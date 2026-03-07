@@ -4,6 +4,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 type AvaliacaoFisicaDB = {
   id: string;
@@ -33,102 +38,56 @@ export const assessmentsRepository = {
   /**
    * Buscar todas as avaliações do tenant
    */
-  async findAll(tenantInfo: TenantInfo): Promise<AvaliacaoFisicaDB[]> {
+  async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<AvaliacaoFisicaDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return [];
-    }
+    if (equipeIds.length === 0) return [];
 
-    // Buscar jogadores do tenant
-    const jogadores = await prisma.jogador.findMany({
-      where: {
-        equipes: {
-          some: {
-            equipeId: { in: equipeIds },
-          },
-        },
-      },
+    const jogadores = await db(tx).jogador.findMany({
+      where: { equipes: { some: { equipeId: { in: equipeIds } } } },
       select: { id: true },
     });
-
     const jogadorIds = jogadores.map(j => j.id);
-
-    return prisma.avaliacaoFisica.findMany({
-      where: {
-        jogadorId: { in: jogadorIds },
-      },
+    return db(tx).avaliacaoFisica.findMany({
+      where: { jogadorId: { in: jogadorIds } },
       orderBy: { data: 'desc' },
     }) as Promise<AvaliacaoFisicaDB[]>;
   },
 
-  /**
-   * Buscar avaliação por ID
-   */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<AvaliacaoFisicaDB | null> {
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<AvaliacaoFisicaDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
+    if (equipeIds.length === 0) return null;
 
-    const avaliacao = await prisma.avaliacaoFisica.findUnique({
+    const avaliacao = await db(tx).avaliacaoFisica.findUnique({
       where: { id },
       include: {
         jogador: {
           include: {
-            equipes: {
-              where: {
-                equipeId: { in: equipeIds },
-              },
-            },
+            equipes: { where: { equipeId: { in: equipeIds } } },
           },
         },
       },
     });
-
-    if (!avaliacao || avaliacao.jogador.equipes.length === 0) {
-      return null;
-    }
-
+    if (!avaliacao || avaliacao.jogador.equipes.length === 0) return null;
     return avaliacao as AvaliacaoFisicaDB;
   },
 
-  /**
-   * Buscar avaliações por jogador
-   */
-  async findByJogador(jogadorId: string, tenantInfo: TenantInfo): Promise<AvaliacaoFisicaDB[]> {
+  async findByJogador(jogadorId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<AvaliacaoFisicaDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return [];
-    }
+    if (equipeIds.length === 0) return [];
 
-    // Validar que jogador pertence ao tenant
-    const jogador = await prisma.jogador.findFirst({
+    const jogador = await db(tx).jogador.findFirst({
       where: {
         id: jogadorId,
-        equipes: {
-          some: {
-            equipeId: { in: equipeIds },
-          },
-        },
+        equipes: { some: { equipeId: { in: equipeIds } } },
       },
     });
-
-    if (!jogador) {
-      return [];
-    }
-
-    return prisma.avaliacaoFisica.findMany({
+    if (!jogador) return [];
+    return db(tx).avaliacaoFisica.findMany({
       where: { jogadorId },
       orderBy: { data: 'desc' },
     }) as Promise<AvaliacaoFisicaDB[]>;
   },
 
-  /**
-   * Criar avaliação
-   */
   async create(data: {
     jogadorId: string;
     data: Date;
@@ -149,29 +108,16 @@ export const assessmentsRepository = {
     suprailiaca?: number;
     coxa?: number;
     planoAcao?: string;
-  }): Promise<AvaliacaoFisicaDB> {
-    return prisma.avaliacaoFisica.create({
-      data,
-    }) as Promise<AvaliacaoFisicaDB>;
+  }, tx?: TransactionClient): Promise<AvaliacaoFisicaDB> {
+    return db(tx).avaliacaoFisica.create({ data }) as Promise<AvaliacaoFisicaDB>;
   },
 
-  /**
-   * Atualizar avaliação
-   */
-  async update(id: string, data: Partial<AvaliacaoFisicaDB>): Promise<AvaliacaoFisicaDB> {
-    return prisma.avaliacaoFisica.update({
-      where: { id },
-      data,
-    }) as Promise<AvaliacaoFisicaDB>;
+  async update(id: string, data: Partial<AvaliacaoFisicaDB>, tx?: TransactionClient): Promise<AvaliacaoFisicaDB> {
+    return db(tx).avaliacaoFisica.update({ where: { id }, data }) as Promise<AvaliacaoFisicaDB>;
   },
 
-  /**
-   * Deletar avaliação
-   */
-  async delete(id: string): Promise<boolean> {
-    await prisma.avaliacaoFisica.delete({
-      where: { id },
-    });
+  async delete(id: string, tx?: TransactionClient): Promise<boolean> {
+    await db(tx).avaliacaoFisica.delete({ where: { id } });
     return true;
   },
 };

@@ -4,6 +4,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 type MetasEstatisticasDB = {
   id: string;
@@ -26,68 +31,28 @@ export const statTargetsRepository = {
   /**
    * Buscar metas do tenant (por equipe)
    */
-  async findByTenant(tenantInfo: TenantInfo): Promise<MetasEstatisticasDB | null> {
+  async findByTenant(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MetasEstatisticasDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
-
-    // Buscar primeira meta encontrada (ou criar padrão)
-    return prisma.metasEstatisticas.findFirst({
-      where: {
-        equipeId: { in: equipeIds },
-      },
+    if (equipeIds.length === 0) return null;
+    return db(tx).metasEstatisticas.findFirst({
+      where: { equipeId: { in: equipeIds } },
     }) as Promise<MetasEstatisticasDB | null>;
   },
 
-  /**
-   * Buscar por ID
-   */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<MetasEstatisticasDB | null> {
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MetasEstatisticasDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
-
-    const meta = await prisma.metasEstatisticas.findUnique({
-      where: { id },
-    });
-
-    if (!meta || !meta.equipeId || !equipeIds.includes(meta.equipeId)) {
-      return null;
-    }
-
+    if (equipeIds.length === 0) return null;
+    const meta = await db(tx).metasEstatisticas.findUnique({ where: { id } });
+    if (!meta || !meta.equipeId || !equipeIds.includes(meta.equipeId)) return null;
     return meta as MetasEstatisticasDB;
   },
 
-  /**
-   * Criar ou atualizar metas
-   */
-  async upsert(
-    equipeId: string,
-    data: Partial<MetasEstatisticasDB>
-  ): Promise<MetasEstatisticasDB> {
-    // Buscar meta existente
-    const existing = await prisma.metasEstatisticas.findFirst({
-      where: { equipeId },
-    });
-
+  async upsert(equipeId: string, data: Partial<MetasEstatisticasDB>, tx?: TransactionClient): Promise<MetasEstatisticasDB> {
+    const existing = await db(tx).metasEstatisticas.findFirst({ where: { equipeId } });
     if (existing) {
-      return prisma.metasEstatisticas.update({
-        where: { id: existing.id },
-        data,
-      }) as Promise<MetasEstatisticasDB>;
+      return db(tx).metasEstatisticas.update({ where: { id: existing.id }, data }) as Promise<MetasEstatisticasDB>;
     }
-
-    // Criar nova
-    return prisma.metasEstatisticas.create({
-      data: {
-        equipeId,
-        ...data,
-      } as any,
-    }) as Promise<MetasEstatisticasDB>;
+    return db(tx).metasEstatisticas.create({ data: { equipeId, ...data } as any }) as Promise<MetasEstatisticasDB>;
   },
 };
 

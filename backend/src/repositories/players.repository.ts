@@ -5,6 +5,7 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
 
 // Tipos do banco (Prisma gera automaticamente, mas definimos aqui para referência)
 type JogadorDB = {
@@ -28,23 +29,24 @@ type JogadorDB = {
   updatedAt: Date;
 };
 
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
+
 export const playersRepository = {
   /**
    * Buscar todos os jogadores do tenant
    */
-  async findAll(tenantInfo: TenantInfo): Promise<JogadorDB[]> {
+  async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogadorDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return [];
-    }
+    if (equipeIds.length === 0) return [];
 
-    return prisma.jogador.findMany({
+    return db(tx).jogador.findMany({
       where: {
         equipes: {
           some: {
             equipeId: { in: equipeIds },
-            dataFim: null, // Apenas jogadores ativos na equipe
+            dataFim: null,
           },
         },
       },
@@ -55,29 +57,19 @@ export const playersRepository = {
   /**
    * Buscar jogador por ID (com validação de tenant)
    */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<JogadorDB | null> {
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogadorDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
+    if (equipeIds.length === 0) return null;
 
-    const jogador = await prisma.jogador.findUnique({
+    const jogador = await db(tx).jogador.findUnique({
       where: { id },
       include: {
         equipes: {
-          where: {
-            equipeId: { in: equipeIds },
-          },
+          where: { equipeId: { in: equipeIds } },
         },
       },
     });
-
-    // Verificar se jogador pertence ao tenant
-    if (!jogador || jogador.equipes.length === 0) {
-      return null;
-    }
-
+    if (!jogador || jogador.equipes.length === 0) return null;
     return jogador as JogadorDB;
   },
 
@@ -100,29 +92,22 @@ export const playersRepository = {
     isTransferido?: boolean;
     dataTransferencia?: Date;
     isAtivo?: boolean;
-  }): Promise<JogadorDB> {
-    return prisma.jogador.create({
-      data: data as any,
-    }) as Promise<JogadorDB>;
+  }, tx?: TransactionClient): Promise<JogadorDB> {
+    return db(tx).jogador.create({ data: data as any }) as Promise<JogadorDB>;
   },
 
   /**
    * Atualizar jogador
    */
-  async update(id: string, data: Partial<JogadorDB>): Promise<JogadorDB> {
-    return prisma.jogador.update({
-      where: { id },
-      data: data as any,
-    }) as Promise<JogadorDB>;
+  async update(id: string, data: Partial<JogadorDB>, tx?: TransactionClient): Promise<JogadorDB> {
+    return db(tx).jogador.update({ where: { id }, data: data as any }) as Promise<JogadorDB>;
   },
 
   /**
    * Deletar jogador
    */
-  async delete(id: string): Promise<boolean> {
-    await prisma.jogador.delete({
-      where: { id },
-    });
+  async delete(id: string, tx?: TransactionClient): Promise<boolean> {
+    await db(tx).jogador.delete({ where: { id } });
     return true;
   },
 };

@@ -6,169 +6,87 @@
 import { Request, Response } from 'express';
 import { playersService } from '../services/players.service';
 import { AppError } from '../utils/errors';
+import { runWithTenant } from '../utils/transactionWithTenant';
+
+function handleError(error: unknown, res: Response, fallbackMessage: string) {
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({ success: false, error: error.message });
+  }
+  return res.status(500).json({
+    success: false,
+    error: error instanceof Error ? error.message : fallbackMessage,
+  });
+}
 
 export const playersController = {
-  /**
-   * GET /api/players
-   */
   getAll: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) {
+      return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
+    }
     try {
-      console.log('[PLAYERS_CONTROLLER] getAll - TenantInfo:', {
-        tecnico_id: req.tenantInfo?.tecnico_id,
-        clube_id: req.tenantInfo?.clube_id,
-        equipe_ids: req.tenantInfo?.equipe_ids,
-        equipe_ids_count: req.tenantInfo?.equipe_ids?.length || 0,
-        user_email: req.user?.email,
-        user_id: req.user?.id,
-      });
-      
-      if (!req.tenantInfo) {
-        console.error('[PLAYERS_CONTROLLER] getAll - ERRO: tenantInfo não está disponível');
-        return res.status(500).json({
-          success: false,
-          error: 'Tenant info não disponível',
-        });
-      }
-      
-      const players = await playersService.getAll(req.tenantInfo!);
-      console.log('[PLAYERS_CONTROLLER] getAll - Jogadores retornados:', players.length);
-      return res.json({ success: true, data: players });
+      const players = await runWithTenant(req, (tx) => playersService.getAll(req.tenantInfo!, tx));
+      const equipeIds = req.tenantInfo.equipe_ids ?? [];
+      let reason: string | undefined;
+      if (equipeIds.length === 0) reason = 'no_teams';
+      else if (players.length === 0) reason = 'no_players_linked';
+      return res.json({ success: true, data: players, ...(reason && { reason }) });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      console.error('[PLAYERS_CONTROLLER] getAll error', error);
-      if (error instanceof Error && error.stack) {
-        console.error('[PLAYERS_CONTROLLER] getAll stack', error.stack);
-      }
-      return res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro ao buscar jogadores',
-      });
+      return handleError(error, res, 'Erro ao buscar jogadores');
     }
   },
 
-  /**
-   * GET /api/players/:id
-   */
   getById: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) {
+      return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
+    }
     try {
-      const player = await playersService.getById(req.params.id, req.tenantInfo!);
+      const player = await runWithTenant(req, (tx) => playersService.getById(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true, data: player });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao buscar jogador',
-      });
+      return handleError(error, res, 'Erro ao buscar jogador');
     }
   },
 
-  /**
-   * POST /api/players
-   */
   create: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) {
+      return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
+    }
     try {
-      // DEBUG: Log do tenantInfo e body recebido
-      console.log('[PLAYERS_CONTROLLER] create - Dados recebidos:', {
-        tenant_tecnico_id: req.tenantInfo?.tecnico_id,
-        tenant_clube_id: req.tenantInfo?.clube_id,
-        tenant_equipe_ids: req.tenantInfo?.equipe_ids,
-        user_email: req.user?.email,
-        user_id: req.user?.id,
-        body: {
-          nome: req.body.nome,
-          equipeId: req.body.equipeId,
-          numeroCamisa: req.body.numeroCamisa,
-          position: req.body.position,
-        },
-      });
-
-      if (!req.tenantInfo) {
-        console.error('[PLAYERS_CONTROLLER] create - ERRO: tenantInfo não está disponível');
-        return res.status(500).json({
-          success: false,
-          error: 'Tenant info não disponível',
-        });
-      }
-
-      const player = await playersService.create(req.body, req.tenantInfo);
-      
-      console.log('[PLAYERS_CONTROLLER] create - Jogador criado com sucesso:', {
-        id: player.id,
-        nome: player.name,
-      });
-
+      const player = await runWithTenant(req, (tx) => playersService.create(req.body, req.tenantInfo!, tx));
       return res.status(201).json({ success: true, data: player });
     } catch (error: any) {
-      console.error('[PLAYERS_CONTROLLER] create - ERRO ao criar jogador:', {
-        error: error?.message,
-        stack: error?.stack,
-        code: error?.code,
-        meta: error?.meta,
-      });
       if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
+        return res.status(error.statusCode).json({ success: false, error: error.message });
       }
-      const errorMessage = error?.message || 'Erro ao criar jogador';
       return res.status(500).json({
         success: false,
-        error: errorMessage,
+        error: error?.message || 'Erro ao criar jogador',
         ...(process.env.NODE_ENV === 'development' && { details: error?.stack }),
       });
     }
   },
 
-  /**
-   * PUT /api/players/:id
-   */
   update: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) {
+      return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
+    }
     try {
-      const player = await playersService.update(req.params.id, req.body, req.tenantInfo!);
+      const player = await runWithTenant(req, (tx) => playersService.update(req.params.id, req.body, req.tenantInfo!, tx));
       return res.json({ success: true, data: player });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao atualizar jogador',
-      });
+      return handleError(error, res, 'Erro ao atualizar jogador');
     }
   },
 
-  /**
-   * DELETE /api/players/:id
-   */
   delete: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) {
+      return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
+    }
     try {
-      await playersService.delete(req.params.id, req.tenantInfo!);
+      await runWithTenant(req, (tx) => playersService.delete(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao deletar jogador',
-      });
+      return handleError(error, res, 'Erro ao deletar jogador');
     }
   },
 };

@@ -3,6 +3,7 @@
  */
 
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
 import { schedulesRepository } from '../repositories/schedules.repository';
 import { transformScheduleToFrontend } from '../adapters/schedule.adapter';
 import { WeeklySchedule } from '../types/frontend';
@@ -45,53 +46,28 @@ export const schedulesService = {
   /**
    * Buscar todas as programações do tenant
    */
-  async getAll(tenantInfo: TenantInfo): Promise<WeeklySchedule[]> {
-    const programacoes = await schedulesRepository.findAll(tenantInfo);
-    
-    if (programacoes.length === 0) {
-      return [];
-    }
+  async getAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<WeeklySchedule[]> {
+    const programacoes = await schedulesRepository.findAll(tenantInfo, tx);
+    if (programacoes.length === 0) return [];
 
     const schedules: WeeklySchedule[] = [];
-    
     for (const programacao of programacoes) {
-      const dias = await schedulesRepository.findDias(programacao.id);
-      schedules.push(
-        transformScheduleToFrontend(
-          programacao as any,
-          dias as any
-        )
-      );
+      const dias = await schedulesRepository.findDias(programacao.id, tx);
+      schedules.push(transformScheduleToFrontend(programacao as any, dias as any));
     }
-
     return schedules;
   },
 
-  /**
-   * Buscar programação por ID
-   */
-  async getById(id: string, tenantInfo: TenantInfo): Promise<WeeklySchedule> {
-    const programacao = await schedulesRepository.findById(id, tenantInfo);
-    
-    if (!programacao) {
-      throw new NotFoundError('Programação', id);
-    }
-
-    const dias = await schedulesRepository.findDias(id);
-
-    return transformScheduleToFrontend(
-      programacao as any,
-      dias as any
-    );
+  async getById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<WeeklySchedule> {
+    const programacao = await schedulesRepository.findById(id, tenantInfo, tx);
+    if (!programacao) throw new NotFoundError('Programação', id);
+    const dias = await schedulesRepository.findDias(id, tx);
+    return transformScheduleToFrontend(programacao as any, dias as any);
   },
 
-  /**
-   * Criar programação (aceita formato do frontend)
-   */
-  async create(data: any, tenantInfo: TenantInfo): Promise<WeeklySchedule> {
+  async create(data: any, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<WeeklySchedule> {
     const equipeIds = tenantInfo.equipe_ids || [];
     const equipeId = data.equipeId || equipeIds[0];
-    
     if (!equipeId || !equipeIds.includes(equipeId)) {
       throw new NotFoundError('Equipe', data.equipeId || equipeIds[0] || '');
     }
@@ -106,9 +82,8 @@ export const schedulesService = {
       dataInicio,
       dataFim,
       isAtivo: data.isActive ?? data.isAtivo ?? false,
-    });
+    }, tx);
 
-    // Persistir dias
     const days = data.days || [];
     for (const item of days) {
       const rows = parseScheduleDay(item);
@@ -122,23 +97,18 @@ export const schedulesService = {
             horario: row.time || undefined,
             localizacao: row.location || undefined,
             observacoes: row.notes,
-          });
+          }, tx);
         }
       }
     }
 
-    const diasCriados = await schedulesRepository.findDias(programacao.id);
+    const diasCriados = await schedulesRepository.findDias(programacao.id, tx);
     return transformScheduleToFrontend(programacao as any, diasCriados as any);
   },
 
-  /**
-   * Atualizar programação (aceita formato do frontend)
-   */
-  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo): Promise<WeeklySchedule> {
-    const existing = await schedulesRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Programação', id);
-    }
+  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<WeeklySchedule> {
+    const existing = await schedulesRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Programação', id);
 
     const updateData: any = {};
     if (data.titulo !== undefined) updateData.titulo = data.titulo;
@@ -152,11 +122,10 @@ export const schedulesService = {
     if (data.isActive !== undefined) updateData.isAtivo = data.isActive;
     if (data.isAtivo !== undefined) updateData.isAtivo = data.isAtivo;
 
-    const programacao = await schedulesRepository.update(id, updateData);
+    const programacao = await schedulesRepository.update(id, updateData, tx);
 
-    // Se days foi enviado, substituir dias
     if (data.days && Array.isArray(data.days)) {
-      await schedulesRepository.deleteDias(id);
+      await schedulesRepository.deleteDias(id, tx);
       for (const item of data.days) {
         const rows = parseScheduleDay(item);
         for (const row of rows) {
@@ -171,26 +140,20 @@ export const schedulesService = {
               observacoes: row.notes,
               exercicioId: row.exercicioId,
               cargaPercent: row.cargaPercent,
-            });
+            }, tx);
           }
         }
       }
     }
 
-    const dias = await schedulesRepository.findDias(id);
+    const dias = await schedulesRepository.findDias(id, tx);
     return transformScheduleToFrontend(programacao as any, dias as any);
   },
 
-  /**
-   * Deletar programação
-   */
-  async delete(id: string, tenantInfo: TenantInfo): Promise<boolean> {
-    const existing = await schedulesRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Programação', id);
-    }
-
-    await schedulesRepository.delete(id);
+  async delete(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<boolean> {
+    const existing = await schedulesRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Programação', id);
+    await schedulesRepository.delete(id, tx);
     return true;
   },
 };

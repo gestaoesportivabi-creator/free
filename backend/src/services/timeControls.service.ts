@@ -4,9 +4,14 @@
  */
 
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
 import { timeControlsRepository } from '../repositories/timeControls.repository';
 import { PlayerTimeControl } from '../types/frontend';
 import prisma from '../config/database';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 /**
  * Transforma eventos do banco para formato PlayerTimeControl do frontend
@@ -72,12 +77,9 @@ export const timeControlsService = {
   /**
    * Buscar todos os time controls de um jogo
    */
-  async getByMatchId(matchId: string, tenantInfo: TenantInfo): Promise<PlayerTimeControl[]> {
-    const eventos = await timeControlsRepository.findByJogoId(matchId, tenantInfo);
-    
-    if (eventos.length === 0) {
-      return [];
-    }
+  async getByMatchId(matchId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PlayerTimeControl[]> {
+    const eventos = await timeControlsRepository.findByJogoId(matchId, tenantInfo, tx);
+    if (eventos.length === 0) return [];
 
     // Agrupar eventos por jogador
     const jogadoresMap = new Map<string, any[]>();
@@ -101,29 +103,17 @@ export const timeControlsService = {
    * Salvar time controls de um jogo
    * Deleta eventos existentes e cria novos
    */
-  async saveForMatch(matchId: string, timeControls: PlayerTimeControl[], tenantInfo: TenantInfo): Promise<PlayerTimeControl[]> {
-    // Verificar se jogo pertence ao tenant
+  async saveForMatch(matchId: string, timeControls: PlayerTimeControl[], tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PlayerTimeControl[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    if (equipeIds.length === 0) {
-      throw new Error('Nenhuma equipe encontrada para o tenant');
-    }
+    if (equipeIds.length === 0) throw new Error('Nenhuma equipe encontrada para o tenant');
 
-    const jogo = await prisma.jogo.findUnique({
-      where: { id: matchId },
-    });
+    const jogo = await db(tx).jogo.findUnique({ where: { id: matchId } });
+    if (!jogo || !equipeIds.includes(jogo.equipeId)) throw new Error('Jogo não encontrado ou não pertence ao tenant');
 
-    if (!jogo || !equipeIds.includes(jogo.equipeId)) {
-      throw new Error('Jogo não encontrado ou não pertence ao tenant');
-    }
+    await timeControlsRepository.deleteByJogoId(matchId, tx);
 
-    // Deletar eventos existentes do jogo
-    await timeControlsRepository.deleteByJogoId(matchId);
-
-    // Criar novos eventos
     for (const tc of timeControls) {
-      // Frontend usa 'timeEntries'
       const entries = tc.timeEntries || [];
-      
       for (const entry of entries) {
         if (entry.entryTime) {
           const [entryMin, entrySec] = entry.entryTime.split(':').map(Number);
@@ -133,8 +123,7 @@ export const timeControlsService = {
             tipoEvento: 'ENTRADA',
             minuto: entryMin || 0,
             segundo: entrySec || 0,
-          });
-
+          }, tx);
           if (entry.exitTime) {
             const [exitMin, exitSec] = entry.exitTime.split(':').map(Number);
             await timeControlsRepository.createEvento({
@@ -143,14 +132,13 @@ export const timeControlsService = {
               tipoEvento: 'SAIDA',
               minuto: exitMin || 0,
               segundo: exitSec || 0,
-            });
+            }, tx);
           }
         }
       }
     }
 
-    // Retornar time controls atualizados
-    return this.getByMatchId(matchId, tenantInfo);
+    return this.getByMatchId(matchId, tenantInfo, tx);
   },
 };
 

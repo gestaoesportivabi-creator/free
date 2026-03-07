@@ -4,6 +4,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 type LesaoDB = {
   id: string;
@@ -24,73 +29,42 @@ export const lesoesRepository = {
   /**
    * Buscar lesões por jogadores (do tenant)
    */
-  async findByJogadores(jogadorIds: string[], tenantInfo: TenantInfo): Promise<LesaoDB[]> {
-    if (jogadorIds.length === 0) {
-      return [];
-    }
-
-    // Validar que jogadores pertencem ao tenant
+  async findByJogadores(jogadorIds: string[], tenantInfo: TenantInfo, tx?: TransactionClient): Promise<LesaoDB[]> {
+    if (jogadorIds.length === 0) return [];
     const equipeIds = tenantInfo.equipe_ids || [];
-    if (equipeIds.length === 0) {
-      return [];
-    }
+    if (equipeIds.length === 0) return [];
 
-    const jogadoresValidos = await prisma.jogador.findMany({
+    const jogadoresValidos = await db(tx).jogador.findMany({
       where: {
         id: { in: jogadorIds },
-        equipes: {
-          some: {
-            equipeId: { in: equipeIds },
-          },
-        },
+        equipes: { some: { equipeId: { in: equipeIds } } },
       },
       select: { id: true },
     });
-
     const idsValidos = jogadoresValidos.map(j => j.id);
-
-    return prisma.lesao.findMany({
-      where: {
-        jogadorId: { in: idsValidos },
-      },
+    return db(tx).lesao.findMany({
+      where: { jogadorId: { in: idsValidos } },
       orderBy: { dataInicio: 'desc' },
     }) as Promise<LesaoDB[]>;
   },
 
-  /**
-   * Buscar lesões por jogador
-   */
-  async findByJogador(jogadorId: string, tenantInfo: TenantInfo): Promise<LesaoDB[]> {
-    // Validar que jogador pertence ao tenant
+  async findByJogador(jogadorId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<LesaoDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    if (equipeIds.length === 0) {
-      return [];
-    }
+    if (equipeIds.length === 0) return [];
 
-    const jogador = await prisma.jogador.findFirst({
+    const jogador = await db(tx).jogador.findFirst({
       where: {
         id: jogadorId,
-        equipes: {
-          some: {
-            equipeId: { in: equipeIds },
-          },
-        },
+        equipes: { some: { equipeId: { in: equipeIds } } },
       },
     });
-
-    if (!jogador) {
-      return [];
-    }
-
-    return prisma.lesao.findMany({
+    if (!jogador) return [];
+    return db(tx).lesao.findMany({
       where: { jogadorId },
       orderBy: { dataInicio: 'desc' },
     }) as Promise<LesaoDB[]>;
   },
 
-  /**
-   * Criar lesão
-   */
   async create(data: {
     jogadorId: string;
     data: Date;
@@ -102,8 +76,8 @@ export const lesoesRepository = {
     severidade?: string | null;
     origem?: string | null;
     diasAfastado?: number | null;
-  }): Promise<LesaoDB> {
-    return prisma.lesao.create({
+  }, tx?: TransactionClient): Promise<LesaoDB> {
+    return db(tx).lesao.create({
       data: {
         jogadorId: data.jogadorId,
         data: data.data,

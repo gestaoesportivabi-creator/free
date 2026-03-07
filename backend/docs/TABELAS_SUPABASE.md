@@ -12,6 +12,16 @@ Antes de acessar dados, o backend resolve o **tenant** do usuário logado:
 
 Rotas protegidas (players, matches, schedules, etc.) usam `equipe_ids` para filtrar e isolar dados por tenant. **Criar jogador** exige que o usuário tenha técnico (ou clube) e ao menos uma equipe; se não houver equipe, o service pode criar uma equipe padrão "Elenco" para o técnico.
 
+## Row Level Security (RLS)
+
+O PostgreSQL (Supabase) tem **RLS ativo** nas tabelas de dados por tenant. Assim, mesmo que haja bug na aplicação ou acesso direto ao banco com o mesmo role, o PostgreSQL só retorna/altera linhas do tenant definido para aquele request.
+
+- **Variáveis de sessão:** As políticas RLS leem `app.equipe_ids` (string com UUIDs separados por vírgula), `app.tecnico_id` e `app.clube_id`. Uma função auxiliar `current_equipe_ids_array()` retorna `uuid[]` a partir de `app.equipe_ids`.
+- **Quem define as variáveis:** O backend define essas variáveis **por request**. Cada rota protegida por tenant roda dentro de uma transação Prisma; no início da transação o backend executa `set_config('app.equipe_ids', ..., true)`, `set_config('app.tecnico_id', ..., true)` e `set_config('app.clube_id', ..., true)` com os valores de `req.tenantInfo`. Todas as queries desse request usam a mesma conexão e enxergam as variáveis; as políticas RLS aplicam o filtro corretamente.
+- **Onde está o código:** O helper `runWithTenant(req, fn)` em [backend/src/utils/transactionWithTenant.ts](../src/utils/transactionWithTenant.ts) inicia a transação, chama `set_config` e executa o callback com o cliente transacional `tx`. Controllers de players, matches, schedules, teams, assessments, championshipMatches, timeControls e statTargets envolvem as chamadas ao service em `runWithTenant(req, (tx) => service.xxx(..., tx))`.
+- **Tabelas com RLS:** equipes, jogadores, equipes_jogadores, jogos, jogos_estatisticas_equipe, jogos_estatisticas_jogador, jogos_eventos, lesoes, avaliacoes_fisicas, programacoes, programacoes_dias, campeonatos, campeonatos_jogos, metas_estatisticas. Tabelas globais (roles, users, competicoes) podem não ter RLS ou ter política permissiva para o role da aplicação.
+- **Migration:** As políticas e a função auxiliar estão em [backend/migrations/013_enable_rls_policies.sql](../migrations/013_enable_rls_policies.sql).
+
 ---
 
 ## Tabelas

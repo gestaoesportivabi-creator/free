@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team } from '../types';
+import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban } from 'lucide-react';
+import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
+import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
+import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { timeControlsApi } from '../services/api';
 import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { PostMatchCollectionSheet } from './PostMatchCollectionSheet';
-import { AthleteSelector } from './AthleteSelector';
 
 interface GoalTime {
     id: string;
@@ -74,16 +75,15 @@ interface ScoutTableProps {
     onSave?: (match: MatchRecord) => void;
     players: Player[];
     competitions: string[];
-    matches?: MatchRecord[]; // Partidas salvas
-    initialData?: { date: string; opponent: string; competition: string; location?: string; scoreTarget?: string; time?: string }; // Dados iniciais da Tabela de Campeonato
-    onInitialDataUsed?: () => void; // Callback quando dados iniciais forem usados
-    championshipMatches?: ChampionshipMatch[]; // Partidas da tabela de campeonato
-    teams?: Team[]; // Equipes cadastradas
-    currentUser?: { id?: string; name: string } | null; // Usuário logado (para auditoria: quem registrou as ações)
-    onScoutWindowOpenChange?: (open: boolean) => void; // Notifica quando a janela Scout da Partida abre/fecha (ex.: para esconder a sidebar)
+    matches?: MatchRecord[];
+    initialData?: { date: string; opponent: string; competition: string; location?: string; scoreTarget?: string; time?: string };
+    onInitialDataUsed?: () => void;
+    championshipMatches?: ChampionshipMatch[];
+    schedules?: { days?: unknown[]; isActive?: unknown }[];
+    teams?: Team[];
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], teams = [], currentUser, onScoutWindowOpenChange }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [] }) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -99,9 +99,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const [isViewMode, setIsViewMode] = useState(false); // Modo visualização (após salvar)
     const [showMatchTypeModal, setShowMatchTypeModal] = useState(false); // Modal de tipo de partida
     const [showScoutingWindow, setShowScoutingWindow] = useState(false); // Janela de coleta
-    useEffect(() => {
-        onScoutWindowOpenChange?.(showScoutingWindow);
-    }, [showScoutingWindow, onScoutWindowOpenChange]);
     const [selectedMatchType, setSelectedMatchType] = useState<MatchType>('normal');
     const [selectedExtraTimeMinutes, setSelectedExtraTimeMinutes] = useState<number>(5);
     const [selectedScheduledMatch, setSelectedScheduledMatch] = useState<ChampionshipMatch | null>(null); // Partida programada selecionada
@@ -111,6 +108,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const [showStartScoutConfirmation, setShowStartScoutConfirmation] = useState<boolean>(false); // Modal de confirmação
     const [collectionType, setCollectionType] = useState<'realtime' | 'postmatch' | null>(null); // Tipo de coleta (null = seletor)
     const [showPostMatchSheet, setShowPostMatchSheet] = useState<boolean>(false); // Planilha pós-jogo
+    const [showRealtimePrepForSavedMatch, setShowRealtimePrepForSavedMatch] = useState<boolean>(false); // Preparação tempo real para partida salva (seleção de atletas antes de abrir aba)
+    const [preparationAthleteFilter, setPreparationAthleteFilter] = useState<'goleiros' | 'linha'>('goleiros'); // Goleiros | Atletas de linha na preparação
 
     // Calendário: filtro de datas (default: mês atual) e modo de visualização
     const [startDate, setStartDate] = useState<string>(() => {
@@ -173,53 +172,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     ]);
 
-    // Atletas transferidos não devem aparecer na seleção para o jogo (apenas visualização/lista)
-    const isPlayerEligibleForMatchSelection = (player: Player): boolean => !player.isTransferred;
-
-    // Lesão vigente = sem data de retorno REAL (returnDateActual/endDate) salva = em recuperação = indisponível
-    // Retorno Previsto (returnDate) não conta - é apenas projeção; só Retorno Real/Alta (returnDateActual/endDate) indica que voltou
-    const isPlayerUnavailableForMatch = (player: Player, matchDate?: string): boolean => {
-        if (!player.injuryHistory || player.injuryHistory.length === 0) return false;
-        const matchDateObj = matchDate ? new Date(matchDate) : new Date();
-        matchDateObj.setHours(0, 0, 0, 0);
-        return player.injuryHistory.some(injury => {
-            const hasActualReturn = !!(injury.returnDateActual || injury.endDate);
-            if (!hasActualReturn) return true; // Lesão sem Retorno Real/Alta = vigente = indisponível
-            const returnDateStr = injury.returnDateActual || injury.endDate!;
-            const returnDate = new Date(returnDateStr);
-            returnDate.setHours(0, 0, 0, 0);
-            return matchDateObj < returnDate; // Partida antes do retorno = indisponível
-        });
-    };
-
     // Carregar players quando a lista mudar (para incluir novos atletas)
     useEffect(() => {
         console.log('📋 Players atualizados no ScoutTable:', players.length, 'atletas');
         console.log('📋 IDs dos players:', players.map(p => ({ id: String(p.id).trim(), name: p.name })));
     }, [players]);
-
-    // Remover atletas lesionados (sem data de retorno) de playersInField e entries quando detectados
-    useEffect(() => {
-        const matchDate = entries[0]?.date;
-        if (!matchDate || players.length === 0) return;
-        const injuredIds = new Set(
-            players
-                .filter(p => isPlayerUnavailableForMatch(p, matchDate))
-                .map(p => String(p.id).trim())
-        );
-        if (injuredIds.size === 0) return;
-        setPlayersInField(prev => {
-            const next = new Set(prev);
-            let changed = false;
-            injuredIds.forEach(id => { if (next.has(id)) { next.delete(id); changed = true; } });
-            return changed ? next : prev;
-        });
-        setEntries(prev => {
-            const filtered = prev.filter(e => !e.athleteId || !injuredIds.has(String(e.athleteId).trim()));
-            return filtered.length !== prev.length ? filtered : prev;
-        });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlayerUnavailableForMatch is stable
-    }, [players, entries[0]?.date]);
 
     // Auto-preenchimento: Trazer todos os atletas ativos quando não houver entries válidas (quando vem da gestão de equipe ou ao abrir a aba)
     useEffect(() => {
@@ -235,18 +192,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         // Se não tem players, não fazer nada
         if (!players || players.length === 0) return;
         
-        // Obter jogadores ativos (não transferidos, não suspensos, não lesionados - excluir lesão sem data de retorno)
-        const currentDate = entries[0]?.date || new Date().toISOString().split('T')[0];
+        // Obter jogadores ativos (não suspensos, não lesionados)
         const activePlayers = players.filter(p => {
-            if (!isPlayerEligibleForMatchSelection(p)) return false; // Excluir transferidos
-            if ((p as any).status && (p as any).status !== 'Ativo') return false;
-            return !isPlayerUnavailableForMatch(p, currentDate); // Excluir lesionados sem data de retorno
+            // Verificar se tem status e se está ativo
+            if ((p as any).status) {
+                return (p as any).status === 'Ativo';
+            }
+            // Se não tem status definido, considerar ativo
+            return true;
         });
         
         // Se não há jogadores ativos, não fazer nada
         if (activePlayers.length === 0) return;
         
         // Criar entries para todos os jogadores ativos
+        const currentDate = entries[0]?.date || new Date().toISOString().split('T')[0];
         const newEntries = activePlayers.map((player, index) => ({
             id: `${Date.now()}-${index}`,
             date: currentDate,
@@ -468,11 +428,12 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             setEntries(newEntries);
         }
         
-        // Preencher atletas ativos (excluir transferidos e lesionados sem data de retorno)
+        // Preencher atletas ativos
         const activePlayers = players.filter(p => {
-            if (!isPlayerEligibleForMatchSelection(p)) return false;
-            if ((p as any).status && (p as any).status !== 'Ativo') return false;
-            return !isPlayerUnavailableForMatch(p, nextMatch.date);
+            if ((p as any).status) {
+                return (p as any).status === 'Ativo';
+            }
+            return true;
         });
         
         if (activePlayers.length > 0 && nextMatch.date) {
@@ -536,11 +497,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             // Preencher data
             const formattedDate = initialData.date;
             
-            // Obter jogadores ativos (excluir transferidos e lesionados sem data de retorno)
+            // Obter jogadores ativos (não suspensos, não lesionados)
             const activePlayers = players.filter(p => {
-                if (!isPlayerEligibleForMatchSelection(p)) return false;
-                if ((p as any).status && (p as any).status !== 'Ativo') return false;
-                return !isPlayerUnavailableForMatch(p, formattedDate);
+                // Verificar se tem status e se está ativo
+                if ((p as any).status) {
+                    return (p as any).status === 'Ativo';
+                }
+                // Se não tem status definido, considerar ativo
+                return true;
             });
 
             // Criar entries para todos os jogadores ativos
@@ -649,14 +613,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 setScoreTarget(matchingMatch.scoreTarget);
             }
             
-            // Preencher atletas ativos se ainda não houver entries válidas (excluir lesionados sem data de retorno)
+            // Preencher atletas ativos se ainda não houver entries válidas
             const hasValidEntries = entries.some(e => e.athleteId && e.athleteId.trim() !== '');
             if (!hasValidEntries && players.length > 0) {
-                const activePlayers = players.filter(p => {
-                    if (!isPlayerEligibleForMatchSelection(p)) return false;
-                    if ((p as any).status && (p as any).status !== 'Ativo') return false;
-                    return !isPlayerUnavailableForMatch(p, normalizedCurrentDate);
-                });
+                const activePlayers = players.filter(p => (p as any).status === 'Ativo');
                 if (activePlayers.length > 0) {
                     const newEntries = activePlayers.map((player, index) => ({
                         id: `${Date.now()}-auto-${index}`,
@@ -960,7 +920,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 rpe: 5,
             };
             // Para RPE, valor inicial é 5, para outras estatísticas é 1
-            newEntry[statField] = (statField === 'rpe' ? 5 : 1) as any;
+            (newEntry as unknown as Record<string, number | string>)[statField] = statField === 'rpe' ? 5 : 1;
             setEntries([...entries, newEntry]);
         } else {
             // Incrementar a estatística do jogador selecionado
@@ -1412,32 +1372,42 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             acc.tacklesWithBall += entry.tacklesPossession;
             acc.tacklesWithoutBall += entry.tacklesNoPossession;
             acc.tacklesCounterAttack += entry.tacklesCounter;
-            acc.wrongPassesTransition += entry.transitionError;
+            acc.transitionErrors += entry.transitionError;
             
             // Cards logic
             if (entry.card !== 'Nenhum') {
-                if (entry.card.includes('Amarelo')) acc.yellowCards++;
-                if (entry.card.includes('Vermelho')) acc.redCards++;
+                if (entry.card.includes('Amarelo')) acc.yellowCards = (acc.yellowCards ?? 0) + 1;
+                if (entry.card.includes('Vermelho')) acc.redCards = (acc.redCards ?? 0) + 1;
             }
             
             // Accumulate RPE for average
-            acc.rpeMatch += entry.rpe;
+            acc.rpeMatch = (acc.rpeMatch ?? 0) + entry.rpe;
 
             return acc;
         }, {
+            goals: 0,
+            assists: 0,
+            passesCorrect: 0,
+            passesWrong: 0,
+            shotsOnTarget: 0,
+            shotsOffTarget: 0,
+            tacklesWithBall: 0,
+            tacklesWithoutBall: 0,
+            tacklesCounterAttack: 0,
+            transitionErrors: 0,
             minutesPlayed: 40,
-            goals: 0, goalsConceded: goalsConceded.length, assists: 0,
-            yellowCards: 0, redCards: 0,
-            passesCorrect: 0, passesWrong: 0, wrongPassesTransition: 0,
-            tacklesWithBall: 0, tacklesCounterAttack: 0, tacklesWithoutBall: 0,
-            shotsOnTarget: 0, shotsOffTarget: 0,
+            goalsConceded: goalsConceded.length,
+            yellowCards: 0,
+            redCards: 0,
             rpeMatch: 0,
-            goalsScoredOpenPlay: 0, goalsScoredSetPiece: 0,
-            goalsConcededOpenPlay: 0, goalsConcededSetPiece: 0
-        });
+            goalsScoredOpenPlay: 0,
+            goalsScoredSetPiece: 0,
+            goalsConcededOpenPlay: 0,
+            goalsConcededSetPiece: 0,
+        } as MatchStats);
 
         // Finalize averages
-        teamStats.rpeMatch = parseFloat((teamStats.rpeMatch / entries.length).toFixed(1));
+        teamStats.rpeMatch = parseFloat(((teamStats.rpeMatch ?? 0) / entries.length).toFixed(1));
         
         // Processar métodos dos gols feitos
         const goalMethodsScored: Record<string, number> = {};
@@ -1465,11 +1435,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         // Calcular resultado automaticamente baseado em gols feitos vs tomados
         const totalGoalsScored = teamStats.goals;
         const totalGoalsConceded = goalsConceded.length;
-        let calculatedResult: 'V' | 'D' | 'E' = 'E';
+        let calculatedResult: 'Vitória' | 'Derrota' | 'Empate' = 'Empate';
         if (totalGoalsScored > totalGoalsConceded) {
-            calculatedResult = 'V';
+            calculatedResult = 'Vitória';
         } else if (totalGoalsConceded > totalGoalsScored) {
-            calculatedResult = 'D';
+            calculatedResult = 'Derrota';
+        } else {
+            calculatedResult = 'Empate';
         }
         
         // Salvar tempos reais dos gols feitos (agregar de todos os jogadores)
@@ -1525,20 +1497,20 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 
                 // Criar objeto playerStats com todas as informações do Input de Dados
                 const playerStat: MatchStats = {
-                    minutesPlayed: 40,
                     goals: entry.goals,
-                    goalsConceded: 0,
                     assists: entry.assists,
-                    yellowCards: entry.card.includes('Amarelo') ? 1 : 0,
-                    redCards: entry.card.includes('Vermelho') ? 1 : 0,
                     passesCorrect: entry.passesCorrect,
                     passesWrong: entry.passesWrong,
-                    wrongPassesTransition: entry.transitionError,
-                    tacklesWithBall: entry.tacklesPossession,
-                    tacklesCounterAttack: entry.tacklesCounter,
-                    tacklesWithoutBall: entry.tacklesNoPossession,
                     shotsOnTarget: entry.shotsOn,
                     shotsOffTarget: entry.shotsOff,
+                    tacklesWithBall: entry.tacklesPossession,
+                    tacklesWithoutBall: entry.tacklesNoPossession,
+                    tacklesCounterAttack: entry.tacklesCounter,
+                    transitionErrors: entry.transitionError,
+                    minutesPlayed: 40,
+                    goalsConceded: 0,
+                    yellowCards: entry.card.includes('Amarelo') ? 1 : 0,
+                    redCards: entry.card.includes('Vermelho') ? 1 : 0,
                     rpeMatch: entry.rpe,
                     goalsScoredOpenPlay: entry.goals,
                     goalsScoredSetPiece: 0,
@@ -1569,11 +1541,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             id: Date.now().toString(),
             competition: competition,
             date: entries[0].date,
-            location: location as 'Mandante' | 'Visitante',
+            goalsFor: teamStats.goals,
+            goalsAgainst: goalsConceded.length,
             opponent: opponent,
-            result: calculatedResult,
-            goalsFor: totalGoalsScored,
-            goalsAgainst: totalGoalsConceded,
+            result: calculatedResult === 'Vitória' ? 'V' : calculatedResult === 'Derrota' ? 'D' : 'E',
             teamStats: teamStats,
             playerStats: playerStats
         };
@@ -1723,11 +1694,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         
         if (item.type === 'saved') {
             const match = item as MatchRecord;
-            if (match.status === 'encerrado') return 'finalizado';
             const hasData = 
                 match.teamStats &&
                 (match.teamStats.goals > 0 ||
-                 (match.teamStats as { goalsConceded?: number }).goalsConceded > 0 ||
+                 (match.teamStats.goalsConceded ?? 0) > 0 ||
                  Object.keys(match.playerStats || {}).length > 0);
             
             return hasData ? 'finalizado' : 'incompleto';
@@ -1787,7 +1757,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     };
 
     const handleBackToCalendar = () => {
-        setShowScoutingWindow(false);
         setViewMode('calendar');
         setSelectedMatch(null);
         setSelectedScheduledMatch(null);
@@ -1833,10 +1802,69 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }]);
     };
     
-    // Funções auxiliares para verificar status do atleta
+    // Lesão ativa = sem data de retorno real nem alta (em recuperação)
     const isPlayerInjured = (player: Player): boolean => {
-        return isPlayerUnavailableForMatch(player);
+        if (!player.injuryHistory || player.injuryHistory.length === 0) return false;
+        return player.injuryHistory.some(injury => !(injury.returnDateActual || injury.endDate));
     };
+
+    // Preparação: fisiologia (PSE/PSR/Sono) e status de suspenso/pendurado por campeonato
+    const preparationData = useMemo(() => {
+        const championships: Championship[] = [];
+        try {
+            const raw = localStorage.getItem('championships');
+            if (raw) championships.push(...JSON.parse(raw));
+        } catch (_) {}
+        const match = selectedScheduledMatch;
+        if (!match || !players.length) {
+            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
+        }
+        const playerIds = players.map(p => p.id);
+        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
+        const suspendedIds = new Set<string>();
+        const penduradoIds = new Set<string>();
+        if (match.competition && championships.length) {
+            const champ = championships.find((c: Championship) => c.name === match.competition);
+            if (champ?.suspensionRules) {
+                const rules = champ.suspensionRules;
+                players.forEach((p) => {
+                    const status = getPlayerStatus(champ.id, p.id, rules);
+                    if (status.suspended) suspendedIds.add(p.id);
+                    else if (status.pendurado) penduradoIds.add(p.id);
+                });
+            }
+        }
+        return { physiology, suspendedIds, penduradoIds };
+    }, [selectedScheduledMatch, players, schedules, championshipMatches]);
+
+    // Mesmo para preparação de partida salva (tempo real)
+    const preparationDataSavedMatch = useMemo(() => {
+        const championships: Championship[] = [];
+        try {
+            const raw = localStorage.getItem('championships');
+            if (raw) championships.push(...JSON.parse(raw));
+        } catch (_) {}
+        const match = selectedMatch;
+        if (!match || !players.length) {
+            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
+        }
+        const playerIds = players.map(p => p.id);
+        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
+        const suspendedIds = new Set<string>();
+        const penduradoIds = new Set<string>();
+        if (match.competition && championships.length) {
+            const champ = championships.find((c: Championship) => c.name === match.competition);
+            if (champ?.suspensionRules) {
+                const rules = champ.suspensionRules;
+                players.forEach((p) => {
+                    const status = getPlayerStatus(champ.id, p.id, rules);
+                    if (status.suspended) suspendedIds.add(p.id);
+                    else if (status.pendurado) penduradoIds.add(p.id);
+                });
+            }
+        }
+        return { physiology, suspendedIds, penduradoIds };
+    }, [selectedMatch, players, schedules, championshipMatches]);
     
     const isPlayerSuspended = (playerId: string): boolean => {
         const entry = entries.find(e => String(e.athleteId).trim() === String(playerId).trim());
@@ -1988,7 +2016,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                             onBack={handleBackToCalendar}
                         />
                     )}
-                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && !showPostMatchSheet && (
+                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && !showPostMatchSheet && !showRealtimePrepForSavedMatch && (
                         <CollectionTypeSelector
                             matchContext={{
                                 date: selectedMatch.date,
@@ -1996,15 +2024,155 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 competition: selectedMatch.competition,
                             }}
                             onSelect={(type: CollectionType) => {
-                                setCollectionType(type);
                                 if (type === 'realtime') {
                                     setShowMatchTypeModal(true);
                                 } else {
-                                    setShowScoutingWindow(true);
+                                    setShowPostMatchSheet(true);
                                 }
                             }}
                             onBack={handleBackToCalendar}
                         />
+                    )}
+
+                    {/* Preparação tempo real — partida salva (não executada): seleção de atletas antes de abrir a nova aba */}
+                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && (
+                        <div className="space-y-6 animate-fade-in pb-12">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
+                                    <Target className="text-[#00f0ff]" size={28} /> Preparação da Partida — Tempo Real
+                                </h2>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRealtimePrepForSavedMatch(false)}
+                                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
+                                >
+                                    <ArrowLeft size={16} /> Voltar
+                                </button>
+                            </div>
+
+                            <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">
+                                <h3 className="text-white font-bold uppercase text-sm mb-4 flex items-center gap-2">
+                                    <Calendar className="text-[#00f0ff]" size={16} /> Informações da Partida
+                                </h3>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data</span>
+                                        <p className="text-white font-bold text-sm">{formatDate(selectedMatch.date)}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Adversário</span>
+                                        <p className="text-white font-bold text-sm">{selectedMatch.opponent || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Competição</span>
+                                        <p className="text-white font-bold text-sm">{selectedMatch.competition || '-'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Tipo de Partida</span>
+                                        <p className="text-white font-bold text-sm">
+                                            {selectedMatchType === 'normal' && 'Partida Normal'}
+                                            {selectedMatchType === 'extraTime' && `Com Acréscimo (${selectedExtraTimeMinutes ?? 5} min)`}
+                                            {selectedMatchType === 'penalties' && 'Direto para Pênaltis'}
+                                            {selectedMatchType === 'extraTimePenalties' && `Acréscimo + Pênaltis (${selectedExtraTimeMinutes ?? 5} min)`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-zinc-950/80 rounded-3xl border border-zinc-800 p-6 shadow-lg">
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
+                                        <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
+                                    </h3>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const list = preparationAthleteFilter === 'goleiros' ? (players || []).filter(p => p.position === 'Goleiro') : (players || []).filter(p => p.position !== 'Goleiro');
+                                            const newSet = new Set(selectedPlayersForMatch);
+                                            list.forEach(p => {
+                                                if (!isPlayerInjured(p) && !preparationDataSavedMatch.suspendedIds.has(p.id)) newSet.add(String(p.id).trim());
+                                            });
+                                            setSelectedPlayersForMatch(newSet);
+                                        }}
+                                        className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-zinc-700 text-[#00f0ff] hover:bg-zinc-600 transition-colors"
+                                    >
+                                        Selecionar todos
+                                    </button>
+                                </div>
+                                <p className="text-zinc-400 text-xs mb-3">Suspensos (borda vermelha), lesão ativa (ambulância, borda laranja) e pendurados (alerta, borda amarela). Clique no card para selecionar.</p>
+                                <div className="max-h-[24rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                    {((preparationAthleteFilter === 'goleiros' ? (players || []).filter(p => p.position === 'Goleiro') : (players || []).filter(p => p.position !== 'Goleiro'))).map((player) => {
+                                        const id = String(player.id).trim();
+                                        const isSelected = selectedPlayersForMatch.has(id);
+                                        const injured = isPlayerInjured(player);
+                                        const suspended = preparationDataSavedMatch.suspendedIds.has(player.id);
+                                        const pendurado = preparationDataSavedMatch.penduradoIds.has(player.id);
+                                        const unavailable = injured || suspended;
+                                        const ph = preparationDataSavedMatch.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
+                                        const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
+                                        const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
+                                        return (
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                                <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
+                                                <div className="flex-shrink-0 flex items-center">
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                </div>
+                                                <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
+                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
+                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5 justify-end mt-0.5">
+                                                        {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
+                                                        {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}
+                                                        {pendurado && !suspended && !injured && <span className="p-0.5 rounded bg-amber-500/90" title="Pendurado"><AlertTriangle size={10} className="text-white" /></span>}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {((preparationAthleteFilter === 'goleiros' ? (players || []).filter(p => p.position === 'Goleiro') : (players || []).filter(p => p.position !== 'Goleiro'))).length === 0 && <p className="text-zinc-500 text-sm text-center py-6">Nenhum jogador nesta categoria</p>}
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (selectedPlayersForMatch.size === 0) return;
+                                        const realtimeScoutData = {
+                                            matchId: selectedMatch.id,
+                                            date: selectedMatch.date,
+                                            opponent: selectedMatch.opponent || '',
+                                            competition: selectedMatch.competition,
+                                            players: players || [],
+                                            teams: teams || [],
+                                            matchType: selectedMatchType,
+                                            extraTimeMinutes: selectedExtraTimeMinutes ?? 5,
+                                            selectedPlayerIds: Array.from(selectedPlayersForMatch),
+                                        };
+                                        localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
+                                        window.open('/scout-realtime', '_blank');
+                                        setShowRealtimePrepForSavedMatch(false);
+                                    }}
+                                    disabled={selectedPlayersForMatch.size === 0}
+                                    className="flex-1 px-6 py-4 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-sm rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
+                                >
+                                    <Target size={20} /> Iniciar Scout da Partida (abre em nova aba)
+                                </button>
+                            </div>
+                            {selectedPlayersForMatch.size === 0 && (
+                                <p className="text-amber-400 text-xs text-center">Selecione pelo menos um atleta para abrir o scout em nova aba.</p>
+                            )}
+                        </div>
                     )}
 
                     {/* Interface de Preparação para Partida Programada — tempo real */}
@@ -2049,97 +2217,109 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 </div>
                             </div>
 
-                            <AthleteSelector
-                                players={players.filter(isPlayerEligibleForMatchSelection)}
-                                selectedIds={selectedPlayersForMatch}
-                                onSelectionChange={setSelectedPlayersForMatch}
-                            />
+                            <div className="bg-zinc-950/80 rounded-3xl border border-zinc-800 p-6 shadow-lg">
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
+                                        <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
+                                    </h3>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const list = preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro');
+                                            const newSet = new Set(selectedPlayersForMatch);
+                                            list.forEach(p => {
+                                                if (!isPlayerInjured(p) && !preparationData.suspendedIds.has(p.id)) newSet.add(String(p.id).trim());
+                                            });
+                                            setSelectedPlayersForMatch(newSet);
+                                        }}
+                                        className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-zinc-700 text-[#00f0ff] hover:bg-zinc-600 transition-colors"
+                                    >
+                                        Selecionar todos
+                                    </button>
+                                </div>
+                                <p className="text-zinc-400 text-xs mb-3">Suspensos (borda vermelha), lesão ativa (ambulância, borda laranja) e pendurados (alerta, borda amarela). Clique no card para selecionar.</p>
+                                <div className="max-h-[24rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                    {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).map((player) => {
+                                        const id = String(player.id).trim();
+                                        const isSelected = selectedPlayersForMatch.has(id);
+                                        const injured = isPlayerInjured(player);
+                                        const suspended = preparationData.suspendedIds.has(player.id);
+                                        const pendurado = preparationData.penduradoIds.has(player.id);
+                                        const unavailable = injured || suspended;
+                                        const ph = preparationData.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
+                                        const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
+                                        const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
+                                        return (
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                                <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
+                                                <div className="flex-shrink-0 flex items-center">
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                </div>
+                                                <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
+                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
+                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5 justify-end mt-0.5">
+                                                        {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
+                                                        {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}
+                                                        {pendurado && !suspended && !injured && <span className="p-0.5 rounded bg-amber-500/90" title="Pendurado"><AlertTriangle size={10} className="text-white" /></span>}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).length === 0 && <p className="text-zinc-500 text-sm text-center py-6">Nenhum jogador nesta categoria</p>}
+                            </div>
 
-                            <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">
-                                <h3 className="text-white font-bold uppercase text-sm mb-4 flex items-center gap-2">
+                            <div className="bg-zinc-950/80 rounded-3xl border border-zinc-800 p-6 shadow-lg">
+                                <h3 className="text-white font-bold uppercase text-sm mb-3 flex items-center gap-2">
                                     <Clock className="text-[#00f0ff]" size={16} /> Tipo de Partida
                                 </h3>
-                                <div className="space-y-3">
-                                    <label className="flex items-center gap-3 p-4 bg-zinc-950 border-2 border-zinc-800 rounded-xl cursor-pointer hover:border-[#00f0ff]/50 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="preparationMatchType"
-                                            value="normal"
-                                            checked={preparationMatchType === 'normal'}
-                                            onChange={() => setPreparationMatchType('normal')}
-                                            className="w-5 h-5 text-[#00f0ff] border-zinc-700 focus:ring-[#00f0ff] focus:ring-2"
-                                        />
-                                        <div className="flex-1">
-                                            <div className="text-white font-bold text-sm">Partida Normal</div>
-                                            <div className="text-zinc-500 text-xs">Dois tempos de 20 minutos</div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    <label className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors cursor-pointer ${preparationMatchType === 'normal' ? 'bg-[#00f0ff]/10 border-[#00f0ff]' : 'bg-zinc-900 border-zinc-700 hover:border-[#00f0ff]/50'}`}>
+                                        <input type="radio" name="preparationMatchType" value="normal" checked={preparationMatchType === 'normal'} onChange={() => setPreparationMatchType('normal')} className="w-4 h-4 text-[#00f0ff] border-zinc-600 focus:ring-[#00f0ff] focus:ring-2" />
+                                        <div className="min-w-0">
+                                            <div className="text-white font-bold text-xs">Normal</div>
+                                            <div className="text-zinc-500 text-[10px]">2×20 min</div>
                                         </div>
                                     </label>
-
-                                    <label className="flex items-center gap-3 p-4 bg-zinc-950 border-2 border-zinc-800 rounded-xl cursor-pointer hover:border-[#00f0ff]/50 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="preparationMatchType"
-                                            value="extraTime"
-                                            checked={preparationMatchType === 'extraTime'}
-                                            onChange={() => setPreparationMatchType('extraTime')}
-                                            className="w-5 h-5 text-[#00f0ff] border-zinc-700 focus:ring-[#00f0ff] focus:ring-2"
-                                        />
-                                        <div className="flex-1">
-                                            <div className="text-white font-bold text-sm">Com Acréscimo</div>
-                                            <div className="text-zinc-500 text-xs">Partida normal + tempo extra</div>
+                                    <label className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors cursor-pointer ${preparationMatchType === 'extraTime' ? 'bg-[#00f0ff]/10 border-[#00f0ff]' : 'bg-zinc-900 border-zinc-700 hover:border-[#00f0ff]/50'}`}>
+                                        <input type="radio" name="preparationMatchType" value="extraTime" checked={preparationMatchType === 'extraTime'} onChange={() => setPreparationMatchType('extraTime')} className="w-4 h-4 text-[#00f0ff] border-zinc-600 focus:ring-[#00f0ff] focus:ring-2" />
+                                        <div className="min-w-0">
+                                            <div className="text-white font-bold text-xs">Acréscimo</div>
+                                            <div className="text-zinc-500 text-[10px]">+ tempo extra</div>
                                         </div>
                                     </label>
-
-                                    <label className="flex items-center gap-3 p-4 bg-zinc-950 border-2 border-zinc-800 rounded-xl cursor-pointer hover:border-[#00f0ff]/50 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="preparationMatchType"
-                                            value="penalties"
-                                            checked={preparationMatchType === 'penalties'}
-                                            onChange={() => setPreparationMatchType('penalties')}
-                                            className="w-5 h-5 text-[#00f0ff] border-zinc-700 focus:ring-[#00f0ff] focus:ring-2"
-                                        />
-                                        <div className="flex-1">
-                                            <div className="text-white font-bold text-sm">Direto para Pênaltis</div>
-                                            <div className="text-zinc-500 text-xs">Sem tempo normal, apenas pênaltis</div>
+                                    <label className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors cursor-pointer ${preparationMatchType === 'penalties' ? 'bg-[#00f0ff]/10 border-[#00f0ff]' : 'bg-zinc-900 border-zinc-700 hover:border-[#00f0ff]/50'}`}>
+                                        <input type="radio" name="preparationMatchType" value="penalties" checked={preparationMatchType === 'penalties'} onChange={() => setPreparationMatchType('penalties')} className="w-4 h-4 text-[#00f0ff] border-zinc-600 focus:ring-[#00f0ff] focus:ring-2" />
+                                        <div className="min-w-0">
+                                            <div className="text-white font-bold text-xs">Pênaltis</div>
+                                            <div className="text-zinc-500 text-[10px]">Direto pênaltis</div>
                                         </div>
                                     </label>
-
-                                    <label className="flex items-center gap-3 p-4 bg-zinc-950 border-2 border-zinc-800 rounded-xl cursor-pointer hover:border-[#00f0ff]/50 transition-colors">
-                                        <input
-                                            type="radio"
-                                            name="preparationMatchType"
-                                            value="extraTimePenalties"
-                                            checked={preparationMatchType === 'extraTimePenalties'}
-                                            onChange={() => setPreparationMatchType('extraTimePenalties')}
-                                            className="w-5 h-5 text-[#00f0ff] border-zinc-700 focus:ring-[#00f0ff] focus:ring-2"
-                                        />
-                                        <div className="flex-1">
-                                            <div className="text-white font-bold text-sm">Acréscimo + Pênaltis</div>
-                                            <div className="text-zinc-500 text-xs">Partida normal + acréscimo + pênaltis</div>
+                                    <label className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors cursor-pointer ${preparationMatchType === 'extraTimePenalties' ? 'bg-[#00f0ff]/10 border-[#00f0ff]' : 'bg-zinc-900 border-zinc-700 hover:border-[#00f0ff]/50'}`}>
+                                        <input type="radio" name="preparationMatchType" value="extraTimePenalties" checked={preparationMatchType === 'extraTimePenalties'} onChange={() => setPreparationMatchType('extraTimePenalties')} className="w-4 h-4 text-[#00f0ff] border-zinc-600 focus:ring-[#00f0ff] focus:ring-2" />
+                                        <div className="min-w-0">
+                                            <div className="text-white font-bold text-xs">Acr. + Pên.</div>
+                                            <div className="text-zinc-500 text-[10px]">Extra + pênaltis</div>
                                         </div>
                                     </label>
                                 </div>
-
                                 {(preparationMatchType === 'extraTime' || preparationMatchType === 'extraTimePenalties') && (
-                                    <div className="mt-4">
-                                        <label className="block text-zinc-400 text-xs font-bold uppercase mb-2">
-                                            Minutos de Acréscimo
-                                        </label>
-                                        <div className="flex items-center gap-3">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max="30"
-                                                value={preparationExtraTimeMinutes}
-                                                onChange={(e) => setPreparationExtraTimeMinutes(Math.max(1, Math.min(30, parseInt(e.target.value) || 5)))}
-                                                className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2 text-white text-sm outline-none focus:border-[#00f0ff]"
-                                            />
-                                            <div className="flex items-center gap-2 text-zinc-500 text-sm">
-                                                <Clock size={16} />
-                                                <span>minutos</span>
-                                            </div>
-                                        </div>
+                                    <div className="mt-3 flex items-center gap-3">
+                                        <label className="text-zinc-400 text-xs font-bold uppercase">Min. acréscimo</label>
+                                        <input type="number" min={1} max={30} value={preparationExtraTimeMinutes} onChange={(e) => setPreparationExtraTimeMinutes(Math.max(1, Math.min(30, parseInt(e.target.value) || 5)))} className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm focus:border-[#00f0ff]" />
+                                        <span className="text-zinc-500 text-xs">min</span>
                                     </div>
                                 )}
                             </div>
@@ -2197,16 +2377,74 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 </div>
                             </div>
 
-                            <AthleteSelector
-                                players={players.filter(isPlayerEligibleForMatchSelection)}
-                                selectedIds={selectedPlayersForMatch}
-                                onSelectionChange={setSelectedPlayersForMatch}
-                            />
+                            <div className="bg-zinc-950/80 rounded-3xl border border-zinc-800 p-6 shadow-lg">
+                                <div className="flex flex-wrap items-center gap-2 mb-3">
+                                    <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
+                                        <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
+                                    </h3>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const list = preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro');
+                                            const newSet = new Set(selectedPlayersForMatch);
+                                            list.forEach(p => {
+                                                if (!isPlayerInjured(p) && !preparationData.suspendedIds.has(p.id)) newSet.add(String(p.id).trim());
+                                            });
+                                            setSelectedPlayersForMatch(newSet);
+                                        }}
+                                        className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-zinc-700 text-[#00f0ff] hover:bg-zinc-600 transition-colors"
+                                    >
+                                        Selecionar todos
+                                    </button>
+                                </div>
+                                <p className="text-zinc-400 text-xs mb-3">Suspensos (borda vermelha), lesão ativa (ambulância, borda laranja) e pendurados (alerta, borda amarela). Clique no card para selecionar.</p>
+                                <div className="max-h-[24rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                    {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).map((player) => {
+                                        const id = String(player.id).trim();
+                                        const isSelected = selectedPlayersForMatch.has(id);
+                                        const injured = isPlayerInjured(player);
+                                        const suspended = preparationData.suspendedIds.has(player.id);
+                                        const pendurado = preparationData.penduradoIds.has(player.id);
+                                        const unavailable = injured || suspended;
+                                        const ph = preparationData.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
+                                        const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
+                                        const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
+                                        return (
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                                <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
+                                                <div className="flex-shrink-0 flex items-center">
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                </div>
+                                                <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
+                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
+                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5 justify-end mt-0.5">
+                                                        {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
+                                                        {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}
+                                                        {pendurado && !suspended && !injured && <span className="p-0.5 rounded bg-amber-500/90" title="Pendurado"><AlertTriangle size={10} className="text-white" /></span>}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).length === 0 && <p className="text-zinc-500 text-sm text-center py-6">Nenhum jogador nesta categoria</p>}
+                            </div>
 
                             <div className="flex justify-center">
                                 <button
                                     type="button"
-                                    onClick={() => setShowScoutingWindow(true)}
+                                    onClick={() => setShowPostMatchSheet(true)}
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors ${
                                         selectedPlayersForMatch.size === 0
@@ -2214,7 +2452,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             : 'bg-[#00f0ff] hover:bg-[#00d9e6] text-black shadow-[0_0_15px_rgba(0,240,255,0.3)]'
                                     }`}
                                 >
-                                    Iniciar Scout (tempo manual)
+                                    Continuar para planilha
                                 </button>
                             </div>
                         </div>
@@ -2250,7 +2488,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 handleBackToCalendar();
                             }}
                             onBack={handleBackToCalendar}
-                            recordedByUser={currentUser ? { id: currentUser.id, name: currentUser.name } : undefined}
                         />
                     )}
 
@@ -2459,40 +2696,31 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                         </button>
                                         <button
                                             onClick={() => {
-                                                // Criar MatchRecord temporário
-                                                const tempMatch: MatchRecord = {
-                                                    id: `temp-${Date.now()}`,
-                                                    opponent: selectedScheduledMatch.opponent || '',
+                                                if (selectedPlayersForMatch.size === 0) return;
+                                                const realtimeScoutData = {
+                                                    matchId: selectedScheduledMatch.id,
                                                     date: selectedScheduledMatch.date,
-                                                    result: 'E',
-                                                    goalsFor: 0,
-                                                    goalsAgainst: 0,
+                                                    opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,
-                                                    playerStats: {},
-                                                    teamStats: {
-                                                        goals: 0,
-                                                        assists: 0,
-                                                        passesCorrect: 0,
-                                                        passesWrong: 0,
-                                                        shotsOnTarget: 0,
-                                                        shotsOffTarget: 0,
-                                                        tacklesWithBall: 0,
-                                                        tacklesWithoutBall: 0,
-                                                        tacklesCounterAttack: 0,
-                                                        transitionErrors: 0,
-                                                    },
+                                                    players: players || [],
+                                                    teams: teams || [],
+                                                    matchType: preparationMatchType,
+                                                    extraTimeMinutes: preparationExtraTimeMinutes,
+                                                    selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                                 };
-                                                setSelectedMatch(tempMatch);
-                                                setSelectedMatchType(preparationMatchType);
-                                                setSelectedExtraTimeMinutes(preparationExtraTimeMinutes);
+                                                localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
+                                                window.open('/scout-realtime', '_blank');
                                                 setShowStartScoutConfirmation(false);
-                                                setShowScoutingWindow(true);
                                             }}
-                                            className="flex-1 px-4 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)]"
+                                            disabled={selectedPlayersForMatch.size === 0}
+                                            className="flex-1 px-4 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                                         >
                                             Confirmar e Iniciar
                                         </button>
                                     </div>
+                                    {selectedPlayersForMatch.size === 0 && (
+                                        <p className="text-amber-400 text-xs text-center mt-3">Selecione pelo menos um atleta para iniciar o scout.</p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -2630,50 +2858,29 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     <div className="mb-4 p-3 bg-zinc-950 rounded-xl border border-zinc-800">
                         <p className="text-zinc-400 text-[10px] font-bold uppercase mb-2">Selecionar Jogadores:</p>
                         <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                            {players
-                                .filter(p => isPlayerEligibleForMatchSelection(p) && ((p as any).status === 'Ativo' || !(p as any).status))
-                                .map(player => {
+                            {players.filter(p => (p as any).status === 'Ativo' || !(p as any).status).map(player => {
                                 const isInField = playersInField.has(String(player.id).trim());
-                                const matchDate = entries[0]?.date;
-                                const isUnavailable = isPlayerUnavailableForMatch(player, matchDate);
                                 return (
-                                    <label
-                                        key={player.id}
-                                        className={`flex items-center gap-2 p-2 rounded transition-colors ${
-                                            isUnavailable
-                                                ? 'opacity-60 cursor-not-allowed pointer-events-none'
-                                                : 'cursor-pointer hover:bg-zinc-900'
-                                        }`}
-                                    >
+                                    <label key={player.id} className="flex items-center gap-2 cursor-pointer hover:bg-zinc-900 p-2 rounded">
                                         <input
                                             type="checkbox"
                                             checked={isInField}
-                                            disabled={isUnavailable}
-                                            readOnly={isUnavailable}
                                             onChange={(e) => {
-                                                if (isUnavailable) return;
                                                 const newSet = new Set(playersInField);
                                                 if (e.target.checked) {
                                                     newSet.add(String(player.id).trim());
                                                 } else {
                                                     newSet.delete(String(player.id).trim());
+                                                    // Se remover da quadra e estava selecionado, limpar seleção
                                                     if (selectedPlayerId === String(player.id).trim()) {
                                                         setSelectedPlayerId(null);
                                                     }
                                                 }
                                                 setPlayersInField(newSet);
                                             }}
-                                            className="w-4 h-4 text-[#00f0ff] bg-zinc-900 border-zinc-700 rounded focus:ring-[#00f0ff] disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-4 h-4 text-[#00f0ff] bg-zinc-900 border-zinc-700 rounded focus:ring-[#00f0ff]"
                                         />
-                                        {isUnavailable && (
-                                            <div className="flex items-center gap-1 flex-shrink-0" title="Indisponível - em recuperação (lesão sem data de retorno)">
-                                                <div className="bg-red-600 p-0.5 rounded">
-                                                    <Ambulance size={14} className="text-white" />
-                                                </div>
-                                                <span className="text-[9px] font-bold uppercase text-red-400">Lesão</span>
-                                            </div>
-                                        )}
-                                        <span className={`text-xs font-bold ${isUnavailable ? 'text-zinc-500' : 'text-white'}`}>#{player.jerseyNumber} {player.name}</span>
+                                        <span className="text-white text-xs font-bold">#{player.jerseyNumber} {player.name}</span>
                                     </label>
                                 );
                             })}
@@ -2689,34 +2896,29 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                             </div>
                         ) : (
                             players.filter(p => playersInField.has(String(p.id).trim())).map(player => {
-                                        const entry = entries.find(e => String(e.athleteId).trim() === String(player.id).trim());
-                                        const isSelected = selectedPlayerId === String(player.id).trim();
-                                        const isInjured = isPlayerInjured(player);
-                                        const isSuspended = isPlayerSuspended(player.id);
-                                        const yellowCards = getYellowCardCount(player.id);
-                                        const isDisabled = isSuspended || isInjured;
-                                        
-                                        return (
-                                            <button
-                                                key={player.id}
-                                                onClick={() => {
-                                                    if (isViewMode) return;
-                                                    setSelectedPlayerId(String(player.id).trim());
-                                                }}
-                                                disabled={isViewMode}
-                                                className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
-                                                    isSelected 
-                                                        ? 'border-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_20px_rgba(0,240,255,0.5)]' 
-                                                        : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
-                                                } ${isDisabled ? 'opacity-60' : ''}`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    {isInjured && (
-                                                        <div className="flex-shrink-0 bg-red-600 p-1 rounded" title="Indisponível - em recuperação (lesão sem data de retorno)">
-                                                            <Ambulance size={16} className="text-white" />
-                                                        </div>
-                                                    )}
-                                                    <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${isSelected ? 'border-[#00f0ff]' : 'border-zinc-700'} bg-zinc-900 flex-shrink-0`}>
+                                const entry = entries.find(e => String(e.athleteId).trim() === String(player.id).trim());
+                                const isSelected = selectedPlayerId === String(player.id).trim();
+                                const isInjured = isPlayerInjured(player);
+                                const isSuspended = isPlayerSuspended(player.id);
+                                const yellowCards = getYellowCardCount(player.id);
+                                const isDisabled = isSuspended || isInjured;
+                                
+                                return (
+                                    <button
+                                        key={player.id}
+                                        onClick={() => {
+                                            if (isViewMode) return;
+                                            setSelectedPlayerId(String(player.id).trim());
+                                        }}
+                                        disabled={isViewMode}
+                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                                            isSelected 
+                                                ? 'border-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_20px_rgba(0,240,255,0.5)]' 
+                                                : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
+                                        } ${isDisabled ? 'opacity-60' : ''}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${isSelected ? 'border-[#00f0ff]' : 'border-zinc-700'} bg-zinc-900 flex-shrink-0`}>
                                                 {player.photoUrl ? (
                                                     <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
                                                 ) : (
@@ -3151,12 +3353,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                         setSelectedExtraTimeMinutes(extraTimeMinutes);
                     }
                     setShowMatchTypeModal(false);
-                    setShowScoutingWindow(true);
+                    // Partida salva: não abrir aba ainda — exibir tela de seleção de atletas; só depois abrir a nova aba
+                    if (selectedMatch) {
+                        setShowRealtimePrepForSavedMatch(true);
+                    }
                 }}
             />
 
-            {/* Janela de Coleta da Partida (realtime ou postmatch) */}
-            {(selectedMatch || (collectionType === 'postmatch' && selectedScheduledMatch)) && (
+            {/* Janela de Coleta da Partida */}
+            {selectedMatch && (
                 <MatchScoutingWindow
                     isOpen={showScoutingWindow}
                     onClose={() => {
@@ -3164,45 +3369,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                         setSelectedMatchType('normal');
                         setSelectedExtraTimeMinutes(5);
                         setSelectedPlayersForMatch(new Set());
-                        setShowPostMatchSheet(false);
                     }}
-                    match={
-                        selectedMatch ??
-                        ({
-                            id: `sched-${selectedScheduledMatch!.id}`,
-                            opponent: selectedScheduledMatch!.opponent || '',
-                            date: selectedScheduledMatch!.date,
-                            result: 'E',
-                            goalsFor: 0,
-                            goalsAgainst: 0,
-                            competition: selectedScheduledMatch!.competition,
-                            playerStats: {},
-                            teamStats: {
-                                goals: 0,
-                                assists: 0,
-                                passesCorrect: 0,
-                                passesWrong: 0,
-                                shotsOnTarget: 0,
-                                shotsOffTarget: 0,
-                                tacklesWithBall: 0,
-                                tacklesWithoutBall: 0,
-                                tacklesCounterAttack: 0,
-                                transitionErrors: 0,
-                            },
-                        } as MatchRecord)
-                    }
+                    match={selectedMatch}
                     players={players || []}
                     teams={teams || []}
                     matchType={selectedMatchType}
                     extraTimeMinutes={selectedExtraTimeMinutes}
-                    selectedPlayerIds={selectedPlayersForMatch.size > 0 ? Array.from(selectedPlayersForMatch) : undefined}
-                    mode={collectionType === 'postmatch' ? 'postmatch' : 'realtime'}
-                    onSave={(saved) => {
-                        onSave?.(saved);
-                        handleBackToCalendar();
-                    }}
-                    recordedByUser={currentUser ? { id: currentUser.id, name: currentUser.name } : undefined}
-                    takeFullWidth={showScoutingWindow}
+                    selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
                 />
             )}
         </div>

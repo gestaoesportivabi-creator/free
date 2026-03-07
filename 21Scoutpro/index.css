@@ -8,11 +8,46 @@ html {
 /* Theme Variables */
 :root {
   --font-sans: 'DM Sans', sans-serif;
+  --font-headline: 'Montserrat', sans-serif;
+  --font-impact: 'Oswald', sans-serif;
+  --font-body: 'Montserrat', sans-serif;
   --bg-primary-dark: #000000;
   --bg-secondary-dark: #09090b;
   --text-primary-dark: #ffffff;
   --text-secondary-dark: #a1a1aa;
   --border-dark: #27272a;
+}
+
+/* Landing page typography */
+.landing-headline {
+  font-family: var(--font-headline);
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
+.landing-impact {
+  font-family: var(--font-impact);
+  font-weight: 700;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.035em;
+}
+
+.landing-body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.landing-body-medium {
+  font-family: var(--font-body);
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
 }
 
 .theme-dark {
@@ -140,5 +175,12 @@ html {
 /* Glow Effect */
 .glow-text {
   text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+/* Sidebar drawer: sem animação para quem prefere reduzir movimento */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-drawer {
+    transition: none;
+  }
 }
 

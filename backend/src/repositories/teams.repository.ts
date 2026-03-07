@@ -5,6 +5,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 // Tipos do banco (Prisma gera automaticamente, mas definimos aqui para referência)
 type EquipeDB = {
@@ -21,7 +26,7 @@ export const teamsRepository = {
   /**
    * Buscar todas as equipes do tenant
    */
-  async findAll(tenantInfo: TenantInfo): Promise<EquipeDB[]> {
+  async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<EquipeDB[]> {
     // DEBUG: Log do tenantInfo recebido
     console.log('[TEAMS_REPOSITORY] findAll - TenantInfo recebido:', {
       tecnico_id: tenantInfo.tecnico_id,
@@ -49,10 +54,8 @@ export const teamsRepository = {
         return [];
       }
 
-      const equipes = await prisma.equipe.findMany({
-        where: {
-          tecnicoId: tenantInfo.tecnico_id,
-        },
+      const equipes = await db(tx).equipe.findMany({
+        where: { tecnicoId: tenantInfo.tecnico_id },
         orderBy: { nome: 'asc' },
       }) as EquipeDB[];
       
@@ -97,10 +100,8 @@ export const teamsRepository = {
         return [];
       }
       console.log('[TEAMS_REPOSITORY] Filtrando equipes por clubeId:', tenantInfo.clube_id);
-      const equipes = await prisma.equipe.findMany({
-        where: {
-          clubeId: tenantInfo.clube_id,
-        },
+      const equipes = await db(tx).equipe.findMany({
+        where: { clubeId: tenantInfo.clube_id },
         orderBy: { nome: 'asc' },
       }) as EquipeDB[];
       
@@ -125,14 +126,8 @@ export const teamsRepository = {
   /**
    * Buscar equipe por ID (com validação de tenant)
    */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<EquipeDB | null> {
-    console.log('[TEAMS_REPOSITORY] findById - Buscando equipe:', {
-      equipe_id: id,
-      tenant_tecnico_id: tenantInfo.tecnico_id,
-      tenant_clube_id: tenantInfo.clube_id,
-    });
-
-    const equipe = await prisma.equipe.findUnique({
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<EquipeDB | null> {
+    const equipe = await db(tx).equipe.findUnique({
       where: { id },
     });
 
@@ -184,67 +179,21 @@ export const teamsRepository = {
     temporada?: string;
     tecnicoId: string;
     clubeId?: string;
-  }): Promise<EquipeDB> {
-    return prisma.equipe.create({
-      data,
-    }) as Promise<EquipeDB>;
+  }, tx?: TransactionClient): Promise<EquipeDB> {
+    return db(tx).equipe.create({ data }) as Promise<EquipeDB>;
   },
 
-  /**
-   * Atualizar equipe
-   */
-  async update(id: string, data: Partial<EquipeDB>): Promise<EquipeDB> {
-    return prisma.equipe.update({
+  async update(id: string, data: Partial<EquipeDB>, tx?: TransactionClient): Promise<EquipeDB> {
+    return db(tx).equipe.update({ where: { id }, data }) as Promise<EquipeDB>;
+  },
+
+  async delete(id: string, tx?: TransactionClient): Promise<boolean> {
+    const equipe = await db(tx).equipe.findUnique({
       where: { id },
-      data,
-    }) as Promise<EquipeDB>;
-  },
-
-  /**
-   * Deletar equipe
-   */
-  async delete(id: string): Promise<boolean> {
-    console.log('[TEAMS_REPOSITORY] delete - Deletando equipe:', id);
-    try {
-      // Primeiro, verificar se a equipe existe
-      const equipe = await prisma.equipe.findUnique({
-        where: { id },
-        include: {
-          jogadores: true,
-          jogos: true,
-          programacoes: true,
-          campeonatos: true,
-        },
-      });
-
-      if (!equipe) {
-        console.error('[TEAMS_REPOSITORY] delete - ERRO: Equipe não encontrada:', id);
-        throw new Error('Equipe não encontrada');
-      }
-
-      console.log('[TEAMS_REPOSITORY] delete - Equipe encontrada:', {
-        id: equipe.id,
-        nome: equipe.nome,
-        jogadores_count: equipe.jogadores.length,
-        jogos_count: equipe.jogos.length,
-        programacoes_count: equipe.programacoes.length,
-        campeonatos_count: equipe.campeonatos.length,
-      });
-
-      // Deletar a equipe (cascade deve deletar relacionamentos)
-      await prisma.equipe.delete({
-        where: { id },
-      });
-      console.log('[TEAMS_REPOSITORY] delete - Equipe deletada com sucesso:', id);
-      return true;
-    } catch (error: any) {
-      console.error('[TEAMS_REPOSITORY] delete - ERRO ao deletar equipe:', {
-        equipe_id: id,
-        error: error?.message,
-        code: error?.code,
-        meta: error?.meta,
-      });
-      throw error;
-    }
+      include: { jogadores: true, jogos: true, programacoes: true, campeonatos: true },
+    });
+    if (!equipe) throw new Error('Equipe não encontrada');
+    await db(tx).equipe.delete({ where: { id } });
+    return true;
   },
 };

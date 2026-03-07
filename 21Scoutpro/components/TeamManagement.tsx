@@ -197,16 +197,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const start = new Date(newInjuryStart);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
-        // Calcular dias baseado na data de retorno real (se houver) ou prevista (se houver)
-        const endDate = newInjuryReturnDateActual || newInjuryReturnDate;
-        if (endDate) {
-            const end = new Date(endDate);
+        // Dias de afastamento: usar apenas retorno REAL para fim da lesão (nunca previsto)
+        const dataLiberacao = newInjuryReturnDateActual;
+        if (dataLiberacao) {
+            const end = new Date(dataLiberacao);
             end.setHours(0, 0, 0, 0);
             const diffTime = Math.abs(end.getTime() - start.getTime());
             daysOut = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         } else {
-            // Se não tem data final, calcular dias desde o início até hoje
             start.setHours(0, 0, 0, 0);
             const diffTime = Math.abs(today.getTime() - start.getTime());
             daysOut = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -216,15 +214,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             id: Date.now().toString(),
             playerId: editPlayerId,
             date: newInjuryStart,
-            endDate: newInjuryReturnDateActual || undefined,
+            startDate: newInjuryStart,
+            // Retorno real = data da liberação; nunca gravar previsto em endDate/returnDateActual
+            endDate: newInjuryReturnDateActual ? newInjuryReturnDateActual : undefined,
             returnDate: newInjuryReturnDate || undefined,
-            returnDateActual: newInjuryReturnDateActual || undefined,
+            returnDateActual: newInjuryReturnDateActual ? newInjuryReturnDateActual : undefined,
             type: newInjuryType as any,
             location: newInjuryLocation as any,
             side: newInjurySide,
             severity: newInjurySeverity as any,
             origin: newInjuryOrigin,
-            startDate: newInjuryStart,
             daysOut: daysOut
         };
 
@@ -255,16 +254,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
     const saveEditInjury = () => {
         if (!editingInjuryId || !editPlayerId) return;
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const endDate = editInjuryReturnDateActual || editInjuryReturnDate;
         let daysOut = 0;
         const inj = injuryHistory.find(i => i.id === editingInjuryId);
         if (inj) {
             const startDate = new Date(inj.startDate || inj.date || '');
             startDate.setHours(0, 0, 0, 0);
-            if (endDate) {
-                const end = new Date(endDate);
+            // Dias de afastamento: usar apenas retorno REAL (liberação), nunca previsto
+            const dataLiberacao = editInjuryReturnDateActual;
+            if (dataLiberacao) {
+                const end = new Date(dataLiberacao);
                 end.setHours(0, 0, 0, 0);
                 daysOut = Math.ceil(Math.abs(end.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
             } else {
@@ -275,11 +273,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         }
         const updatedInjuryHistory = injuryHistory.map(i => {
             if (i.id !== editingInjuryId) return i;
+            // Retorno previsto e retorno real são campos distintos: nunca gravar previsto em returnDateActual ou endDate
+            const retornoPrevisto = editInjuryReturnDate || undefined;
+            const retornoReal = editInjuryReturnDateActual ? editInjuryReturnDateActual : undefined;
             return {
                 ...i,
-                returnDate: editInjuryReturnDate || undefined,
-                returnDateActual: editInjuryReturnDateActual || undefined,
-                endDate: editInjuryReturnDateActual || i.endDate,
+                returnDate: retornoPrevisto,
+                returnDateActual: retornoReal,
+                endDate: retornoReal !== undefined ? retornoReal : i.endDate,
                 daysOut,
             };
         });
@@ -396,40 +397,48 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         });
     };
 
-    const openAddForPosition = (pos: Position) => {
-        resetForm();
-        setPosition(pos);
-        setIsFormOpen(true);
-        setEditMode(false);
-    };
-
+    
     const PlayerCard = ({ player }: { player: Player }) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        // Calcular dias de afastamento ativo (lesão sem retorno real)
+        // Lesões ativas = sem retorno real/alta
+        // Lesão ativa = sem data de retorno real/liberacao preenchida (ícone ambulância)
         const activeInjuries = player.injuryHistory?.filter(inj => !inj.returnDateActual && !inj.endDate) || [];
+        // Recuperadas: com retorno real ou endDate
+        const recoveredInjuries = player.injuryHistory?.filter(inj => !!(inj.returnDateActual || inj.endDate)) || [];
         let activeDaysOut = 0;
-        let activeDaysColor = 'text-green-400';
+        let withinDeadline = true; // dentro do prazo (retorno previsto não passou)
         
         if (activeInjuries.length > 0) {
-            const activeInjury = activeInjuries[0]; // Pegar a primeira lesão ativa
+            const activeInjury = activeInjuries[0];
             const startDate = new Date(activeInjury.startDate || activeInjury.date || '');
             startDate.setHours(0, 0, 0, 0);
             const diffTime = Math.abs(today.getTime() - startDate.getTime());
             activeDaysOut = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            // Verificar se passou da data prevista
             if (activeInjury.returnDate) {
                 const returnDate = new Date(activeInjury.returnDate);
                 returnDate.setHours(0, 0, 0, 0);
-                if (today > returnDate) {
-                    activeDaysColor = 'text-red-400';
-                } else {
-                    activeDaysColor = 'text-green-400';
-                }
+                withinDeadline = today <= returnDate;
             }
         }
+        
+        // Contar recuperadas dentro do prazo vs fora do prazo (retorno real <= retorno previsto = dentro)
+        let recoveredWithin = 0;
+        let recoveredOutside = 0;
+        recoveredInjuries.forEach((inj) => {
+            const actual = inj.returnDateActual || inj.endDate || '';
+            const expected = inj.returnDate || '';
+            if (!actual) return;
+            const actualDate = new Date(actual);
+            if (expected) {
+                const expectedDate = new Date(expected);
+                if (actualDate <= expectedDate) recoveredWithin++;
+                else recoveredOutside++;
+            } else {
+                recoveredWithin++;
+            }
+        });
         
         const totalDaysOut = player.injuryHistory ? player.injuryHistory.reduce((acc, curr) => acc + (curr.daysOut || 0), 0) : 0;
         return (
@@ -454,7 +463,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                      
                      <div className="absolute top-4 left-4 flex items-center gap-2">
                          {activeInjuries.length > 0 && (
-                             <div className="bg-red-600 p-1.5 rounded-lg shadow-lg" title="Em recuperação - lesão sem data de retorno">
+                             <div className="bg-red-600 p-1.5 rounded-lg shadow-lg" title="Lesão ativa">
                                  <Ambulance size={18} className="text-white" />
                              </div>
                          )}
@@ -469,17 +478,33 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                          <span className="text-2xl font-black text-white italic">#{player.jerseyNumber}</span>
                      </div>
 
-                     {/* Edit Button */}
-                     <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditClick(player);
-                        }}
-                        className="absolute bottom-4 right-4 bg-white text-black p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity hover:scale-110 z-10 cursor-pointer shadow-lg"
-                        title="Editar Atleta"
-                     >
-                         <Edit2 size={16} />
-                     </button>
+                     {/* Edit e Excluir */}
+                     <div className="absolute bottom-4 right-4 flex items-center gap-2 z-10">
+                         {onDeletePlayer && (
+                             <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPlayerToDelete(player);
+                                }}
+                                className="bg-red-500/90 hover:bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer shadow-lg"
+                                title="Excluir Atleta"
+                             >
+                                 <Trash2 size={16} />
+                             </button>
+                         )}
+                         <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(player);
+                            }}
+                            className="bg-white text-black p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity hover:scale-110 cursor-pointer shadow-lg"
+                            title="Editar Atleta"
+                         >
+                             <Edit2 size={16} />
+                         </button>
+                     </div>
                      
                      <div className="absolute bottom-4 left-4">
                          <h3 className="text-xl font-black text-white uppercase italic tracking-tighter drop-shadow-lg">{player.nickname || player.name}</h3>
@@ -516,9 +541,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
                                 {activeInjuries.length > 0 && (
                                     <div className="flex items-center gap-2 border-t border-zinc-900 pt-1 mt-1">
-                                        <AlertTriangle size={14} className={activeDaysColor === 'text-red-400' ? 'text-red-500' : 'text-green-500'} />
-                                        <span className={`text-[10px] font-bold uppercase ${activeDaysColor}`}>
-                                            {activeDaysOut} Dias em Afastamento {activeDaysColor === 'text-red-400' ? '(Atrasado)' : '(No Prazo)'}
+                                        <AlertTriangle size={14} className={withinDeadline ? 'text-green-500' : 'text-red-500'} />
+                                        <span className={`text-[10px] font-bold uppercase ${withinDeadline ? 'text-green-400' : 'text-red-400'}`}>
+                                            {activeDaysOut} dias {withinDeadline ? '— Dentro do prazo' : '— Fora do prazo'}
+                                        </span>
+                                    </div>
+                                )}
+                                {player.injuryHistory.length > 1 && recoveredInjuries.length > 0 && (
+                                    <div className="flex items-center gap-2 border-t border-zinc-900 pt-1 mt-1 text-[10px] text-zinc-400">
+                                        <span className="font-bold uppercase">
+                                            {recoveredWithin} recuperada{recoveredWithin !== 1 ? 's' : ''} dentro do prazo
+                                            {recoveredOutside > 0 && ` · ${recoveredOutside} fora do prazo`}
                                         </span>
                                     </div>
                                 )}
@@ -542,7 +575,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setPlayerToDelete(null)}>
                 <div className="bg-zinc-900 border border-zinc-700 rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
                     <p className="text-white font-medium mb-6">
-                        Deseja realmente excluir o cadastro de <strong>{playerToDelete.nickname || playerToDelete.name}</strong>? Esta ação não pode ser desfeita.
+                        Deseja mesmo excluir esse atleta? <strong>{playerToDelete.nickname || playerToDelete.name}</strong> será removido do elenco. Esta ação não pode ser desfeita.
                     </p>
                     <div className="flex justify-end gap-3">
                         <button
@@ -613,7 +646,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                         }}
                         className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-6 py-3 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.4)]"
                     >
-                        {isFormOpen ? 'Cancelar' : <><Plus size={16} /> Novo Atleta</>}
+                        {isFormOpen ? 'Cancelar' : <><Plus size={16} /> Novo atleta</>}
                     </button>
                 </div>
             </div>
@@ -824,16 +857,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data Início</label>
+                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1" title="Data em que a lesão ocorreu">Data da lesão</label>
                                         <input type="date" value={newInjuryStart} onChange={e => setNewInjuryStart(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-white text-xs" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data Retorno Prevista</label>
-                                        <input type="date" value={newInjuryReturnDate} onChange={e => setNewInjuryReturnDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-white text-xs" />
+                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1" title="Data limite para retornar as atividades dentro do prazo">Retorno previsto</label>
+                                        <input type="date" value={newInjuryReturnDate} onChange={e => setNewInjuryReturnDate(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-white text-xs" aria-describedby="help-retorno-previsto" />
+                                        <span id="help-retorno-previsto" className="text-[9px] text-zinc-500 block mt-0.5">Data limite para retorno dentro do prazo</span>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data Retorno Real / Alta</label>
-                                        <input type="date" value={newInjuryReturnDateActual} onChange={e => setNewInjuryReturnDateActual(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-white text-xs" />
+                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1" title="Data da liberação para volta das atividades">Retorno real</label>
+                                        <input type="date" value={newInjuryReturnDateActual} onChange={e => setNewInjuryReturnDateActual(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-white text-xs" aria-describedby="help-retorno-real" />
+                                        <span id="help-retorno-real" className="text-[9px] text-zinc-500 block mt-0.5">Data da liberação para volta</span>
                                     </div>
                                     <div className="md:col-span-2 lg:col-span-4">
                                         <button 
@@ -852,9 +887,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                         <table className="w-full text-left">
                                             <thead className="bg-zinc-900 text-[10px] text-zinc-500 uppercase">
                                                 <tr>
-                                                    <th className="p-3">Data da lesão</th>
-                                                    <th className="p-3">Retorno previsto</th>
-                                                    <th className="p-3">Retorno real</th>
+                                                    <th className="p-3" title="Data em que a lesão ocorreu">Data da lesão</th>
+                                                    <th className="p-3" title="Data limite para retornar as atividades dentro do prazo">Retorno previsto</th>
+                                                    <th className="p-3" title="Data da liberação para volta das atividades">Retorno real</th>
                                                     <th className="p-3 w-20 text-center">Editar</th>
                                                 </tr>
                                             </thead>
@@ -878,7 +913,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                                         ) : (
                                                             <>
                                                                 <td className="p-3">{inj.returnDate ? new Date(inj.returnDate).toLocaleDateString('pt-BR') : '-'}</td>
-                                                                <td className="p-3">{inj.returnDateActual ? new Date(inj.returnDateActual).toLocaleDateString('pt-BR') : '-'}</td>
+                                                                <td className="p-3">{(inj.returnDateActual || inj.endDate) ? new Date(inj.returnDateActual || inj.endDate || '').toLocaleDateString('pt-BR') : '-'}</td>
                                                                 <td className="p-3 text-center">
                                                                     <button type="button" onClick={() => startEditInjury(inj)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors" title="Editar data de retorno">
                                                                         <Pencil size={14} />
@@ -1192,19 +1227,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                 return (
                     <div key={`expanded-${pos}`} className="animate-fade-in">
                         <div className={`bg-zinc-950 rounded-3xl border-2 ${style.border} p-6`}>
-                            <div className="flex items-center justify-between mb-6">
+                            <div className="mb-6">
                                 <h3 className="font-black text-white uppercase tracking-tighter flex items-center gap-3 text-2xl">
                                     <Shirt size={28} className="text-[#10b981]" />
                                     {pos}
                                     <span className="text-lg text-white font-normal normal-case">({list.length} atletas)</span>
                                 </h3>
-                                <button
-                                    type="button"
-                                    onClick={() => openAddForPosition(pos as Position)}
-                                    className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-6 py-3 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.4)]"
-                                >
-                                    <Plus size={16} /> Cadastrar atleta em {pos}
-                                </button>
                             </div>
                             
                             {list.length > 0 ? (
@@ -1217,7 +1245,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 <div className="text-center py-12">
                                     <Shirt size={64} className="text-zinc-700 mx-auto mb-4" />
                                     <p className="text-zinc-500 text-lg font-bold uppercase mb-2">Nenhum atleta cadastrado em {pos}</p>
-                                    <p className="text-zinc-600 text-sm">Clique no botão acima para cadastrar o primeiro atleta desta posição.</p>
+                                    <p className="text-zinc-600 text-sm">Use o botão &quot;Novo atleta&quot; no topo da página para cadastrar.</p>
                                 </div>
                             )}
                         </div>

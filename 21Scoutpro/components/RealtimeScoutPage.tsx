@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
+import { matchesApi } from '../services/api';
 
 interface RealtimeScoutData {
   matchId?: string;
@@ -68,16 +69,38 @@ export const RealtimeScoutPage: React.FC = () => {
     }
   }, []);
 
-  const handleSave = (savedMatch: MatchRecord) => {
-    // Salvar partida e opcionalmente fechar a aba
-    // Por enquanto, apenas logar
-    console.log('Partida salva:', savedMatch);
-    
-    // Limpar dados do localStorage
-    localStorage.removeItem('realtimeScoutData');
-    
-    // Opcional: fechar a aba após salvar
-    // window.close();
+  // Manter URL sempre em /scout-realtime: não permitir voltar para /dashboard nesta aba
+  useEffect(() => {
+    if (window.location.pathname !== '/scout-realtime') {
+      window.history.replaceState({}, '', '/scout-realtime');
+    }
+    const handlePopState = () => {
+      if (window.location.pathname !== '/scout-realtime') {
+        window.history.replaceState({}, '', '/scout-realtime');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleSave = async (savedMatch: MatchRecord) => {
+    try {
+      if (!savedMatch || !savedMatch.teamStats) {
+        alert('Dados da partida incompletos. Não foi possível salvar.');
+        return;
+      }
+      const saved = await matchesApi.create(savedMatch);
+      if (saved) {
+        localStorage.removeItem('realtimeScoutData');
+        alert('Partida salva com sucesso! Os dados foram gravados no sistema.');
+        window.close();
+      } else {
+        alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
+      }
+    } catch (err) {
+      console.error('Erro ao salvar partida:', err);
+      alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
+    }
   };
 
   const handleClose = () => {
@@ -88,7 +111,7 @@ export const RealtimeScoutPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="w-screen h-screen bg-black flex items-center justify-center">
+      <div className="w-screen h-dvh min-h-dvh bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="text-[#00f0ff] text-2xl font-black uppercase mb-4">Carregando...</div>
           <div className="text-zinc-400 text-sm">Preparando interface de coleta</div>
@@ -99,7 +122,7 @@ export const RealtimeScoutPage: React.FC = () => {
 
   if (error || !scoutData || !match) {
     return (
-      <div className="w-screen h-screen bg-black flex items-center justify-center">
+      <div className="w-screen h-dvh min-h-dvh bg-black flex items-center justify-center">
         <div className="text-center max-w-md mx-4">
           <div className="text-red-400 text-xl font-black uppercase mb-4">Erro</div>
           <div className="text-zinc-400 text-sm mb-6">{error || 'Dados da partida não encontrados'}</div>
@@ -115,10 +138,11 @@ export const RealtimeScoutPage: React.FC = () => {
   }
 
   return (
-    <div className="w-screen h-screen overflow-hidden bg-black">
+    <div className="w-screen h-dvh min-h-dvh overflow-hidden bg-black">
       <MatchScoutingWindow
         isOpen={true}
         onClose={handleClose}
+        onSave={handleSave}
         match={match}
         players={scoutData.players}
         teams={scoutData.teams}

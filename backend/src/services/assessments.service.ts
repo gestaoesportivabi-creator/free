@@ -3,6 +3,7 @@
  */
 
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
 import { assessmentsRepository } from '../repositories/assessments.repository';
 import { PhysicalAssessment } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
@@ -44,29 +45,18 @@ export const assessmentsService = {
   /**
    * Buscar todas as avaliações do tenant
    */
-  async getAll(tenantInfo: TenantInfo): Promise<PhysicalAssessment[]> {
-    const avaliacoes = await assessmentsRepository.findAll(tenantInfo);
+  async getAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment[]> {
+    const avaliacoes = await assessmentsRepository.findAll(tenantInfo, tx);
     return avaliacoes.map(transformAssessmentToFrontend);
   },
 
-  /**
-   * Buscar avaliação por ID
-   */
-  async getById(id: string, tenantInfo: TenantInfo): Promise<PhysicalAssessment> {
-    const avaliacao = await assessmentsRepository.findById(id, tenantInfo);
-    
-    if (!avaliacao) {
-      throw new NotFoundError('Avaliação física', id);
-    }
-
+  async getById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
+    const avaliacao = await assessmentsRepository.findById(id, tenantInfo, tx);
+    if (!avaliacao) throw new NotFoundError('Avaliação física', id);
     return transformAssessmentToFrontend(avaliacao);
   },
 
-  /**
-   * Criar avaliação
-   * Frontend envia campos adicionais: bodyFatPercent, actionPlan, skinfolds (chest, axilla, etc.)
-   */
-  async create(data: any, _tenantInfo: TenantInfo): Promise<PhysicalAssessment> {
+  async create(data: any, _tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
     // Mapear campos do frontend para banco
     const backendData = {
       jogadorId: data.playerId,
@@ -92,18 +82,13 @@ export const assessmentsService = {
       planoAcao: data.actionPlan,
     };
 
-    const avaliacao = await assessmentsRepository.create(backendData);
+    const avaliacao = await assessmentsRepository.create(backendData, tx);
     return transformAssessmentToFrontend(avaliacao);
   },
 
-  /**
-   * Atualizar avaliação
-   */
-  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo): Promise<PhysicalAssessment> {
-    const existing = await assessmentsRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Avaliação física', id);
-    }
+  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
+    const existing = await assessmentsRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Avaliação física', id);
 
     // Mapear campos do frontend para banco
     const backendData: any = {};
@@ -129,20 +114,14 @@ export const assessmentsService = {
     // Campo actionPlan
     if (data.actionPlan !== undefined) backendData.planoAcao = data.actionPlan;
 
-    const avaliacao = await assessmentsRepository.update(id, backendData);
+    const avaliacao = await assessmentsRepository.update(id, backendData, tx);
     return transformAssessmentToFrontend(avaliacao);
   },
 
-  /**
-   * Deletar avaliação
-   */
-  async delete(id: string, tenantInfo: TenantInfo): Promise<boolean> {
-    const existing = await assessmentsRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Avaliação física', id);
-    }
-
-    await assessmentsRepository.delete(id);
+  async delete(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<boolean> {
+    const existing = await assessmentsRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Avaliação física', id);
+    await assessmentsRepository.delete(id, tx);
     return true;
   },
 };

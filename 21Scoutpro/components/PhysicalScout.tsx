@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, Filter, UserMinus, Moon } from 'lucide-react';
+import { LineChart, Line, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, Filter, UserMinus, Moon, RefreshCw } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
@@ -8,6 +8,8 @@ import { normalizeScheduleDays } from '../utils/scheduleUtils';
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
+const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
+const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
 const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
 
 type StoredQualidadeSono = Record<string, Record<string, number>>;
@@ -15,6 +17,8 @@ type StoredQualidadeSono = Record<string, Record<string, number>>;
 type ChampionshipMatch = { id: string; date: string; time?: string; opponent: string; competition?: string };
 type StoredPseJogos = Record<string, Record<string, number>>;
 type StoredPseTreinos = Record<string, Record<string, number>>;
+type StoredPsrJogos = Record<string, Record<string, number>>;
+type StoredPsrTreinos = Record<string, Record<string, number>>;
 
 interface PhysicalScoutProps {
     matches: MatchRecord[];
@@ -30,6 +34,8 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   const [trainingPse, setTrainingPse] = useState<Record<string, number>>({});
   const [pseJogosStored, setPseJogosStored] = useState<StoredPseJogos>({});
   const [pseTreinosStored, setPseTreinosStored] = useState<StoredPseTreinos>({});
+  const [psrJogosStored, setPsrJogosStored] = useState<StoredPsrJogos>({});
+  const [psrTreinosStored, setPsrTreinosStored] = useState<StoredPsrTreinos>({});
   const [qualidadeSonoStored, setQualidadeSonoStored] = useState<StoredQualidadeSono>({});
 
   useEffect(() => {
@@ -55,12 +61,21 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
   useEffect(() => {
     try {
+      const j = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
+      if (j) setPsrJogosStored(JSON.parse(j));
+      const t = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
+      if (t) setPsrTreinosStored(JSON.parse(t));
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    try {
       const raw = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
       if (raw) setQualidadeSonoStored(JSON.parse(raw));
     } catch (_) {}
   }, []);
 
-  // Recarregar dados das abas PSE e Qualidade de sono quando a tab for exibida (para atualizar após preencher nas outras abas)
+  // Recarregar dados das abas PSE, PSR e Qualidade de sono quando a tab for exibida (para atualizar após preencher nas outras abas)
   useEffect(() => {
     const onStorage = () => {
       try {
@@ -68,6 +83,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         if (j) setPseJogosStored(JSON.parse(j));
         const t = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
         if (t) setPseTreinosStored(JSON.parse(t));
+        const pj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
+        if (pj) setPsrJogosStored(JSON.parse(pj));
+        const pt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
+        if (pt) setPsrTreinosStored(JSON.parse(pt));
         const q = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
         if (q) setQualidadeSonoStored(JSON.parse(q));
       } catch (_) {}
@@ -153,6 +172,22 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
   const teamAveragePseTreinos = (sessionKey: string): number | null => {
     const data = pseTreinosStored[sessionKey];
+    if (!data) return null;
+    const values = Object.values(data).filter(v => typeof v === 'number' && v >= 0 && v <= 10);
+    if (values.length === 0) return null;
+    return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+  };
+
+  const teamAveragePsrJogos = (matchId: string): number | null => {
+    const data = psrJogosStored[matchId];
+    if (!data) return null;
+    const values = Object.values(data).filter(v => typeof v === 'number' && v >= 0 && v <= 10);
+    if (values.length === 0) return null;
+    return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+  };
+
+  const teamAveragePsrTreinos = (sessionKey: string): number | null => {
+    const data = psrTreinosStored[sessionKey];
     if (!data) return null;
     const values = Object.values(data).filter(v => typeof v === 'number' && v >= 0 && v <= 10);
     if (values.length === 0) return null;
@@ -289,6 +324,45 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         rpe: t.avgRpe ?? 0,
         type: 'Treino'
       }));
+
+  // Evolução PSR (Jogos): média da equipe a partir da aba PSR (Treinos e Jogos)
+  const psrMatchData = useMemo(() => {
+    if (championshipMatches.length === 0) return [];
+    const sorted = [...championshipMatches].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted
+      .filter(m => monthFilter === 'Todos' || new Date(m.date).getMonth().toString() === monthFilter)
+      .filter(m => compFilter === 'Todas' || m.competition === compFilter)
+      .map(m => {
+        const avg = teamAveragePsrJogos(m.id);
+        if (avg == null) return null;
+        return {
+          date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          rpe: avg,
+          opponent: m.opponent
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => v != null);
+  }, [championshipMatches, monthFilter, compFilter, psrJogosStored]);
+
+  // Média PSR (Treinos): média da equipe por sessão
+  const psrTrainingDataFromSessions = useMemo(() => {
+    return trainingSessionsForChart
+      .filter(s => monthFilter === 'Todos' || new Date(s.date).getMonth().toString() === monthFilter)
+      .map(s => {
+        const teamAvg = teamAveragePsrTreinos(s.sessionKey);
+        const dateLabel = new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const hour = s.time ? s.time.slice(0, 5) : '';
+        const label = hour ? `${dateLabel} ${hour}` : dateLabel;
+        return {
+          date: label,
+          dateKey: s.date,
+          rpe: teamAvg ?? 0,
+          type: 'Treino'
+        };
+      });
+  }, [trainingSessionsForChart, monthFilter, psrTreinosStored]);
+
+  const psrTrainingData = trainingSessionsForChart.length > 0 ? psrTrainingDataFromSessions : [];
 
   // Qualidade de sono: eventos = noite anterior a treino (manhã) + noite anterior a jogo
   const sleepChartData = useMemo(() => {
@@ -514,13 +588,14 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                         contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }}
                         cursor={{stroke: '#ccff00'}}
                     />
+                    <Area type="monotone" dataKey="rpe" fill="#ccff00" fillOpacity={0.25} stroke="none" />
                     <Line 
                         type="monotone" 
                         dataKey="rpe" 
                         stroke="#ccff00" 
-                        strokeWidth={4} 
-                        dot={{fill: '#ccff00', r: 5}} 
-                        activeDot={{r: 8}} 
+                        strokeWidth={1.5} 
+                        dot={{fill: '#ccff00', r: 4}} 
+                        activeDot={{r: 6}} 
                         name="PSE Média equipe"
                     >
                         <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
@@ -541,12 +616,13 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                     <Tooltip 
                         contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }}
                     />
+                    <Area type="monotone" dataKey="rpe" fill="#10b981" fillOpacity={0.25} stroke="none" />
                     <Line 
                         type="monotone" 
                         dataKey="rpe" 
                         stroke="#10b981"
-                        strokeWidth={4}
-                        dot={{fill: '#10b981', r: 5}}
+                        strokeWidth={1.5}
+                        dot={{fill: '#10b981', r: 4}}
                         name="PSE Média equipe"
                     >
                          <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
@@ -554,6 +630,52 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                 </LineChart>
              </ResponsiveContainer>
            </div>
+        </ExpandableCard>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
+        <ExpandableCard title="Evolução PSR (Jogos)" icon={RefreshCw} headerColor="text-sky-400">
+          <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por jogo. Quanto mais perto de 10, melhor a recuperação. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
+          {psrMatchData.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={psrMatchData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Poppins' }} />
+                  <YAxis domain={[0, 12]} stroke="#666" hide />
+                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} cursor={{ stroke: '#38bdf8' }} />
+                  <Area type="monotone" dataKey="rpe" fill="#38bdf8" fillOpacity={0.25} stroke="none" />
+                  <Line type="monotone" dataKey="rpe" stroke="#38bdf8" strokeWidth={1.5} dot={{ fill: '#38bdf8', r: 4 }} activeDot={{ r: 6 }} name="PSR Média equipe">
+                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-zinc-500 text-sm py-8">Preencha a PSR nos jogos na aba <strong>PSR (Treinos e Jogos)</strong> para ver a evolução.</p>
+          )}
+        </ExpandableCard>
+
+        <ExpandableCard title="Média PSR (Treinos)" icon={RefreshCw} headerColor="text-sky-500">
+          <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por sessão (Treino ou Musculação). Mais perto de 10 = melhor recuperado. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
+          {psrTrainingData.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={psrTrainingData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Poppins' }} />
+                  <YAxis domain={[0, 12]} stroke="#666" hide />
+                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} />
+                  <Area type="monotone" dataKey="rpe" fill="#0ea5e9" fillOpacity={0.25} stroke="none" />
+                  <Line type="monotone" dataKey="rpe" stroke="#0ea5e9" strokeWidth={1.5} dot={{ fill: '#0ea5e9', r: 4 }} name="PSR Média equipe">
+                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                  </Line>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-zinc-500 text-sm py-8">Preencha a PSR nos treinos na aba <strong>PSR (Treinos e Jogos)</strong> para ver a evolução.</p>
+          )}
         </ExpandableCard>
       </div>
 

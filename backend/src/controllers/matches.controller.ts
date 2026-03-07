@@ -5,101 +5,66 @@
 import { Request, Response } from 'express';
 import { matchesService } from '../services/matches.service';
 import { AppError } from '../utils/errors';
+import { runWithTenant } from '../utils/transactionWithTenant';
+
+function handleError(error: unknown, res: Response, fallback: string) {
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({ success: false, error: error.message });
+  }
+  return res.status(500).json({
+    success: false,
+    error: error instanceof Error ? error.message : fallback,
+  });
+}
 
 export const matchesController = {
   getAll: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const matches = await matchesService.getAll(req.tenantInfo!);
+      const matches = await runWithTenant(req, (tx) => matchesService.getAll(req.tenantInfo!, tx));
       return res.json({ success: true, data: matches });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      console.error('[MATCHES_CONTROLLER] getAll error', error);
-      if (error instanceof Error && error.stack) {
-        console.error('[MATCHES_CONTROLLER] getAll stack', error.stack);
-      }
-      return res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Erro ao buscar jogos',
-      });
+      return handleError(error, res, 'Erro ao buscar jogos');
     }
   },
 
   getById: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const match = await matchesService.getById(req.params.id, req.tenantInfo!);
+      const match = await runWithTenant(req, (tx) => matchesService.getById(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true, data: match });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao buscar jogo',
-      });
+      return handleError(error, res, 'Erro ao buscar jogo');
     }
   },
 
   create: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const match = await matchesService.create(req.body, req.tenantInfo!);
+      const match = await runWithTenant(req, (tx) => matchesService.create(req.body, req.tenantInfo!, tx));
       return res.status(201).json({ success: true, data: match });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      const message = error instanceof Error ? error.message : 'Erro ao criar jogo';
-      console.error('[matches.controller] create error:', error);
-      return res.status(500).json({
-        success: false,
-        error: message,
-      });
+      return handleError(error, res, 'Erro ao criar jogo');
     }
   },
 
   update: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const match = await matchesService.update(req.params.id, req.body, req.tenantInfo!);
+      const match = await runWithTenant(req, (tx) => matchesService.update(req.params.id, req.body, req.tenantInfo!, tx));
       return res.json({ success: true, data: match });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao atualizar jogo',
-      });
+      return handleError(error, res, 'Erro ao atualizar jogo');
     }
   },
 
   delete: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      await matchesService.delete(req.params.id, req.tenantInfo!);
+      await runWithTenant(req, (tx) => matchesService.delete(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao deletar jogo',
-      });
+      return handleError(error, res, 'Erro ao deletar jogo');
     }
   },
 };

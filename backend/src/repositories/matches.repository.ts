@@ -5,6 +5,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 // Tipos do banco
 type JogoDB = {
@@ -19,6 +24,8 @@ type JogoDB = {
   golsPro: number;
   golsContra: number;
   videoUrl: string | null;
+  possessionSecondsWith: number;
+  possessionSecondsWithout: number;
   createdAt: Date;
 };
 
@@ -75,63 +82,31 @@ export const matchesRepository = {
   /**
    * Buscar todos os jogos do tenant
    */
-  async findAll(tenantInfo: TenantInfo): Promise<JogoDB[]> {
+  async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogoDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return [];
-    }
-
-    return prisma.jogo.findMany({
-      where: {
-        equipeId: { in: equipeIds },
-      },
+    if (equipeIds.length === 0) return [];
+    return db(tx).jogo.findMany({
+      where: { equipeId: { in: equipeIds } },
       orderBy: { data: 'desc' },
     }) as Promise<JogoDB[]>;
   },
 
-  /**
-   * Buscar jogo por ID (com validação de tenant)
-   */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<JogoDB | null> {
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogoDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
-
-    const jogo = await prisma.jogo.findUnique({
-      where: { id },
-    });
-
-    if (!jogo || !equipeIds.includes(jogo.equipeId)) {
-      return null;
-    }
-
+    if (equipeIds.length === 0) return null;
+    const jogo = await db(tx).jogo.findUnique({ where: { id } });
+    if (!jogo || !equipeIds.includes(jogo.equipeId)) return null;
     return jogo as JogoDB;
   },
 
-  /**
-   * Buscar estatísticas da equipe para um jogo
-   */
-  async findEstatisticasEquipe(jogoId: string): Promise<JogoEstatisticaEquipeDB | null> {
-    return prisma.jogosEstatisticasEquipe.findUnique({
-      where: { jogoId },
-    }) as Promise<JogoEstatisticaEquipeDB | null>;
+  async findEstatisticasEquipe(jogoId: string, tx?: TransactionClient): Promise<JogoEstatisticaEquipeDB | null> {
+    return db(tx).jogosEstatisticasEquipe.findUnique({ where: { jogoId } }) as Promise<JogoEstatisticaEquipeDB | null>;
   },
 
-  /**
-   * Buscar estatísticas dos jogadores para um jogo
-   */
-  async findEstatisticasJogadores(jogoId: string): Promise<JogoEstatisticaJogadorDB[]> {
-    return prisma.jogosEstatisticasJogador.findMany({
-      where: { jogoId },
-    }) as Promise<JogoEstatisticaJogadorDB[]>;
+  async findEstatisticasJogadores(jogoId: string, tx?: TransactionClient): Promise<JogoEstatisticaJogadorDB[]> {
+    return db(tx).jogosEstatisticasJogador.findMany({ where: { jogoId } }) as Promise<JogoEstatisticaJogadorDB[]>;
   },
 
-  /**
-   * Criar novo jogo
-   */
   async create(data: {
     equipeId: string;
     adversario: string;
@@ -147,8 +122,10 @@ export const matchesRepository = {
     playerRelationships?: object;
     lineup?: object;
     substitutionHistory?: object;
-  }): Promise<JogoDB> {
-    return prisma.jogo.create({
+    possessionSecondsWith?: number;
+    possessionSecondsWithout?: number;
+  }, tx?: TransactionClient): Promise<JogoDB> {
+    return db(tx).jogo.create({
       data: {
         equipeId: data.equipeId,
         adversario: data.adversario,
@@ -164,68 +141,43 @@ export const matchesRepository = {
         playerRelationships: data.playerRelationships as any,
         lineup: data.lineup as any,
         substitutionHistory: data.substitutionHistory as any,
+        possessionSecondsWith: data.possessionSecondsWith ?? 0,
+        possessionSecondsWithout: data.possessionSecondsWithout ?? 0,
       },
     }) as Promise<JogoDB>;
   },
 
-  /**
-   * Atualizar jogo
-   */
-  async update(id: string, data: Partial<JogoDB>): Promise<JogoDB> {
-    return prisma.jogo.update({
-      where: { id },
-      data,
-    }) as Promise<JogoDB>;
+  async update(id: string, data: Partial<JogoDB>, tx?: TransactionClient): Promise<JogoDB> {
+    return db(tx).jogo.update({ where: { id }, data }) as Promise<JogoDB>;
   },
 
-  /**
-   * Deletar jogo
-   */
-  async delete(id: string): Promise<boolean> {
-    await prisma.jogo.delete({
-      where: { id },
-    });
+  async delete(id: string, tx?: TransactionClient): Promise<boolean> {
+    await db(tx).jogo.delete({ where: { id } });
     return true;
   },
 
-  /**
-   * Criar/atualizar estatísticas da equipe
-   */
   async upsertEstatisticasEquipe(
     jogoId: string,
-    data: Partial<JogoEstatisticaEquipeDB>
+    data: Partial<JogoEstatisticaEquipeDB>,
+    tx?: TransactionClient
   ): Promise<JogoEstatisticaEquipeDB> {
-    return prisma.jogosEstatisticasEquipe.upsert({
+    return db(tx).jogosEstatisticasEquipe.upsert({
       where: { jogoId },
       update: data,
-      create: {
-        jogoId,
-        ...data,
-      } as any,
+      create: { jogoId, ...data } as any,
     }) as Promise<JogoEstatisticaEquipeDB>;
   },
 
-  /**
-   * Criar/atualizar estatísticas de jogador
-   */
   async upsertEstatisticasJogador(
     jogoId: string,
     jogadorId: string,
-    data: Partial<JogoEstatisticaJogadorDB>
+    data: Partial<JogoEstatisticaJogadorDB>,
+    tx?: TransactionClient
   ): Promise<JogoEstatisticaJogadorDB> {
-    return prisma.jogosEstatisticasJogador.upsert({
-      where: {
-        jogoId_jogadorId: {
-          jogoId,
-          jogadorId,
-        },
-      },
+    return db(tx).jogosEstatisticasJogador.upsert({
+      where: { jogoId_jogadorId: { jogoId, jogadorId } },
       update: data,
-      create: {
-        jogoId,
-        jogadorId,
-        ...data,
-      } as any,
+      create: { jogoId, jogadorId, ...data } as any,
     }) as Promise<JogoEstatisticaJogadorDB>;
   },
 };

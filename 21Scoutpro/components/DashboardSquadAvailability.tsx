@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { UserCheck, UserCog, UserX } from 'lucide-react';
+import { Check, AlertTriangle, Ambulance } from 'lucide-react';
 import { Player } from '../types';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { Championship } from '../types';
@@ -17,10 +17,10 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
   nextMatch,
   championships,
 }) => {
-  const { available, withRestriction, unavailable } = useMemo(() => {
+  const { available, withRestriction, injuredOnly } = useMemo(() => {
     const available: Player[] = [];
     const withRestriction: Player[] = [];
-    const unavailable: Player[] = [];
+    const injuredOnly: Player[] = [];
 
     let suspendedIds = new Set<string>();
     let penduradoIds = new Set<string>();
@@ -28,7 +28,6 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
       const champ = championships.find((c) => c.name === nextMatch.competition);
       if (champ?.suspensionRules) {
         const rules = champ.suspensionRules;
-        const cards = getChampionshipCards(champ.id);
         players.forEach((p) => {
           const status = getPlayerStatus(champ.id, p.id, rules);
           if (status.suspended) suspendedIds.add(p.id);
@@ -43,16 +42,16 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
     };
 
     players.forEach((p) => {
-      if (suspendedIds.has(p.id) || hasActiveInjury(p)) {
-        unavailable.push(p);
+      if (hasActiveInjury(p)) {
+        injuredOnly.push(p);
       } else if (penduradoIds.has(p.id)) {
         withRestriction.push(p);
-      } else {
+      } else if (!suspendedIds.has(p.id)) {
         available.push(p);
       }
     });
 
-    return { available, withRestriction, unavailable };
+    return { available, withRestriction, injuredOnly };
   }, [players, nextMatch, championships]);
 
   return (
@@ -61,7 +60,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-emerald-500/80">
           <div className="flex items-center gap-1.5 mb-1">
-            <UserCheck className="text-zinc-500" size={14} />
+            <Check className="text-emerald-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Disponíveis</span>
           </div>
           <p className="text-base font-semibold text-white">{available.length}</p>
@@ -72,8 +71,8 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
         </div>
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-amber-500/80">
           <div className="flex items-center gap-1.5 mb-1">
-            <UserCog className="text-zinc-500" size={14} />
-            <span className="text-zinc-400 font-medium text-xs">Com restrição</span>
+            <AlertTriangle className="text-amber-500/80" size={14} strokeWidth={2.5} />
+            <span className="text-zinc-400 font-medium text-xs">Pendurados</span>
           </div>
           <p className="text-base font-semibold text-white">{withRestriction.length}</p>
           <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
@@ -84,14 +83,14 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
         </div>
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-red-500/80">
           <div className="flex items-center gap-1.5 mb-1">
-            <UserX className="text-zinc-500" size={14} />
-            <span className="text-zinc-400 font-medium text-xs">Indisponíveis</span>
+            <Ambulance className="text-red-500/80" size={14} strokeWidth={2.5} />
+            <span className="text-zinc-400 font-medium text-xs">Desfalques por lesão</span>
           </div>
-          <p className="text-base font-semibold text-white">{unavailable.length}</p>
+          <p className="text-base font-semibold text-white">{injuredOnly.length}</p>
           <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
-            {unavailable.length === 0
+            {injuredOnly.length === 0
               ? 'Nenhum'
-              : unavailable.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (unavailable.length > 3 ? ` +${unavailable.length - 3}` : '')}
+              : injuredOnly.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (injuredOnly.length > 3 ? ` +${injuredOnly.length - 3}` : '')}
           </p>
         </div>
       </div>

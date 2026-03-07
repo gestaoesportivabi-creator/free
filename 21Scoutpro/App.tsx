@@ -14,11 +14,11 @@ import { StatsRanking } from './components/StatsRanking';
 import { Schedule } from './components/Schedule';
 import { Academia } from './components/Academia';
 import { PseTab } from './components/PseTab';
+import { PsrTab } from './components/PsrTab';
 import { QualidadeSonoTab } from './components/QualidadeSonoTab';
 import { LoadingMessage } from './components/LoadingMessage';
 import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipTable';
 import { SuspensionsAlert } from './components/SuspensionsAlert';
-import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { ManagementReport } from './components/ManagementReport';
 import { NextMatchAlert } from './components/NextMatchAlert';
@@ -28,7 +28,7 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck } from 'lucide-react';
+import { FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Menu } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
@@ -77,6 +77,58 @@ const SLIDES = [
     }
 ];
 
+const TAB_LABELS: Record<string, string> = {
+  dashboard: 'Visão Geral',
+  team: 'Elenco',
+  schedule: 'Programação',
+  championship: 'Tabela de Campeonato',
+  table: 'Dados do Jogo',
+  general: 'Scout Coletivo',
+  individual: 'Scout Individual',
+  ranking: 'Ranking',
+  physical: 'Monitoramento Fisiológico',
+  pse: 'PSE',
+  psr: 'PSR',
+  'qualidade-sono': 'Qualidade de sono',
+  assessment: 'Avaliação Física',
+  academia: 'Musculação',
+  settings: 'Configurações',
+};
+
+/** Recursos necessários por aba (carregamento sob demanda) */
+const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
+  dashboard: ['players', 'matches', 'schedules', 'championshipMatches', 'championships'],
+  team: ['players'],
+  schedule: ['schedules'],
+  championship: ['championshipMatches', 'competitions', 'championships', 'matches'],
+  table: ['players', 'competitions', 'matches', 'championshipMatches', 'schedules', 'teams'],
+  general: ['matches', 'players'],
+  individual: ['matches', 'players', 'timeControls'],
+  ranking: ['players', 'matches'],
+  physical: ['matches', 'players', 'schedules', 'championshipMatches'],
+  assessment: ['players', 'assessments'],
+  video: ['matches', 'players'],
+  pse: ['schedules', 'championshipMatches', 'players'],
+  psr: ['schedules', 'championshipMatches', 'players'],
+  'qualidade-sono': ['schedules', 'championshipMatches', 'players'],
+  academia: ['schedules', 'players'],
+  'management-report': ['players', 'matches', 'assessments', 'timeControls'],
+  settings: ['statTargets'],
+};
+
+const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
+  players: false,
+  matches: false,
+  teams: false,
+  schedules: false,
+  competitions: false,
+  championshipMatches: false,
+  championships: false,
+  assessments: false,
+  statTargets: false,
+  timeControls: false,
+};
+
 export default function App() {
   // Route state: 'landing' | 'login' | 'register' | 'app'
   const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'register' | 'app'>('landing');
@@ -86,6 +138,7 @@ export default function App() {
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
+  const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -100,6 +153,9 @@ export default function App() {
   const [championshipMatches, setChampionshipMatches] = useState<ChampionshipMatch[]>([]);
   const [championships, setChampionships] = useState<Championship[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+
+  /** Rastreia quais recursos já foram carregados (evita recarregar ao trocar de aba) */
+  const [loadedResources, setLoadedResources] = useState<Record<string, boolean>>(() => ({ ...INITIAL_LOADED_RESOURCES }));
   
   // Stats Targets State
   const [statTargets, setStatTargets] = useState<StatTargets>({
@@ -212,6 +268,20 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  // Nome e escudo do time da aba Configurações (para card Próximo jogo na Visão Geral)
+  const [overviewTeamSettings, setOverviewTeamSettings] = useState<{ teamName: string; teamShieldUrl: string }>({ teamName: '', teamShieldUrl: '' });
+  useEffect(() => {
+    if (activeTab !== 'dashboard') return;
+    try {
+      const raw = localStorage.getItem('scout21_settings_current_team');
+      if (!raw) { setOverviewTeamSettings({ teamName: '', teamShieldUrl: '' }); return; }
+      const d = JSON.parse(raw);
+      setOverviewTeamSettings({ teamName: d.teamName || '', teamShieldUrl: d.shieldUrl || '' });
+    } catch (_) {
+      setOverviewTeamSettings({ teamName: '', teamShieldUrl: '' });
+    }
+  }, [activeTab]);
+
   // Próximo compromisso: o mais próximo entre próximo jogo e próximo treino (hoje/futuro)
   const nextCommitment = useMemo(() => {
     const now = liveNow;
@@ -264,7 +334,9 @@ export default function App() {
     const within24h = diff > 0 && diff <= 24 * 60 * 60 * 1000;
     const hours = within24h ? Math.floor(diff / (1000 * 60 * 60)) : null;
     const minutes = within24h ? Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)) : null;
-    return { ...first, countdown: hours != null && minutes != null ? { hours, minutes } : null };
+    const timeLabel = `${String(first.dateTime.getHours()).padStart(2, '0')}:${String(first.dateTime.getMinutes()).padStart(2, '0')}`;
+    const activityDisplay = first.type === 'jogo' ? 'Jogo' : first.label;
+    return { ...first, countdown: hours != null && minutes != null ? { hours, minutes } : null, activityDisplay, timeLabel };
   }, [overviewStats.nextMatch, schedules, liveNow]);
 
   // Contagens para alertas resumidos (lesões ativas, suspensos, pendurados)
@@ -292,30 +364,44 @@ export default function App() {
     return { injuredCount, suspendedCount, penduradosCount };
   }, [players, overviewStats.nextMatch, championships]);
 
-  // Foco do dia: preparação para próximo jogo ou atividade do dia (treino)
+  const activeAlertsForToday = useMemo(() => {
+    const a: { kind: 'lesão' | 'suspenso' | 'pendurado'; count: number }[] = [];
+    if (dashboardAlertCounts.injuredCount > 0) a.push({ kind: 'lesão', count: dashboardAlertCounts.injuredCount });
+    if (dashboardAlertCounts.suspendedCount > 0) a.push({ kind: 'suspenso', count: dashboardAlertCounts.suspendedCount });
+    if (dashboardAlertCounts.penduradosCount > 0) a.push({ kind: 'pendurado', count: dashboardAlertCounts.penduradosCount });
+    return a;
+  }, [dashboardAlertCounts.injuredCount, dashboardAlertCounts.suspendedCount, dashboardAlertCounts.penduradosCount]);
+
+  // Foco do dia: observações da programação (aba Programação) para o dia de hoje
   const focusOfDay = useMemo(() => {
-    if (nextCommitment?.type === 'jogo') {
-      const opp = overviewStats.nextMatch?.opponent || 'próximo jogo';
-      return `Preparação para ${opp}`;
-    }
-    if (nextCommitment?.type === 'treino') {
-      return nextCommitment.label || 'Treino';
-    }
     const todayStr = liveNow.toISOString().split('T')[0];
     const activeSchedules = (schedules || []).filter(
       s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true') && s.days && Array.isArray(s.days)
     );
-    for (const s of activeSchedules) {
+    const notes: string[] = [];
+    activeSchedules.forEach(s => {
       try {
         const flat = normalizeScheduleDays(s);
-        const today = flat.find((d: { date?: string }) => d.date === todayStr);
-        if (today && (today as { activity?: string }).activity) {
-          return (today as { activity: string }).activity;
-        }
+        flat.filter((d: { date?: string }) => d.date === todayStr).forEach((d: { notes?: string }) => {
+          if (d.notes && String(d.notes).trim()) notes.push(String(d.notes).trim());
+        });
       } catch (_) {}
+    });
+    if (notes.length > 0) return notes.join(' · ');
+    if (nextCommitment?.type === 'jogo') {
+      const opp = overviewStats.nextMatch?.opponent || 'próximo jogo';
+      return `Preparação para ${opp}`;
     }
+    if (nextCommitment?.type === 'treino') return nextCommitment.label || 'Treino';
     return 'Dia sem compromisso registrado';
   }, [nextCommitment, overviewStats.nextMatch, schedules, liveNow]);
+
+  // Últimas 5 partidas salvas para o card Últimas partidas (bolinhas V/D/E)
+  const lastMatchResults = useMemo((): ('V' | 'D' | 'E')[] => {
+    const withResult = (matches || []).filter(m => m && m.teamStats && (m.result === 'V' || m.result === 'D' || m.result === 'E'));
+    const sorted = [...withResult].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return sorted.slice(0, 5).map(m => m.result);
+  }, [matches]);
 
   // Lesões com início nos últimos 7 dias (para tendência semanal)
   const injuriesLast7Days = useMemo(() => {
@@ -357,162 +443,204 @@ export default function App() {
     return `${dateLabel} • ${timeLabel}`;
   };
 
-  // Carregar dados da API quando o componente monta E quando o usuário faz login
+  // --- Funções de carregamento por recurso (sob demanda) ---
+  const loadPlayers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const apiPlayers = await playersApi.getAll().catch(err => { console.error('❌ Erro ao carregar players:', err); return []; });
+      const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
+      const apiIds = new Set(apiPlayers.map(p => p.id));
+      const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
+      setPlayers([...apiPlayers, ...localOnly]);
+      setLoadedResources(prev => ({ ...prev, players: true }));
+    } catch {
+      const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
+      setPlayers(localPlayers);
+      setLoadedResources(prev => ({ ...prev, players: true }));
+    }
+  };
+
+  const loadMatches = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const matchesData = await matchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar matches:', err); return []; });
+      const validMatches = (matchesData as MatchRecord[]).filter(m => m && m.teamStats);
+      setMatches(validMatches);
+      setLoadedResources(prev => ({ ...prev, matches: true }));
+    } catch {
+      setMatches([]);
+      setLoadedResources(prev => ({ ...prev, matches: true }));
+    }
+  };
+
+  const loadTeams = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const teamsData = await teamsApi.getAll().catch(err => { console.error('❌ Erro ao carregar teams:', err); return []; });
+      setTeams(teamsData as Team[]);
+      setLoadedResources(prev => ({ ...prev, teams: true }));
+    } catch {
+      setTeams([]);
+      setLoadedResources(prev => ({ ...prev, teams: true }));
+    }
+  };
+
+  const loadSchedules = () => {
+    try {
+      const localSchedules = JSON.parse(localStorage.getItem('scout21_schedules_local') || '[]');
+      const validSchedules = localSchedules
+        .filter((s: WeeklySchedule) => s && s.id)
+        .map((s: WeeklySchedule) => ({
+          ...s,
+          days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
+          isActive: s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true'
+        }))
+        .sort((a: WeeklySchedule, b: WeeklySchedule) => {
+          if (a.isActive && !b.isActive) return -1;
+          if (!a.isActive && b.isActive) return 1;
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+      setSchedules(validSchedules);
+      setLoadedResources(prev => ({ ...prev, schedules: true }));
+    } catch {
+      setSchedules([]);
+      setLoadedResources(prev => ({ ...prev, schedules: true }));
+    }
+  };
+
+  const loadCompetitions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const data = await competitionsApi.getAll().catch(err => { console.error('❌ Erro ao carregar competitions:', err); return []; });
+      setCompetitions(Array.isArray(data) && data.length > 0 ? data : []);
+      setLoadedResources(prev => ({ ...prev, competitions: true }));
+    } catch {
+      setCompetitions([]);
+      setLoadedResources(prev => ({ ...prev, competitions: true }));
+    }
+  };
+
+  const loadChampionshipMatches = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const data = await championshipMatchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar championshipMatches:', err); return []; });
+      setChampionshipMatches(Array.isArray(data) && data.length > 0 ? data : []);
+      setLoadedResources(prev => ({ ...prev, championshipMatches: true }));
+    } catch {
+      setChampionshipMatches([]);
+      setLoadedResources(prev => ({ ...prev, championshipMatches: true }));
+    }
+  };
+
+  const loadChampionships = () => {
+    const saved = JSON.parse(localStorage.getItem('championships') || '[]');
+    setChampionships(saved);
+    setLoadedResources(prev => ({ ...prev, championships: true }));
+  };
+
+  const loadAssessments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const data = await assessmentsApi.getAll().catch(err => { console.error('❌ Erro ao carregar assessments:', err); return []; });
+      setAssessments(data as PhysicalAssessment[]);
+      setLoadedResources(prev => ({ ...prev, assessments: true }));
+    } catch {
+      setAssessments([]);
+      setLoadedResources(prev => ({ ...prev, assessments: true }));
+    }
+  };
+
+  const loadStatTargets = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const data = await statTargetsApi.getAll().catch(err => { console.error('❌ Erro ao carregar statTargets:', err); return []; });
+      if (Array.isArray(data) && data.length > 0 && data[0]) setStatTargets(data[0] as StatTargets);
+      setLoadedResources(prev => ({ ...prev, statTargets: true }));
+    } catch {
+      setLoadedResources(prev => ({ ...prev, statTargets: true }));
+    }
+  };
+
+  const loadTimeControls = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setTimeControls([]);
+        setLoadedResources(prev => ({ ...prev, timeControls: true }));
+        return;
+      }
+      const data = await timeControlsApi.getAll().catch(() => []);
+      setTimeControls(Array.isArray(data) ? data : []);
+      setLoadedResources(prev => ({ ...prev, timeControls: true }));
+    } catch {
+      setTimeControls([]);
+      setLoadedResources(prev => ({ ...prev, timeControls: true }));
+    }
+  };
+
+  const loadResource = (resource: string): Promise<void> | void => {
+    switch (resource) {
+      case 'players': return loadPlayers();
+      case 'matches': return loadMatches();
+      case 'teams': return loadTeams();
+      case 'schedules': return loadSchedules();
+      case 'competitions': return loadCompetitions();
+      case 'championshipMatches': return loadChampionshipMatches();
+      case 'championships': return loadChampionships();
+      case 'assessments': return loadAssessments();
+      case 'statTargets': return loadStatTargets();
+      case 'timeControls': return loadTimeControls();
+      default: return undefined;
+    }
+  };
+
+  // Carregamento inicial: apenas dados do dashboard (ao fazer login)
   useEffect(() => {
-    // Só carregar dados se o usuário estiver logado
     if (!currentUser) {
       console.log('⏸️ Usuário não logado, pulando carregamento de dados');
-      // NÃO setar isInitializing(false) aqui — o efeito de restauração de sessão cuida disso.
-      // Setar aqui causava uma corrida: isInitializing ficava false antes do fetch do profile completar,
-      // fazendo o efeito de URL empurrar "/" antes da sessão ser restaurada.
       return;
     }
-    
-    const loadData = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        console.log('🔄 Carregando dados da API...');
-        console.log('👤 Usuário logado:', currentUser?.email);
-        console.log('🔑 Token presente:', token ? 'SIM' : 'NÃO');
-        
-        if (!token) {
-          console.error('❌ Token não encontrado no localStorage!');
-          return;
-        }
-        
-        // FASE 1: Carregar dados críticos primeiro (players, matches, teams)
-        console.log('🚀 Fase 1: Carregando dados críticos...');
-        const [playersData, matchesData, teamsData] = await Promise.allSettled([
-          playersApi.getAll().catch(err => { console.error('❌ Erro ao carregar players:', err); return []; }),
-          matchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar matches:', err); return []; }),
-          teamsApi.getAll().catch(err => { console.error('❌ Erro ao carregar teams:', err); return []; })
-        ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
-
-        // Atualizar UI: merge players da API com players salvos localmente (fallback)
-        const apiPlayers = playersData as Player[];
-        const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-        const apiIds = new Set(apiPlayers.map(p => p.id));
-        const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
-        setPlayers([...apiPlayers, ...localOnly]);
-        
-        // Validar matches antes de definir - garantir que todos tenham teamStats válido
-        const validMatches = (matchesData as MatchRecord[]).filter(m => {
-          if (!m || !m.teamStats) {
-            console.warn('⚠️ Match inválido removido ao carregar:', m);
-            return false;
-          }
-          return true;
-        });
-        setMatches(validMatches);
-        setTeams(teamsData as Team[]);
-        
-        console.log('✅ Fase 1 concluída:', {
-          players: playersData.length,
-          matches: validMatches.length,
-          teams: teamsData.length,
-        });
-
-        // FASE 2: Carregar dados importantes em background (não bloqueia UI)
-        // Programação: carregar apenas do localStorage (salvamento local)
-        setTimeout(async () => {
-          console.log('🚀 Fase 2: Carregando dados importantes...');
-          const localSchedules = JSON.parse(localStorage.getItem('scout21_schedules_local') || '[]');
-          const validSchedules = localSchedules
-            .filter((s: WeeklySchedule) => s && s.id)
-            .map((s: WeeklySchedule) => ({
-              ...s,
-              days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
-              isActive: s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true'
-            }))
-            .sort((a: WeeklySchedule, b: WeeklySchedule) => {
-              if (a.isActive && !b.isActive) return -1;
-              if (!a.isActive && b.isActive) return 1;
-              const aCreated = a.createdAt || 0;
-              const bCreated = b.createdAt || 0;
-              return bCreated - aCreated;
-            });
-          setSchedules(validSchedules);
-
-          const [competitionsData, championshipMatchesData] = await Promise.allSettled([
-            competitionsApi.getAll().catch(err => { console.error('❌ Erro ao carregar competitions:', err); return []; }),
-            championshipMatchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar championshipMatches:', err); return []; })
-          ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
-          
-          setCompetitions((competitionsData as string[]).length > 0 ? (competitionsData as string[]) : []);
-          setChampionshipMatches((championshipMatchesData as ChampionshipMatch[]).length > 0 ? (championshipMatchesData as ChampionshipMatch[]) : []);
-          
-          console.log('✅ Fase 2 concluída:', {
-            schedules: validSchedules.length,
-            competitions: (competitionsData as string[]).length,
-            championshipMatches: (championshipMatchesData as ChampionshipMatch[]).length,
-          });
-        }, 100);
-
-        // FASE 3: Carregar dados secundários em background
-        setTimeout(async () => {
-          console.log('🚀 Fase 3: Carregando dados secundários...');
-          const [assessmentsData, statTargetsData] = await Promise.allSettled([
-            assessmentsApi.getAll().catch(err => { console.error('❌ Erro ao carregar assessments:', err); return []; }),
-            statTargetsApi.getAll().catch(err => { console.error('❌ Erro ao carregar statTargets:', err); return []; })
-          ]).then(results => results.map(r => r.status === 'fulfilled' ? r.value : []));
-
-          setAssessments(assessmentsData as PhysicalAssessment[]);
-          
-          if ((statTargetsData as StatTargets[]).length > 0 && (statTargetsData as StatTargets[])[0]) {
-            setStatTargets((statTargetsData as StatTargets[])[0]);
-          }
-          
-          console.log('✅ Fase 3 concluída:', {
-            assessments: assessmentsData.length,
-            statTargets: statTargetsData.length,
-          });
-        }, 300);
-        
-        // TimeControls não tem getAll(), será carregado por jogo quando necessário
-        setTimeControls([]);
-        
-        // Campeonatos: carregar do localStorage
-        const savedChampionships = JSON.parse(localStorage.getItem('championships') || '[]');
-        setChampionships(savedChampionships);
-        
-        console.log('✅ Dados críticos carregados com sucesso!');
-      } catch (error) {
-        console.error('❌ Erro ao carregar dados da API:', error);
-        // Fallback: carregar players e schedules salvos localmente
-        const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-        const localSchedules = JSON.parse(localStorage.getItem('scout21_schedules_local') || '[]');
-        setPlayers(localPlayers);
-        setMatches([]);
-        setAssessments([]);
-        setSchedules(localSchedules);
-        setCompetitions([]);
-        setChampionshipMatches([]);
-        console.warn('⚠️ Erro ao carregar dados da API. Sistema iniciado sem dados.');
-      }
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('❌ Token não encontrado no localStorage!');
+      return;
+    }
+    console.log('🔄 Carregando dados do dashboard...');
+    const loadDashboard = async () => {
+      await Promise.all([
+        loadPlayers(),
+        loadMatches(),
+        loadChampionshipMatches(),
+      ]);
+      loadSchedules();
+      loadChampionships();
     };
+    loadDashboard();
+  }, [currentUser]);
 
-    loadData();
-  }, [currentUser]); // Executar quando o usuário fizer login ou mudar
-
-  // Clean up old schedules (older than 30 days) on mount
+  // Clean up old schedules (older than 30 days) when schedules have been loaded
   useEffect(() => {
+    if (!loadedResources.schedules) return;
     const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
     const now = Date.now();
-    
     setSchedules(prev => {
         const validSchedules = prev.filter(s => {
-            // If legacy schedule without createdAt, keep it or default to now (let's keep it to be safe)
-            const created = s.createdAt || now; 
+            const created = s.createdAt || now;
             return (now - created) < thirtyDaysInMs;
         });
-        
-        // Update local storage if items were removed
         if (validSchedules.length !== prev.length) {
             console.log("Auto-deleted expired schedules");
         }
         return validSchedules;
     });
-  }, []);
+  }, [loadedResources.schedules]);
 
   // Carousel Timer
   useEffect(() => {
@@ -524,6 +652,21 @@ export default function App() {
     }
   }, [activeTab]);
 
+  // Reset sidebar drawer when viewport becomes desktop (>= md)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const handler = () => { if (mq.matches) setSidebarOpen(false); };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Escape key closes sidebar drawer
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSidebarOpen(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const handleLogin = (user: User) => {
       console.log('🔐 handleLogin chamado com usuário:', user);
       console.log('🔑 Token no localStorage:', localStorage.getItem('token') ? 'PRESENTE' : 'AUSENTE');
@@ -533,12 +676,12 @@ export default function App() {
   };
 
   const handleTabChange = (tab: string) => {
-      setIsLoading(true);
+      const resources = TAB_REQUIRED_RESOURCES[tab] ?? [];
+      const missing = resources.filter(r => !loadedResources[r]);
       setActiveTab(tab);
-      // Simulate loading time
-      setTimeout(() => {
-          setIsLoading(false);
-      }, 500);
+      if (missing.length === 0) return;
+      setIsLoading(true);
+      Promise.all(missing.map(r => Promise.resolve(loadResource(r)))).then(() => setIsLoading(false));
   };
 
   const handleUpdateUser = async (updatedData: Partial<User>) => {
@@ -605,18 +748,20 @@ export default function App() {
         console.log('💾 Resposta do salvamento:', saved);
         
         if (saved) {
-          // Atualizar cartões por campeonato (se partida vinculada a campeonato)
-          if (saved.competition && saved.playerStats) {
+          // Atualizar cartões por campeonato (regras de suspensão) usando o payload enviado
+          const competitionName = newMatch.competition || saved.competition;
+          const statsSource = newMatch.playerStats || saved.playerStats;
+          if (competitionName && statsSource) {
             try {
               const savedChampionships = JSON.parse(localStorage.getItem('championships') || '[]');
-              const championship = savedChampionships.find((c: any) => c.name === saved.competition);
+              const championship = savedChampionships.find((c: any) => c.name === competitionName);
               if (championship?.id && championship?.suspensionRules) {
                 const { updateCardsFromMatch } = await import('./utils/championshipCards');
                 const playerStatsForCards: Record<string, { yellowCards?: number; redCards?: number }> = {};
-                Object.entries(saved.playerStats || {}).forEach(([playerId, stats]: [string, any]) => {
+                Object.entries(statsSource).forEach(([playerId, stats]: [string, any]) => {
                   playerStatsForCards[playerId] = {
-                    yellowCards: stats.yellowCards ?? 0,
-                    redCards: stats.redCards ?? 0,
+                    yellowCards: stats.yellowCards ?? stats.cartoesAmarelos ?? 0,
+                    redCards: stats.redCards ?? stats.cartoesVermelhos ?? 0,
                   };
                 });
                 updateCardsFromMatch(championship.id, playerStatsForCards, championship.suspensionRules);
@@ -949,8 +1094,10 @@ export default function App() {
   }, []);
 
   // Update URL when route changes (skip while initializing to avoid overwriting the current URL before session restore)
+  // Nunca alterar a URL quando estiver em /scout-realtime: a aba deve permanecer nessa URL e não ir para /dashboard
   useEffect(() => {
     if (isInitializing) return;
+    if (window.location.pathname === '/scout-realtime') return;
     if (currentRoute === 'register') {
       window.history.pushState({}, '', '/registro');
     } else if (currentRoute === 'login') {
@@ -985,6 +1132,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Rota dedicada à coleta em tempo real (dados em localStorage; save via API)
+  if (window.location.pathname === '/scout-realtime') {
+    return <RealtimeScoutPage />;
   }
 
   // Mostrar landing page
@@ -1191,6 +1343,7 @@ export default function App() {
             delete (window as any).selectedChampionshipMatch;
           }}
           championshipMatches={championshipMatches}
+          schedules={schedules}
           teams={teams}
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
@@ -1201,6 +1354,12 @@ export default function App() {
         return (
           <TabBackgroundWrapper>
             <PseTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+          </TabBackgroundWrapper>
+        );
+      case 'psr':
+        return (
+          <TabBackgroundWrapper>
+            <PsrTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
           </TabBackgroundWrapper>
         );
       case 'qualidade-sono':
@@ -1247,10 +1406,6 @@ export default function App() {
               countdown: nextCommitment.countdown,
             }
           : null;
-        const activeAlertsForToday: import('./components/DashboardTodayBlock').ActiveAlert[] = [];
-        if (dashboardAlertCounts.injuredCount > 0) activeAlertsForToday.push({ kind: 'lesão', count: dashboardAlertCounts.injuredCount });
-        if (dashboardAlertCounts.suspendedCount > 0) activeAlertsForToday.push({ kind: 'suspenso', count: dashboardAlertCounts.suspendedCount });
-        if (dashboardAlertCounts.penduradosCount > 0) activeAlertsForToday.push({ kind: 'pendurado', count: dashboardAlertCounts.penduradosCount });
 
         return (
           <div className="h-full w-full rounded-lg border border-zinc-800 bg-zinc-950 p-6 md:p-8 shadow-sm animate-fade-in">
@@ -1266,18 +1421,18 @@ export default function App() {
                 <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
               </header>
 
-              {/* 1. Bloco fixo HOJE NO CLUBE */}
+              {/* Bloco Status operacional do dia (compromisso, tempo, foco, resultado últimas partidas) */}
               <DashboardTodayBlock
                 nextCommitment={nextCommitmentForToday}
                 focusOfDay={focusOfDay}
                 activeAlerts={activeAlertsForToday}
+                lastMatchResults={lastMatchResults}
               />
 
-              {/* 1. Riscos e desfalques */}
-              <section className="space-y-4" aria-label="Riscos e desfalques">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-bold">Riscos e desfalques</p>
+              {/* 1. Atletas Suspensos (apenas suspensos por cartões; lesões aparecem só no card Desfalques por lesão) */}
+              <section className="space-y-4" aria-label="Atletas Suspensos">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-bold">Atletas Suspensos</p>
                 <div className="flex flex-col gap-3">
-                  <InjuredPlayersAlert players={players} />
                   {overviewStats.nextMatch && (
                     <SuspensionsAlert
                       nextMatch={overviewStats.nextMatch}
@@ -1285,9 +1440,9 @@ export default function App() {
                       players={players}
                     />
                   )}
-                  {!overviewStats.nextMatch && dashboardAlertCounts.injuredCount === 0 && (
+                  {!overviewStats.nextMatch && (
                     <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-500 text-xs">
-                      Sem lesões ou suspensões no momento.
+                      Sem próximo jogo definido.
                     </div>
                   )}
                 </div>
@@ -1310,6 +1465,8 @@ export default function App() {
                     nextMatch={overviewStats.nextMatch}
                     championships={championships}
                     players={players}
+                    teamName={overviewTeamSettings.teamName}
+                    teamShieldUrl={overviewTeamSettings.teamShieldUrl}
                   />
                 </div>
               </section>
@@ -1317,7 +1474,7 @@ export default function App() {
               {/* 4. Indicadores gerais */}
               <section className="grid grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Indicadores gerais">
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
-                <StatCard label="Jogos" value={overviewStats.totalGames} helper={`V ${overviewStats.wins} · D ${overviewStats.losses}`} highlight={overviewStats.totalGames > 0} />
+                <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
                 <StatCard label="Lesões no ano" value={overviewStats.injuriesThisYear} helper={String(overviewStats.currentYear)} />
               </section>
@@ -1325,15 +1482,8 @@ export default function App() {
               {/* 7. Ações principais no rodapé */}
               <footer className="flex flex-wrap gap-3 pt-4 border-t border-zinc-700">
                 <button
-                  onClick={() => handleTabChange('general')}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-zinc-700"
-                >
-                  <BarChart3 size={14} />
-                  Scout Coletivo
-                </button>
-                <button
                   onClick={() => handleTabChange('management-report')}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-zinc-700"
+                  className="flex items-center gap-2 rounded-lg border border-[#0d2137] bg-[#0d2137] px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-[#1e3a5f]"
                 >
                   <FileText size={14} />
                   Relatório Gerencial
@@ -1354,22 +1504,54 @@ export default function App() {
 
   // Rota 'app' - renderizar com Sidebar (escondida quando a janela Scout da Partida está aberta)
   return (
-    <div className="flex min-h-screen bg-black text-zinc-100 font-sans">
+    <div className="flex min-h-screen bg-black text-zinc-100 font-sans min-w-0">
       {!scoutWindowOpen && (
-        <Sidebar 
-          activeTab={activeTab} 
-          setActiveTab={handleTabChange} 
-          onLogout={() => {
-            console.log('👋 Logout - Voltando para home');
-            localStorage.removeItem('token');
-            setCurrentUser(null);
-            setCurrentRoute('landing');
-          }}
-          currentUser={currentUser}
-        />
+        <>
+          {/* Backdrop do drawer (apenas mobile) */}
+          {sidebarOpen && (
+            <button
+              type="button"
+              className="fixed inset-0 bg-black/60 z-40 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Fechar menu"
+            />
+          )}
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={handleTabChange}
+            onLogout={() => {
+              console.log('👋 Logout - Voltando para home');
+              localStorage.removeItem('token');
+              setCurrentUser(null);
+              setCurrentRoute('landing');
+            }}
+            currentUser={currentUser}
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            onNavigate={() => setSidebarOpen(false)}
+          />
+        </>
       )}
-      <main className={`flex-1 p-6 overflow-y-auto h-screen scroll-smooth print:ml-0 print:p-0 ${scoutWindowOpen ? 'ml-0' : 'ml-64'}`}>
-        {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
+      <main className={`flex-1 flex flex-col overflow-y-auto h-screen scroll-smooth print:ml-0 print:p-0 min-w-0 ${scoutWindowOpen ? 'ml-0' : 'ml-0 md:ml-64'}`}>
+        {!scoutWindowOpen && (
+          <header className="md:hidden shrink-0 flex items-center gap-3 px-4 py-3 bg-black border-b border-zinc-900">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 -ml-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#00f0ff] focus:ring-offset-2 focus:ring-offset-black"
+              aria-label="Abrir menu"
+              aria-expanded={sidebarOpen}
+            >
+              <Menu size={24} />
+            </button>
+            <span className="font-bold text-white truncate text-sm uppercase tracking-wider">
+              {TAB_LABELS[activeTab] ?? activeTab}
+            </span>
+          </header>
+        )}
+        <div className="flex-1 p-6 min-w-0 print:p-0">
+          {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
+        </div>
       </main>
     </div>
   );

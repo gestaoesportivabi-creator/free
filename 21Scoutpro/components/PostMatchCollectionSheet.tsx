@@ -7,6 +7,10 @@ export interface PostMatchMatchContext {
   opponent: string;
   date: string;
   competition?: string;
+  /** Gols da nossa equipe (usado ao salvar quando a partida já foi carregada) */
+  goalsFor?: number;
+  /** Gols do adversário (evita zerar ao salvar pela planilha pós-jogo) */
+  goalsAgainst?: number;
 }
 
 interface FormData {
@@ -298,7 +302,9 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
       }
     }
 
-    const result: 'V' | 'D' | 'E' = 'E';
+    const goalsFor = teamStats.goals;
+    const goalsAgainst = match.goalsAgainst ?? 0;
+    const result: 'V' | 'D' | 'E' = goalsFor > goalsAgainst ? 'V' : goalsAgainst > goalsFor ? 'D' : 'E';
     const postMatchEventLogWithRecordedBy = recordedByUser
       ? events.map((e) => ({
           ...e,
@@ -311,8 +317,8 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
       opponent: match.opponent,
       date: match.date,
       result,
-      goalsFor: teamStats.goals,
-      goalsAgainst: 0,
+      goalsFor,
+      goalsAgainst,
       competition: match.competition,
       playerStats,
       teamStats,

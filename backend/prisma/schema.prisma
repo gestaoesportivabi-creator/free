@@ -146,6 +146,8 @@ model Jogo {
   playerRelationships   Json?                      @map("player_relationships")
   lineup                Json?                      @map("lineup")
   substitutionHistory   Json?                      @map("substitution_history")
+  possessionSecondsWith Int                        @default(0) @map("possession_seconds_with")
+  possessionSecondsWithout Int                     @default(0) @map("possession_seconds_without")
   createdAt             DateTime                   @default(now()) @map("created_at")
   campeonatosJogos    CampeonatosJogos[]
   competicao          Competicao?                @relation(fields: [competicaoId], references: [id])
@@ -226,7 +228,7 @@ model JogosEventos {
   minuto     Int
   segundo    Int
   createdAt  DateTime @default(now()) @map("created_at")
-  jogador    Jogador  @relation(fields: [jogadorId], references: [id])
+  jogador    Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
   jogo       Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@map("jogos_eventos")

@@ -26,9 +26,9 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
     console.log(`📡 GET ${resource}:`, url);
     console.log(`🔑 Token presente:`, token ? 'SIM' : 'NÃO', token ? `(${token.substring(0, 20)}...)` : '');
     
-    // Adicionar timeout de 10 segundos
+    // Timeout 25s (matches e outros recursos podem demorar no primeiro request)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
     
     const response = await fetch(url, {
       method: 'GET',
@@ -85,7 +85,7 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
     return data;
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.error(`⏱️ Timeout ao fazer GET em ${resource} (10s)`);
+      console.warn(`⏱️ Timeout ao carregar ${resource} (25s). Continuando com dados vazios.`);
     } else {
       console.error(`❌ Error fetching ${resource}:`, error);
       if (error instanceof Error) {

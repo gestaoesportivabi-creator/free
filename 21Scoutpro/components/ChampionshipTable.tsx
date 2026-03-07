@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag } from 'lucide-react';
 import { Championship } from '../types';
 import { setChampionshipCards } from '../utils/championshipCards';
+import { parseLocalDateOnly, isDateInPast } from '../utils/dateUtils';
 
 export interface ChampionshipMatch {
     id: string;
@@ -96,6 +97,17 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     // Estados para importação
     const [showImportModal, setShowImportModal] = useState(false);
     const [importData, setImportData] = useState<string>('');
+
+    // Nome e escudo do time da aba Configurações (para cards de partidas)
+    const [teamSettings, setTeamSettings] = useState<{ teamName: string; shieldUrl: string }>({ teamName: '', shieldUrl: '' });
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('scout21_settings_current_team');
+            if (!raw) return;
+            const d = JSON.parse(raw);
+            setTeamSettings({ teamName: d.teamName || '', shieldUrl: d.shieldUrl || '' });
+        } catch (_) {}
+    }, []);
     
     // Modal de regras quando a fase da partida difere da fase do campeonato
     const [showPhaseRulesModal, setShowPhaseRulesModal] = useState(false);
@@ -352,7 +364,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const formatMatchDate = (dateValue: string | undefined) => {
         if (!dateValue) return '-';
         try {
-            const date = new Date(dateValue);
+            const date = parseLocalDateOnly(dateValue);
             if (Number.isNaN(date.getTime())) return dateValue;
             return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
         } catch {
@@ -360,18 +372,17 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         }
     };
     
-    // Separar e ordenar partidas por tempo (passadas vs futuras)
+    // Separar e ordenar partidas por tempo (passadas vs futuras) — datas como local (YYYY-MM-DD)
     const { pastMatches, futureMatches } = useMemo(() => {
         const now = new Date();
-        now.setHours(0, 0, 0, 0); // Zerar hora para comparação apenas de data
+        now.setHours(0, 0, 0, 0);
         
         const past: ChampionshipMatch[] = [];
         const future: ChampionshipMatch[] = [];
         
         matches.forEach(match => {
-            const matchDate = new Date(match.date);
-            matchDate.setHours(0, 0, 0, 0);
-            
+            const matchDate = parseLocalDateOnly(match.date);
+            if (Number.isNaN(matchDate.getTime())) return;
             if (matchDate < now) {
                 past.push(match);
             } else {
@@ -379,16 +390,14 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             }
         });
         
-        // Ordenar passadas: mais recente primeiro (DESC)
         past.sort((a, b) => {
-            const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime();
+            const dateCompare = parseLocalDateOnly(b.date).getTime() - parseLocalDateOnly(a.date).getTime();
             if (dateCompare !== 0) return dateCompare;
             return (b.time || '').localeCompare(a.time || '');
         });
         
-        // Ordenar futuras: mais próxima primeiro (ASC)
         future.sort((a, b) => {
-            const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+            const dateCompare = parseLocalDateOnly(a.date).getTime() - parseLocalDateOnly(b.date).getTime();
             if (dateCompare !== 0) return dateCompare;
             return (a.time || '').localeCompare(b.time || '');
         });
@@ -396,52 +405,47 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         return { pastMatches: past, futureMatches: future };
     }, [matches]);
     
-    // Aplicar filtro de período às partidas passadas
+    // Aplicar filtro de período às partidas passadas (datas locais)
     const applyTimeFilter = (matchesList: ChampionshipMatch[]) => {
         if (timeFilter === 'all') return matchesList;
         
         const now = new Date();
+        now.setHours(0, 0, 0, 0);
         const daysMap = { '7days': 7, '30days': 30, '90days': 90 };
         const days = daysMap[timeFilter];
-        
         const cutoffDate = new Date(now);
         cutoffDate.setDate(cutoffDate.getDate() - days);
         
         return matchesList.filter(match => {
-            const matchDate = new Date(match.date);
-            return matchDate >= cutoffDate && matchDate <= now;
+            const matchDate = parseLocalDateOnly(match.date);
+            return !Number.isNaN(matchDate.getTime()) && matchDate >= cutoffDate && matchDate <= now;
         });
     };
 
     return (
         <div className="space-y-6 animate-fade-in pb-12">
-            <div className="bg-black p-6 rounded-3xl border border-zinc-900 shadow-lg">
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
-                            <Trophy className="text-[#10b981]" /> Tabela de Campeonato
+            <div className="bg-black p-4 md:p-6 rounded-3xl border border-zinc-900 shadow-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div className="min-w-0">
+                        <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
+                            <Trophy className="text-[#10b981] shrink-0" /> Tabela de Campeonato
                         </h2>
-                        <p className="text-zinc-500 text-xs font-bold mt-1">
+                        <p className="text-zinc-500 text-xs font-bold mt-1 hidden sm:block">
                             Gerencie os jogos da temporada e use para preencher automaticamente o Input de Dados
                         </p>
                     </div>
                     {!isCreating && (
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
                             {onRefresh && (
                                 <button
                                     onClick={onRefresh}
-                                    className="flex items-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-white px-4 py-2 font-bold uppercase text-xs rounded-xl transition-colors"
+                                    className="flex items-center justify-center w-10 h-10 md:w-[176px] md:h-auto md:gap-2 bg-zinc-700 hover:bg-zinc-600 text-white md:px-4 md:py-2 font-bold uppercase text-xs rounded-xl transition-colors"
                                     title="Recarregar dados da planilha"
                                 >
-                                    <RefreshCw size={16} /> Recarregar
+                                    <RefreshCw size={18} />
+                                    <span className="hidden md:inline">Recarregar</span>
                                 </button>
                             )}
-                            <button
-                                onClick={() => setShowImportModal(true)}
-                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(37,99,235,0.3)]"
-                            >
-                                <Upload size={16} /> Importar Tabela
-                            </button>
                             <button
                                 onClick={() => {
                                     setChampionshipForm({
@@ -461,9 +465,11 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     });
                                     setShowChampionshipModal(true);
                                 }}
-                                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                                className="flex items-center justify-center w-10 h-10 md:w-[176px] md:h-auto md:gap-2 bg-purple-600 hover:bg-purple-500 text-white md:px-4 md:py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(147,51,234,0.3)]"
+                                title="Novo campeonato"
                             >
-                                <Trophy size={16} /> Cadastrar Campeonato
+                                <Trophy size={18} />
+                                <span className="hidden md:inline">Novo campeonato</span>
                             </button>
                             <button
                                 onClick={() => {
@@ -479,9 +485,11 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     });
                                     setIsCreating(true);
                                 }}
-                                className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-4 py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                className="flex items-center justify-center w-10 h-10 md:w-[176px] md:h-auto md:gap-2 bg-[#10b981] hover:bg-[#34d399] text-white md:px-4 md:py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                title="Nova Partida"
                             >
-                                <Plus size={16} /> Nova Partida
+                                <Plus size={18} />
+                                <span className="hidden md:inline">Nova Partida</span>
                             </button>
                         </div>
                     )}
@@ -505,8 +513,13 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                             {formatMatchDate(match.date)} • {formatTime(match.time)}
                                         </span>
                                     </div>
-                                    <p className="text-sm font-semibold text-white truncate">
-                                        {match.team || 'Nosso time'} x {match.opponent}
+                                    <p className="text-sm font-semibold text-white truncate flex items-center gap-2">
+                                        {teamSettings.shieldUrl ? (
+                                            <img src={teamSettings.shieldUrl} alt="" className="w-5 h-5 object-contain flex-shrink-0 rounded" aria-hidden />
+                                        ) : null}
+                                        <span>{teamSettings.teamName || match.team || 'Nosso time'}</span>
+                                        <span className="text-zinc-500">x</span>
+                                        <span>{match.opponent}</span>
                                     </p>
                                     <p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-500">
                                         {match.location || 'Local indefinido'}
@@ -759,16 +772,16 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                     )}
                 </div>
 
-                {/* Tabela de partidas */}
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                {/* Tabela de partidas — colunas com largura mínima, sem comprimir */}
+                <div className="overflow-x-auto -mx-4 md:mx-0 px-2 md:px-0">
+                    <table className="w-full min-w-[580px] table-auto text-left border-collapse">
                         <thead>
                             <tr className="bg-zinc-950 text-[10px] text-zinc-400 uppercase tracking-wider font-bold border-b border-zinc-800">
-                                <th className="p-3 border-r border-zinc-900">Data</th>
-                                <th className="p-3 border-r border-zinc-900">Hora</th>
-                                <th className="p-3 border-r border-zinc-900">Adversário</th>
-                                <th className="p-3 border-r border-zinc-900">Competição</th>
-                                <th className="p-3 text-center">Ações</th>
+                                <th className="min-w-[100px] p-1.5 md:p-2 border-r border-zinc-900">Data</th>
+                                <th className="min-w-[70px] p-1.5 md:p-2 border-r border-zinc-900">Hora</th>
+                                <th className="min-w-[140px] p-1.5 md:p-2 border-r border-zinc-900">Adversário</th>
+                                <th className="min-w-[160px] p-1.5 md:p-2 border-r border-zinc-900">Competição</th>
+                                <th className="min-w-[90px] p-1.5 md:p-2 text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -781,14 +794,11 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                             ) : (() => {
                                 // Função auxiliar para renderizar uma linha de partida
                                 const renderMatchRow = (match: ChampionshipMatch) => {
-                                    // Tratamento seguro de data
                                     let dateDisplay = '-';
-                                    const isPast = new Date(match.date) < new Date();
-                                    
                                     try {
                                         if (match.date) {
-                                            const date = new Date(match.date);
-                                            if (!isNaN(date.getTime())) {
+                                            const date = parseLocalDateOnly(match.date);
+                                            if (!Number.isNaN(date.getTime())) {
                                                 dateDisplay = date.toLocaleDateString('pt-BR');
                                             }
                                         }
@@ -798,37 +808,26 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     
                                     return (
                                         <tr key={match.id} className="border-b border-zinc-900 hover:bg-zinc-950">
-                                            <td className="p-3 border-r border-zinc-900 text-white text-xs">
-                                                <div className="flex items-center gap-2">
-                                                    {dateDisplay}
-                                                    {isPast ? (
-                                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[9px] font-bold rounded uppercase">
-                                                            Realizada
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-[9px] font-bold rounded uppercase">
-                                                            Agendada
-                                                        </span>
-                                                    )}
-                                                </div>
+                                            <td className="p-1.5 md:p-2 border-r border-zinc-900 text-white text-xs whitespace-nowrap">
+                                                {dateDisplay}
                                             </td>
-                                            <td className="p-3 border-r border-zinc-900 text-white text-xs">
+                                            <td className="p-1.5 md:p-2 border-r border-zinc-900 text-white text-xs whitespace-nowrap">
                                                 {formatTime(match.time)}
                                             </td>
-                                            <td className="p-3 border-r border-zinc-900 text-white text-xs font-bold">
+                                            <td className="p-1.5 md:p-2 border-r border-zinc-900 text-white text-xs font-bold whitespace-nowrap">
                                                 {match.opponent || '-'}
                                             </td>
-                                            <td className="p-3 border-r border-zinc-900 text-white text-xs">
+                                            <td className="p-1.5 md:p-2 border-r border-zinc-900 text-white text-xs whitespace-nowrap">
                                                 {match.competition || '-'}
                                             </td>
-                                            <td className="p-3">
-                                                <div className="flex items-center justify-center gap-2">
+                                            <td className="p-1.5 md:p-2 whitespace-nowrap">
+                                                <div className="flex items-center justify-center gap-0.5 md:gap-1">
                                                     <button
                                                         onClick={() => handleEdit(match)}
-                                                        className="p-2 text-blue-400 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                        className="p-1 md:p-1.5 text-blue-400 hover:bg-zinc-900 rounded-lg transition-colors"
                                                         title="Editar"
                                                     >
-                                                        <Edit2 size={16} />
+                                                        <Edit2 size={14} />
                                                     </button>
                                                     {onDelete && (
                                                         <button
@@ -837,10 +836,10 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                                                     onDelete(match.id);
                                                                 }
                                                             }}
-                                                            className="p-2 text-red-400 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                            className="p-1 md:p-1.5 text-red-400 hover:bg-zinc-900 rounded-lg transition-colors"
                                                             title="Excluir"
                                                         >
-                                                            <Trash2 size={16} />
+                                                            <Trash2 size={14} />
                                                         </button>
                                                     )}
                                                 </div>

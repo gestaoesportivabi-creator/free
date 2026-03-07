@@ -4,6 +4,7 @@
  */
 
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
 import { playersRepository } from '../repositories/players.repository';
 import { lesoesRepository } from '../repositories/lesoes.repository';
 import { assessmentsRepository } from '../repositories/assessments.repository';
@@ -12,23 +13,22 @@ import { Player } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
 
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
+
 export const playersService = {
   /**
    * Buscar todos os jogadores do tenant
    */
-  async getAll(tenantInfo: TenantInfo): Promise<Player[]> {
-    // Buscar jogadores do banco
-    const jogadores = await playersRepository.findAll(tenantInfo);
-    
-    if (jogadores.length === 0) {
-      return [];
-    }
+  async getAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<Player[]> {
+    const jogadores = await playersRepository.findAll(tenantInfo, tx);
+    if (jogadores.length === 0) return [];
 
-    // Buscar lesões e avaliações relacionadas
     const jogadorIds = jogadores.map(j => j.id);
     const [lesoes, avaliacoes] = await Promise.all([
-      lesoesRepository.findByJogadores(jogadorIds, tenantInfo),
-      assessmentsRepository.findAll(tenantInfo),
+      lesoesRepository.findByJogadores(jogadorIds, tenantInfo, tx),
+      assessmentsRepository.findAll(tenantInfo, tx),
     ]);
 
     // Agrupar lesões e avaliações por jogador
@@ -66,17 +66,13 @@ export const playersService = {
   /**
    * Buscar jogador por ID
    */
-  async getById(id: string, tenantInfo: TenantInfo): Promise<Player> {
-    const jogador = await playersRepository.findById(id, tenantInfo);
-    
-    if (!jogador) {
-      throw new NotFoundError('Jogador', id);
-    }
+  async getById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<Player> {
+    const jogador = await playersRepository.findById(id, tenantInfo, tx);
+    if (!jogador) throw new NotFoundError('Jogador', id);
 
-    // Buscar lesões e avaliações
     const [lesoes, avaliacoes] = await Promise.all([
-      lesoesRepository.findByJogador(id, tenantInfo),
-      assessmentsRepository.findByJogador(id, tenantInfo),
+      lesoesRepository.findByJogador(id, tenantInfo, tx),
+      assessmentsRepository.findByJogador(id, tenantInfo, tx),
     ]);
 
     return transformPlayerToFrontend(
@@ -105,7 +101,7 @@ export const playersService = {
     dataTransferencia?: Date;
     isAtivo?: boolean;
     equipeId?: string; // ID da equipe para vincular o jogador
-  }, tenantInfo: TenantInfo): Promise<Player> {
+  }, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<Player> {
     try {
       console.log('[PLAYERS_SERVICE] create - Iniciando criação de jogador:', {
         nome: data.nome,
@@ -135,22 +131,15 @@ export const playersService = {
         }
         console.log('[PLAYERS_SERVICE] create - Usando equipe:', equipeIdParaVincular);
       } else if (tenantInfo.tecnico_id) {
-        // Sem equipes: criar equipe padrão "Elenco" e usar para o vínculo
-        const existente = await prisma.equipe.findFirst({
-          where: {
-            tecnicoId: tenantInfo.tecnico_id,
-            nome: 'Elenco',
-          },
+        const existente = await db(tx).equipe.findFirst({
+          where: { tecnicoId: tenantInfo.tecnico_id, nome: 'Elenco' },
         });
         if (existente) {
           equipeIdParaVincular = existente.id;
           console.log('[PLAYERS_SERVICE] create - Usando equipe padrão existente:', equipeIdParaVincular);
         } else {
-          const elenco = await prisma.equipe.create({
-            data: {
-              nome: 'Elenco',
-              tecnicoId: tenantInfo.tecnico_id,
-            },
+          const elenco = await db(tx).equipe.create({
+            data: { nome: 'Elenco', tecnicoId: tenantInfo.tecnico_id },
           });
           equipeIdParaVincular = elenco.id;
           console.log('[PLAYERS_SERVICE] create - Equipe padrão "Elenco" criada:', equipeIdParaVincular);
@@ -280,7 +269,7 @@ export const playersService = {
       });
 
       // Criar jogador
-      const jogador = await playersRepository.create(dadosJogador);
+      const jogador = await playersRepository.create(dadosJogador, tx);
       console.log('[PLAYERS_SERVICE] create - Jogador criado no banco:', {
         id: jogador.id,
         nome: jogador.nome,
@@ -293,8 +282,7 @@ export const playersService = {
           equipeId: equipeIdParaVincular,
         });
 
-        // Verificar se já existe vínculo ativo
-        const vinculoExistente = await prisma.equipesJogadores.findFirst({
+        const vinculoExistente = await db(tx).equipesJogadores.findFirst({
           where: {
             jogadorId: jogador.id,
             equipeId: equipeIdParaVincular,
@@ -305,17 +293,14 @@ export const playersService = {
         if (vinculoExistente) {
           console.log('[PLAYERS_SERVICE] create - Vínculo já existe, pulando criação');
         } else {
-          // Usar apenas a data (sem hora) para dataInicio
           const hoje = new Date();
           hoje.setHours(0, 0, 0, 0);
-          
           console.log('[PLAYERS_SERVICE] create - Criando vínculo:', {
             equipeId: equipeIdParaVincular,
             jogadorId: jogador.id,
             dataInicio: hoje,
           });
-
-          await prisma.equipesJogadores.create({
+          await db(tx).equipesJogadores.create({
             data: {
               equipeId: equipeIdParaVincular,
               jogadorId: jogador.id,
@@ -323,30 +308,27 @@ export const playersService = {
               dataFim: null,
             },
           });
-
           console.log('[PLAYERS_SERVICE] create - Vínculo criado com sucesso');
         }
 
-        // Persistir lesões se houver
         const injuries = Array.isArray(injuryHistoryPayload) ? injuryHistoryPayload : [];
         for (const inj of injuries) {
           const startDate = inj.startDate || inj.date;
           if (!startDate) continue;
-          const endDateVal = inj.returnDateActual || inj.returnDate || inj.endDate;
-          await prisma.lesao.create({
-            data: {
-              jogadorId: jogador.id,
-              data: new Date(startDate),
-              dataInicio: new Date(startDate),
-              dataFim: endDateVal ? new Date(endDateVal) : null,
-              tipo: inj.type || 'Outros',
-              localizacao: inj.location || 'Não informado',
-              lado: inj.side || null,
-              severidade: inj.severity || null,
-              origem: inj.origin || null,
-              diasAfastado: inj.daysOut ?? null,
-            },
-          });
+          // dataFim = apenas retorno REAL (liberação); nunca usar returnDate (previsto) aqui
+          const dataFimVal = inj.returnDateActual || inj.endDate;
+          await lesoesRepository.create({
+            jogadorId: jogador.id,
+            data: new Date(startDate),
+            dataInicio: new Date(startDate),
+            dataFim: dataFimVal ? new Date(dataFimVal) : null,
+            tipo: inj.type || 'Outros',
+            localizacao: inj.location || 'Não informado',
+            lado: inj.side || null,
+            severidade: inj.severity || null,
+            origem: inj.origin || null,
+            diasAfastado: inj.daysOut ?? null,
+          }, tx);
         }
       } catch (error: any) {
         // Se houver erro ao vincular, fazer rollback: deletar o jogador criado
@@ -358,7 +340,7 @@ export const playersService = {
         });
         
         try {
-          await playersRepository.delete(jogador.id);
+          await playersRepository.delete(jogador.id, tx);
           console.log('[PLAYERS_SERVICE] create - Rollback: Jogador deletado');
         } catch (deleteError) {
           console.error('[PLAYERS_SERVICE] create - ERRO ao fazer rollback:', deleteError);
@@ -383,11 +365,9 @@ export const playersService = {
    * Atualizar jogador
    * Mapeia campos do frontend (name, jerseyNumber, etc.) para o banco (nome, numeroCamisa, etc.)
    */
-  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo): Promise<Player> {
-    const existing = await playersRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Jogador', id);
-    }
+  async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<Player> {
+    const existing = await playersRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Jogador', id);
 
     const d = data as any;
     const mapNum = (v: any) => (v !== undefined && v !== null && v !== '') ? Number(v) : undefined;
@@ -415,36 +395,34 @@ export const playersService = {
     if (d.isAtivo !== undefined) payload.isAtivo = Boolean(d.isAtivo);
     if (Array.isArray(d.maxLoads) && d.maxLoads.length > 0) payload.maxLoadsJson = d.maxLoads;
 
-    const jogador = await playersRepository.update(id, payload as any);
+    const jogador = await playersRepository.update(id, payload as any, tx);
 
-    // Sincronizar lesões (injuryHistory)
     const injuryHistory = (d as any).injuryHistory;
     if (Array.isArray(injuryHistory)) {
-      await prisma.lesao.deleteMany({ where: { jogadorId: id } });
+      await db(tx).lesao.deleteMany({ where: { jogadorId: id } });
       for (const inj of injuryHistory) {
         const startDate = inj.startDate || inj.date;
         if (!startDate) continue;
-        const endDateVal = inj.returnDateActual || inj.returnDate || inj.endDate;
-        await prisma.lesao.create({
-          data: {
-            jogadorId: id,
-            data: new Date(startDate),
-            dataInicio: new Date(startDate),
-            dataFim: endDateVal ? new Date(endDateVal) : null,
-            tipo: inj.type || 'Outros',
-            localizacao: inj.location || 'Não informado',
-            lado: inj.side || null,
-            severidade: inj.severity || null,
-            origem: inj.origin || null,
-            diasAfastado: inj.daysOut ?? null,
-          },
-        });
+        // dataFim = apenas retorno REAL (liberação); nunca usar returnDate (previsto) aqui
+        const dataFimVal = inj.returnDateActual || inj.endDate;
+        await lesoesRepository.create({
+          jogadorId: id,
+          data: new Date(startDate),
+          dataInicio: new Date(startDate),
+          dataFim: dataFimVal ? new Date(dataFimVal) : null,
+          tipo: inj.type || 'Outros',
+          localizacao: inj.location || 'Não informado',
+          lado: inj.side || null,
+          severidade: inj.severity || null,
+          origem: inj.origin || null,
+          diasAfastado: inj.daysOut ?? null,
+        }, tx);
       }
     }
 
     const [lesoes, avaliacoes] = await Promise.all([
-      lesoesRepository.findByJogador(id, tenantInfo),
-      assessmentsRepository.findByJogador(id, tenantInfo),
+      lesoesRepository.findByJogador(id, tenantInfo, tx),
+      assessmentsRepository.findByJogador(id, tenantInfo, tx),
     ]);
 
     return transformPlayerToFrontend(
@@ -456,15 +434,15 @@ export const playersService = {
 
   /**
    * Deletar jogador
+   * Remove primeiro registros que referenciam o jogador (eventos de jogo não tinham onDelete no schema antigo),
+   * depois o jogador. EquipesJogadores, Lesao, AvaliacaoFisica e JogosEstatisticasJogador já têm onDelete: Cascade.
    */
-  async delete(id: string, tenantInfo: TenantInfo): Promise<boolean> {
-    // Verificar se jogador existe e pertence ao tenant
-    const existing = await playersRepository.findById(id, tenantInfo);
-    if (!existing) {
-      throw new NotFoundError('Jogador', id);
-    }
+  async delete(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<boolean> {
+    const existing = await playersRepository.findById(id, tenantInfo, tx);
+    if (!existing) throw new NotFoundError('Jogador', id);
 
-    await playersRepository.delete(id);
+    await db(tx).jogosEventos.deleteMany({ where: { jogadorId: id } });
+    await playersRepository.delete(id, tx);
     return true;
   },
 };

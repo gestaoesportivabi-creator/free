@@ -4,6 +4,11 @@
 
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
+import type { TransactionClient } from '../utils/transactionWithTenant';
+
+function db(tx?: TransactionClient) {
+  return tx ?? prisma;
+}
 
 type ProgramacaoDB = {
   id: string;
@@ -34,90 +39,49 @@ export const schedulesRepository = {
   /**
    * Buscar todas as programações do tenant
    */
-  async findAll(tenantInfo: TenantInfo): Promise<ProgramacaoDB[]> {
+  async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<ProgramacaoDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return [];
-    }
-
-    return prisma.programacao.findMany({
-      where: {
-        equipeId: { in: equipeIds },
-      },
+    if (equipeIds.length === 0) return [];
+    return db(tx).programacao.findMany({
+      where: { equipeId: { in: equipeIds } },
       orderBy: { dataInicio: 'desc' },
     }) as Promise<ProgramacaoDB[]>;
   },
 
-  /**
-   * Buscar programação por ID
-   */
-  async findById(id: string, tenantInfo: TenantInfo): Promise<ProgramacaoDB | null> {
+  async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<ProgramacaoDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    
-    if (equipeIds.length === 0) {
-      return null;
-    }
-
-    const programacao = await prisma.programacao.findUnique({
-      where: { id },
-    });
-
-    if (!programacao || !equipeIds.includes(programacao.equipeId)) {
-      return null;
-    }
-
+    if (equipeIds.length === 0) return null;
+    const programacao = await db(tx).programacao.findUnique({ where: { id } });
+    if (!programacao || !equipeIds.includes(programacao.equipeId)) return null;
     return programacao as ProgramacaoDB;
   },
 
-  /**
-   * Buscar dias de uma programação
-   */
-  async findDias(programacaoId: string): Promise<ProgramacaoDiaDB[]> {
-    return prisma.programacoesDias.findMany({
+  async findDias(programacaoId: string, tx?: TransactionClient): Promise<ProgramacaoDiaDB[]> {
+    return db(tx).programacoesDias.findMany({
       where: { programacaoId },
       orderBy: { data: 'asc' },
     }) as Promise<ProgramacaoDiaDB[]>;
   },
 
-  /**
-   * Criar programação
-   */
   async create(data: {
     equipeId: string;
     titulo: string;
     dataInicio: Date;
     dataFim: Date;
     isAtivo?: boolean;
-  }): Promise<ProgramacaoDB> {
-    return prisma.programacao.create({
-      data,
-    }) as Promise<ProgramacaoDB>;
+  }, tx?: TransactionClient): Promise<ProgramacaoDB> {
+    return db(tx).programacao.create({ data }) as Promise<ProgramacaoDB>;
   },
 
-  /**
-   * Atualizar programação
-   */
-  async update(id: string, data: Partial<ProgramacaoDB>): Promise<ProgramacaoDB> {
-    return prisma.programacao.update({
-      where: { id },
-      data,
-    }) as Promise<ProgramacaoDB>;
+  async update(id: string, data: Partial<ProgramacaoDB>, tx?: TransactionClient): Promise<ProgramacaoDB> {
+    return db(tx).programacao.update({ where: { id }, data }) as Promise<ProgramacaoDB>;
   },
 
-  /**
-   * Deletar programação
-   */
-  async delete(id: string): Promise<boolean> {
-    await prisma.programacao.delete({
-      where: { id },
-    });
+  async delete(id: string, tx?: TransactionClient): Promise<boolean> {
+    await db(tx).programacao.delete({ where: { id } });
     return true;
   },
 
-  /**
-   * Criar dia de programação
-   */
   async createDia(data: {
     programacaoId: string;
     data: Date;
@@ -129,9 +93,9 @@ export const schedulesRepository = {
     observacoes?: string;
     exercicioId?: string;
     cargaPercent?: number;
-  }): Promise<ProgramacaoDiaDB> {
+  }, tx?: TransactionClient): Promise<ProgramacaoDiaDB> {
     const { exercicioId, cargaPercent, ...rest } = data;
-    return prisma.programacoesDias.create({
+    return db(tx).programacoesDias.create({
       data: {
         ...rest,
         ...(exercicioId && { exercicioId }),
@@ -140,13 +104,8 @@ export const schedulesRepository = {
     }) as Promise<ProgramacaoDiaDB>;
   },
 
-  /**
-   * Deletar dias de uma programação
-   */
-  async deleteDias(programacaoId: string): Promise<boolean> {
-    await prisma.programacoesDias.deleteMany({
-      where: { programacaoId },
-    });
+  async deleteDias(programacaoId: string, tx?: TransactionClient): Promise<boolean> {
+    await db(tx).programacoesDias.deleteMany({ where: { programacaoId } });
     return true;
   },
 };

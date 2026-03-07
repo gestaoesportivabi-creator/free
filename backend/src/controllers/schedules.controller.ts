@@ -5,95 +5,63 @@
 import { Request, Response } from 'express';
 import { schedulesService } from '../services/schedules.service';
 import { AppError } from '../utils/errors';
+import { runWithTenant } from '../utils/transactionWithTenant';
+
+function handleError(error: unknown, res: Response, fallback: string) {
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({ success: false, error: error.message });
+  }
+  return res.status(500).json({ success: false, error: error instanceof Error ? error.message : fallback });
+}
 
 export const schedulesController = {
   getAll: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const schedules = await schedulesService.getAll(req.tenantInfo!);
+      const schedules = await runWithTenant(req, (tx) => schedulesService.getAll(req.tenantInfo!, tx));
       return res.json({ success: true, data: schedules });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao buscar programações',
-      });
+      return handleError(error, res, 'Erro ao buscar programações');
     }
   },
 
   getById: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const schedule = await schedulesService.getById(req.params.id, req.tenantInfo!);
+      const schedule = await runWithTenant(req, (tx) => schedulesService.getById(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true, data: schedule });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao buscar programação',
-      });
+      return handleError(error, res, 'Erro ao buscar programação');
     }
   },
 
   create: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const schedule = await schedulesService.create(req.body, req.tenantInfo!);
+      const schedule = await runWithTenant(req, (tx) => schedulesService.create(req.body, req.tenantInfo!, tx));
       return res.status(201).json({ success: true, data: schedule });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao criar programação',
-      });
+      return handleError(error, res, 'Erro ao criar programação');
     }
   },
 
   update: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const schedule = await schedulesService.update(req.params.id, req.body, req.tenantInfo!);
+      const schedule = await runWithTenant(req, (tx) => schedulesService.update(req.params.id, req.body, req.tenantInfo!, tx));
       return res.json({ success: true, data: schedule });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao atualizar programação',
-      });
+      return handleError(error, res, 'Erro ao atualizar programação');
     }
   },
 
   delete: async (req: Request, res: Response) => {
+    if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      await schedulesService.delete(req.params.id, req.tenantInfo!);
+      await runWithTenant(req, (tx) => schedulesService.delete(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true });
     } catch (error) {
-      if (error instanceof AppError) {
-        return res.status(error.statusCode).json({
-          success: false,
-          error: error.message,
-        });
-      }
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao deletar programação',
-      });
+      return handleError(error, res, 'Erro ao deletar programação');
     }
   },
 };

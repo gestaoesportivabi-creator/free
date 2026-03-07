@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, Dumbbell, Activity, Moon } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, Dumbbell, Activity, Moon, RefreshCw, X } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -24,9 +24,14 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
   currentUser: User | null;
+  /** Controla o drawer em mobile; em desktop é ignorado */
+  open?: boolean;
+  onClose?: () => void;
+  /** Chamado ao navegar (ex.: fechar drawer em mobile) */
+  onNavigate?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate }) => {
   const isAthlete = currentUser?.role === 'Atleta';
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['gestao', 'performance', 'fisiologia']));
 
@@ -60,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       items: [
         { id: 'physical', label: 'Monitoramento Fisiológico', icon: HeartPulse, restricted: isAthlete },
         { id: 'pse', label: 'PSE (Treinos e Jogos)', icon: Activity, restricted: isAthlete },
+        { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: isAthlete },
         { id: 'qualidade-sono', label: 'Qualidade de sono', icon: Moon, restricted: isAthlete },
         { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: isAthlete },
         { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: isAthlete },
@@ -95,10 +101,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
 
   const visibleStandaloneItems = standaloneItems.filter(item => !item.restricted);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open) closeButtonRef.current?.focus();
+  }, [open]);
+
   return (
-    <div className="w-64 bg-black h-screen fixed left-0 top-0 text-zinc-400 flex flex-col border-r border-zinc-900 z-50 shadow-2xl font-sans print:hidden">
-      {/* Brand Header com Logo Oficial */}
-      <div className="h-24 flex items-center gap-4 px-6 border-b border-zinc-900 bg-black">
+    <div
+      className={`sidebar-drawer w-64 bg-black h-screen fixed left-0 top-0 text-zinc-400 flex flex-col border-r border-zinc-900 z-50 shadow-2xl font-sans print:hidden transition-transform duration-300 ease-out md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      role="navigation"
+      aria-label="Menu principal"
+    >
+      {/* Brand Header com Logo Oficial + botão fechar (mobile) */}
+      <div className="h-24 flex items-center justify-between gap-4 px-4 pr-2 border-b border-zinc-900 bg-black shrink-0">
+        <div className="flex items-center gap-4 min-w-0">
         <div className="w-12 h-12 border-2 border-white rounded-xl flex items-center justify-center bg-black shrink-0 shadow-[0_0_15px_rgba(255,255,255,0.1)] overflow-hidden">
              <img 
                 src={LOGO_IMAGE} 
@@ -106,10 +122,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                 className="w-full h-full object-contain p-1.5"
              />
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
             <h2 className="text-lg font-black text-white tracking-tighter italic leading-none whitespace-nowrap">SCOUT 21</h2>
             <p className="text-[10px] font-bold text-[#00f0ff] uppercase tracking-[0.2em] mt-1 glow-text whitespace-nowrap">Pro Analytics</p>
         </div>
+        </div>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          onClick={onClose}
+          className="md:hidden p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors shrink-0 focus:outline-none focus:ring-2 focus:ring-[#00f0ff] focus:ring-offset-2 focus:ring-offset-black"
+          aria-label="Fechar menu"
+        >
+          <X size={24} />
+        </button>
       </div>
 
       <div className="px-6 pt-8 pb-2">
@@ -124,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
             return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group overflow-hidden ${
                     isActive
                       ? 'bg-[#00f0ff] text-black shadow-[0_0_15px_rgba(0,240,255,0.4)]'
@@ -176,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                       return (
                         <button
                           key={item.id}
-                          onClick={() => setActiveTab(item.id)}
+                          onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
                           className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
                             isActive
                               ? 'bg-[#00f0ff] text-black shadow-[0_0_10px_rgba(0,240,255,0.3)]'
@@ -217,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
             </div>
         </div>
         <button 
-          onClick={() => setActiveTab('settings')}
+          onClick={() => { setActiveTab('settings'); onNavigate?.(); }}
           className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 text-zinc-400 hover:bg-zinc-900 hover:text-[#00f0ff] border border-zinc-900 hover:border-[#00f0ff]/30 transition-colors text-xs font-bold rounded-lg uppercase tracking-wide whitespace-nowrap"
         >
           <Settings size={14} />
