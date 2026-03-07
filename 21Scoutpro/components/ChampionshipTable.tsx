@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag } from 'lucide-react';
+import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag, Lock } from 'lucide-react';
 import { Championship } from '../types';
+import { IS_FREE_PLAN } from '../config';
 import { setChampionshipCards } from '../utils/championshipCards';
 import { parseLocalDateOnly, isDateInPast } from '../utils/dateUtils';
 
@@ -960,8 +961,17 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                 </select>
                             </div>
                             
+                            {/* Pontuação por resultado - bloqueada na versão free */}
                             <div className="border-t border-zinc-800 pt-4">
                                 <h4 className="text-white font-bold text-sm mb-4 uppercase">Pontuação por resultado</h4>
+                                {IS_FREE_PLAN ? (
+                                    <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
+                                        <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
+                                        <p className="text-zinc-400 text-sm max-w-md">
+                                            Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                        </p>
+                                    </div>
+                                ) : (
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
                                         <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Vitória</label>
@@ -994,11 +1004,21 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                         />
                                     </div>
                                 </div>
+                                )}
                             </div>
                             
+                            {/* Regras de Suspensão - bloqueadas na versão free */}
                             <div className="border-t border-zinc-800 pt-4">
                                 <h4 className="text-white font-bold text-sm mb-4 uppercase">Regras de Suspensão</h4>
-                                
+                                {IS_FREE_PLAN ? (
+                                    <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
+                                        <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
+                                        <p className="text-zinc-400 text-sm max-w-md">
+                                            Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                        </p>
+                                    </div>
+                                ) : (
+                                <>
                                 <div className="space-y-4">
                                     <div>
                                         <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
@@ -1070,6 +1090,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                         Zerar cartões ao avançar de fase
                                     </label>
                                 </div>
+                                </>
+                                )}
                             </div>
                             
                             <div className="border-t border-zinc-800 pt-4">
