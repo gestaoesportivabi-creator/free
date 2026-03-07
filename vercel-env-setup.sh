@@ -27,8 +27,8 @@ echo ""
 
 # Pergunta qual projeto configurar
 echo "Qual projeto você quer configurar?"
-echo "1. Frontend (21Scoutpro)"
-echo "2. Backend"
+echo "1. Frontend (21Scoutpro) - só se tiver 2 projetos separados"
+echo "2. Backend / Deploy único (recomendado - frontend+backend no mesmo domínio)"
 read -p "Escolha (1 ou 2): " project_choice
 
 if [ "$project_choice" = "1" ]; then
@@ -52,15 +52,19 @@ if [ "$project_choice" = "1" ]; then
 elif [ "$project_choice" = "2" ]; then
     PROJECT_TYPE="backend"
     
-    # DATABASE_URL (já temos do CREDENCIAIS_BANCO.md)
-    DATABASE_URL="postgresql://postgres:%23Gestaoesportiva21@db.jhjrqnggsfeztgkpqcjm.supabase.co:5432/postgres"
+    # DATABASE_URL - Pooler (porta 6543) para serverless Vercel
+    # Alinhado com backend/.env - projeto mymuvraqtnoqrtuzoimj
+    DATABASE_URL="postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+    
+    # DIRECT_URL - Obrigatório pelo Prisma schema (porta 5432)
+    DIRECT_URL="postgresql://postgres:%23Gestaoesportiva21@db.mymuvraqtnoqrtuzoimj.supabase.co:5432/postgres?sslmode=require"
     
     # Gera JWT_SECRET
     echo "🔑 Gerando JWT_SECRET..."
     JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
     
     echo ""
-    read -p "🔗 Digite a URL do seu FRONTEND no Vercel (ex: https://scout21-frontend-xyz789.vercel.app): " FRONTEND_URL
+    read -p "🔗 Digite a URL do seu deploy no Vercel (ex: https://seu-projeto.vercel.app): " FRONTEND_URL
     
     CORS_ORIGIN="$FRONTEND_URL"
     
@@ -71,6 +75,10 @@ elif [ "$project_choice" = "2" ]; then
     # Configura DATABASE_URL
     echo "✅ Configurando DATABASE_URL..."
     echo "$DATABASE_URL" | vercel env add DATABASE_URL production preview development
+    
+    # Configura DIRECT_URL (obrigatório pelo Prisma schema)
+    echo "✅ Configurando DIRECT_URL..."
+    echo "$DIRECT_URL" | vercel env add DIRECT_URL production preview development
     
     # Configura JWT_SECRET
     echo "✅ Configurando JWT_SECRET..."
@@ -96,7 +104,8 @@ elif [ "$project_choice" = "2" ]; then
     echo "✅ Backend configurado com sucesso!"
     echo ""
     echo "📋 Variáveis configuradas:"
-    echo "   DATABASE_URL=*** (oculto por segurança)"
+    echo "   DATABASE_URL=*** (pooler 6543)"
+    echo "   DIRECT_URL=*** (direta 5432)"
     echo "   JWT_SECRET=$JWT_SECRET"
     echo "   JWT_EXPIRES_IN=7d"
     echo "   NODE_ENV=production"

@@ -11,31 +11,29 @@
 # 8. Faça um Redeploy
 
 # ============================================
-# FRONTEND (21Scoutpro)
-# ============================================
-# 
-# ⚠️ IMPORTANTE: Substitua "seu-backend.vercel.app" pela URL REAL do seu backend no Vercel
-# 
-# Como descobrir a URL do backend:
-# 1. Acesse: https://vercel.com/dashboard
-# 2. Selecione o projeto do BACKEND (não o frontend)
-# 3. A URL estará no topo, algo como: https://scout21-backend-abc123.vercel.app
-# 4. Adicione /api no final
-#
-# Exemplo real:
-# VITE_API_URL=https://scout21-backend-abc123.vercel.app/api
-
-VITE_API_URL=https://seu-backend.vercel.app/api
-
-# ============================================
-# BACKEND
+# DEPLOY ÚNICO (Frontend + Backend no mesmo domínio)
 # ============================================
 #
-# ⚠️ IMPORTANTE: Substitua os valores abaixo pelos seus dados reais
+# NÃO precisa de VITE_API_URL - o frontend usa /api relativo automaticamente.
+#
+# Se tiver 2 projetos separados, configure no projeto do frontend:
+# VITE_API_URL=https://seu-backend.vercel.app/api
+
+# ============================================
+# BACKEND - Variáveis obrigatórias
+# ============================================
+#
+# Projeto Supabase: mymuvraqtnoqrtuzoimj (alinhado com backend/.env)
+# Se usar outro projeto, ajuste as URLs no Supabase Dashboard.
 #
 
-# Connection string do Supabase (já tem no CREDENCIAIS_BANCO.md)
-DATABASE_URL=postgresql://postgres:SUA_SENHA@db.SEU_PROJETO.supabase.co:5432/postgres
+# DATABASE_URL - Use pooler (porta 6543) para serverless
+# Senha com # deve ser codificada como %23
+DATABASE_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+
+# DIRECT_URL - Session pooler (porta 5432 no host pooler)
+# O host db.xxx.supabase.co não é acessível do Vercel serverless - use o pooler
+DIRECT_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:5432/postgres
 
 # Gere uma chave secreta forte (veja comando abaixo)
 JWT_SECRET=sua-chave-secreta-forte-aqui
@@ -43,11 +41,10 @@ JWT_SECRET=sua-chave-secreta-forte-aqui
 JWT_EXPIRES_IN=7d
 NODE_ENV=production
 
-# ⚠️ Substitua "seu-frontend.vercel.app" pela URL REAL do seu frontend no Vercel
-# Como descobrir: Vercel Dashboard → Projeto do Frontend → URL no topo
-# Exemplo: https://scout21-frontend-xyz789.vercel.app
-CORS_ORIGIN=https://seu-frontend.vercel.app
-FRONTEND_URL=https://seu-frontend.vercel.app
+# URL do seu deploy (mesmo domínio para frontend e backend)
+# Exemplo: https://seu-projeto.vercel.app
+CORS_ORIGIN=https://seu-projeto.vercel.app
+FRONTEND_URL=https://seu-projeto.vercel.app
 
 # ============================================
 # 🔑 Gerar JWT_SECRET:

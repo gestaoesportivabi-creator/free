@@ -16,7 +16,7 @@ export const env = {
   
   // JWT
   JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production',
-  JWT_EXPIRES_IN: (process.env.JWT_EXPIRES_IN || '8h') as string,
+  JWT_EXPIRES_IN: (process.env.JWT_EXPIRES_IN?.trim() || '8h') as string,
   
   // CORS
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',

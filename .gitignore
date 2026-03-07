@@ -48,3 +48,4 @@ backend/_archived/google-sheets/google-token.json
 CREDENCIAIS_BANCO.md
 VERCEL_CONFIG.md
 .vercel
+.env.vercel

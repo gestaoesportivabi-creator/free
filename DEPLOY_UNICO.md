@@ -39,7 +39,12 @@ Configure no Vercel Dashboard → Settings → Environment Variables:
 
 ### Obrigatórias:
 ```
-DATABASE_URL=postgresql://postgres:%23Gestaoesportiva21@db.jhjrqnggsfeztgkpqcjm.supabase.co:5432/postgres
+# DATABASE_URL - Pooler (porta 6543) para serverless
+DATABASE_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+
+# DIRECT_URL - Obrigatório pelo Prisma schema (porta 5432)
+DIRECT_URL=postgresql://postgres:%23Gestaoesportiva21@db.mymuvraqtnoqrtuzoimj.supabase.co:5432/postgres?sslmode=require
+
 JWT_SECRET=sua-chave-secreta-forte-aqui
 JWT_EXPIRES_IN=7d
 NODE_ENV=production
@@ -50,6 +55,8 @@ NODE_ENV=production
 CORS_ORIGIN=https://scout21.vercel.app
 FRONTEND_URL=https://scout21.vercel.app
 ```
+
+**⚠️ IMPORTANTE:** Sem `DIRECT_URL`, o Prisma falha no build. O schema exige essa variável.
 
 **⚠️ NÃO precisa configurar `VITE_API_URL`** - o frontend usa `/api` relativo automaticamente!
 
@@ -81,8 +88,14 @@ vercel --prod
 - Não precisa configurar `CORS_ORIGIN` se frontend e backend estão no mesmo domínio
 
 ### Erro: Database connection
-- Verifique se `DATABASE_URL` está configurada corretamente
+- Verifique se `DATABASE_URL` e `DIRECT_URL` estão configuradas corretamente
+- `DATABASE_URL`: use pooler (porta 6543) para serverless
+- `DIRECT_URL`: use conexão direta (porta 5432) - obrigatório pelo Prisma
 - Certifique-se de que o Supabase permite conexões externas
+
+### Erro: "Environment variable not found: DIRECT_URL"
+- Adicione `DIRECT_URL` no Vercel Dashboard (Settings → Environment Variables)
+- Use a connection string direta do Supabase (porta 5432)
 
 ## 📝 Notas Importantes
 
