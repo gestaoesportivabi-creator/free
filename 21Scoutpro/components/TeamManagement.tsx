@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
-import { Shirt, Save, Plus, User, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil } from 'lucide-react';
+import { Shirt, Save, Plus, User, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
+import { IS_FREE_PLAN } from '../config';
 
 interface TeamManagementProps {
     players: Player[];
@@ -377,7 +378,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const playersByPosition = useMemo(() => {
         const grouped: Record<string, Player[]> = {};
         filteredPlayers.forEach(player => {
-            const pos = player.position || 'Outros';
+            const raw = (player.position || '').trim();
+            const pos = config.positions.find(p => p.toLowerCase() === raw.toLowerCase()) || raw || 'Outros';
             if (!grouped[pos]) grouped[pos] = [];
             grouped[pos].push(player);
         });
@@ -385,6 +387,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const remainingPositions = Object.keys(grouped).filter(pos => !orderedPositions.includes(pos as Position));
         return { orderedPositions, remainingPositions, grouped };
     }, [filteredPlayers, config.positions]);
+
+    // Abrir automaticamente a primeira posição que tiver atletas para o card aparecer ao carregar a aba
+    const orderedKey = playersByPosition.orderedPositions.join(',');
+    useEffect(() => {
+        if (playersByPosition.orderedPositions.length > 0) {
+            setExpandedPositions(prev => (prev.size === 0 ? new Set([playersByPosition.orderedPositions[0]]) : prev));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só expandir quando a lista de posições com atletas mudar (ex.: primeiro carregamento)
+    }, [orderedKey]);
 
     const togglePositionExpanded = (pos: string) => {
         setExpandedPositions(prev => {
@@ -804,8 +815,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                             </div>
                         )}
 
-                        {/* TAB: MEDICAL (Injury History) */}
+                        {/* TAB: MEDICAL (Injury History) - bloqueada na versão free */}
                         {activeTab === 'medical' && (
+                            IS_FREE_PLAN ? (
+                                <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
+                                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
+                                    <p className="text-zinc-400 text-sm max-w-md">
+                                        Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                    </p>
+                                </div>
+                            ) : (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
                                     <div>
@@ -928,10 +947,19 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                     </div>
                                 )}
                             </div>
+                            )
                         )}
 
-                        {/* TAB: MAX LOAD */}
+                        {/* TAB: MAX LOAD - bloqueada na versão free */}
                         {activeTab === 'maxLoad' && (
+                            IS_FREE_PLAN ? (
+                                <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
+                                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
+                                    <p className="text-zinc-400 text-sm max-w-md">
+                                        Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                    </p>
+                                </div>
+                            ) : (
                             <div className="space-y-6 animate-fade-in">
                                 {/* Botão Adicionar Exercício */}
                                 {!isAddingMaxLoad && !editingMaxLoadId && (
@@ -1185,6 +1213,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                     </div>
                                 )}
                             </div>
+                            )
                         )}
 
                         <div className="col-span-1 md:col-span-4 flex justify-end mt-4 pt-4 border-t border-zinc-900">
