@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "installCommand": "npm install && cd 21Scoutpro && npm install --production=false && cd ../backend && npm install --production=false && cd ../api && npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "21Scoutpro/dist",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

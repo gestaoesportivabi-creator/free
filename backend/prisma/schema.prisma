@@ -1,0 +1,375 @@
+// SCOUT21PRO - Schema Prisma
+// Baseado nos 9 prompts de alinhamento com a landing page
+// Criado em: 2026-01-09
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(50)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@map("roles")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(255)
+  photoUrl     String?  @map("photo_url")
+  roleId       String   @map("role_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  clube        Clube?
+  tecnico      Tecnico?
+  role         Role     @relation(fields: [roleId], references: [id])
+
+  @@map("users")
+}
+
+model Tecnico {
+  id                   String     @id @default(uuid())
+  userId               String     @unique @map("user_id")
+  nome                 String     @db.VarChar(255)
+  cpf                  String?    @unique @db.VarChar(14)
+  registroProfissional String?    @map("registro_profissional") @db.VarChar(50)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  equipes              Equipe[]
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tecnicos")
+}
+
+model Clube {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  razaoSocial String   @map("razao_social") @db.VarChar(255)
+  cnpj        String   @unique @db.VarChar(18)
+  cidade      String?  @db.VarChar(100)
+  estado      String?  @db.VarChar(2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipes     Equipe[]
+
+  @@map("clubes")
+}
+
+model Equipe {
+  id                String              @id @default(uuid())
+  nome              String              @db.VarChar(255)
+  categoria         String?             @db.VarChar(50)
+  temporada         String?             @db.VarChar(20)
+  tecnicoId         String              @map("tecnico_id")
+  clubeId           String?             @map("clube_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  campeonatos       Campeonato[]
+  clube             Clube?              @relation(fields: [clubeId], references: [id])
+  tecnico           Tecnico             @relation(fields: [tecnicoId], references: [id])
+  jogadores         EquipesJogadores[]
+  jogos             Jogo[]
+  metasEstatisticas MetasEstatisticas[]
+  programacoes      Programacao[]
+
+  @@index([tecnicoId])
+  @@index([clubeId])
+  @@map("equipes")
+}
+
+model Jogador {
+  id                  String                     @id @default(uuid())
+  nome                String                     @db.VarChar(255)
+  apelido             String?                    @db.VarChar(100)
+  dataNascimento      DateTime?                  @map("data_nascimento") @db.Date
+  idade               Int?                       @db.SmallInt
+  funcaoEmQuadra      String?                    @map("funcao_em_quadra") @db.VarChar(50)
+  numeroCamisa        Int?                       @map("numero_camisa") @db.SmallInt
+  peDominante         String?                    @map("pe_dominante") @db.VarChar(20)
+  altura              Decimal?                   @db.Decimal(5, 2)
+  peso                Decimal?                   @db.Decimal(5, 2)
+  ultimoClube         String?                    @map("ultimo_clube") @db.VarChar(255)
+  fotoUrl             String?                    @map("foto_url") @db.Text
+  maxLoadsJson        Json?                      @map("max_loads_json")
+  isTransferido       Boolean                    @default(false) @map("is_transferido")
+  dataTransferencia   DateTime?                  @map("data_transferencia") @db.Date
+  isAtivo             Boolean                    @default(true) @map("is_ativo")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+  avaliacoesFisicas   AvaliacaoFisica[]
+  equipes             EquipesJogadores[]
+  estatisticasJogador JogosEstatisticasJogador[]
+  eventos             JogosEventos[]
+  lesoes              Lesao[]
+
+  @@map("jogadores")
+}
+
+model EquipesJogadores {
+  id         String    @id @default(uuid())
+  equipeId   String    @map("equipe_id")
+  jogadorId  String    @map("jogador_id")
+  dataInicio DateTime  @map("data_inicio") @db.Date
+  dataFim    DateTime? @map("data_fim") @db.Date
+  createdAt  DateTime  @default(now()) @map("created_at")
+  equipe     Equipe    @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  jogador    Jogador   @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@unique([equipeId, jogadorId, dataInicio])
+  @@index([equipeId])
+  @@index([jogadorId])
+  @@map("equipes_jogadores")
+}
+
+model Jogo {
+  id                     String                     @id @default(uuid())
+  equipeId               String                     @map("equipe_id")
+  adversario             String                     @db.VarChar(255)
+  data                   DateTime                   @db.Date
+  campeonato             String?                    @db.VarChar(255)
+  competicaoId          String?                    @map("competicao_id")
+  local                  String?                    @db.VarChar(255)
+  resultado             String?                    @db.Char(1)
+  golsPro               Int                        @default(0) @map("gols_pro")
+  golsContra            Int                        @default(0) @map("gols_contra")
+  videoUrl              String?                    @map("video_url")
+  postMatchEventLog     Json?                      @map("post_match_event_log")
+  playerRelationships   Json?                      @map("player_relationships")
+  lineup                Json?                      @map("lineup")
+  substitutionHistory   Json?                      @map("substitution_history")
+  createdAt             DateTime                   @default(now()) @map("created_at")
+  campeonatosJogos    CampeonatosJogos[]
+  competicao          Competicao?                @relation(fields: [competicaoId], references: [id])
+  equipe              Equipe                     @relation(fields: [equipeId], references: [id])
+  estatisticasEquipe  JogosEstatisticasEquipe?
+  estatisticasJogador JogosEstatisticasJogador[]
+  eventos             JogosEventos[]
+
+  @@index([equipeId, data(sort: Desc)])
+  @@index([competicaoId])
+  @@map("jogos")
+}
+
+model JogosEstatisticasEquipe {
+  id                     String @id @default(uuid())
+  jogoId                 String @unique @map("jogo_id")
+  minutosJogados         Int    @default(0) @map("minutos_jogados")
+  gols                   Int    @default(0)
+  golsSofridos           Int    @default(0) @map("gols_sofridos")
+  assistencias           Int    @default(0)
+  cartoesAmarelos        Int    @default(0) @map("cartoes_amarelos")
+  cartoesVermelhos       Int    @default(0) @map("cartoes_vermelhos")
+  passesCorretos         Int    @default(0) @map("passes_corretos")
+  passesErrados          Int    @default(0) @map("passes_errados")
+  passesErradosTransicao Int    @default(0) @map("passes_errados_transicao")
+  desarmesComBola        Int    @default(0) @map("desarmes_com_bola")
+  desarmesContraAtaque   Int    @default(0) @map("desarmes_contra_ataque")
+  desarmesSemBola        Int    @default(0) @map("desarmes_sem_bola")
+  chutesNoGol            Int    @default(0) @map("chutes_no_gol")
+  chutesFora             Int    @default(0) @map("chutes_fora")
+  rpePartida             Int?   @map("rpe_partida")
+  golsMarcadosJogoAberto Int    @default(0) @map("gols_marcados_jogo_aberto")
+  golsMarcadosBolaParada Int    @default(0) @map("gols_marcados_bola_parada")
+  golsSofridosJogoAberto Int    @default(0) @map("gols_sofridos_jogo_aberto")
+  golsSofridosBolaParada Int    @default(0) @map("gols_sofridos_bola_parada")
+  jogo                   Jogo   @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+
+  @@map("jogos_estatisticas_equipe")
+}
+
+model JogosEstatisticasJogador {
+  id                     String  @id @default(uuid())
+  jogoId                 String  @map("jogo_id")
+  jogadorId              String  @map("jogador_id")
+  minutosJogados         Int     @default(0) @map("minutos_jogados")
+  gols                   Int     @default(0)
+  golsSofridos           Int     @default(0) @map("gols_sofridos")
+  assistencias           Int     @default(0)
+  cartoesAmarelos        Int     @default(0) @map("cartoes_amarelos")
+  cartoesVermelhos       Int     @default(0) @map("cartoes_vermelhos")
+  passesCorretos         Int     @default(0) @map("passes_corretos")
+  passesErrados          Int     @default(0) @map("passes_errados")
+  passesErradosTransicao Int     @default(0) @map("passes_errados_transicao")
+  desarmesComBola        Int     @default(0) @map("desarmes_com_bola")
+  desarmesContraAtaque   Int     @default(0) @map("desarmes_contra_ataque")
+  desarmesSemBola        Int     @default(0) @map("desarmes_sem_bola")
+  chutesNoGol            Int     @default(0) @map("chutes_no_gol")
+  chutesFora             Int     @default(0) @map("chutes_fora")
+  rpePartida             Int?    @map("rpe_partida")
+  golsMarcadosJogoAberto Int     @default(0) @map("gols_marcados_jogo_aberto")
+  golsMarcadosBolaParada Int     @default(0) @map("gols_marcados_bola_parada")
+  golsSofridosJogoAberto Int     @default(0) @map("gols_sofridos_jogo_aberto")
+  golsSofridosBolaParada Int     @default(0) @map("gols_sofridos_bola_parada")
+  jogador                Jogador @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+  jogo                   Jogo    @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+
+  @@unique([jogoId, jogadorId])
+  @@index([jogoId])
+  @@index([jogadorId])
+  @@map("jogos_estatisticas_jogador")
+}
+
+model JogosEventos {
+  id         String   @id @default(uuid())
+  jogoId     String   @map("jogo_id")
+  jogadorId  String   @map("jogador_id")
+  tipoEvento String   @map("tipo_evento") @db.VarChar(10)
+  minuto     Int
+  segundo    Int
+  createdAt  DateTime @default(now()) @map("created_at")
+  jogador    Jogador  @relation(fields: [jogadorId], references: [id])
+  jogo       Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+
+  @@map("jogos_eventos")
+}
+
+model Lesao {
+  id           String    @id @default(uuid())
+  jogadorId    String    @map("jogador_id")
+  data         DateTime  @db.Date
+  dataInicio   DateTime  @map("data_inicio") @db.Date
+  dataFim      DateTime? @map("data_fim") @db.Date
+  tipo         String    @db.VarChar(100)
+  localizacao  String    @db.VarChar(100)
+  lado         String?   @db.VarChar(20)
+  severidade   String?   @db.VarChar(50)
+  origem       String?   @db.VarChar(20)
+  diasAfastado Int?      @map("dias_afastado")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  jogador      Jogador   @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([jogadorId, data(sort: Desc)])
+  @@map("lesoes")
+}
+
+model AvaliacaoFisica {
+  id              String   @id @default(uuid())
+  jogadorId       String   @map("jogador_id")
+  data            DateTime @db.Date
+  peso            Decimal? @db.Decimal(5, 2)
+  altura          Decimal? @db.Decimal(5, 2)
+  gorduraCorporal Decimal? @map("gordura_corporal") @db.Decimal(5, 2)
+  massaMuscular   Decimal? @map("massa_muscular") @db.Decimal(5, 2)
+  vo2max          Decimal? @db.Decimal(5, 2)
+  flexibilidade   Decimal? @db.Decimal(5, 2)
+  velocidade      Decimal? @db.Decimal(5, 2)
+  forca           Decimal? @db.Decimal(5, 2)
+  agilidade       Decimal? @db.Decimal(5, 2)
+  peitoral        Decimal? @db.Decimal(5, 2)
+  axilar          Decimal? @db.Decimal(5, 2)
+  subescapular    Decimal? @db.Decimal(5, 2)
+  triceps         Decimal? @db.Decimal(5, 2)
+  abdominal       Decimal? @db.Decimal(5, 2)
+  suprailiaca     Decimal? @db.Decimal(5, 2)
+  coxa            Decimal? @db.Decimal(5, 2)
+  planoAcao       String?  @map("plano_acao")
+  createdAt       DateTime @default(now()) @map("created_at")
+  jogador         Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@unique([jogadorId, data])
+  @@index([jogadorId, data(sort: Desc)])
+  @@map("avaliacoes_fisicas")
+}
+
+model Programacao {
+  id         String             @id @default(uuid())
+  equipeId   String             @map("equipe_id")
+  titulo     String             @db.VarChar(255)
+  dataInicio DateTime           @map("data_inicio") @db.Date
+  dataFim    DateTime           @map("data_fim") @db.Date
+  isAtivo    Boolean            @default(false) @map("is_ativo")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  equipe     Equipe             @relation(fields: [equipeId], references: [id])
+  dias       ProgramacoesDias[]
+
+  @@index([equipeId, dataInicio])
+  @@map("programacoes")
+}
+
+model ProgramacoesDias {
+  id              String      @id @default(uuid())
+  programacaoId   String      @map("programacao_id")
+  data            DateTime    @db.Date
+  diaSemana       String?     @map("dia_semana") @db.VarChar(20)
+  diaSemanaNumero Int?        @map("dia_semana_numero")
+  atividade       String?     @db.VarChar(255)
+  horario         String?     @db.VarChar(10)
+  localizacao     String?     @db.VarChar(255)
+  observacoes     String?
+  exercicioId     String?     @map("exercicio_id") @db.VarChar(50)
+  cargaPercent    Int?        @map("carga_percent")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  programacao     Programacao @relation(fields: [programacaoId], references: [id], onDelete: Cascade)
+
+  @@map("programacoes_dias")
+}
+
+model Campeonato {
+  id        String             @id @default(uuid())
+  nome      String             @db.VarChar(255)
+  equipeId  String?            @map("equipe_id")
+  createdAt DateTime           @default(now()) @map("created_at")
+  equipe    Equipe?            @relation(fields: [equipeId], references: [id])
+  jogos     CampeonatosJogos[]
+
+  @@index([equipeId])
+  @@map("campeonatos")
+}
+
+model CampeonatosJogos {
+  id             String     @id @default(uuid())
+  campeonatoId   String     @map("campeonato_id")
+  data           DateTime   @db.Date
+  horario        String?    @db.VarChar(10)
+  equipe         String     @db.VarChar(255)
+  adversario     String     @db.VarChar(255)
+  competicao     String?    @db.VarChar(255)
+  local          String?    @db.VarChar(50)
+  metaPontuacao  String?    @map("meta_pontuacao") @db.VarChar(255)
+  jogoId         String?    @map("jogo_id")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  campeonato     Campeonato @relation(fields: [campeonatoId], references: [id], onDelete: Cascade)
+  jogo           Jogo?      @relation(fields: [jogoId], references: [id])
+
+  @@index([jogoId])
+  @@map("campeonatos_jogos")
+}
+
+model Competicao {
+  id        String   @id @default(uuid())
+  nome      String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  jogos     Jogo[]
+
+  @@map("competicoes")
+}
+
+model MetasEstatisticas {
+  id                   String   @id @default(uuid())
+  equipeId             String?  @map("equipe_id")
+  gols                 Int      @default(0)
+  assistencias         Int      @default(0)
+  passesCorretos       Int      @default(0) @map("passes_corretos")
+  passesErrados        Int      @default(0) @map("passes_errados")
+  chutesNoGol          Int      @default(0) @map("chutes_no_gol")
+  chutesFora           Int      @default(0) @map("chutes_fora")
+  desarmesComPosse     Int      @default(0) @map("desarmes_com_posse")
+  desarmesSemPosse     Int      @default(0) @map("desarmes_sem_posse")
+  desarmesContraAtaque Int      @default(0) @map("desarmes_contra_ataque")
+  errosTransicao       Int      @default(0) @map("erros_transicao")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  equipe               Equipe?  @relation(fields: [equipeId], references: [id])
+
+  @@index([equipeId])
+  @@map("metas_estatisticas")
+}

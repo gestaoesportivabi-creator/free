@@ -1,0 +1,50 @@
+# Dependencies
+node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+/dist
+
+# Misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sensitive files
+CREDENCIAIS_BANCO.md
+VERCEL_CONFIG.md
+*.zip
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs
+logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/_archived/google-sheets/google-credentials.json
+backend/_archived/google-sheets/google-token.json
+*.zip
+21Scoutpro/package-lock.json
+CREDENCIAIS_BANCO.md
+VERCEL_CONFIG.md
+.vercel

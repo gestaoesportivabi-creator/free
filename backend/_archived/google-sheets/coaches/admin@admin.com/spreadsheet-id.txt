@@ -1,0 +1,3 @@
+# Cole aqui o ID da planilha do Google Sheets
+# Exemplo: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms
+

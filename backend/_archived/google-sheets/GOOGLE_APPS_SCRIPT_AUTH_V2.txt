@@ -1,0 +1,192 @@
+/**
+ * ============================================
+ * SCOUT 21 PRO - AUTH API MESTRE (V2 - COM REGISTRO AUTOMÁTICO)
+ * ============================================
+ * 
+ * SETUP NECESSÁRIO:
+ * 1. Ter a planilha "Scout 21 Pro - Admin" com aba 'users'.
+ * 2. Ter um ID de uma PLANILHA MOLDE (Template) para ser copiada.
+ * 
+ * CONFIGURAÇÃO:
+ * Substitua o ID abaixo pelo ID da sua planilha "Molde" (uma planilha com todas as abas e headers, mas vazia).
+ */
+const TEMPLATE_SPREADSHEET_ID = '1jZEVqcjm1n-SlSJrotUsNgqx69eKFCFSpZ6g2vuErqc'; 
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action || 'login'; // 'login' ou 'register'
+
+    if (action === 'register') {
+        return handleRegister(data);
+    } else {
+        return handleLogin(data);
+    }
+
+  } catch (error) {
+    return createResponse({ success: false, error: 'Erro geral: ' + error.toString() });
+  }
+}
+
+// ==========================================
+// LOGIN
+// ==========================================
+function handleLogin(data) {
+    const email = data.email ? data.email.trim().toLowerCase() : '';
+    const password = data.password ? data.password.trim() : '';
+
+    if (!email || !password) return createResponse({ success: false, error: 'Dados incompletos' });
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('users');
+    const rows = sheet.getDataRange().getValues();
+    const headers = rows[0];
+    
+    const idxEmail = headers.indexOf('email');
+    const idxPass = headers.indexOf('password');
+    // Mapear colunas corretamente
+    const idxId = headers.indexOf('id');
+    const idxName = headers.indexOf('name');
+    const idxRole = headers.indexOf('role');
+    const idxSpreadsheetId = headers.indexOf('spreadsheetId'); // Mudamos de Url para Id para ser mais flexível
+    // Fallback: se não achar coluna spreadsheetId, tenta spreadsheetUrl
+    const idxSpreadsheetUrl = headers.indexOf('spreadsheetUrl');
+    
+    const idxActive = headers.indexOf('active');
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (String(row[idxEmail]).toLowerCase() === email) {
+            
+            // Validação de senha simples
+            if (String(row[idxPass]) === password) {
+                if (row[idxActive] === false || String(row[idxActive]) === 'FALSE') {
+                    return createResponse({ success: false, error: 'Usuário inativo' });
+                }
+
+                // Recuperar ID da planilha
+                let userSheetId = '';
+                let userSheetUrl = '';
+
+                if (idxSpreadsheetId > -1) userSheetId = row[idxSpreadsheetId];
+                
+                // Se só tem URL, extrair ID ou usar URL
+                if (!userSheetId && idxSpreadsheetUrl > -1) {
+                    userSheetUrl = row[idxSpreadsheetUrl];
+                    // Tentar extrair ID da URL se possível, ou retornar URL para o frontend tratar
+                }
+
+                return createResponse({
+                    success: true,
+                    user: {
+                        id: row[idxId],
+                        name: row[idxName],
+                        email: row[idxEmail],
+                        role: row[idxRole],
+                        spreadsheetId: userSheetId,
+                        spreadsheetUrl: userSheetUrl, 
+                        // Se não tiver ID explícito, frontend pode tentar montar URL. 
+                        // Mas no fluxo SaaS ideal, retornamos o ID para a API central usar.
+                        teamName: 'Meu Time',
+                        sport: 'futsal'
+                    }
+                });
+            } else {
+                 return createResponse({ success: false, error: 'Senha incorreta' });
+            }
+        }
+    }
+    return createResponse({ success: false, error: 'Usuário não encontrado' });
+}
+
+// ==========================================
+// REGISTRO
+// ==========================================
+function handleRegister(data) {
+    const name = data.name;
+    const email = data.email ? data.email.trim().toLowerCase() : '';
+    const password = data.password;
+    
+    if (!name || !email || !password) {
+        return createResponse({ success: false, error: 'Preencha todos os campos' });
+    }
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('users');
+    // Verificar duplicidade
+    const users = sheet.getDataRange().getValues();
+    const idxEmail = users[0].indexOf('email');
+    
+    for (let i = 1; i < users.length; i++) {
+        if (String(users[i][idxEmail]).toLowerCase() === email) {
+            return createResponse({ success: false, error: 'Email já cadastrado' });
+        }
+    }
+
+    try {
+        // 1. Clonar Planilha Template
+        // Verifica se temos o ID do template configurado
+        if (!TEMPLATE_SPREADSHEET_ID || TEMPLATE_SPREADSHEET_ID.includes('SEU_ID')) {
+             return createResponse({ success: false, error: 'Erro de config: Template ID não definido no Admin' });
+        }
+
+        const templateFile = DriveApp.getFileById(TEMPLATE_SPREADSHEET_ID);
+        const newFileName = `Scout21 - ${name}`;
+        const newFile = templateFile.makeCopy(newFileName);
+        
+        // Opcional: Compartilhar com o usuário (se for gmail)
+        // try { newFile.addEditor(email); } catch(e) {} MakeCopy já dá permissão ao dono do script
+
+        const newSpreadsheetId = newFile.getId();
+        const newSpreadsheetUrl = newFile.getUrl();
+
+        // 2. Criar registro no banco
+        const newId = Utilities.getUuid();
+        const now = new Date();
+        
+        // Headers esperados: id | name | email | password | role | spreadsheetId | spreadsheetUrl | active | createdAt
+        // Se sua planilha tem colunas diferentes, ajuste a ordem aqui!
+        
+        // Mapeando indices baseado nos headers da primeira linha para ser seguro
+        const headers = users[0];
+        const newRow = new Array(headers.length).fill('');
+        
+        // Helper para preencher
+        const setVal = (colName, val) => {
+            const idx = headers.indexOf(colName);
+            if (idx > -1) newRow[idx] = val;
+        };
+
+        setVal('id', newId);
+        setVal('name', name);
+        setVal('email', email);
+        setVal('password', password); // Ideal: Hash
+        setVal('role', 'Treinador');
+        setVal('spreadsheetId', newSpreadsheetId);
+        setVal('spreadsheetUrl', newSpreadsheetUrl);
+        setVal('active', true);
+        setVal('createdAt', now);
+
+        sheet.appendRow(newRow);
+
+        return createResponse({
+            success: true,
+            user: {
+                id: newId,
+                name: name,
+                email: email,
+                role: 'Treinador',
+                spreadsheetId: newSpreadsheetId,
+                spreadsheetUrl: newSpreadsheetUrl,
+                teamName: 'Meu Time',
+                sport: 'futsal'
+            }
+        });
+
+    } catch (err) {
+        return createResponse({ success: false, error: 'Erro ao criar conta: ' + err.toString() });
+    }
+}
+
+function createResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}

@@ -1,0 +1,89 @@
+/**
+ * ============================================
+ * SCOUT 21 PRO - AUTH API MESTRE
+ * ============================================
+ * 
+ * INSTRUÇÕES:
+ * 1. Crie uma planilha nova chamada "Scout 21 Pro - ADMIN"
+ * 2. Crie uma aba chamada 'users'
+ * 3. Na linha 1, crie os headers:
+ *    id | name | email | password | role | spreadsheetUrl | active | createdAt
+ * 
+ * 4. Vá em Extensões > Apps Script
+ * 5. Cole este código
+ * 6. Publique como Web App (Executar como: Eu / Acesso: Qualquer um)
+ */
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const email = data.email ? data.email.trim().toLowerCase() : '';
+    const password = data.password ? data.password.trim() : '';
+
+    if (!email || !password) {
+      return createResponse({ success: false, error: 'Email e senha obrigatórios' });
+    }
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('users');
+    if (!sheet) return createResponse({ success: false, error: 'Tabela users não encontrada' });
+
+    const rows = sheet.getDataRange().getValues();
+    const headers = rows[0];
+    
+    // Índices
+    const idxEmail = headers.indexOf('email');
+    const idxPass = headers.indexOf('password');
+    const idxUrl = headers.indexOf('spreadsheetUrl');
+    const idxActive = headers.indexOf('active');
+    
+    // Procurar usuário
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (String(row[idxEmail]).toLowerCase() === email) {
+            
+            // Verificar Senha (simples ou hash se preferir)
+            // Para MVP simples, estamos comparando texto plano ou hash simples
+            // O ideal é que o 'password' na planilha seja um hash
+            if (String(row[idxPass]) === password || String(row[idxPass]) === simpleHash(password)) {
+                
+                if (row[idxActive] === false || String(row[idxActive]) === 'FALSE') {
+                    return createResponse({ success: false, error: 'Usuário inativo' });
+                }
+
+                return createResponse({
+                    success: true,
+                    user: {
+                        id: row[headers.indexOf('id')],
+                        name: row[headers.indexOf('name')],
+                        email: row[idxEmail],
+                        role: row[headers.indexOf('role')],
+                        spreadsheetUrl: row[idxUrl],
+                        teamName: 'Time Personalizado', // Pode adicionar coluna teamName depois
+                        sport: 'futsal' // Pode adicionar coluna sport depois
+                    }
+                });
+            } else {
+                 return createResponse({ success: false, error: 'Senha incorreta' });
+            }
+        }
+    }
+
+    return createResponse({ success: false, error: 'Usuário não encontrado' });
+
+  } catch (error) {
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+function createResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Hash simples para compatibilidade com o sistema atual (MD5-like)
+// Copiar a mesma função simpleHash que está no frontend se quiser usar hash
+function simpleHash(text) {
+    // Implementação simplificada ou deixe texto plano para o MVP inicial
+    // Se quiser usar texto plano na planilha, basta salvar a senha normal
+    return text; 
+}

@@ -1,0 +1,27 @@
+{
+  "name": "scout-21-pro-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SCOUT 21 PRO - Sistema de Gestão Esportiva (Frontend + Backend)",
+  "scripts": {
+    "supabase:login": "supabase login",
+    "supabase:link": "supabase link --project-ref jhjrqnggsfeztgkpqcjm",
+    "supabase:db-pull": "supabase db pull",
+    "supabase:db-push": "supabase db push",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd 21Scoutpro && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build:frontend": "cd 21Scoutpro && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "install:all": "npm install && cd 21Scoutpro && npm install && cd ../backend && npm install",
+    "build": "npm run build:backend && npm run build:frontend"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^5.5.16",
+    "concurrently": "^8.2.2",
+    "supabase": "^2.0.0"
+  }
+}

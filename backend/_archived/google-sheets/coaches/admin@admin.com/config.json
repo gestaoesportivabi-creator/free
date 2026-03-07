@@ -1,0 +1,13 @@
+{
+  "id": "b022de34-dae7-40f3-bac5-61355eb7e7cc",
+  "name": "Administrador",
+  "email": "admin@admin.com",
+  "passwordHash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
+  "teamName": "Admin Team",
+  "sport": "futsal",
+  "photoUrl": "",
+  "role": "Treinador",
+  "createdAt": "2026-01-05T20:53:02.954Z",
+  "spreadsheetId": "",
+  "active": true
+}

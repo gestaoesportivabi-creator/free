@@ -1,0 +1,362 @@
+/**
+ * ============================================
+ * SCOUT 21 PRO - MOTOR DE DADOS (SAAS MODE)
+ * ============================================
+ * 
+ * Este script funciona como um "Motor Central".
+ * Ele recebe requisições do frontend, que devem conter:
+ * 1. O recurso e ação desejada (get/post/put/delete)
+ * 2. O `spreadsheetId` do cliente onde a operação deve ocorrer
+ * 
+ * INSTRUÇÕES:
+ * 1. Publique este script como Web App (Executar como: Eu, Acesso: Qualquer um)
+ * 2. Esta URL será a API_URL no config do frontend.
+ */
+
+// Se nenhum ID for passado, usa este como fallback (opcional)
+const DEFAULT_SPREADSHEET_ID = '';
+
+// Variável global para armazenar o ID recebido na requisição atual
+let CURRENT_REQUEST_SPREADSHEET_ID = '';
+
+// Nomes das abas (deve corresponder exatamente aos nomes na planilha)
+const SHEETS = {
+  players: 'players',
+  matches: 'matches',
+  matchPlayerStats: 'match_player_stats',
+  injuries: 'injuries',
+  assessments: 'assessments',
+  schedules: 'schedules',
+  scheduleDays: 'schedule_days',
+  budgetEntries: 'budget_entries',
+  budgetExpenses: 'budget_expenses',
+  competitions: 'competitions',
+  statTargets: 'stat_targets',
+  users: 'users',
+  timeControls: 'time_controls',
+  championshipMatches: 'championship_matches'
+};
+
+/**
+ * ============================================
+ * FUNÇÕES AUXILIARES
+ * ============================================
+ */
+
+// Obter planilha ativa (Dinânmico)
+function getSpreadsheet() {
+  try {
+    // 1. Prioridade: ID enviado na requisição (SaaS Mode)
+    if (CURRENT_REQUEST_SPREADSHEET_ID) {
+        Logger.log('📂 SaaS: Abrindo planilha dinâmica: ' + CURRENT_REQUEST_SPREADSHEET_ID);
+        return SpreadsheetApp.openById(CURRENT_REQUEST_SPREADSHEET_ID);
+    }
+
+    // 2. Fallback: Se o script estiver embutido (Stand-alone mode)
+    try {
+        return SpreadsheetApp.getActiveSpreadsheet();
+    } catch (e) {
+        // Se falhar e tiver default
+        if (DEFAULT_SPREADSHEET_ID) {
+             return SpreadsheetApp.openById(DEFAULT_SPREADSHEET_ID);
+        }
+    }
+    throw new Error('Nenhum spreadsheetId fornecido e script não está embutido.');
+
+  } catch (error) {
+    Logger.log('Erro ao obter planilha: ' + error.toString());
+    throw error;
+  }
+}
+
+// Obter aba específica
+function getSheet(sheetName) {
+  try {
+    const ss = getSpreadsheet();
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+    }
+    return sheet;
+  } catch (error) {
+    Logger.log('Erro ao obter aba ' + sheetName + ': ' + error.toString());
+    throw error;
+  }
+}
+
+function rowToObject(sheet, row) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const obj = {};
+  headers.forEach((header, index) => {
+    if (header) {
+      let value = row[index];
+      if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+        try { value = JSON.parse(value); } catch (e) {}
+      }
+      obj[header] = value || null;
+    }
+  });
+  return obj;
+}
+
+function objectToRow(sheet, obj) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  return headers.map((header, index) => {
+    const normalizedHeader = String(header).trim().toLowerCase();
+    let key = header;
+    if (!(header in obj)) {
+      const foundKey = Object.keys(obj).find(k => String(k).trim().toLowerCase() === normalizedHeader);
+      if (foundKey) key = foundKey;
+    }
+    
+    if (obj[key] === undefined) return '';
+    const value = obj[key];
+    if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+      try { return JSON.stringify(value); } catch (e) { return ''; }
+    }
+    return value;
+  });
+}
+
+function getAllData(sheetName) {
+  try {
+    const sheet = getSheet(sheetName);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return [];
+    
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (!headers || headers.length === 0) return [];
+    
+    const data = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    
+    const result = data.map((row, rowIndex) => {
+      const obj = {};
+      headers.forEach((header, index) => {
+        if (header) {
+          let value = row[index];
+          if (typeof value === 'string' && value.trim() !== '' && (value.trim().startsWith('[') || value.trim().startsWith('{'))) {
+            try { value = JSON.parse(value); } catch (e) {}
+          }
+          if (value === '' || value === null || value === undefined) value = null;
+          const normalizedHeader = String(header).trim();
+          obj[normalizedHeader] = value;
+        }
+      });
+      if (!obj.id && !obj.ID && !obj.Id) obj.id = 'gen_' + (rowIndex + 1);
+      return obj;
+    });
+    return result;
+  } catch (error) {
+    return [];
+  }
+}
+
+function getDataById(sheetName, id) {
+  try {
+    const sheet = getSheet(sheetName);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return null;
+    
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const idColumn = headers.indexOf('id');
+    if (idColumn === -1) return null;
+    
+    const idStr = String(id);
+    const data = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    
+    for (let i = 0; i < data.length; i++) {
+        // Comparação flexível
+        if (String(data[i][idColumn]) === idStr) {
+            const obj = {};
+            headers.forEach((header, index) => {
+                let value = data[i][index];
+                if (typeof value === 'string' && (value.startsWith('[') || value.startsWith('{'))) {
+                    try { value = JSON.parse(value); } catch(e){}
+                }
+                obj[header] = value;
+            });
+            return obj;
+        }
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function insertData(sheetName, data) {
+  try {
+    const sheet = getSheet(sheetName);
+    if (sheet.getLastRow() === 0) {
+      const headers = Object.keys(data);
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
+    
+    let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    let idColumnIndex = headers.findIndex(h => String(h).trim().toLowerCase() === 'id');
+    
+    if (idColumnIndex === -1 && data.id) {
+      sheet.insertColumnBefore(1);
+      sheet.getRange(1, 1).setValue('id');
+    }
+    
+    const row = objectToRow(sheet, data);
+    sheet.appendRow(row);
+    return { success: true, data: data };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+function updateData(sheetName, id, data) {
+  try {
+    const sheet = getSheet(sheetName);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false, error: 'No data' };
+    
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const idColumn = headers.indexOf('id');
+    if (idColumn === -1) return { success: false, error: 'ID col missing' };
+    
+    const idStr = String(id).trim();
+    
+    for (let i = 2; i <= lastRow; i++) {
+      const cellValue = sheet.getRange(i, idColumn + 1).getValue();
+      if (String(cellValue).trim() === idStr) {
+        
+        headers.forEach((header, colIndex) => {
+          if (!header) return;
+          if (data.hasOwnProperty(header)) {
+            const value = data[header];
+            if (typeof value === 'object' && value !== null) {
+               try { sheet.getRange(i, colIndex + 1).setValue(JSON.stringify(value)); } catch(e){}
+            } else {
+               sheet.getRange(i, colIndex + 1).setValue(value);
+            }
+          }
+        });
+        return { success: true, data: { ...getDataById(sheetName, id), ...data } };
+      }
+    }
+    return { success: false, error: 'Not found' };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+function deleteData(sheetName, id) {
+  try {
+    const sheet = getSheet(sheetName);
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false, error: 'No data' };
+    
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const idColumn = headers.indexOf('id');
+    if (idColumn === -1) return { success: false };
+    
+    const idStr = String(id).trim();
+    const dataRange = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    
+    for (let i = 0; i < dataRange.length; i++) {
+      const cellValue = sheet.getRange(i + 2, idColumn + 1).getValue();
+      if (String(cellValue).trim() === idStr) {
+        sheet.deleteRow(i + 2);
+        return { success: true };
+      }
+    }
+    return { success: false, error: 'Not found' };
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+function doGet(e) { return handleRequest(e); }
+function doPost(e) { return handleRequest(e); }
+
+function createResponse(jsonData) {
+  return ContentService.createTextOutput(JSON.stringify(jsonData))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleRequest(e) {
+  try {
+    // CAPTURAR SPREADSHEET ID DA REQUISIÇÃO
+    if (e.parameter && e.parameter.spreadsheetId) {
+        CURRENT_REQUEST_SPREADSHEET_ID = e.parameter.spreadsheetId;
+    }
+
+    let method = 'GET';
+    let path = e.parameter.path || '';
+    let requestData = {};
+    
+    if (e.parameter.method) method = e.parameter.method.toUpperCase();
+    else if (e.postData) method = 'POST';
+    
+    if (e.postData && e.postData.contents) {
+      try { requestData = JSON.parse(e.postData.contents); } catch (err) {}
+      
+      // Também verificar se spreadsheetId veio no body JSON
+      if (requestData.spreadsheetId && !CURRENT_REQUEST_SPREADSHEET_ID) {
+          CURRENT_REQUEST_SPREADSHEET_ID = requestData.spreadsheetId;
+      }
+    }
+
+    // Se ainda não temos ID e não temos Default, erro
+    if (!CURRENT_REQUEST_SPREADSHEET_ID && !DEFAULT_SPREADSHEET_ID) {
+        // Tentar obter da planilha ativa como último recurso
+        try { SpreadsheetApp.getActiveSpreadsheet(); } catch(e) {
+             return createResponse({ success: false, error: 'CRITICAL: No spreadsheetId provided.' });
+        }
+    }
+
+    const pathParts = path.split('/').filter(p => p);
+    const resource = pathParts[0];
+    const id = pathParts[1];
+    
+    const resourceMap = {
+      'players': SHEETS.players,
+      'matches': SHEETS.matches,
+      'match-player-stats': SHEETS.matchPlayerStats,
+      'injuries': SHEETS.injuries,
+      'assessments': SHEETS.assessments,
+      'schedules': SHEETS.schedules,
+      'schedule-days': SHEETS.scheduleDays,
+      'budget-entries': SHEETS.budgetEntries,
+      'budget-expenses': SHEETS.budgetExpenses,
+      'competitions': SHEETS.competitions,
+      'stat-targets': SHEETS.statTargets,
+      'users': SHEETS.users,
+      'time-controls': SHEETS.timeControls,
+      'championship-matches': SHEETS.championshipMatches
+    };
+    
+    const sheetName = resourceMap[resource];
+    
+    if (!sheetName) return createResponse({ success: false, error: 'Resource not found' });
+    
+    let result;
+    
+    if (method === 'GET') {
+      if (id) {
+        const data = getDataById(sheetName, id);
+        result = data ? { success: true, data: data } : { success: false, error: 'Not found' };
+      } else {
+        const data = getAllData(sheetName);
+        result = { success: true, data: data };
+      }
+    } 
+    else if (method === 'POST') {
+      result = insertData(sheetName, requestData);
+    }
+    else if (method === 'PUT' || method === 'PATCH') {
+      result = updateData(sheetName, id, requestData);
+    }
+    else if (method === 'DELETE') {
+      result = deleteData(sheetName, id);
+    }
+    
+    return createResponse(result);
+  } catch (error) {
+    return createResponse({ success: false, error: error.toString() });
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "f859b4ad-4633-4fcd-b997-926e47a64537",
+  "name": "João Silva",
+  "email": "joao@teste.com",
+  "passwordHash": "55a5e9e78207b4df8699d60886fa070079463547b095d1a05bc719bb4e6cd251",
+  "teamName": "AFC Lions",
+  "sport": "futsal",
+  "photoUrl": "",
+  "role": "Treinador",
+  "createdAt": "2026-01-05T20:50:24.652Z",
+  "spreadsheetId": "",
+  "active": true
+}
