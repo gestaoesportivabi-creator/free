@@ -183,25 +183,25 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col items-center justify-center min-h-0 pt-20 pb-4 overflow-y-auto">
+      {/* Área central: sem rolagem, tudo visível */}
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 pt-16 pb-20 overflow-hidden">
       <div className="absolute inset-0 z-0 pointer-events-none">
           <img 
             src="https://images.unsplash.com/photo-1504450758481-7338eba7524a?q=80&w=2069&auto=format&fit=crop" 
             alt="Arena Lotada Emoção" 
             className="w-full h-full object-cover opacity-60"
           />
-          {/* Gradient Overlay for Text Readability and Mood */}
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/80 mix-blend-multiply"></div>
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black"></div>
       </div>
 
       {/* Auth Card - compacto para caber na tela sem rolagem */}
-      <div className="z-20 bg-black/20 backdrop-blur-lg border border-white/10 p-6 md:p-8 rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] w-full max-w-sm relative animate-fade-in ring-1 ring-white/5">
+      <div className="z-20 bg-black/20 backdrop-blur-lg border border-white/10 p-4 sm:p-6 rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] w-full max-w-sm relative animate-fade-in ring-1 ring-white/5">
         
-        <div className="mb-6 text-center">
+        <div className="mb-4 text-center">
             {/* Logo Oficial */}
-            <div className="flex justify-center mb-4">
-                <div className={`relative w-28 h-28 flex items-center justify-center border-2 ${isRegistering ? 'border-[#00f0ff]' : 'border-white'} bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden`}>
+            <div className="flex justify-center mb-3">
+                <div className={`relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border-2 ${isRegistering ? 'border-[#00f0ff]' : 'border-white'} bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden`}>
                     <img 
                         src={LOGO_IMAGE} 
                         alt="SCOUT21PRO" 
@@ -210,10 +210,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
                 </div>
             </div>
 
-            <h1 className="text-2xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg">
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg">
                 SCOUT21PRO
             </h1>
-            <p className="text-[9px] text-zinc-200 font-light uppercase tracking-[0.25em] mt-1 drop-shadow-md">
+            <p className="text-[9px] text-zinc-200 font-light uppercase tracking-[0.25em] mt-0.5 drop-shadow-md">
                 {isRegistering ? 'Criar Conta Gratuita' : 'Performance Data Intelligence e Gestão'}
             </p>
         </div>
@@ -368,20 +368,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
              </button>
         </div>
       </div>
+      </div>
 
-      {/* Mensagem de saudação logo abaixo do card — visível sem rolar */}
-      <div className="z-20 w-full max-w-sm px-4 mt-3 flex justify-center animate-fade-in">
-        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-zinc-700/70 backdrop-blur-sm rounded-md">
-          <span className="text-zinc-300 font-light text-[11px] md:text-xs tracking-wide">
-            Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados.
-          </span>
-          <div className="w-4 h-4 border border-zinc-600/50 rounded flex items-center justify-center bg-black/90 shrink-0 overflow-hidden">
+      {/* Rodapé fixo: mensagem de saudação sempre visível */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 py-3 px-4 bg-black/80 backdrop-blur-md border-t border-white/10">
+        <div className="max-w-2xl mx-auto flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 text-center">
+          <div className="w-6 h-6 border border-zinc-600/50 rounded flex items-center justify-center bg-black/80 shrink-0 overflow-hidden">
             <img src={LOGO_IMAGE} alt="" className="w-full h-full object-contain p-0.5" />
           </div>
+          <p className="text-zinc-300 font-light text-[11px] sm:text-xs tracking-wide">
+            Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados.
+          </p>
         </div>
-      </div>
-      </div>
-
+      </footer>
     </div>
   );
 };
