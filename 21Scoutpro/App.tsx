@@ -21,6 +21,7 @@ import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipT
 import { SuspensionsAlert } from './components/SuspensionsAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { ManagementReport } from './components/ManagementReport';
+import { EmBreve } from './components/EmBreve';
 import { NextMatchAlert } from './components/NextMatchAlert';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { DashboardTodayBlock } from './components/DashboardTodayBlock';
@@ -95,7 +96,7 @@ const TAB_LABELS: Record<string, string> = {
   settings: 'Configurações',
 };
 
-/** Recursos necessários por aba (carregamento sob demanda) */
+/** Recursos necessários por aba (carregamento sob demanda). Abas "Em breve" = [] para render instantâneo */
 const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   dashboard: ['players', 'matches', 'schedules', 'championshipMatches', 'championships'],
   team: ['players'],
@@ -104,16 +105,16 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   table: ['players', 'competitions', 'matches', 'championshipMatches', 'schedules', 'teams'],
   general: ['matches', 'players'],
   individual: ['matches', 'players', 'timeControls'],
-  ranking: ['players', 'matches'],
-  physical: ['matches', 'players', 'schedules', 'championshipMatches'],
-  assessment: ['players', 'assessments'],
+  ranking: [],
+  physical: [],
+  assessment: [],
   video: ['matches', 'players'],
-  pse: ['schedules', 'championshipMatches', 'players'],
-  psr: ['schedules', 'championshipMatches', 'players'],
-  'qualidade-sono': ['schedules', 'championshipMatches', 'players'],
-  academia: ['schedules', 'players'],
+  pse: [],
+  psr: [],
+  'qualidade-sono': [],
+  academia: [],
   'management-report': ['players', 'matches', 'assessments', 'timeControls'],
-  settings: ['statTargets'],
+  settings: [],
 };
 
 const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
@@ -676,9 +677,9 @@ export default function App() {
   };
 
   const handleTabChange = (tab: string) => {
+      setActiveTab(tab);
       const resources = TAB_REQUIRED_RESOURCES[tab] ?? [];
       const missing = resources.filter(r => !loadedResources[r]);
-      setActiveTab(tab);
       if (missing.length === 0) return;
       setIsLoading(true);
       Promise.all(missing.map(r => Promise.resolve(loadResource(r)))).then(() => setIsLoading(false));
@@ -1215,7 +1216,7 @@ export default function App() {
       case 'ranking': 
         return (
           <TabBackgroundWrapper>
-            <StatsRanking players={players} matches={matches} />
+            <EmBreve />
           </TabBackgroundWrapper>
         ); 
       case 'general':
@@ -1229,13 +1230,13 @@ export default function App() {
       case 'physical':
         return (
           <TabBackgroundWrapper>
-            <PhysicalScout matches={matches} players={players} schedules={schedules} championshipMatches={championshipMatches} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'assessment': 
         return (
           <TabBackgroundWrapper>
-            <PhysicalAssessmentTab players={players} assessments={assessments} onSaveAssessment={handleSaveAssessment} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'video':
@@ -1353,25 +1354,25 @@ export default function App() {
       case 'pse':
         return (
           <TabBackgroundWrapper>
-            <PseTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'psr':
         return (
           <TabBackgroundWrapper>
-            <PsrTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'qualidade-sono':
         return (
           <TabBackgroundWrapper>
-            <QualidadeSonoTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'academia':
         return (
           <TabBackgroundWrapper>
-            <Academia schedules={schedules} players={players} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'management-report':
@@ -1388,12 +1389,7 @@ export default function App() {
       case 'settings':
         return (
           <TabBackgroundWrapper>
-            <Settings 
-              currentUser={currentUser} 
-              onUpdateUser={handleUpdateUser}
-              statTargets={statTargets}
-              onUpdateTargets={handleUpdateTargets}
-            />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'dashboard':

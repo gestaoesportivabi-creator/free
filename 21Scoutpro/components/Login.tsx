@@ -241,7 +241,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder={isRegistering ? 'joaosilva' : 'admin'}
+              placeholder={isRegistering ? 'joaosilva' : 'seu@email.com'}
             />
           </div>
 
@@ -255,9 +255,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
               placeholder="••••••"
             />
-            {!isRegistering && (
-              <p className="text-[10px] text-zinc-400 font-light text-center pt-1">Use admin/admin para teste</p>
-            )}
             {isRegistering && (
               <p className="text-[10px] text-zinc-400 font-light text-center pt-1">Mínimo 4 caracteres</p>
             )}
@@ -367,7 +364,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
                 }}
                 className="text-xs text-zinc-300 hover:text-white font-light transition-colors uppercase tracking-widest"
              >
-                 {isRegistering ? 'Já possui conta? Fazer Login' : 'Novo no clube? Criar Conta'}
+                 {isRegistering ? 'Já possui conta? Fazer Login' : 'Criar Conta Grátis'}
              </button>
         </div>
       </div>

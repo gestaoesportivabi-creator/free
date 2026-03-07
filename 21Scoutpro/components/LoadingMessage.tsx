@@ -27,15 +27,15 @@ interface LoadingMessageProps {
 }
 
 // Mapeamento de abas para animações e mensagens
-const TAB_ANIMATIONS: Record<string, { message: string; animation: 'shield' | 'field' | 'prayer' | 'default' }> = {
+const TAB_ANIMATIONS: Record<string, { message: string; animation: 'shield' | 'field' | 'default' }> = {
     'team': { message: 'Colocando a caneleira...', animation: 'shield' },
     'table': { message: 'Entrando em quadra...', animation: 'field' },
     'championship': { message: 'Carregando tabela de campeonato...', animation: 'field' },
     'time-control': { message: 'Entrando em quadra...', animation: 'field' },
     'general': { message: 'Montando quadro tático...', animation: 'field' },
     'individual': { message: 'Analisando performance...', animation: 'field' },
-    'physical': { message: 'Fazendo a oração...', animation: 'prayer' },
-    'assessment': { message: 'Fazendo a oração...', animation: 'prayer' },
+    'physical': { message: 'Carregando...', animation: 'default' },
+    'assessment': { message: 'Carregando...', animation: 'default' },
     'ranking': { message: 'Organizando dados...', animation: 'shield' },
     'video': { message: 'Carregando vídeo...', animation: 'field' },
     'schedule': { message: 'Organizando programação...', animation: 'shield' },
@@ -119,66 +119,6 @@ const FieldAnimation: React.FC = () => (
     </div>
 );
 
-// Componente de Oração/Terço
-const PrayerAnimation: React.FC = () => (
-    <div className="relative w-20 h-32 flex flex-col items-center">
-        {/* Terço/Cordão */}
-        <svg viewBox="0 0 60 100" className="w-full h-full">
-            <defs>
-                <linearGradient id="beadGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="1" />
-                    <stop offset="100%" stopColor="#059669" stopOpacity="0.6" />
-                </linearGradient>
-            </defs>
-            {/* Cordão */}
-            <path
-                d="M30 10 Q30 30, 20 40 Q10 50, 10 60 Q10 70, 20 75 Q30 80, 30 90"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="1.5"
-                strokeDasharray="2 2"
-                opacity="0.5"
-            />
-            <path
-                d="M30 10 Q30 30, 40 40 Q50 50, 50 60 Q50 70, 40 75 Q30 80, 30 90"
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="1.5"
-                strokeDasharray="2 2"
-                opacity="0.5"
-            />
-            {/* Contas do terço */}
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i, index) => {
-                const angle = (index / 10) * Math.PI * 2;
-                const radius = 25;
-                const x = 30 + Math.cos(angle) * radius;
-                const y = 50 + Math.sin(angle) * radius;
-                return (
-                    <circle
-                        key={i}
-                        cx={x}
-                        cy={y}
-                        r="3"
-                        fill="url(#beadGradient)"
-                        className="animate-pulse"
-                        style={{ animationDelay: `${index * 0.1}s` }}
-                    />
-                );
-            })}
-            {/* Cruz no centro */}
-            <g transform="translate(30, 50)">
-                <rect x="-1" y="-8" width="2" height="16" fill="#10b981" className="animate-pulse" />
-                <rect x="-6" y="-1" width="12" height="2" fill="#10b981" className="animate-pulse" />
-            </g>
-        </svg>
-        {/* Mãos em oração (simplificado) */}
-        <div className="absolute -bottom-4 flex gap-1">
-            <div className="w-3 h-4 bg-gradient-to-b from-[#10b981]/40 to-[#059669]/20 rounded-t-full"></div>
-            <div className="w-3 h-4 bg-gradient-to-b from-[#10b981]/40 to-[#059669]/20 rounded-t-full"></div>
-        </div>
-    </div>
-);
-
 // Animação padrão (spinner)
 const DefaultAnimation: React.FC = () => (
     <div className="relative w-16 h-16">
@@ -207,8 +147,6 @@ export const LoadingMessage: React.FC<LoadingMessageProps> = ({ activeTab = 'das
                 return <ShieldAnimation />;
             case 'field':
                 return <FieldAnimation />;
-            case 'prayer':
-                return <PrayerAnimation />;
             default:
                 return <DefaultAnimation />;
         }

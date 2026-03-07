@@ -534,9 +534,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                   </li>
                 ))}
               </ul>
-              <a href="https://wa.me/5548991486176?text=Olá%2C%20quero%20assinar%20o%20Plano%20Intermediário%20(R%2499%2C00%2Fmês)." target="_blank" rel="noopener noreferrer" className="mt-auto w-full py-3.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-base rounded-xl transition-all text-center block shrink-0">
-                Assinar agora R$99,00/Mês
-              </a>
+              <span className="mt-auto w-full py-3.5 bg-zinc-800 border border-zinc-700 text-white font-semibold text-base rounded-xl text-center block shrink-0 opacity-90">
+                Em breve!
+              </span>
             </div>
             <div className="bg-black border border-zinc-800 rounded-2xl p-10 min-h-[420px] hover:border-[#00f0ff]/50 transition-all flex flex-col min-w-0">
               <div className="flex items-center justify-start gap-2 mb-6">
@@ -553,9 +553,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                   </li>
                 ))}
               </ul>
-              <a href="https://wa.me/5548991486176?text=Olá%2C%20quero%20assinar%20o%20Plano%20Avançado%20(R%24179%2C00%2Fmês)." target="_blank" rel="noopener noreferrer" className="mt-auto w-full py-3.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-semibold text-base rounded-xl transition-all text-center block shrink-0">
-                Assinar agora R$179,00/Mês
-              </a>
+              <span className="mt-auto w-full py-3.5 bg-zinc-800 border border-zinc-700 text-white font-semibold text-base rounded-xl text-center block shrink-0 opacity-90">
+                Em breve!
+              </span>
             </div>
           </div>
 

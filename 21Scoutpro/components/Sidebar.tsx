@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, Dumbbell, Activity, Moon, RefreshCw, X } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, Dumbbell, Activity, Moon, RefreshCw, X, Lock } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -33,7 +33,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate }) => {
   const isAthlete = currentUser?.role === 'Atleta';
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['gestao', 'performance', 'fisiologia']));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['gestao', 'performance']));
 
   // Estrutura hierárquica de categorias
   const categories: Category[] = [
@@ -63,12 +63,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       label: 'Fisiologia',
       icon: HeartPulse,
       items: [
-        { id: 'physical', label: 'Monitoramento Fisiológico', icon: HeartPulse, restricted: isAthlete },
-        { id: 'pse', label: 'PSE (Treinos e Jogos)', icon: Activity, restricted: isAthlete },
-        { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: isAthlete },
-        { id: 'qualidade-sono', label: 'Qualidade de sono', icon: Moon, restricted: isAthlete },
-        { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: isAthlete },
-        { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: isAthlete },
+        { id: 'physical', label: 'Monitoramento Fisiológico', icon: HeartPulse, restricted: false },
+        { id: 'pse', label: 'PSE (Treinos e Jogos)', icon: Activity, restricted: false },
+        { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: false },
+        { id: 'qualidade-sono', label: 'Qualidade de sono', icon: Moon, restricted: false },
+        { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: false },
+        { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: false },
       ]
     }
   ];
@@ -199,6 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                     {category.items.map((item) => {
                       const ItemIcon = item.icon || CategoryIcon;
                       const isActive = isItemActive(item.id);
+                      const showLock = category.id === 'fisiologia' || item.id === 'ranking';
                       return (
                         <button
                           key={item.id}
@@ -209,7 +210,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                               : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
                           }`}
                         >
-                          <ItemIcon size={18} className={`shrink-0 ${isActive ? 'text-black' : 'text-zinc-600 group-hover:text-[#00f0ff]'}`} />
+                          {showLock ? (
+                            <Lock size={18} className={`shrink-0 ${isActive ? 'text-black' : 'text-zinc-600 group-hover:text-[#00f0ff]'}`} />
+                          ) : (
+                            <ItemIcon size={18} className={`shrink-0 ${isActive ? 'text-black' : 'text-zinc-600 group-hover:text-[#00f0ff]'}`} />
+                          )}
                           <span className={`text-xs uppercase tracking-wider whitespace-nowrap text-ellipsis overflow-hidden ${isActive ? 'font-black' : 'font-medium'}`}>
                             {item.label}
                           </span>
@@ -246,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
           onClick={() => { setActiveTab('settings'); onNavigate?.(); }}
           className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 text-zinc-400 hover:bg-zinc-900 hover:text-[#00f0ff] border border-zinc-900 hover:border-[#00f0ff]/30 transition-colors text-xs font-bold rounded-lg uppercase tracking-wide whitespace-nowrap"
         >
-          <Settings size={14} />
+          <Lock size={14} />
           <span>Configurações</span>
         </button>
         <button 
