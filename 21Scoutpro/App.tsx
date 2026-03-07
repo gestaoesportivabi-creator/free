@@ -19,6 +19,7 @@ import { QualidadeSonoTab } from './components/QualidadeSonoTab';
 import { LoadingMessage } from './components/LoadingMessage';
 import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipTable';
 import { SuspensionsAlert } from './components/SuspensionsAlert';
+import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { ManagementReport } from './components/ManagementReport';
 import { EmBreve } from './components/EmBreve';
