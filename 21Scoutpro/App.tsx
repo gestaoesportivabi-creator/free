@@ -1404,7 +1404,10 @@ export default function App() {
       case 'settings':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            <Settings
+              currentUser={currentUser}
+              onUpdateUser={handleUpdateUser}
+            />
           </TabBackgroundWrapper>
         );
       case 'dashboard':
