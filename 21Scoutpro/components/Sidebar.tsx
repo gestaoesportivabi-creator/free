@@ -251,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
           onClick={() => { setActiveTab('settings'); onNavigate?.(); }}
           className="w-full flex items-center justify-center space-x-2 px-3 py-2 mb-3 text-zinc-400 hover:bg-zinc-900 hover:text-[#00f0ff] border border-zinc-900 hover:border-[#00f0ff]/30 transition-colors text-xs font-bold rounded-lg uppercase tracking-wide whitespace-nowrap"
         >
-          <Lock size={14} />
+          <Settings size={14} />
           <span>Configurações</span>
         </button>
         <button 

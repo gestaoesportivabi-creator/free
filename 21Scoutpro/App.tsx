@@ -706,7 +706,16 @@ export default function App() {
               body: JSON.stringify(updatedData),
           });
 
-          const result = await response.json();
+          let result: { success?: boolean; data?: unknown; error?: string };
+          try {
+              result = await response.json();
+          } catch {
+              const text = await response.text().catch(() => '');
+              if (response.ok) return;
+              console.error('Erro ao atualizar perfil: resposta não é JSON', text?.slice(0, 200));
+              alert('Erro ao atualizar perfil. O servidor retornou uma resposta inválida.');
+              return;
+          }
 
           if (result.success && result.data) {
               // Atualizar estado local com dados retornados

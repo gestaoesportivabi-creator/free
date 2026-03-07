@@ -222,5 +222,85 @@ export const authController = {
       });
     }
   },
+
+  /**
+   * PUT /api/auth/profile
+   * Atualiza dados do usuário autenticado (nome, email, foto, senha)
+   */
+  updateProfile: async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Usuário não autenticado',
+        });
+      }
+
+      const { name, email, photoUrl, password } = req.body as {
+        name?: string;
+        email?: string;
+        photoUrl?: string;
+        password?: string;
+      };
+
+      const updateData: { name?: string; email?: string; photoUrl?: string | null; passwordHash?: string } = {};
+      if (name != null && String(name).trim()) updateData.name = String(name).trim();
+      if (email != null && String(email).trim()) updateData.email = String(email).trim();
+      if (photoUrl !== undefined) updateData.photoUrl = photoUrl ? String(photoUrl) : null;
+      if (password != null && String(password).length >= 4) {
+        updateData.passwordHash = await bcrypt.hash(String(password), 10);
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Nenhum dado válido para atualizar',
+        });
+      }
+
+      if (updateData.email) {
+        const existing = await prisma.user.findFirst({
+          where: { email: updateData.email, id: { not: userId } },
+        });
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            error: 'Este e-mail já está em uso por outra conta',
+          });
+        }
+      }
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        include: { role: true },
+      });
+
+      if (!user || !user.isActive) {
+        return res.status(401).json({
+          success: false,
+          error: 'Usuário não encontrado ou inativo',
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role.name,
+          photoUrl: user.photoUrl,
+        },
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao atualizar perfil',
+      });
+    }
+  },
 };
 

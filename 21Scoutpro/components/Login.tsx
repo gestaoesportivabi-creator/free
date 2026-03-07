@@ -157,7 +157,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
   return (
     <div className="min-h-screen w-full flex flex-col relative bg-black overflow-hidden font-sans text-white">
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-lg border-b border-zinc-800/50 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-12 py-4 md:py-5">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 md:py-4">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center shrink-0">
               {onBackToHome ? (
@@ -183,8 +183,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
         </div>
       </nav>
 
-      <div className="flex-1 flex items-center justify-center pt-24 pb-8">
-      <div className="absolute inset-0 z-0">
+      <div className="flex-1 flex flex-col items-center justify-center min-h-0 pt-20 pb-4 overflow-y-auto">
+      <div className="absolute inset-0 z-0 pointer-events-none">
           <img 
             src="https://images.unsplash.com/photo-1504450758481-7338eba7524a?q=80&w=2069&auto=format&fit=crop" 
             alt="Arena Lotada Emoção" 
@@ -195,13 +195,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black"></div>
       </div>
 
-      {/* Auth Card - Black Piano Aesthetic - EXTRA TRANSPARENT (20%) */}
-      <div className="z-20 bg-black/20 backdrop-blur-lg border border-white/10 p-12 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.9)] w-full max-w-sm relative animate-fade-in ring-1 ring-white/5 mb-24">
+      {/* Auth Card - compacto para caber na tela sem rolagem */}
+      <div className="z-20 bg-black/20 backdrop-blur-lg border border-white/10 p-6 md:p-8 rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] w-full max-w-sm relative animate-fade-in ring-1 ring-white/5">
         
-        <div className="mb-10 text-center">
+        <div className="mb-6 text-center">
             {/* Logo Oficial */}
-            <div className="flex justify-center mb-8">
-                <div className={`relative w-40 h-40 flex items-center justify-center border-[3px] ${isRegistering ? 'border-[#00f0ff]' : 'border-white'} bg-black/60 shadow-[0_0_40px_rgba(0,240,255,0.3)] rounded-2xl transform rotate-3 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_50px_rgba(0,240,255,0.5)] overflow-hidden`}>
+            <div className="flex justify-center mb-4">
+                <div className={`relative w-28 h-28 flex items-center justify-center border-2 ${isRegistering ? 'border-[#00f0ff]' : 'border-white'} bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden`}>
                     <img 
                         src={LOGO_IMAGE} 
                         alt="SCOUT21PRO" 
@@ -210,15 +210,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
                 </div>
             </div>
 
-            <h1 className="text-3xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg">
+            <h1 className="text-2xl font-black text-white tracking-tighter uppercase italic drop-shadow-lg">
                 SCOUT21PRO
             </h1>
-            <p className="text-[10px] text-zinc-200 font-light uppercase tracking-[0.3em] mt-2 drop-shadow-md">
+            <p className="text-[9px] text-zinc-200 font-light uppercase tracking-[0.25em] mt-1 drop-shadow-md">
                 {isRegistering ? 'Criar Conta Gratuita' : 'Performance Data Intelligence e Gestão'}
             </p>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {isRegistering && (
              <div className="space-y-1.5">
                 <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Seu Nome</label>
@@ -350,7 +350,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           )}
         </form>
         
-        <div className="mt-8 text-center pt-6 border-t border-white/10">
+        <div className="mt-4 text-center pt-4 border-t border-white/10">
              <button 
                 onClick={() => {
                     if (isRegistering && onSwitchToLogin) {
@@ -362,34 +362,24 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
                     }
                     setError('');
                 }}
-                className="text-xs text-zinc-300 hover:text-white font-light transition-colors uppercase tracking-widest"
+                className="text-[10px] text-zinc-300 hover:text-white font-light transition-colors uppercase tracking-widest"
              >
                  {isRegistering ? 'Já possui conta? Fazer Login' : 'Criar Conta Grátis'}
              </button>
         </div>
       </div>
-      </div>
 
-      <div className="absolute bottom-8 left-0 right-0 z-30 flex justify-center px-6 animate-fade-in-up">
-        <div className="flex flex-col items-center gap-2.5">
-            {/* Decorative Line */}
-            <div className="h-[1px] w-40 bg-gradient-to-r from-transparent via-zinc-600 to-transparent"></div>
-            
-            {/* Welcome Message - Compact Background (almost text size) */}
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-700/70 backdrop-blur-sm rounded-md">
-                <span className="text-zinc-300 font-light text-xs md:text-sm tracking-wide">
-                    Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados para decisões vencedoras.
-                </span>
-                {/* Logo oficial no rodapé */}
-                <div className="w-5 h-5 border border-zinc-600/50 rounded flex items-center justify-center bg-black/90 shrink-0 ml-1 overflow-hidden">
-                    <img 
-                        src={LOGO_IMAGE} 
-                        alt="SCOUT21PRO" 
-                        className="w-full h-full object-contain p-0.5"
-                    />
-                </div>
-            </div>
+      {/* Mensagem de saudação logo abaixo do card — visível sem rolar */}
+      <div className="z-20 w-full max-w-sm px-4 mt-3 flex justify-center animate-fade-in">
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-zinc-700/70 backdrop-blur-sm rounded-md">
+          <span className="text-zinc-300 font-light text-[11px] md:text-xs tracking-wide">
+            Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados.
+          </span>
+          <div className="w-4 h-4 border border-zinc-600/50 rounded flex items-center justify-center bg-black/90 shrink-0 overflow-hidden">
+            <img src={LOGO_IMAGE} alt="" className="w-full h-full object-contain p-0.5" />
+          </div>
         </div>
+      </div>
       </div>
 
     </div>
