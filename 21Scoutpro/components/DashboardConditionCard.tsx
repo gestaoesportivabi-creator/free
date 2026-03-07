@@ -17,6 +17,8 @@ type ChampionshipMatchForAlert = { date: string };
 interface DashboardConditionCardProps {
   schedules: WeeklySchedule[];
   championshipMatches: ChampionshipMatchForAlert[];
+  /** Na versão free não exibir dados, apenas mensagem "Em breve" */
+  isFreePlan?: boolean;
 }
 
 function isMorningTime(timeStr: string): boolean {
@@ -30,10 +32,24 @@ function teamAvg(values: number[]): number | null {
   return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
 }
 
+const MESSAGE_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.';
+
 export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
   schedules = [],
   championshipMatches = [],
+  isFreePlan = false,
 }) => {
+  if (isFreePlan) {
+    return (
+      <div className="rounded-lg border border-white/[0.08] bg-zinc-900/60 p-4">
+        <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-medium mb-3">
+          Condição física da equipe
+        </p>
+        <div className="h-px bg-white/[0.06] mb-3" />
+        <p className="text-zinc-400 text-sm">{MESSAGE_EM_BREVE}</p>
+      </div>
+    );
+  }
   const [sonoStored, setSonoStored] = useState<StoredSono>({});
   const [pseTreinos, setPseTreinos] = useState<StoredPse>({});
   const [psrTreinos, setPsrTreinos] = useState<StoredPsr>({});

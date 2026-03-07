@@ -30,6 +30,9 @@ export const getApiUrl = () => {
 
 export const API_URL = getApiUrl();
 
+/** Versão free: esconde dados de suspensos, condição física, etc. e mostra "Em breve" onde aplicável */
+export const IS_FREE_PLAN = (import.meta.env.VITE_PLAN ?? 'free') === 'free';
+
 // Mapeamento de recursos para rotas da API
 // Mantido para compatibilidade com services/api.ts
 export const API_RESOURCES = {

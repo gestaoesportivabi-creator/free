@@ -49,7 +49,7 @@ export const DashboardTodayBlock: React.FC<DashboardTodayBlockProps> = ({
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-wider text-zinc-500">Compromisso</p>
             <p className="text-white font-semibold text-sm mt-0.5">
-              {nextCommitment?.activityDisplay ?? (nextCommitment?.type === 'jogo' ? 'Jogo' : nextCommitment?.type === 'treino' ? 'Treino' : '—')}
+              {nextCommitment?.activityDisplay ?? (nextCommitment?.type === 'jogo' ? 'Jogo' : nextCommitment?.type === 'treino' ? 'Treino' : 'Dia sem compromisso')}
             </p>
             {nextCommitment?.label && nextCommitment.type === 'jogo' && (
               <p className="text-zinc-400 text-xs truncate">{nextCommitment.label}</p>

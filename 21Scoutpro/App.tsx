@@ -29,11 +29,12 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Menu } from 'lucide-react';
+import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
+import { IS_FREE_PLAN } from './config';
 
 const SLIDES = [
     {
@@ -1376,6 +1377,19 @@ export default function App() {
           </TabBackgroundWrapper>
         );
       case 'management-report':
+        if (IS_FREE_PLAN) {
+          return (
+            <TabBackgroundWrapper>
+              <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
+                <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
+                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Relatório Gerencial</h2>
+                <p className="text-zinc-400 text-sm max-w-md">
+                  Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                </p>
+              </div>
+            </TabBackgroundWrapper>
+          );
+        }
         return (
           <TabBackgroundWrapper>
             <ManagementReport 
@@ -1429,14 +1443,18 @@ export default function App() {
               <section className="space-y-4" aria-label="Atletas Suspensos">
                 <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-bold">Atletas Suspensos</p>
                 <div className="flex flex-col gap-3">
-                  {overviewStats.nextMatch && (
+                  <InjuredPlayersAlert players={players} />
+                  {IS_FREE_PLAN ? (
+                    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-400 text-sm">
+                      Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                    </div>
+                  ) : overviewStats.nextMatch ? (
                     <SuspensionsAlert
                       nextMatch={overviewStats.nextMatch}
                       championships={championships}
                       players={players}
                     />
-                  )}
-                  {!overviewStats.nextMatch && (
+                  ) : (
                     <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-500 text-xs">
                       Sem próximo jogo definido.
                     </div>
@@ -1445,7 +1463,11 @@ export default function App() {
               </section>
 
               {/* 2. Condição física da equipe */}
-              <DashboardConditionCard schedules={schedules} championshipMatches={championshipMatches} />
+              <DashboardConditionCard
+                schedules={schedules}
+                championshipMatches={championshipMatches}
+                isFreePlan={IS_FREE_PLAN}
+              />
 
               {/* 3. Elenco disponível + Próximo jogo */}
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1454,6 +1476,7 @@ export default function App() {
                     players={players}
                     nextMatch={overviewStats.nextMatch}
                     championships={championships}
+                    isFreePlan={IS_FREE_PLAN}
                   />
                 </div>
                 <div>
@@ -1472,7 +1495,7 @@ export default function App() {
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
                 <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
-                <StatCard label="Lesões no ano" value={overviewStats.injuriesThisYear} helper={String(overviewStats.currentYear)} />
+                <StatCard label="Lesões no ano" value={IS_FREE_PLAN ? 'Em breve' : overviewStats.injuriesThisYear} helper={IS_FREE_PLAN ? '—' : String(overviewStats.currentYear)} />
               </section>
 
               {/* 7. Ações principais no rodapé */}

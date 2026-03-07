@@ -10,12 +10,15 @@ interface DashboardSquadAvailabilityProps {
   players: Player[];
   nextMatch: ChampionshipMatch;
   championships: Championship[];
+  /** Na versão free: card Disponíveis = total cadastrados; outros dois = "Em breve" */
+  isFreePlan?: boolean;
 }
 
 export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProps> = ({
   players,
   nextMatch,
   championships,
+  isFreePlan = false,
 }) => {
   const { available, withRestriction, injuredOnly } = useMemo(() => {
     const available: Player[] = [];
@@ -63,10 +66,9 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             <Check className="text-emerald-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Disponíveis</span>
           </div>
-          <p className="text-base font-semibold text-white">{available.length}</p>
+          <p className="text-base font-semibold text-white">{isFreePlan ? players.length : available.length}</p>
           <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
-            {available.slice(0, 3).map((p) => p.nickname || p.name).join(' · ')}
-            {available.length > 3 ? ` +${available.length - 3}` : ''}
+            {isFreePlan ? 'Atletas cadastrados' : (available.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (available.length > 3 ? ` +${available.length - 3}` : ''))}
           </p>
         </div>
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-amber-500/80">
@@ -74,24 +76,36 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             <AlertTriangle className="text-amber-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Pendurados</span>
           </div>
-          <p className="text-base font-semibold text-white">{withRestriction.length}</p>
-          <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
-            {withRestriction.length === 0
-              ? 'Nenhum pendurado'
-              : withRestriction.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (withRestriction.length > 3 ? ` +${withRestriction.length - 3}` : '')}
-          </p>
+          {isFreePlan ? (
+            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">Em breve</p>
+          ) : (
+            <>
+              <p className="text-base font-semibold text-white">{withRestriction.length}</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
+                {withRestriction.length === 0
+                  ? 'Nenhum pendurado'
+                  : withRestriction.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (withRestriction.length > 3 ? ` +${withRestriction.length - 3}` : '')}
+              </p>
+            </>
+          )}
         </div>
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-red-500/80">
           <div className="flex items-center gap-1.5 mb-1">
             <Ambulance className="text-red-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Desfalques por lesão</span>
           </div>
-          <p className="text-base font-semibold text-white">{injuredOnly.length}</p>
-          <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
-            {injuredOnly.length === 0
-              ? 'Nenhum'
-              : injuredOnly.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (injuredOnly.length > 3 ? ` +${injuredOnly.length - 3}` : '')}
-          </p>
+          {isFreePlan ? (
+            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">Em breve</p>
+          ) : (
+            <>
+              <p className="text-base font-semibold text-white">{injuredOnly.length}</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5 truncate opacity-80">
+                {injuredOnly.length === 0
+                  ? 'Nenhum'
+                  : injuredOnly.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (injuredOnly.length > 3 ? ` +${injuredOnly.length - 3}` : '')}
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
