@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban } from 'lucide-react';
+import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
@@ -9,6 +9,7 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { PostMatchCollectionSheet } from './PostMatchCollectionSheet';
+import { IS_FREE_PLAN } from '../config';
 
 interface GoalTime {
     id: string;
@@ -2125,11 +2126,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                    </div>
+                                                    {IS_FREE_PLAN ? (
+                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
+                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
                                                         {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
                                                         {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}
@@ -2263,11 +2271,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                    </div>
+                                                    {IS_FREE_PLAN ? (
+                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
+                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
                                                         {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
                                                         {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}
@@ -2423,11 +2438,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                        <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                        <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                        <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                    </div>
+                                                    {IS_FREE_PLAN ? (
+                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
+                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
                                                         {suspended && <span className="p-0.5 rounded bg-red-600/90" title="Suspenso"><Ban size={10} className="text-white" /></span>}
                                                         {injured && <span className="p-0.5 rounded bg-orange-500/90" title="Lesão ativa"><Ambulance size={10} className="text-white" /></span>}

@@ -370,15 +370,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
       </div>
       </div>
 
-      {/* Rodapé fixo: mensagem de boas-vindas no final da tela, uma linha, fonte maior */}
+      {/* Rodapé fixo: frase completa em uma linha, logo no final */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 py-3 px-4 bg-black/80 backdrop-blur-md border-t border-white/10">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-2 sm:gap-2.5 text-center">
-          <div className="w-6 h-6 border border-zinc-600/50 rounded flex items-center justify-center bg-black/80 shrink-0 overflow-hidden">
+        <div className="max-w-5xl mx-auto flex flex-nowrap items-center justify-center gap-2 sm:gap-2.5">
+          <p className="text-zinc-300 font-light text-xs sm:text-sm tracking-wide whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
+            Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados para decisões vencedoras.
+          </p>
+          <div className="w-6 h-6 border border-zinc-600/50 rounded flex items-center justify-center bg-black/80 shrink-0 overflow-hidden flex-shrink-0">
             <img src={LOGO_IMAGE} alt="" className="w-full h-full object-contain p-0.5" />
           </div>
-          <p className="text-zinc-300 font-light text-sm sm:text-base tracking-wide whitespace-nowrap overflow-hidden text-ellipsis max-w-full">
-            Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span> — gestão esportiva baseada em dados.
-          </p>
         </div>
       </footer>
     </div>

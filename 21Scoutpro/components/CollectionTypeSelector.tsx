@@ -1,5 +1,6 @@
 import React from 'react';
-import { Play, Sheet, Calendar, ArrowLeft } from 'lucide-react';
+import { Play, Sheet, Calendar, ArrowLeft, Lock } from 'lucide-react';
+import { IS_FREE_PLAN } from '../config';
 
 export type CollectionType = 'realtime' | 'postmatch';
 
@@ -77,21 +78,35 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
           <button
             type="button"
             onClick={() => {
+              if (IS_FREE_PLAN) return;
               if (onRealtimeSelect) {
                 onRealtimeSelect();
               } else {
                 onSelect('realtime');
               }
             }}
-            className="flex items-center gap-4 p-6 bg-zinc-950 border-2 border-zinc-800 rounded-xl hover:border-[#00f0ff]/50 transition-colors text-left group"
+            disabled={IS_FREE_PLAN}
+            className={`flex items-center gap-4 p-6 rounded-xl border-2 text-left group ${
+              IS_FREE_PLAN
+                ? 'bg-zinc-950 border-zinc-700 opacity-90 cursor-not-allowed'
+                : 'bg-zinc-950 border-zinc-800 hover:border-[#00f0ff]/50 transition-colors'
+            }`}
           >
-            <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-[#00f0ff]/20 border-2 border-[#00f0ff]/50 flex items-center justify-center group-hover:bg-[#00f0ff]/30">
-              <Play className="text-[#00f0ff]" size={28} />
+            <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center border-2 ${
+              IS_FREE_PLAN ? 'bg-zinc-800/50 border-zinc-600' : 'bg-[#00f0ff]/20 border-[#00f0ff]/50 group-hover:bg-[#00f0ff]/30'
+            }`}>
+              {IS_FREE_PLAN ? (
+                <Lock className="text-zinc-500" size={28} strokeWidth={1.5} />
+              ) : (
+                <Play className="text-[#00f0ff]" size={28} />
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-white font-black text-lg uppercase tracking-tight">Tempo real</div>
+              <div className={`font-black text-lg uppercase tracking-tight ${IS_FREE_PLAN ? 'text-zinc-400' : 'text-white'}`}>Tempo real</div>
               <div className="text-zinc-500 text-sm mt-1">
-                Coleta durante a partida. Escalação, cronômetro e registro de ações em tempo real.
+                {IS_FREE_PLAN
+                  ? 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.'
+                  : 'Coleta durante a partida. Escalação, cronômetro e registro de ações em tempo real.'}
               </div>
             </div>
           </button>

@@ -156,13 +156,13 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                             </span>
                         </div>
 
-                        {/* Direita: Índice Físico (bloqueado — PSE/PSR/Sono substituídos por cadeado) */}
+                        {/* Direita: dentro do card — título Índices Físicos acima do cadeado */}
                         {!disabled && (
                             <div
                                 className="flex flex-col justify-center items-center gap-0.5 flex-shrink-0 rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1 min-w-[4rem]"
                                 title="Em breve, estamos desenvolvendo. Entre em contato para mais informações."
                             >
-                                <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Indice Fisico</span>
+                                <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                 <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
                             </div>
                         )}
