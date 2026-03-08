@@ -103,8 +103,24 @@ export const matchesRepository = {
     return db(tx).jogosEstatisticasEquipe.findUnique({ where: { jogoId } }) as Promise<JogoEstatisticaEquipeDB | null>;
   },
 
+  /** Busca estatísticas de equipe para vários jogos de uma vez (evita N+1) */
+  async findEstatisticasEquipeByJogoIds(jogoIds: string[], tx?: TransactionClient): Promise<JogoEstatisticaEquipeDB[]> {
+    if (jogoIds.length === 0) return [];
+    return db(tx).jogosEstatisticasEquipe.findMany({
+      where: { jogoId: { in: jogoIds } },
+    }) as Promise<JogoEstatisticaEquipeDB[]>;
+  },
+
   async findEstatisticasJogadores(jogoId: string, tx?: TransactionClient): Promise<JogoEstatisticaJogadorDB[]> {
     return db(tx).jogosEstatisticasJogador.findMany({ where: { jogoId } }) as Promise<JogoEstatisticaJogadorDB[]>;
+  },
+
+  /** Busca estatísticas de jogadores para vários jogos de uma vez (evita N+1) */
+  async findEstatisticasJogadoresByJogoIds(jogoIds: string[], tx?: TransactionClient): Promise<JogoEstatisticaJogadorDB[]> {
+    if (jogoIds.length === 0) return [];
+    return db(tx).jogosEstatisticasJogador.findMany({
+      where: { jogoId: { in: jogoIds } },
+    }) as Promise<JogoEstatisticaJogadorDB[]>;
   },
 
   async create(data: {

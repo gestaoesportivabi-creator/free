@@ -23,9 +23,11 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
     const path = id ? `${resource}/${id}` : resource;
     const url = `${getApiUrl()}/${path}`;
     const token = localStorage.getItem('token') || '';
-    console.log(`📡 GET ${resource}:`, url);
-    console.log(`🔑 Token presente:`, token ? 'SIM' : 'NÃO', token ? `(${token.substring(0, 20)}...)` : '');
-    
+    const isDev = import.meta.env.DEV;
+    if (isDev) {
+      console.log(`📡 GET ${resource}:`, url);
+    }
+
     // Timeout 25s (matches e outros recursos podem demorar no primeiro request)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
@@ -42,54 +44,49 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      console.error(`❌ HTTP Error: ${response.status} ${response.statusText}`);
-      const text = await response.text();
-      console.error('Response text:', text);
+      if (isDev) {
+        const text = await response.text();
+        console.error(`❌ GET ${resource}: ${response.status}`, text.slice(0, 200));
+      }
       return [];
     }
 
     let result: ApiResponse<T[]>;
     try {
       const responseText = await response.text();
-      console.log(`📥 GET ${resource} response text (primeiros 500 chars):`, responseText.substring(0, 500));
-      
       try {
         result = JSON.parse(responseText);
-        console.log(`📥 GET ${resource} response parsed:`, result);
       } catch (parseError) {
-        console.error(`❌ Erro ao parsear JSON de ${resource}:`, parseError);
-        console.error('Response text completo:', responseText);
+        if (isDev) {
+          console.error(`❌ Erro ao parsear JSON de ${resource}:`, parseError);
+          console.error('Response text (500 chars):', responseText.substring(0, 500));
+        }
         return [];
       }
     } catch (jsonError) {
-      console.error(`❌ Erro ao ler response de ${resource}:`, jsonError);
+      if (isDev) console.error(`❌ Erro ao ler response de ${resource}:`, jsonError);
       return [];
     }
 
     if (!result.success) {
-      console.error(`❌ API Error para ${resource}:`, result.error);
-      console.error(`📋 Dados retornados mesmo com erro:`, result.data);
-      // Mesmo com erro, tentar retornar os dados se existirem
-      if (result.data && Array.isArray(result.data)) {
-        console.log('⚠️ Retornando dados mesmo com success=false');
-        return result.data;
+      if (isDev) {
+        console.error(`❌ API Error para ${resource}:`, result.error);
       }
+      if (result.data && Array.isArray(result.data)) return result.data;
       return [];
     }
 
     const data = result.data || [];
-    console.log(`✅ GET ${resource} - ${data.length} itens retornados`);
-    if (data.length === 0) {
-      console.warn(`⚠️ GET ${resource} retornou array vazio. Verifique se há dados no banco para este tenant.`);
+    if (isDev && data.length === 0) {
+      console.warn(`⚠️ GET ${resource} retornou array vazio.`);
     }
     return data;
   } catch (error: any) {
-    if (error.name === 'AbortError') {
-      console.warn(`⏱️ Timeout ao carregar ${resource} (25s). Continuando com dados vazios.`);
-    } else {
-      console.error(`❌ Error fetching ${resource}:`, error);
-      if (error instanceof Error) {
-        console.error('Error details:', error.message, error.stack);
+    if (import.meta.env.DEV) {
+      if (error.name === 'AbortError') {
+        console.warn(`⏱️ Timeout ao carregar ${resource} (25s).`);
+      } else {
+        console.error(`❌ Error fetching ${resource}:`, error);
       }
     }
     return [];

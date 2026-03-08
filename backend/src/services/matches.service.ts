@@ -16,12 +16,24 @@ export const matchesService = {
     const jogos = await matchesRepository.findAll(tenantInfo, tx);
     if (jogos.length === 0) return [];
 
+    const jogoIds = jogos.map((j) => j.id);
+    const [todasEquipe, todosJogadores] = await Promise.all([
+      matchesRepository.findEstatisticasEquipeByJogoIds(jogoIds, tx),
+      matchesRepository.findEstatisticasJogadoresByJogoIds(jogoIds, tx),
+    ]);
+    const porJogoEquipe = new Map<string, (typeof todasEquipe)[0]>();
+    for (const e of todasEquipe) porJogoEquipe.set(e.jogoId, e);
+    const porJogoJogadores = new Map<string, (typeof todosJogadores)[0][]>();
+    for (const j of todosJogadores) {
+      const arr = porJogoJogadores.get(j.jogoId) ?? [];
+      arr.push(j);
+      porJogoJogadores.set(j.jogoId, arr);
+    }
+
     const matches: MatchRecord[] = [];
     for (const jogo of jogos) {
-      const [estatisticasEquipe, estatisticasJogadores] = await Promise.all([
-        matchesRepository.findEstatisticasEquipe(jogo.id, tx),
-        matchesRepository.findEstatisticasJogadores(jogo.id, tx),
-      ]);
+      const estatisticasEquipe = porJogoEquipe.get(jogo.id);
+      const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
       if (estatisticasEquipe) {
         matches.push(
           transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any)

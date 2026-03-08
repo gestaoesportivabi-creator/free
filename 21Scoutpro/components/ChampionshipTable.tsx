@@ -968,7 +968,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
                                         <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
                                         <p className="text-zinc-400 text-sm max-w-md">
-                                            Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                            Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                                         </p>
                                     </div>
                                 ) : (
@@ -1014,7 +1014,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
                                         <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
                                         <p className="text-zinc-400 text-sm max-w-md">
-                                            Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                            Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                                         </p>
                                     </div>
                                 ) : (

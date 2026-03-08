@@ -32,7 +32,7 @@ function teamAvg(values: number[]): number | null {
   return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
 }
 
-const MESSAGE_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.';
+const MESSAGE_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.';
 
 export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
   schedules = [],

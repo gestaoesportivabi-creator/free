@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
-import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp } from 'lucide-react';
+import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { SportConfig, MatchRecord, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
+import { IS_FREE_PLAN } from '../config';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -919,26 +920,44 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <ExpandableCard title="Quarteto Alta performance" icon={Trophy} headerColor="text-[#ccff00]">
-          <div className="space-y-6">
-            {quartetAnalysis.highPerformance.length === 0 ? (
-              <p className="text-zinc-500 text-sm py-6 text-center">Nenhum quarteto com pelo menos 3 minutos juntos nas partidas filtradas. Use partidas com escalação e scout salvos.</p>
-            ) : (
-              quartetAnalysis.highPerformance.map((q, idx) => (
-                <QuartetCard key={idx} quarteto={q} rank={idx + 1} variant="high" />
-              ))
-            )}
-          </div>
+          {IS_FREE_PLAN ? (
+            <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
+              <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
+              <p className="text-zinc-400 text-sm max-w-md">
+                Em breve, estamos desenvolvendo. Entre em contato para mais informações.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {quartetAnalysis.highPerformance.length === 0 ? (
+                <p className="text-zinc-500 text-sm py-6 text-center">Nenhum quarteto com pelo menos 3 minutos juntos nas partidas filtradas. Use partidas com escalação e scout salvos.</p>
+              ) : (
+                quartetAnalysis.highPerformance.map((q, idx) => (
+                  <QuartetCard key={idx} quarteto={q} rank={idx + 1} variant="high" />
+                ))
+              )}
+            </div>
+          )}
         </ExpandableCard>
         <ExpandableCard title="Quarteto Baixa performance" icon={AlertCircle} headerColor="text-[#ff0055]">
-          <div className="space-y-6">
-            {quartetAnalysis.lowPerformance.length === 0 ? (
-              <p className="text-zinc-500 text-sm py-6 text-center">Nenhum quarteto com pelo menos 3 minutos juntos nas partidas filtradas. Use partidas com escalação e scout salvos.</p>
-            ) : (
-              quartetAnalysis.lowPerformance.map((q, idx) => (
-                <QuartetCard key={idx} quarteto={q} rank={idx + 1} variant="low" />
-              ))
-            )}
-          </div>
+          {IS_FREE_PLAN ? (
+            <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
+              <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
+              <p className="text-zinc-400 text-sm max-w-md">
+                Em breve, estamos desenvolvendo. Entre em contato para mais informações.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {quartetAnalysis.lowPerformance.length === 0 ? (
+                <p className="text-zinc-500 text-sm py-6 text-center">Nenhum quarteto com pelo menos 3 minutos juntos nas partidas filtradas. Use partidas com escalação e scout salvos.</p>
+              ) : (
+                quartetAnalysis.lowPerformance.map((q, idx) => (
+                  <QuartetCard key={idx} quarteto={q} rank={idx + 1} variant="low" />
+                ))
+              )}
+            </div>
+          )}
         </ExpandableCard>
       </div>
 

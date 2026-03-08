@@ -821,7 +821,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
                                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                                     <p className="text-zinc-400 text-sm max-w-md">
-                                        Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                        Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                                     </p>
                                 </div>
                             ) : (
@@ -956,7 +956,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
                                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                                     <p className="text-zinc-400 text-sm max-w-md">
-                                        Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                                        Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                                     </p>
                                 </div>
                             ) : (

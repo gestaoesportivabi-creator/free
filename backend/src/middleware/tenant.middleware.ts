@@ -44,30 +44,17 @@ export function tenantMiddleware() {
         });
       }
 
-      // DEBUG: Log do usuário autenticado
-      console.log('[TENANT_MIDDLEWARE] ===== NOVA REQUISIÇÃO =====');
-      console.log('[TENANT_MIDDLEWARE] Usuário autenticado:', {
-        userId: req.user.id,
-        email: req.user.email,
-        role_id: req.user.role_id,
-        timestamp: new Date().toISOString(),
-      });
+      const isDev = process.env.NODE_ENV === 'development';
+      if (isDev) {
+        console.log('[TENANT_MIDDLEWARE] Usuário:', req.user?.email);
+      }
 
-      // Obter informações do tenant usando Prisma
       const tenantInfo = await getTenantInfo(
         req.user,
         async (userId: string) => {
-          console.log('[TENANT_MIDDLEWARE] Buscando técnico para userId:', userId);
           const tecnico = await prisma.tecnico.findUnique({ where: { userId } });
-          if (!tecnico) {
-            console.log('[TENANT_MIDDLEWARE] Técnico não encontrado para userId:', userId);
-            return null;
-          }
-          console.log('[TENANT_MIDDLEWARE] Técnico encontrado:', {
-            tecnico_id: tecnico.id,
-            nome: tecnico.nome,
-            userId: tecnico.userId,
-          });
+          if (isDev && !tecnico) console.log('[TENANT_MIDDLEWARE] Técnico não encontrado para userId:', userId);
+          if (!tecnico) return null;
           return {
             id: tecnico.id,
             user_id: tecnico.userId,
@@ -75,17 +62,9 @@ export function tenantMiddleware() {
           };
         },
         async (userId: string) => {
-          console.log('[TENANT_MIDDLEWARE] Buscando clube para userId:', userId);
           const clube = await prisma.clube.findUnique({ where: { userId } });
-          if (!clube) {
-            console.log('[TENANT_MIDDLEWARE] Clube não encontrado para userId:', userId);
-            return null;
-          }
-          console.log('[TENANT_MIDDLEWARE] Clube encontrado:', {
-            clube_id: clube.id,
-            razao_social: clube.razaoSocial,
-            userId: clube.userId,
-          });
+          if (isDev && !clube) console.log('[TENANT_MIDDLEWARE] Clube não encontrado para userId:', userId);
+          if (!clube) return null;
           return {
             id: clube.id,
             user_id: clube.userId,
@@ -93,34 +72,24 @@ export function tenantMiddleware() {
           };
         },
         async (tecnicoId: string) => {
-          console.log('[TENANT_MIDDLEWARE] Buscando equipes para tecnicoId:', tecnicoId);
           const equipes = await prisma.equipe.findMany({
             where: { tecnicoId },
             select: { id: true },
           });
-          console.log('[TENANT_MIDDLEWARE] Equipes encontradas:', equipes.map(e => e.id));
           return equipes;
         },
         async (clubeId: string) => {
-          console.log('[TENANT_MIDDLEWARE] Buscando equipes para clubeId:', clubeId);
           const equipes = await prisma.equipe.findMany({
             where: { clubeId },
             select: { id: true },
           });
-          console.log('[TENANT_MIDDLEWARE] Equipes encontradas:', equipes.map(e => e.id));
           return equipes;
         }
       );
 
-      // DEBUG: Log do tenantInfo obtido
-      console.log('[TENANT_MIDDLEWARE] TenantInfo obtido:', {
-        tecnico_id: tenantInfo.tecnico_id,
-        clube_id: tenantInfo.clube_id,
-        equipe_ids: tenantInfo.equipe_ids,
-        equipe_ids_count: tenantInfo.equipe_ids?.length || 0,
-        user_email: req.user.email,
-        user_id: req.user.id,
-      });
+      if (isDev) {
+        console.log('[TENANT_MIDDLEWARE] equipe_ids:', tenantInfo.equipe_ids?.length ?? 0);
+      }
 
       // Validação crítica: garantir que o tenantInfo corresponde ao usuário
       if (tenantInfo.tecnico_id) {

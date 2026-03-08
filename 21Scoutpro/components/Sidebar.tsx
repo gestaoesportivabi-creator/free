@@ -29,9 +29,11 @@ interface SidebarProps {
   onClose?: () => void;
   /** Chamado ao navegar (ex.: fechar drawer em mobile) */
   onNavigate?: () => void;
+  /** Plano free: Scout Individual mostra cadeado */
+  isFreePlan?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, isFreePlan = false }) => {
   const isAthlete = currentUser?.role === 'Atleta';
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['gestao', 'performance']));
 
@@ -199,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                     {category.items.map((item) => {
                       const ItemIcon = item.icon || CategoryIcon;
                       const isActive = isItemActive(item.id);
-                      const showLock = category.id === 'fisiologia' || item.id === 'ranking';
+                      const showLock = category.id === 'fisiologia' || (item.id === 'individual' && isFreePlan);
                       return (
                         <button
                           key={item.id}

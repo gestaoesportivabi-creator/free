@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Users, Shield, Ambulance, Ban } from 'lucide-react';
+import { Users, Shield, Ambulance, Ban, Lock } from 'lucide-react';
 import { Player } from '../types';
 import type { PlayerPhysiology } from '../utils/playerPhysiologyForMatch';
 
@@ -108,7 +108,6 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                 const disabled = isDisabled(player.id);
                 const status = playerStatusMap[id];
                 const name = displayName(player);
-                const ph = physio(player.id);
                 return (
                     <button
                         key={player.id}
@@ -157,33 +156,14 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                             </span>
                         </div>
 
-                        {/* Direita: dados fisiológicos só para atletas disponíveis */}
+                        {/* Direita: Índice Físico (bloqueado — PSE/PSR/Sono substituídos por cadeado) */}
                         {!disabled && (
                             <div
-                                className="flex flex-col justify-center gap-1 flex-shrink-0 text-right rounded-lg border border-[#00f0ff]/40 bg-[#00f0ff]/10 px-1.5 py-1 min-w-[4rem]"
-                                title="Fisiologia: PSR (dia do jogo), PSE (última sessão de treino), Sono (dia do jogo)"
+                                className="flex flex-col justify-center items-center gap-0.5 flex-shrink-0 rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1 min-w-[4rem]"
+                                title="Em breve, estamos desenvolvendo. Entre em contato para mais informações."
                             >
-                                <div
-                                    className="flex items-center justify-end gap-1 leading-tight text-green-100"
-                                    title="PSR (esforço percebido de recuperação) registrada no dia do jogo"
-                                >
-                                    <span className="text-[8px] opacity-90 uppercase">PSR</span>
-                                    <span className="text-xs font-bold tabular-nums text-[#00f0ff]">{formatPhysio(ph.psrMatchDay)}</span>
-                                </div>
-                                <div
-                                    className="flex items-center justify-end gap-1 leading-tight text-green-100"
-                                    title="PSE (esforço percebido na sessão) da última sessão de treino antes do jogo — inclui treino no próprio dia do jogo se houver"
-                                >
-                                    <span className="text-[8px] opacity-90 uppercase">PSE</span>
-                                    <span className="text-xs font-bold tabular-nums text-[#00f0ff]">{formatPhysio(ph.pseAfterLastTraining)}</span>
-                                </div>
-                                <div
-                                    className="flex items-center justify-end gap-1 leading-tight text-green-100"
-                                    title="Qualidade do sono no dia do jogo (escala 1-5)"
-                                >
-                                    <span className="text-[8px] opacity-90 uppercase">Sono</span>
-                                    <span className="text-xs font-bold tabular-nums text-[#00f0ff]">{formatPhysio(ph.sleepMatchDay)}</span>
-                                </div>
+                                <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Indice Fisico</span>
+                                <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
                             </div>
                         )}
                     </button>

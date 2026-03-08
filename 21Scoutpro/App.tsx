@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Login } from './components/Login';
 import { LandingPage } from './components/LandingPage';
@@ -159,6 +159,9 @@ export default function App() {
 
   /** Rastreia quais recursos já foram carregados (evita recarregar ao trocar de aba) */
   const [loadedResources, setLoadedResources] = useState<Record<string, boolean>>(() => ({ ...INITIAL_LOADED_RESOURCES }));
+
+  /** Se true, os dados do dashboard já foram disparados no init (evita duplicar no useEffect de currentUser) */
+  const dashboardDataLoadStarted = useRef(false);
   
   // Stats Targets State
   const [statTargets, setStatTargets] = useState<StatTargets>({
@@ -606,16 +609,10 @@ export default function App() {
 
   // Carregamento inicial: apenas dados do dashboard (ao fazer login)
   useEffect(() => {
-    if (!currentUser) {
-      console.log('⏸️ Usuário não logado, pulando carregamento de dados');
-      return;
-    }
+    if (!currentUser) return;
     const token = localStorage.getItem('token');
-    if (!token) {
-      console.error('❌ Token não encontrado no localStorage!');
-      return;
-    }
-    console.log('🔄 Carregando dados do dashboard...');
+    if (!token) return;
+    if (dashboardDataLoadStarted.current) return;
     const loadDashboard = async () => {
       await Promise.all([
         loadPlayers(),
@@ -1070,6 +1067,12 @@ export default function App() {
         setIsInitializing(false);
         return;
       }
+      dashboardDataLoadStarted.current = true;
+      loadPlayers();
+      loadMatches();
+      loadChampionshipMatches();
+      loadSchedules();
+      loadChampionships();
       try {
         const { getApiUrl } = await import('./config');
         const response = await fetch(`${getApiUrl()}/auth/profile`, {
@@ -1224,15 +1227,28 @@ export default function App() {
             />
           </TabBackgroundWrapper>
         );
-      case 'ranking': 
+      case 'ranking':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            <StatsRanking players={players} matches={matches} />
           </TabBackgroundWrapper>
-        ); 
+        );
       case 'general':
         return <GeneralScout config={config} matches={matches} players={players} />; 
       case 'individual':
+        if (IS_FREE_PLAN) {
+          return (
+            <TabBackgroundWrapper>
+              <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
+                <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
+                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Scout Individual</h2>
+                <p className="text-zinc-400 text-sm max-w-md">
+                  Em breve, estamos desenvolvendo. Entre em contato para mais informações.
+                </p>
+              </div>
+            </TabBackgroundWrapper>
+          );
+        }
         return (
           <TabBackgroundWrapper>
             <IndividualScout config={config} currentUser={currentUser} matches={matches} players={players} timeControls={timeControls} />
@@ -1394,7 +1410,7 @@ export default function App() {
                 <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
                 <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Relatório Gerencial</h2>
                 <p className="text-zinc-400 text-sm max-w-md">
-                  Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                  Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                 </p>
               </div>
             </TabBackgroundWrapper>
@@ -1459,7 +1475,7 @@ export default function App() {
                   <InjuredPlayersAlert players={players} />
                   {IS_FREE_PLAN ? (
                     <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-400 text-sm">
-                      Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.
+                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                     </div>
                   ) : overviewStats.nextMatch ? (
                     <SuspensionsAlert
@@ -1561,6 +1577,7 @@ export default function App() {
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             onNavigate={() => setSidebarOpen(false)}
+            isFreePlan={IS_FREE_PLAN}
           />
         </>
       )}

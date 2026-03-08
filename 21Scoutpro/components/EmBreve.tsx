@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lock } from 'lucide-react';
 
-const MENSAGEM_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para sugestões e informações.';
+const MENSAGEM_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.';
 
 export const EmBreve: React.FC = () => (
   <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
