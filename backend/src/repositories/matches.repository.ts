@@ -24,8 +24,6 @@ type JogoDB = {
   golsPro: number;
   golsContra: number;
   videoUrl: string | null;
-  possessionSecondsWith: number;
-  possessionSecondsWithout: number;
   createdAt: Date;
 };
 
@@ -138,8 +136,6 @@ export const matchesRepository = {
     playerRelationships?: object;
     lineup?: object;
     substitutionHistory?: object;
-    possessionSecondsWith?: number;
-    possessionSecondsWithout?: number;
   }, tx?: TransactionClient): Promise<JogoDB> {
     return db(tx).jogo.create({
       data: {
@@ -157,8 +153,6 @@ export const matchesRepository = {
         playerRelationships: data.playerRelationships as any,
         lineup: data.lineup as any,
         substitutionHistory: data.substitutionHistory as any,
-        possessionSecondsWith: data.possessionSecondsWith ?? 0,
-        possessionSecondsWithout: data.possessionSecondsWithout ?? 0,
       },
     }) as Promise<JogoDB>;
   },

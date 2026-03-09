@@ -6,6 +6,7 @@ Se GET /api/players ou GET /api/matches retornam 500 com erro do tipo **"column 
 
 - `jogadores.max_loads_json` não existe → migração **009**
 - `jogos.post_match_event_log` (e colunas relacionadas) não existem → migração **011**
+- Colunas de posse removidas (`possession_seconds_with`, `possession_seconds_without`) → migração **015**
 
 ## Opção A – Supabase SQL Editor (recomendado)
 
@@ -41,6 +42,14 @@ COMMENT ON COLUMN jogos.lineup IS 'Escalação (players, bench, ballPossessionSt
 COMMENT ON COLUMN jogos.substitution_history IS 'Histórico de substituições';
 ```
 
+### Migração 015 – jogos (remover posse de bola)
+
+```sql
+-- Remover colunas de posse de bola (não usadas na versão pós-partida)
+ALTER TABLE jogos DROP COLUMN IF EXISTS possession_seconds_with;
+ALTER TABLE jogos DROP COLUMN IF EXISTS possession_seconds_without;
+```
+
 ## Opção B – Linha de comando (psql)
 
 Use a connection string **direta** do Supabase (porta 5432, a mesma de `DIRECT_URL`):
@@ -49,6 +58,7 @@ Use a connection string **direta** do Supabase (porta 5432, a mesma de `DIRECT_U
 cd backend
 psql "<DIRECT_URL>" -f migrations/009_add_maxloads_and_fotourl_text.sql
 psql "<DIRECT_URL>" -f migrations/011_add_match_json_fields.sql
+psql "<DIRECT_URL>" -f migrations/015_remove_possession_seconds.sql
 ```
 
 Substitua `"<DIRECT_URL>"` pela URL real (entre aspas se tiver caracteres especiais).

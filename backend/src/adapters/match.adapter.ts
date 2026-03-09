@@ -22,8 +22,6 @@ interface JogoDB {
   playerRelationships?: unknown;
   lineup?: unknown;
   substitutionHistory?: unknown;
-  possessionSecondsWith?: number;
-  possessionSecondsWithout?: number;
   createdAt: Date | string;
 }
 
@@ -146,8 +144,6 @@ export function transformMatchToFrontend(
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
-  if (jogo.possessionSecondsWith !== undefined) result.possessionSecondsWith = jogo.possessionSecondsWith;
-  if (jogo.possessionSecondsWithout !== undefined) result.possessionSecondsWithout = jogo.possessionSecondsWithout;
   return result;
 }
 

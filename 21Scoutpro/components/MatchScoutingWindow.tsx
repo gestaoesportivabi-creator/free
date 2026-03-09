@@ -715,8 +715,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
         : undefined;
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
-      savedMatch.possessionSecondsWith = possessionSecondsWith;
-      savedMatch.possessionSecondsWithout = possessionSecondsWithout;
       onSave(savedMatch);
     }
     onClose();
