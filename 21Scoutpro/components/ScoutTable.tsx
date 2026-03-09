@@ -81,9 +81,11 @@ interface ScoutTableProps {
     championshipMatches?: ChampionshipMatch[];
     schedules?: { days?: unknown[]; isActive?: unknown }[];
     teams?: Team[];
+    /** Chamado quando o popup Depois da Partida abre/fecha (para recolher sidebar e dar espaço) */
+    onPostMatchOpenChange?: (open: boolean) => void;
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [] }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], onPostMatchOpenChange }) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -109,6 +111,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const [collectionType, setCollectionType] = useState<'realtime' | 'postmatch' | null>(null); // Tipo de coleta (null = seletor)
     const [showPostMatchSheet, setShowPostMatchSheet] = useState<boolean>(false); // Planilha pós-jogo
     const [showRealtimePrepForSavedMatch, setShowRealtimePrepForSavedMatch] = useState<boolean>(false); // Preparação tempo real para partida salva (seleção de atletas antes de abrir aba)
+
+    // Notificar App quando popup Depois da Partida abre/fecha (para recolher sidebar)
+    useEffect(() => {
+        onPostMatchOpenChange?.(showPostMatchSheet);
+    }, [showPostMatchSheet, onPostMatchOpenChange]);
     const [preparationAthleteFilter, setPreparationAthleteFilter] = useState<'goleiros' | 'linha'>('goleiros'); // Goleiros | Atletas de linha na preparação
 
     // Calendário: filtro de datas (default: mês atual) e modo de visualização

@@ -142,6 +142,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
   const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
+  const [sidebarRetracted, setSidebarRetracted] = useState(false); // desktop: true = recolhida, false = expandida (padrão expandida)
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -779,11 +780,18 @@ export default function App() {
               console.warn('Erro ao atualizar cartões do campeonato:', e);
             }
           }
-          // Validar match salvo antes de adicionar à lista
+          // Validar match salvo e recarregar da API para garantir consistência (evitar cache local)
           if (saved.teamStats) {
-            setMatches(prev => [...prev, saved]);
-            console.log('✅ Partida salva e adicionada à lista local');
-            alert("Partida salva com sucesso! Os dados foram atualizados no sistema.");
+            try {
+              const refreshed = await matchesApi.getAll();
+              const valid = (refreshed as MatchRecord[]).filter(m => m && m.teamStats);
+              setMatches(valid);
+              console.log('✅ Partida salva e lista recarregada do banco de dados');
+            } catch (e) {
+              console.warn('Recarregar matches falhou, usando resposta do save:', e);
+              setMatches(prev => [...prev, saved]);
+            }
+            alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
             setActiveTab('general');
           } else {
             console.error('❌ Erro: Match salvo sem teamStats:', saved);
@@ -1375,6 +1383,7 @@ export default function App() {
           teams={teams}
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
+          onPostMatchOpenChange={(open) => setSidebarRetracted(open)}
             />
           </TabBackgroundWrapper>
         );
@@ -1577,11 +1586,13 @@ export default function App() {
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             onNavigate={() => setSidebarOpen(false)}
+            retracted={sidebarRetracted}
+            onToggleRetract={() => setSidebarRetracted((r) => !r)}
             isFreePlan={IS_FREE_PLAN}
           />
         </>
       )}
-      <main className={`flex-1 flex flex-col overflow-y-auto h-screen scroll-smooth print:ml-0 print:p-0 min-w-0 ${scoutWindowOpen ? 'ml-0' : 'ml-0 md:ml-64'}`}>
+      <main className={`flex-1 flex flex-col overflow-y-auto h-screen scroll-smooth print:ml-0 print:p-0 min-w-0 ${scoutWindowOpen ? 'ml-0' : sidebarRetracted ? 'ml-0 md:ml-16' : 'ml-0 md:ml-64'}`}>
         {!scoutWindowOpen && (
           <header className="md:hidden shrink-0 flex items-center gap-3 px-4 py-3 bg-black border-b border-zinc-900">
             <button

@@ -75,6 +75,24 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
           Escolha como os dados serão coletados para esta partida:
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Esquerda: Adicionar dados da Partida */}
+          <button
+            type="button"
+            onClick={() => onSelect('postmatch')}
+            className="flex items-center gap-4 p-6 bg-zinc-950 border-2 border-zinc-800 rounded-xl hover:border-[#00f0ff]/50 transition-colors text-left group"
+          >
+            <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-[#00f0ff]/20 border-2 border-[#00f0ff]/50 flex items-center justify-center group-hover:bg-[#00f0ff]/30">
+              <Sheet className="text-[#00f0ff]" size={28} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-white font-black text-lg uppercase tracking-tight">Adicionar dados da Partida</div>
+              <div className="text-zinc-500 text-sm mt-1">
+                Preencher planilha com finalizações, passes, gols, assistências e desarmes.
+              </div>
+            </div>
+          </button>
+
+          {/* Direita: Tempo real */}
           <button
             type="button"
             onClick={() => {
@@ -107,22 +125,6 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
                 {IS_FREE_PLAN
                   ? 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.'
                   : 'Coleta durante a partida. Escalação, cronômetro e registro de ações em tempo real.'}
-              </div>
-            </div>
-          </button>
-
-            <button
-            type="button"
-            onClick={() => onSelect('postmatch')}
-            className="flex items-center gap-4 p-6 bg-zinc-950 border-2 border-zinc-800 rounded-xl hover:border-[#00f0ff]/50 transition-colors text-left group"
-          >
-            <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-[#00f0ff]/20 border-2 border-[#00f0ff]/50 flex items-center justify-center group-hover:bg-[#00f0ff]/30">
-              <Sheet className="text-[#00f0ff]" size={28} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-white font-black text-lg uppercase tracking-tight">Depois da partida</div>
-              <div className="text-zinc-500 text-sm mt-1">
-                Preencher planilha com finalizações, passes, gols, assistências e desarmes.
               </div>
             </div>
           </button>
