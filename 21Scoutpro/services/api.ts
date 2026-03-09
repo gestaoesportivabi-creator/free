@@ -161,7 +161,6 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
   try {
     const url = `${getApiUrl()}/${resource}/${id}`;
     
-    // Adicionar timeout de 15 segundos
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     
@@ -177,27 +176,35 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
     
     clearTimeout(timeoutId);
 
+    const responseText = await response.text();
+    let parsed: ApiResponse<T> | null = null;
+    try {
+      parsed = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      // resposta não é JSON
+    }
+
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error:', response.status, errorText);
-      return null;
+      const errMsg = parsed?.error || responseText || `Erro ${response.status}`;
+      console.error('API Error:', response.status, errMsg);
+      throw new Error(errMsg);
     }
 
-    const result: ApiResponse<T> = await response.json();
-
-    if (!result.success) {
-      console.error('API Error:', result.error);
-      return null;
+    if (parsed && !parsed.success) {
+      const errMsg = parsed.error || 'Erro desconhecido';
+      console.error('API Error:', errMsg);
+      throw new Error(errMsg);
     }
 
-    return result.data || null;
+    return (parsed?.data ?? null) as T | null;
   } catch (error: any) {
     if (error.name === 'AbortError') {
       console.error(`⏱️ Timeout ao fazer PUT em ${resource} (15s)`);
-    } else {
-      console.error(`Error updating ${resource}:`, error);
+      throw new Error('Tempo esgotado. Verifique sua conexão e tente novamente.');
     }
-    return null;
+    if (error instanceof Error) throw error;
+    console.error(`Error updating ${resource}:`, error);
+    throw new Error('Erro ao comunicar com o servidor.');
   }
 }
 

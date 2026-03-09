@@ -17,6 +17,11 @@ export interface ChampionshipMatch {
     scoreTarget?: string; // Meta de pontuação esperada
 }
 
+interface SavedMatch {
+    date: string;
+    opponent: string;
+}
+
 interface ChampionshipTableProps {
     matches?: ChampionshipMatch[];
     competitions?: string[]; // Competições disponíveis
@@ -27,6 +32,7 @@ interface ChampionshipTableProps {
     championships?: Championship[]; // Campeonatos cadastrados
     onSaveChampionship?: (championship: Championship) => void; // Callback para salvar campeonato
     teams?: { id: string; nome: string }[]; // Equipes para cadastrar no campeonato
+    allMatches?: SavedMatch[];
 }
 
 const PHASE_OPTIONS = [
@@ -43,7 +49,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     onRefresh,
     championships = [],
     onSaveChampionship,
-    teams = []
+    teams = [],
+    allMatches = []
 }) => {
     // Debug: log matches
     useEffect(() => {
@@ -373,38 +380,54 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         }
     };
     
-    // Separar e ordenar partidas por tempo (passadas vs futuras) — datas como local (YYYY-MM-DD)
+    // Chave de partidas salvas para cruzamento (data+adversário)
+    const savedMatchKeys = useMemo(() => {
+        const keys = new Set<string>();
+        allMatches.forEach(m => {
+            const d = new Date(m.date);
+            d.setHours(0, 0, 0, 0);
+            keys.add(`${d.getTime()}_${(m.opponent || '').trim().toLowerCase()}`);
+        });
+        return keys;
+    }, [allMatches]);
+
+    // Separar e ordenar partidas por tempo (passadas vs futuras)
+    // Partidas com dados salvos (jogos) são consideradas passadas mesmo se a data for futura
     const { pastMatches, futureMatches } = useMemo(() => {
         const now = new Date();
         now.setHours(0, 0, 0, 0);
-        
+
         const past: ChampionshipMatch[] = [];
         const future: ChampionshipMatch[] = [];
-        
+
         matches.forEach(match => {
             const matchDate = parseLocalDateOnly(match.date);
             if (Number.isNaN(matchDate.getTime())) return;
-            if (matchDate < now) {
+
+            const key = `${matchDate.getTime()}_${(match.opponent || '').trim().toLowerCase()}`;
+            const hasSavedData = savedMatchKeys.has(key);
+
+            if (matchDate < now || hasSavedData) {
                 past.push(match);
             } else {
                 future.push(match);
             }
         });
-        
+
         past.sort((a, b) => {
             const dateCompare = parseLocalDateOnly(b.date).getTime() - parseLocalDateOnly(a.date).getTime();
             if (dateCompare !== 0) return dateCompare;
             return (b.time || '').localeCompare(a.time || '');
         });
-        
+
         future.sort((a, b) => {
             const dateCompare = parseLocalDateOnly(a.date).getTime() - parseLocalDateOnly(b.date).getTime();
             if (dateCompare !== 0) return dateCompare;
             return (a.time || '').localeCompare(b.time || '');
         });
-        
+
         return { pastMatches: past, futureMatches: future };
-    }, [matches]);
+    }, [matches, savedMatchKeys]);
     
     // Aplicar filtro de período às partidas passadas (datas locais)
     const applyTimeFilter = (matchesList: ChampionshipMatch[]) => {

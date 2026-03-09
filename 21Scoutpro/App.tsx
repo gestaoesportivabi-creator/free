@@ -754,7 +754,23 @@ export default function App() {
           playerStatsCount: Object.keys(newMatch.playerStats || {}).length
         });
 
-        const saved = await matchesApi.create(newMatch);
+        // Verificar se é uma partida existente (ID real do banco) ou nova (sched-* ou sem ID)
+        const isExistingMatch = newMatch.id
+          && !newMatch.id.startsWith('sched-')
+          && matches.some(m => m.id === newMatch.id);
+
+        let saved: MatchRecord | null;
+        if (isExistingMatch) {
+          console.log('📝 Atualizando partida existente:', newMatch.id);
+          saved = await matchesApi.update(newMatch.id, newMatch);
+        } else {
+          const matchToCreate = { ...newMatch };
+          if (matchToCreate.id?.startsWith('sched-')) {
+            delete (matchToCreate as any).id;
+          }
+          console.log('➕ Criando nova partida');
+          saved = await matchesApi.create(matchToCreate);
+        }
         console.log('💾 Resposta do salvamento:', saved);
         
         if (saved) {
@@ -1475,37 +1491,7 @@ export default function App() {
                 lastMatchResults={lastMatchResults}
               />
 
-              {/* 1. Atletas Suspensos (apenas suspensos por cartões; lesões aparecem só no card Desfalques por lesão) */}
-              <section className="space-y-4" aria-label="Atletas Suspensos">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-bold">Atletas Suspensos</p>
-                <div className="flex flex-col gap-3">
-                  <InjuredPlayersAlert players={players} />
-                  {IS_FREE_PLAN ? (
-                    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-400 text-sm">
-                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                    </div>
-                  ) : overviewStats.nextMatch ? (
-                    <SuspensionsAlert
-                      nextMatch={overviewStats.nextMatch}
-                      championships={championships}
-                      players={players}
-                    />
-                  ) : (
-                    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 px-4 py-3 text-zinc-500 text-xs">
-                      Sem próximo jogo definido.
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* 2. Condição física da equipe */}
-              <DashboardConditionCard
-                schedules={schedules}
-                championshipMatches={championshipMatches}
-                isFreePlan={IS_FREE_PLAN}
-              />
-
-              {/* 3. Elenco disponível + Próximo jogo */}
+              {/* Elenco disponível + Próximo jogo */}
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
                   <DashboardSquadAvailability

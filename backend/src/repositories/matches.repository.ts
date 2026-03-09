@@ -49,6 +49,7 @@ type JogoEstatisticaEquipeDB = {
   golsMarcadosBolaParada: number;
   golsSofridosJogoAberto: number;
   golsSofridosBolaParada: number;
+  metodoGol: string | null;
 };
 
 type JogoEstatisticaJogadorDB = {

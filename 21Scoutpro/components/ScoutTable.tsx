@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock } from 'lucide-react';
+import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
@@ -1718,9 +1718,27 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     };
 
     // Partidas unificadas (salvas + programadas) filtradas por intervalo de datas
+    // Deduplica: se uma programada já tem uma versão salva (mesma data+adversário), mostra só a salva
     const filteredMatches = useMemo((): CalendarMatchItem[] => {
         const saved: CalendarMatchItem[] = matches.map((m) => ({ ...m, type: 'saved' as const }));
-        const scheduled: CalendarMatchItem[] = championshipMatches.map((m) => ({ ...m, type: 'scheduled' as const }));
+
+        const savedKeys = new Set(
+            matches.map((m) => {
+                const d = new Date(m.date);
+                d.setHours(0, 0, 0, 0);
+                return `${d.getTime()}_${(m.opponent || '').trim().toLowerCase()}`;
+            })
+        );
+
+        const scheduled: CalendarMatchItem[] = championshipMatches
+            .filter((cm) => {
+                const d = new Date(cm.date);
+                d.setHours(0, 0, 0, 0);
+                const key = `${d.getTime()}_${(cm.opponent || '').trim().toLowerCase()}`;
+                return !savedKeys.has(key);
+            })
+            .map((m) => ({ ...m, type: 'scheduled' as const }));
+
         const all: CalendarMatchItem[] = [...saved, ...scheduled];
 
         const start = new Date(startDate);
@@ -2512,10 +2530,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                   const ids = Object.keys(m.playerStats || {});
                                   return ids.length > 0 ? players.filter((p) => ids.includes(String(p.id).trim())) : players;
                               })();
+                        const isEditingExisting = !isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch);
                         return (
                             <MatchScoutingWindow
                                 isOpen={true}
-                                onClose={() => { setShowPostMatchSheet(false); handleBackToCalendar(); }}
+                                onClose={() => {
+                                    setShowPostMatchSheet(false);
+                                    if (!isEditingExisting) handleBackToCalendar();
+                                }}
                                 match={postmatchMatch}
                                 players={postmatchPlayers}
                                 teams={teams || []}
@@ -2523,7 +2545,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 extraTimeMinutes={selectedExtraTimeMinutes}
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
-                                onSave={(saved) => { onSave?.(saved); setShowPostMatchSheet(false); handleBackToCalendar(); }}
+                                onSave={(saved) => {
+                                    onSave?.(saved);
+                                    setShowPostMatchSheet(false);
+                                    handleBackToCalendar();
+                                }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
                                 sidebarRetracted={true}
@@ -2532,13 +2558,25 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     })()}
 
                     {/* Interface de Análise para Partida Salva (apenas executadas) */}
-                    {!isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch) && (
+                    {!isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch) && !showPostMatchSheet && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
                                     <Target className="text-[#00f0ff]" size={28} /> Análise da Partida
                                 </h2>
                                 <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedPlayersForMatch(new Set(
+                                                Object.keys(selectedMatch!.playerStats || {}).map(id => id.trim())
+                                            ));
+                                            setShowPostMatchSheet(true);
+                                        }}
+                                        className="flex items-center gap-2 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
+                                    >
+                                        <Edit2 size={16} /> Editar Dados
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={handleBackToCalendar}

@@ -22,7 +22,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     // Form State
     const [name, setName] = useState('');
     const [nickname, setNickname] = useState('');
-    const [position, setPosition] = useState<Position>('Ala');
+    const [position, setPosition] = useState<Position>(config.positions[0] || 'Goleiro');
     const [jerseyNumber, setJerseyNumber] = useState('');
     const [dominantFoot, setDominantFoot] = useState<'Destro' | 'Canhoto' | 'Ambidestro'>('Destro');
     const [age, setAge] = useState('');
@@ -104,10 +104,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         return INJURY_LOCATIONS_BY_TYPE[type] || INJURY_LOCATIONS_BY_TYPE['Outros'];
     };
 
-    const resetForm = () => {
+    const resetForm = (defaultPosition?: Position) => {
         setName('');
         setNickname('');
-        setPosition('Ala');
+        setPosition(defaultPosition || config.positions[0] || 'Goleiro');
         setJerseyNumber('');
         setDominantFoot('Destro');
         setAge('');
@@ -651,8 +651,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                     )}
                     <button 
                         onClick={() => {
-                            if (isFormOpen) resetForm();
-                            else resetForm();
+                            const expandedArr = Array.from(expandedPositions);
+                            const defaultPos = expandedArr.length === 1
+                                ? expandedArr[0] as Position
+                                : undefined;
+                            if (!isFormOpen) {
+                                resetForm(defaultPos);
+                                setEditMode(false);
+                                setEditPlayerId(null);
+                                setActiveTab('profile');
+                            } else {
+                                resetForm();
+                            }
                             setIsFormOpen(!isFormOpen);
                         }}
                         className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-6 py-3 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.4)]"

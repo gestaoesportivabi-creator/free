@@ -106,6 +106,24 @@ export const matchesService = {
       substitutionHistory: data.substitutionHistory,
     }, tx);
 
+    // Extrair métodos de gol do postMatchEventLog
+    let metodoGol: string | null = null;
+    const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+    if (eventLog && Array.isArray(eventLog)) {
+      const methodCounts: Record<string, number> = {};
+      for (const ev of eventLog) {
+        if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+          methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
+        }
+      }
+      if (Object.keys(methodCounts).length > 0) {
+        metodoGol = JSON.stringify(methodCounts);
+      }
+    }
+    if (!metodoGol && teamStats.goalMethodsScored && Object.keys(teamStats.goalMethodsScored).length > 0) {
+      metodoGol = JSON.stringify(teamStats.goalMethodsScored);
+    }
+
     await matchesRepository.upsertEstatisticasEquipe(jogo.id, {
       minutosJogados: 40,
       gols: teamStats.goals ?? golsPro,
@@ -126,6 +144,7 @@ export const matchesService = {
       golsMarcadosBolaParada: 0,
       golsSofridosJogoAberto: 0,
       golsSofridosBolaParada: 0,
+      metodoGol,
     }, tx);
 
     const jogadoresTenant = await playersRepository.findAll(tenantInfo, tx);
@@ -172,18 +191,108 @@ export const matchesService = {
     const existing = await matchesRepository.findById(id, tenantInfo, tx);
     if (!existing) throw new NotFoundError('Jogo', id);
 
-    const updatePayload: Record<string, unknown> = { ...data };
-    if (data.goalsFor !== undefined) updatePayload.golsPro = data.goalsFor;
-    if (data.goalsAgainst !== undefined) updatePayload.golsContra = data.goalsAgainst;
+    const golsPro = data.golsPro ?? data.goalsFor ?? existing.golsPro;
+    const golsContra = data.golsContra ?? data.goalsAgainst ?? existing.golsContra;
 
-    const jogo = await matchesRepository.update(id, updatePayload as any, tx);
+    const jogoUpdate: Record<string, unknown> = {};
+    if (data.adversario ?? data.opponent) jogoUpdate.adversario = data.adversario ?? data.opponent;
+    if (data.data ?? data.date) {
+      const d = data.data ?? (typeof data.date === 'string' ? new Date(data.date) : data.date);
+      if (d instanceof Date && !isNaN(d.getTime())) jogoUpdate.data = d;
+    }
+    if (data.campeonato ?? data.competition) jogoUpdate.campeonato = data.campeonato ?? data.competition;
+    if (data.resultado ?? data.result) jogoUpdate.resultado = data.resultado ?? data.result;
+    jogoUpdate.golsPro = golsPro;
+    jogoUpdate.golsContra = golsContra;
+    if (data.postMatchEventLog !== undefined) jogoUpdate.postMatchEventLog = data.postMatchEventLog;
+    if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
+    if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
+    if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
+
+    const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
+
+    // Update team stats if provided
+    const teamStats = data.teamStats;
+    if (teamStats) {
+      let metodoGol: string | null = null;
+      const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+      if (eventLog && Array.isArray(eventLog)) {
+        const methodCounts: Record<string, number> = {};
+        for (const ev of eventLog) {
+          if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+            methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
+          }
+        }
+        if (Object.keys(methodCounts).length > 0) {
+          metodoGol = JSON.stringify(methodCounts);
+        }
+      }
+      if (!metodoGol && teamStats.goalMethodsScored && Object.keys(teamStats.goalMethodsScored).length > 0) {
+        metodoGol = JSON.stringify(teamStats.goalMethodsScored);
+      }
+
+      await matchesRepository.upsertEstatisticasEquipe(id, {
+        minutosJogados: 40,
+        gols: teamStats.goals ?? golsPro,
+        golsSofridos: teamStats.goalsConceded ?? golsContra,
+        assistencias: teamStats.assists ?? 0,
+        cartoesAmarelos: 0,
+        cartoesVermelhos: 0,
+        passesCorretos: teamStats.passesCorrect ?? 0,
+        passesErrados: teamStats.passesWrong ?? 0,
+        passesErradosTransicao: teamStats.transitionErrors ?? 0,
+        desarmesComBola: teamStats.tacklesWithBall ?? 0,
+        desarmesContraAtaque: teamStats.tacklesCounterAttack ?? 0,
+        desarmesSemBola: teamStats.tacklesWithoutBall ?? 0,
+        chutesNoGol: teamStats.shotsOnTarget ?? 0,
+        chutesFora: teamStats.shotsOffTarget ?? 0,
+        rpePartida: null,
+        golsMarcadosJogoAberto: 0,
+        golsMarcadosBolaParada: 0,
+        golsSofridosJogoAberto: 0,
+        golsSofridosBolaParada: 0,
+        metodoGol,
+      }, tx);
+    }
+
+    // Update player stats if provided
+    const playerStats = data.playerStats;
+    if (playerStats && Object.keys(playerStats).length > 0) {
+      const jogadoresTenant = await playersRepository.findAll(tenantInfo, tx);
+      const validJogadorIds = new Set(jogadoresTenant.map((j) => j.id));
+      for (const [jogadorId, stats] of Object.entries(playerStats)) {
+        if (!validJogadorIds.has(jogadorId.trim())) continue;
+        const s = stats as any;
+        await matchesRepository.upsertEstatisticasJogador(id, jogadorId.trim(), {
+          minutosJogados: 40,
+          gols: s.goals ?? 0,
+          golsSofridos: 0,
+          assistencias: s.assists ?? 0,
+          cartoesAmarelos: s.yellowCards ?? 0,
+          cartoesVermelhos: s.redCards ?? 0,
+          passesCorretos: s.passesCorrect ?? 0,
+          passesErrados: s.passesWrong ?? 0,
+          passesErradosTransicao: s.transitionErrors ?? 0,
+          desarmesComBola: s.tacklesWithBall ?? 0,
+          desarmesContraAtaque: s.tacklesCounterAttack ?? 0,
+          desarmesSemBola: s.tacklesWithoutBall ?? 0,
+          chutesNoGol: s.shotsOnTarget ?? 0,
+          chutesFora: s.shotsOffTarget ?? 0,
+          rpePartida: null,
+          golsMarcadosJogoAberto: 0,
+          golsMarcadosBolaParada: 0,
+          golsSofridosJogoAberto: 0,
+          golsSofridosBolaParada: 0,
+        }, tx);
+      }
+    }
+
     const [estatisticasEquipe, estatisticasJogadores] = await Promise.all([
       matchesRepository.findEstatisticasEquipe(id, tx),
       matchesRepository.findEstatisticasJogadores(id, tx),
     ]);
-    if (!estatisticasEquipe) throw new NotFoundError('Estatísticas do jogo', id);
 
-    return transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+    return transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe || undefined);
   },
 
   async delete(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<boolean> {
