@@ -40,6 +40,8 @@ interface MatchScoutingWindowProps {
   recordedByUser?: { id?: string; name: string };
   /** Quando true, ocupa todo o viewport (ex.: sidebar foi escondida pelo app) */
   takeFullWidth?: boolean;
+  /** Quando true, alinha à esquerda com sidebar retraída (64px); quando false, com sidebar expandida (256px) */
+  sidebarRetracted?: boolean;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -127,6 +129,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   onSave,
   recordedByUser,
   takeFullWidth,
+  sidebarRetracted = false,
 }) => {
   const isPostmatch = mode === 'postmatch';
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
@@ -1534,9 +1537,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const isRealtimePage = window.location.pathname === '/scout-realtime';
   const useFullViewport = isRealtimePage || takeFullWidth;
+  const leftOffset = sidebarRetracted ? 'left-16' : 'left-64';
   return (
     <div className={`fixed z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-fade-in overflow-hidden p-0 ${
-      useFullViewport ? 'inset-0 h-dvh min-h-dvh' : 'left-[16rem] top-0 right-0 bottom-0'
+      useFullViewport ? 'inset-0 h-dvh min-h-dvh' : `${leftOffset} top-0 right-0 bottom-0`
     }`}>
       <div className="w-full h-full min-h-0 bg-black flex flex-col relative overflow-hidden">
 
@@ -2436,34 +2440,52 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
                 </div>
               )}
+              {/* Popup Método do gol - overlay em cima, seleciona e fecha */}
               {goalStep === 'method' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-3 font-bold uppercase">Método do gol</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(pendingGoalIsOpponent ? GOAL_METHODS_CONCEDED : GOAL_METHODS_OUR).map((method) => {
-                      const ui = GOAL_METHOD_UI[method] || { icon: <Goal size={16} />, bg: 'bg-zinc-600', hover: 'hover:bg-zinc-500', text: 'text-white' };
-                      return (
-                        <button
-                          key={method}
-                          onClick={() => {
-                            setPendingGoalMethod(method);
-                            setGoalStep('confirm');
-                          }}
-                          className={`flex items-center gap-2 px-3 py-2.5 ${ui.bg} ${ui.hover} ${ui.text} border-0 font-semibold text-xs rounded-lg transition-colors shadow-md`}
-                        >
-                          {ui.icon}
-                          <span className="text-left">{method}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600"
-                    >
-                      <ArrowLeft size={14} /> Voltar
-                    </button>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-lg bg-zinc-950 border-2 border-[#00f0ff]/40 rounded-2xl shadow-2xl shadow-[#00f0ff]/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-[#00f0ff] font-black uppercase text-sm tracking-wider flex items-center gap-2">
+                        <Goal size={18} />
+                        Método do gol
+                      </h3>
+                      <p className="text-zinc-500 text-xs mt-1">
+                        {pendingGoalIsOpponent ? 'Como o adversário marcou?' : 'Como foi o gol?'}
+                      </p>
+                    </div>
+                    <div className="p-4 max-h-[60vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-2">
+                        {(pendingGoalIsOpponent ? GOAL_METHODS_CONCEDED : GOAL_METHODS_OUR).map((method) => {
+                          const ui = GOAL_METHOD_UI[method] || { icon: <Goal size={16} />, bg: 'bg-zinc-600', hover: 'hover:bg-zinc-500', text: 'text-white' };
+                          return (
+                            <button
+                              key={method}
+                              onClick={() => {
+                                setPendingGoalMethod(method);
+                                setGoalStep('confirm');
+                              }}
+                              className={`flex items-center gap-2 px-4 py-3 ${ui.bg} ${ui.hover} ${ui.text} border-0 font-bold text-xs rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98]`}
+                            >
+                              {ui.icon}
+                              <span className="text-left truncate">{method}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
+                      >
+                        <ArrowLeft size={14} /> Voltar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

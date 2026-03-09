@@ -7,6 +7,7 @@ import { TenantInfo } from '../utils/tenant.helper';
 import type { TransactionClient } from '../utils/transactionWithTenant';
 import { matchesRepository } from '../repositories/matches.repository';
 import { playersRepository } from '../repositories/players.repository';
+import { teamsRepository } from '../repositories/teams.repository';
 import { transformMatchToFrontend } from '../adapters/match.adapter';
 import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
@@ -57,7 +58,23 @@ export const matchesService = {
   },
 
   async create(data: any, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord> {
-    const equipeIds = tenantInfo.equipe_ids || [];
+    let equipeIds = tenantInfo.equipe_ids || [];
+
+    // Se não há equipes mas o tenant tem técnico, criar equipe padrão "Elenco"
+    if (equipeIds.length === 0 && tenantInfo.tecnico_id) {
+      try {
+        const novaEquipe = await teamsRepository.create(
+          { nome: 'Elenco', tecnicoId: tenantInfo.tecnico_id },
+          tx
+        );
+        equipeIds = [novaEquipe.id];
+        tenantInfo.equipe_ids = equipeIds;
+        console.log('[MATCHES_SERVICE] Equipe padrão "Elenco" criada para técnico:', tenantInfo.tecnico_id);
+      } catch (e) {
+        console.error('[MATCHES_SERVICE] Erro ao criar equipe padrão:', e);
+        throw new NotFoundError('Equipe', 'Nenhuma equipe encontrada. Crie uma equipe em Gestão de Equipe antes de salvar partidas.');
+      }
+    }
     if (equipeIds.length === 0) throw new NotFoundError('Equipe', 'Nenhuma equipe encontrada para o tenant');
 
     const equipeId = data.equipeId || equipeIds[0];

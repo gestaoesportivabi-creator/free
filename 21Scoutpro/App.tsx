@@ -803,10 +803,8 @@ export default function App() {
         }
       } catch (error) {
         console.error('❌ Erro ao salvar partida:', error);
-        if (error instanceof Error) {
-          console.error('Detalhes do erro:', error.message, error.stack);
-        }
-        alert("Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) para mais detalhes.");
+        const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+        alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
       }
   };
 

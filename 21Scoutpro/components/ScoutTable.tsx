@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
@@ -112,9 +112,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const [showPostMatchSheet, setShowPostMatchSheet] = useState<boolean>(false); // Planilha pós-jogo
     const [showRealtimePrepForSavedMatch, setShowRealtimePrepForSavedMatch] = useState<boolean>(false); // Preparação tempo real para partida salva (seleção de atletas antes de abrir aba)
 
-    // Notificar App quando popup Depois da Partida abre/fecha (para recolher sidebar)
+    // Notificar App quando popup Depois da Partida abre/fecha (para recolher sidebar) - só quando muda, não sobrescreve toggle manual
+    const prevPostMatchOpen = useRef<boolean | undefined>(undefined);
     useEffect(() => {
-        onPostMatchOpenChange?.(showPostMatchSheet);
+        if (prevPostMatchOpen.current !== showPostMatchSheet) {
+            prevPostMatchOpen.current = showPostMatchSheet;
+            onPostMatchOpenChange?.(showPostMatchSheet);
+        }
     }, [showPostMatchSheet, onPostMatchOpenChange]);
     const [preparationAthleteFilter, setPreparationAthleteFilter] = useState<'goleiros' | 'linha'>('goleiros'); // Goleiros | Atletas de linha na preparação
 
@@ -2521,7 +2525,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 mode="postmatch"
                                 onSave={(saved) => { onSave?.(saved); setShowPostMatchSheet(false); handleBackToCalendar(); }}
                                 recordedByUser={undefined}
-                                takeFullWidth={true}
+                                takeFullWidth={false}
+                                sidebarRetracted={true}
                             />
                         );
                     })()}

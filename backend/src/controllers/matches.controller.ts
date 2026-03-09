@@ -44,6 +44,7 @@ export const matchesController = {
       const match = await runWithTenant(req, (tx) => matchesService.create(req.body, req.tenantInfo!, tx));
       return res.status(201).json({ success: true, data: match });
     } catch (error) {
+      console.error('[MATCHES_CONTROLLER] Erro ao criar jogo:', error);
       return handleError(error, res, 'Erro ao criar jogo');
     }
   },
