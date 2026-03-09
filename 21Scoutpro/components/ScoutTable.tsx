@@ -8,7 +8,6 @@ import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
-import { PostMatchCollectionSheet } from './PostMatchCollectionSheet';
 import { IS_FREE_PLAN } from '../config';
 
 interface GoalTime {
@@ -2480,38 +2479,45 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                         </div>
                     )}
 
-                    {/* Planilha pós-jogo */}
-                    {showPostMatchSheet && (isScheduledMatch() ? selectedScheduledMatch : selectedMatch) && (
-                        <PostMatchCollectionSheet
-                            match={
-                                isScheduledMatch() && selectedScheduledMatch
-                                    ? {
-                                          id: `sched-${selectedScheduledMatch.id}`,
-                                          opponent: selectedScheduledMatch.opponent || '',
-                                          date: selectedScheduledMatch.date,
-                                          competition: selectedScheduledMatch.competition,
-                                      }
-                                    : selectedMatch!
-                            }
-                            players={
-                                isScheduledMatch()
-                                    ? players.filter((p) => selectedPlayersForMatch.has(String(p.id).trim()))
-                                    : (() => {
-                                          const m = selectedMatch!;
-                                          const ids = Object.keys(m.playerStats || {});
-                                          if (ids.length > 0) {
-                                              return players.filter((p) => ids.includes(String(p.id).trim()));
-                                          }
-                                          return players;
-                                      })()
-                            }
-                            onSave={(saved) => {
-                                onSave?.(saved);
-                                handleBackToCalendar();
-                            }}
-                            onBack={handleBackToCalendar}
-                        />
-                    )}
+                    {/* Pós-jogo: MatchScoutingWindow em popup (estilo tempo real, tempo manual) */}
+                    {showPostMatchSheet && (isScheduledMatch() ? selectedScheduledMatch : selectedMatch) && (() => {
+                        const postmatchMatch: MatchRecord = isScheduledMatch() && selectedScheduledMatch
+                            ? {
+                                  id: `sched-${selectedScheduledMatch.id}`,
+                                  opponent: selectedScheduledMatch.opponent || '',
+                                  date: selectedScheduledMatch.date,
+                                  result: 'E',
+                                  goalsFor: 0,
+                                  goalsAgainst: 0,
+                                  competition: selectedScheduledMatch.competition,
+                                  playerStats: {},
+                                  teamStats: { goals: 0, assists: 0, passesCorrect: 0, passesWrong: 0, shotsOnTarget: 0, shotsOffTarget: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesCounterAttack: 0, transitionErrors: 0 },
+                              }
+                            : { ...selectedMatch!, playerStats: selectedMatch!.playerStats || {}, teamStats: selectedMatch!.teamStats || { goals: 0, assists: 0, passesCorrect: 0, passesWrong: 0, shotsOnTarget: 0, shotsOffTarget: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesCounterAttack: 0, transitionErrors: 0 } };
+                        const postmatchPlayers = isScheduledMatch()
+                            ? players.filter((p) => selectedPlayersForMatch.has(String(p.id).trim()))
+                            : (() => {
+                                  const m = selectedMatch!;
+                                  const ids = Object.keys(m.playerStats || {});
+                                  return ids.length > 0 ? players.filter((p) => ids.includes(String(p.id).trim())) : players;
+                              })();
+                        return (
+                            <MatchScoutingWindow
+                                isOpen={true}
+                                onClose={() => { setShowPostMatchSheet(false); handleBackToCalendar(); }}
+                                match={postmatchMatch}
+                                players={postmatchPlayers}
+                                teams={teams || []}
+                                matchType={selectedMatchType}
+                                extraTimeMinutes={selectedExtraTimeMinutes}
+                                selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
+                                mode="postmatch"
+                                onSave={(saved) => { onSave?.(saved); setShowPostMatchSheet(false); handleBackToCalendar(); }}
+                                recordedByUser={undefined}
+                                takeFullWidth={true}
+                            />
+                        );
+                    })()}
 
                     {/* Interface de Análise para Partida Salva (apenas executadas) */}
                     {!isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch) && (

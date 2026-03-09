@@ -3,16 +3,6 @@ import { X, Play, Pause, Square, Users, ArrowRightLeft, Goal, AlertTriangle, Clo
 import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
 
-/** Formata dígitos para MM:SS (ex.: "0100" → "01:00"). */
-function formatDigitsToMMSS(digits: string): string {
-  const d = digits.replace(/\D/g, '').slice(0, 4);
-  if (d.length === 0) return '';
-  if (d.length === 1) return `00:0${d}`;
-  if (d.length === 2) return `${d}:`;
-  if (d.length === 3) return `0${d[0]}:${d.slice(1)}`;
-  return `${d.slice(0, 2)}:${d.slice(2)}`;
-}
-
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
   const d = input.trim().replace(/\D/g, '');
@@ -140,7 +130,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 }) => {
   const isPostmatch = mode === 'postmatch';
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
-  const [manualTimeInput, setManualTimeInput] = useState<string>(''); // postmatch: dígitos MMSS
+  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto 0–20
+  const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
@@ -375,7 +366,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Tempo a usar ao registrar evento (cronômetro ou manual)
   const getTimeForEvent = (): number | null => {
     if (isPostmatch) {
-      return parseManualTimeToSeconds(manualTimeInput);
+      return manualMinute * 60 + manualSecond;
     }
     return matchTime;
   };
@@ -2809,16 +2800,37 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
                       <div className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
                         {isPostmatch ? (
-                          <div className="w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-1">
-                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo (MM:SS)</label>
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="ex. 0125"
-                              value={formatDigitsToMMSS(manualTimeInput)}
-                              onChange={(e) => setManualTimeInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                              className="w-full max-w-[100px] bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-2 text-white text-lg font-black font-mono text-center outline-none focus:border-[#00f0ff] tabular-nums"
-                            />
+                          <div className="w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
+                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo (min:seg)</label>
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={manualMinute}
+                                onChange={(e) => setManualMinute(parseInt(e.target.value, 10))}
+                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                              >
+                                {Array.from({ length: 21 }, (_, i) => (
+                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                ))}
+                              </select>
+                              <span className="text-zinc-500 font-bold">:</span>
+                              <select
+                                value={manualSecond}
+                                onChange={(e) => setManualSecond(parseInt(e.target.value, 10))}
+                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                              >
+                                {Array.from({ length: 60 }, (_, i) => (
+                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <select
+                              value={currentPeriod}
+                              onChange={(e) => setCurrentPeriod(e.target.value as '1T' | '2T')}
+                              className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-white text-[10px] font-bold uppercase outline-none focus:border-[#00f0ff]"
+                            >
+                              <option value="1T">1º tempo</option>
+                              <option value="2T">2º tempo</option>
+                            </select>
                           </div>
                         ) : (
                           <>
