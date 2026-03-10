@@ -668,11 +668,47 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const USER_DATA_LOCALSTORAGE_KEYS = [
+    'user',
+    'scout21_players_local',
+    'scout21_schedules_local',
+    'championships',
+    'scout21_pse_jogos',
+    'scout21_pse_treinos',
+    'scout21_psr_jogos',
+    'scout21_psr_treinos',
+    'scout21_qualidade_sono',
+    'scout21_training_pse',
+    'scout21_settings_current_team',
+    'substitutionFrequency',
+    'realtimeScoutData',
+  ];
+
+  const clearAllUserData = (includeToken = false) => {
+    USER_DATA_LOCALSTORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    if (includeToken) localStorage.removeItem('token');
+    setMatches([]);
+    setPlayers([]);
+    setAssessments([]);
+    setSchedules([]);
+    setCompetitions([]);
+    setTimeControls([]);
+    setChampionshipMatches([]);
+    setChampionships([]);
+    setTeams([]);
+    setStatTargets({ goals: 3, assists: 3, passesCorrect: 30, passesWrong: 5, shotsOn: 8, shotsOff: 5, tacklesPossession: 10, tacklesNoPossession: 10, tacklesCounter: 5, transitionError: 2 });
+    setOverviewTeamSettings({ teamName: '', teamShieldUrl: '' });
+    setLoadedResources({ ...INITIAL_LOADED_RESOURCES });
+    dashboardDataLoadStarted.current = false;
+  };
+
   const handleLogin = (user: User) => {
       console.log('🔐 handleLogin chamado com usuário:', user);
-      console.log('🔑 Token no localStorage:', localStorage.getItem('token') ? 'PRESENTE' : 'AUSENTE');
+      clearAllUserData();
+      const token = localStorage.getItem('token');
+      console.log('🔑 Token no localStorage:', token ? 'PRESENTE' : 'AUSENTE');
       setCurrentUser(user);
-      setActiveTab('dashboard'); 
+      setActiveTab('dashboard');
       console.log('✅ currentUser atualizado, useEffect deve ser disparado');
   };
 
@@ -1115,12 +1151,12 @@ export default function App() {
           setIsInitializing(false);
           restored = true;
         } else {
-          localStorage.removeItem('token');
+          clearAllUserData(true);
           setRouteFromPath();
         }
       } catch {
         if (cancelled) return;
-        localStorage.removeItem('token');
+        clearAllUserData(true);
         setRouteFromPath();
       } finally {
         if (!cancelled && !restored) setIsInitializing(false);
@@ -1561,8 +1597,8 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={handleTabChange}
             onLogout={() => {
-              console.log('👋 Logout - Voltando para home');
-              localStorage.removeItem('token');
+              console.log('👋 Logout - Limpando dados e voltando para home');
+              clearAllUserData(true);
               setCurrentUser(null);
               setCurrentRoute('landing');
             }}

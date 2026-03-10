@@ -227,6 +227,37 @@ export const authController = {
    * PUT /api/auth/profile
    * Atualiza dados do usuário autenticado (nome, email, foto, senha)
    */
+  /**
+   * GET /api/auth/users
+   * Lista todos os usuários cadastrados (requer autenticação)
+   */
+  listUsers: async (_req: Request, res: Response) => {
+    try {
+      const users = await prisma.user.findMany({
+        where: { isActive: true },
+        include: { role: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return res.json({
+        success: true,
+        data: users.map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role.name,
+          createdAt: u.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error('Erro ao listar usuários:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao listar usuários',
+      });
+    }
+  },
+
   updateProfile: async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;

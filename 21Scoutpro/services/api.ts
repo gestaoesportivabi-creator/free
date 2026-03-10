@@ -416,3 +416,15 @@ export const teamsApi = {
   update: (id: string, team: Partial<Team>) => put<Team>(API_RESOURCES.teams, id, team),
   delete: (id: string) => del(API_RESOURCES.teams, id),
 };
+
+export interface RegisteredUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+}
+
+export const usersApi = {
+  getAll: () => get<RegisteredUser>('auth/users'),
+};

@@ -55,8 +55,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           setIsLoading(false);
           return;
         }
-        if (!email || email.trim().length < 3) {
-          setError('Digite um email válido (mínimo 3 caracteres).');
+        if (!email || !email.trim().includes('@')) {
+          setError('Digite um e-mail válido (ex: nome@email.com).');
           setIsLoading(false);
           return;
         }
@@ -234,14 +234,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           )}
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">{isRegistering ? 'Escolha um usuário' : 'Usuário'}</label>
+            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail</label>
             <input
-              type="text"
+              type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder={isRegistering ? 'joaosilva' : 'seu@email.com'}
+              placeholder="seu@email.com"
             />
           </div>
 
