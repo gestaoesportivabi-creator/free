@@ -33,15 +33,30 @@ export const authController = {
       }
 
       // Buscar por email primeiro; se não encontrar, buscar por nome
+      // Usar select para não depender de colunas opcionais (ex.: team_display_name) que podem não existir no DB
       let user = await prisma.user.findUnique({
         where: { email: identifier },
-        include: { role: true },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          passwordHash: true,
+          isActive: true,
+          role: { select: { name: true } },
+        },
       });
 
       if (!user) {
         user = await prisma.user.findFirst({
           where: { name: { equals: identifier, mode: 'insensitive' } },
-          include: { role: true },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            passwordHash: true,
+            isActive: true,
+            role: { select: { name: true } },
+          },
         });
       }
 
@@ -80,6 +95,9 @@ export const authController = {
           success: false,
           error: error.message,
         });
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[auth/login] Erro 500:', error);
       }
       return res.status(500).json({
         success: false,
