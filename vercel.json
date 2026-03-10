@@ -1,11 +1,11 @@
 {
   "version": 2,
-  "installCommand": "npm install && cd 21Scoutpro && npm install --production=false && cd ../backend && npm install --production=false && npx prisma generate && cd ../api && npm install",
-  "buildCommand": "cd backend && npx prisma generate && cd .. && npm run build",
+  "installCommand": "npm install && cd 21Scoutpro && npm install --production=false && cd ../backend && npm install --production=false && rm -rf node_modules/.prisma && npx prisma generate && cd ../api && npm install",
+  "buildCommand": "cd backend && rm -rf node_modules/.prisma && npx prisma generate && cd .. && npm run build",
   "outputDirectory": "21Scoutpro/dist",
   "framework": null,
   "env": {
-    "PRISMA_SCHEMA_CACHE_BUST": "v3"
+    "PRISMA_SCHEMA_CACHE_BUST": "v4"
   },
   "rewrites": [
     {
