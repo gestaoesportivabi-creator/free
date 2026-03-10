@@ -691,7 +691,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
   };
 
-  // Encerrar coleta
+  // Finalizar coleta (status = encerrado, mas editável depois)
   const handleEndCollection = () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
@@ -704,7 +704,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    // Realtime: montar MatchRecord completo e salvar sempre ao encerrar (mesmo com zero eventos)
     if (substitutionHistory.length > 0) {
       updateSubstitutionFrequency(substitutionHistory);
     }
@@ -715,6 +714,27 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
         : undefined;
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
+      onSave(savedMatch);
+    }
+    onClose();
+  };
+
+  // Salvar rascunho para finalizar depois (status = em_andamento)
+  const handleSaveLater = () => {
+    if (matchEvents.length === 0 && !isPostmatch) {
+      onClose();
+      return;
+    }
+
+    if (onSave) {
+      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
+      savedMatch.status = 'em_andamento';
+      if (!isPostmatch) {
+        savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
+          ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
+          : undefined;
+        savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
+      }
       onSave(savedMatch);
     }
     onClose();
@@ -1583,7 +1603,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               </div>
             </div>
 
-            {/* Log no extremo esquerdo, Encerrar Coleta no extremo direito */}
+            {/* Log no extremo esquerdo, Finalizar Coleta no extremo direito */}
             <div className="flex items-center justify-between w-full">
               <button
                 type="button"
@@ -1592,17 +1612,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               >
                 <List size={14} /> Logs
               </button>
-              <button
-                onClick={handleEndCollection}
-                disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
-                  (isPostmatch && matchEvents.length >= 1) || isMatchEnded
-                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                }`}
-              >
-                Encerrar Coleta
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={handleEndCollection}
+                  disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
+                  className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
+                    (isPostmatch && matchEvents.length >= 1) || isMatchEnded
+                      ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
+                      : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
+                  }`}
+                >
+                  Finalizar Coleta
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLater}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+                >
+                  finalizar depois
+                </button>
+              </div>
             </div>
           </div>
           {/* Tempo com posse e porcentagem (apenas tempo real com cronômetro) */}

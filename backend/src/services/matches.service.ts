@@ -104,6 +104,7 @@ export const matchesService = {
       playerRelationships: data.playerRelationships,
       lineup: data.lineup,
       substitutionHistory: data.substitutionHistory,
+      status: data.status || 'encerrado',
     }, tx);
 
     // Extrair métodos de gol do postMatchEventLog
@@ -208,6 +209,7 @@ export const matchesService = {
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
     if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
+    if (data.status !== undefined) jogoUpdate.status = data.status;
 
     const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
 

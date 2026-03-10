@@ -22,6 +22,7 @@ interface JogoDB {
   playerRelationships?: unknown;
   lineup?: unknown;
   substitutionHistory?: unknown;
+  status?: string | null;
   createdAt: Date | string;
 }
 
@@ -151,6 +152,7 @@ export function transformMatchToFrontend(
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
+  if (jogo.status) result.status = jogo.status as MatchRecord['status'];
   return result;
 }
 

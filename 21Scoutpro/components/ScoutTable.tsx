@@ -1705,6 +1705,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         
         if (item.type === 'saved') {
             const match = item as MatchRecord;
+            if (match.status === 'em_andamento') return 'incompleto';
+            if (match.status === 'encerrado') return 'finalizado';
             const hasData = 
                 match.teamStats &&
                 (match.teamStats.goals > 0 ||
