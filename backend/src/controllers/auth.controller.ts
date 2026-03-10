@@ -25,7 +25,12 @@ export const authController = {
         });
       }
 
-      const identifier = String(email).trim();
+      let identifier = String(email).trim();
+
+      // Atalho: "admin" aceito como admin@admin.com (credenciais padrão do seed)
+      if (identifier.toLowerCase() === 'admin') {
+        identifier = 'admin@admin.com';
+      }
 
       // Buscar por email primeiro; se não encontrar, buscar por nome
       let user = await prisma.user.findUnique({
