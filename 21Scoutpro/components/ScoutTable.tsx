@@ -2547,8 +2547,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 extraTimeMinutes={selectedExtraTimeMinutes}
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
-                                onSave={(saved) => {
-                                    onSave?.(saved);
+                                onSave={async (saved) => {
+                                    await onSave?.(saved);
                                     setShowPostMatchSheet(false);
                                     handleBackToCalendar();
                                 }}

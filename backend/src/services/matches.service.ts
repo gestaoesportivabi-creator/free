@@ -208,11 +208,16 @@ export const matchesService = {
       matchesRepository.findEstatisticasJogadores(jogo.id, tx),
     ]);
 
-    return transformMatchToFrontend(
+    const result = transformMatchToFrontend(
       jogo as any,
       estatisticasJogadores as any,
       estatisticasEquipe || undefined
     );
+    result.status = matchStatus as MatchRecord['status'];
+    if (metodoGol && result.teamStats) {
+      try { result.teamStats.goalMethodsScored = JSON.parse(metodoGol); } catch { /* ignore */ }
+    }
+    return result;
   },
 
   async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord> {
@@ -327,7 +332,18 @@ export const matchesService = {
       matchesRepository.findEstatisticasJogadores(id, tx),
     ]);
 
-    return transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe || undefined);
+    const result = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe || undefined);
+    const [statusMap, metodoGolMap] = await Promise.all([
+      matchesRepository.getStatusByIds([id]),
+      matchesRepository.getMetodoGolByJogoIds([id]),
+    ]);
+    const st = statusMap.get(id);
+    if (st) result.status = st as MatchRecord['status'];
+    const mg = metodoGolMap.get(id);
+    if (mg && result.teamStats) {
+      try { result.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+    }
+    return result;
   },
 
   async delete(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<boolean> {
