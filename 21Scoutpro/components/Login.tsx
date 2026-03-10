@@ -104,13 +104,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           setIsLoading(false);
         }
       } else {
-        // Login - chamar API do backend
-        // IMPORTANTE: Se o usuário digitar "admin", sempre usar "admin@admin.com"
-        const emailToUse = (email.trim() === 'admin' || email.trim() === 'admin@admin.com') 
-          ? 'admin@admin.com' 
-          : email.trim();
+        // Login - chamar API do backend (aceita email ou nome)
+        const identifier = email.trim();
         
-        console.log('🔐 Tentando login com email:', emailToUse);
+        console.log('🔐 Tentando login com:', identifier);
         
         const response = await fetch(`${getApiUrl()}/auth/login`, {
           method: 'POST',
@@ -118,7 +115,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            email: emailToUse,
+            email: identifier,
             password: password,
           }),
         });
@@ -234,14 +231,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           )}
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail</label>
+            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">{isRegistering ? 'E-mail' : 'E-mail ou Nome'}</label>
             <input
-              type="email"
+              type={isRegistering ? 'email' : 'text'}
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder="seu@email.com"
+              placeholder={isRegistering ? 'seu@email.com' : 'seu@email.com ou seu nome'}
             />
           </div>
 

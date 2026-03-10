@@ -21,15 +21,24 @@ export const authController = {
       if (!email || !password) {
         return res.status(400).json({
           success: false,
-          error: 'Email e senha são obrigatórios',
+          error: 'Email/nome e senha são obrigatórios',
         });
       }
 
-      // Buscar usuário
-      const user = await prisma.user.findUnique({
-        where: { email },
+      const identifier = String(email).trim();
+
+      // Buscar por email primeiro; se não encontrar, buscar por nome
+      let user = await prisma.user.findUnique({
+        where: { email: identifier },
         include: { role: true },
       });
+
+      if (!user) {
+        user = await prisma.user.findFirst({
+          where: { name: { equals: identifier, mode: 'insensitive' } },
+          include: { role: true },
+        });
+      }
 
       if (!user || !user.isActive) {
         throw new UnauthorizedError('Credenciais inválidas');
