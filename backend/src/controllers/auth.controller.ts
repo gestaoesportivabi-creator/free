@@ -224,9 +224,17 @@ export const authController = {
         });
       }
 
+      // select só com colunas que existem sem a migração 018 (evita 500 se team_* não existirem)
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        include: { role: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          photoUrl: true,
+          isActive: true,
+          role: { select: { name: true } },
+        },
       });
 
       if (!user || !user.isActive) {
@@ -236,17 +244,30 @@ export const authController = {
         });
       }
 
+      const data: { id: string; name: string; email: string; role: string; photoUrl?: string; teamDisplayName?: string; teamShieldUrl?: string } = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
+        photoUrl: user.photoUrl ?? undefined,
+      };
+      // Incluir team* se as colunas existirem (após migração 018) — busca em segundo passo para não quebrar sem migração
+      try {
+        const ext = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { teamDisplayName: true, teamShieldUrl: true },
+        });
+        if (ext) {
+          data.teamDisplayName = ext.teamDisplayName ?? undefined;
+          data.teamShieldUrl = ext.teamShieldUrl ?? undefined;
+        }
+      } catch (_) {
+        // colunas team_* podem não existir
+      }
+
       return res.json({
         success: true,
-        data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role.name,
-          photoUrl: user.photoUrl,
-          teamDisplayName: user.teamDisplayName ?? undefined,
-          teamShieldUrl: user.teamShieldUrl ?? undefined,
-        },
+        data,
       });
     } catch (error) {
       console.error('Erro ao buscar perfil:', error);

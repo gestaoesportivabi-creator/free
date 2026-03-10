@@ -43,10 +43,16 @@ export async function authMiddleware(
       email: string;
     };
 
-    // Buscar usuário no banco
+    // Buscar usuário no banco (select evita depender de colunas opcionais que podem não existir no DB)
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      include: { role: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        isActive: true,
+        role: { select: { name: true } },
+      },
     });
 
     if (!user || !user.isActive) {
@@ -58,7 +64,7 @@ export async function authMiddleware(
       id: user.id,
       email: user.email,
       name: user.name,
-      role_id: user.role.name, // Usar nome da role (TECNICO, ADMIN, etc) ao invés do UUID
+      role_id: user.role.name,
     };
 
     next();
