@@ -24,7 +24,6 @@ type JogoDB = {
   golsPro: number;
   golsContra: number;
   videoUrl: string | null;
-  status: string | null;
   createdAt: Date;
 };
 
@@ -138,7 +137,6 @@ export const matchesRepository = {
     playerRelationships?: object;
     lineup?: object;
     substitutionHistory?: object;
-    status?: string;
   }, tx?: TransactionClient): Promise<JogoDB> {
     return db(tx).jogo.create({
       data: {
@@ -156,7 +154,6 @@ export const matchesRepository = {
         playerRelationships: data.playerRelationships as any,
         lineup: data.lineup as any,
         substitutionHistory: data.substitutionHistory as any,
-        status: data.status || 'encerrado',
       },
     }) as Promise<JogoDB>;
   },
@@ -193,6 +190,27 @@ export const matchesRepository = {
       update: data,
       create: { jogoId, jogadorId, ...data } as any,
     }) as Promise<JogoEstatisticaJogadorDB>;
+  },
+
+  async setStatus(jogoId: string, status: string, tx?: TransactionClient): Promise<void> {
+    await db(tx).$executeRawUnsafe(
+      'UPDATE jogos SET status = $1 WHERE id = $2',
+      status,
+      jogoId
+    );
+  },
+
+  async getStatusByIds(jogoIds: string[]): Promise<Map<string, string>> {
+    if (jogoIds.length === 0) return new Map();
+    const rows = await prisma.$queryRawUnsafe<{ id: string; status: string }[]>(
+      `SELECT id, status FROM jogos WHERE id = ANY($1::text[])`,
+      jogoIds
+    );
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.status) map.set(r.id, r.status);
+    }
+    return map;
   },
 };
 

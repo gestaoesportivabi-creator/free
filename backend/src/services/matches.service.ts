@@ -31,14 +31,18 @@ export const matchesService = {
       porJogoJogadores.set(j.jogoId, arr);
     }
 
+    // Buscar status via raw SQL (coluna fora do Prisma schema)
+    const statusMap = await matchesRepository.getStatusByIds(jogoIds);
+
     const matches: MatchRecord[] = [];
     for (const jogo of jogos) {
       const estatisticasEquipe = porJogoEquipe.get(jogo.id);
       const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
       if (estatisticasEquipe) {
-        matches.push(
-          transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any)
-        );
+        const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+        const st = statusMap.get(jogo.id);
+        if (st) match.status = st as MatchRecord['status'];
+        matches.push(match);
       }
     }
     return matches;
@@ -54,7 +58,11 @@ export const matchesService = {
     ]);
     if (!estatisticasEquipe) throw new NotFoundError('Estatísticas do jogo', id);
 
-    return transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+    const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+    const statusMap = await matchesRepository.getStatusByIds([id]);
+    const st = statusMap.get(id);
+    if (st) match.status = st as MatchRecord['status'];
+    return match;
   },
 
   async create(data: any, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord> {
@@ -104,8 +112,11 @@ export const matchesService = {
       playerRelationships: data.playerRelationships,
       lineup: data.lineup,
       substitutionHistory: data.substitutionHistory,
-      status: data.status || 'encerrado',
     }, tx);
+
+    // Salvar status via raw SQL (coluna fora do Prisma schema)
+    const matchStatus = data.status || 'encerrado';
+    await matchesRepository.setStatus(jogo.id, matchStatus, tx);
 
     // Extrair métodos de gol do postMatchEventLog
     let metodoGol: string | null = null;
@@ -209,9 +220,12 @@ export const matchesService = {
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
     if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
-    if (data.status !== undefined) jogoUpdate.status = data.status;
-
     const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
+
+    // Salvar status via raw SQL (coluna fora do Prisma schema)
+    if (data.status !== undefined) {
+      await matchesRepository.setStatus(id, data.status, tx);
+    }
 
     // Update team stats if provided
     const teamStats = data.teamStats;
