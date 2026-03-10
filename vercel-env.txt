@@ -23,19 +23,18 @@
 # BACKEND - Variáveis obrigatórias
 # ============================================
 #
-# Projeto Supabase: mymuvraqtnoqrtuzoimj (alinhado com backend/.env)
-# Se usar outro projeto, ajuste as URLs no Supabase Dashboard.
+# Projeto Supabase: jhjrqnggsfeztgkpqcjm (alinhado com package.json supabase:link)
+# Use os MESMOS valores em backend/.env para que local e produção acessem o mesmo banco.
 #
 
 # DATABASE_URL - Use pooler (porta 6543) para serverless
 # Senha com # deve ser codificada como %23
-DATABASE_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+DATABASE_URL=postgresql://postgres.jhjrqnggsfeztgkpqcjm:%23Gestaoesportiva21@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
 
-# DIRECT_URL - Session pooler (porta 5432 no host pooler)
-# O host db.xxx.supabase.co não é acessível do Vercel serverless - use o pooler
-DIRECT_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:%23Gestaoesportiva21@aws-1-us-east-1.pooler.supabase.com:5432/postgres
+# DIRECT_URL - Conexão direta (porta 5432) - obrigatório para Prisma
+DIRECT_URL=postgresql://postgres:%23Gestaoesportiva21@db.jhjrqnggsfeztgkpqcjm.supabase.co:5432/postgres?sslmode=require
 
-# Gere uma chave secreta forte (veja comando abaixo)
+# OBRIGATÓRIO: use o MESMO JWT_SECRET do backend/.env para tokens funcionarem em local e produção
 JWT_SECRET=sua-chave-secreta-forte-aqui
 
 JWT_EXPIRES_IN=7d

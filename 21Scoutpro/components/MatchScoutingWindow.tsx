@@ -2488,32 +2488,90 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </div>
               )}
               {goalStep === 'confirm' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() =>
-                        handleRegisterGoal(
-                          pendingGoalType || 'normal',
-                          pendingGoalIsOpponent,
-                          pendingGoalPlayerId
-                        )
-                      }
-                      className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-lg transition-colors whitespace-nowrap"
-                    >
-                      Confirmar Gol
-                    </button>
-                    <button
-                      onClick={() => {
-                        setGoalStep(null);
-                        setPendingGoalType(null);
-                        setPendingGoalIsOpponent(false);
-                        setPendingGoalPlayerId(null);
-                        setPendingGoalTime(null);
-                      }}
-                      className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-xs rounded-lg transition-colors"
-                    >
-                      Cancelar
-                    </button>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => {
+                      setGoalStep(null);
+                      setPendingGoalType(null);
+                      setPendingGoalIsOpponent(false);
+                      setPendingGoalPlayerId(null);
+                      setPendingGoalTime(null);
+                    }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-green-400 font-black uppercase text-sm tracking-wider flex items-center gap-2">
+                        <Goal size={18} />
+                        Confirmar Gol
+                      </h3>
+                      <p className="text-zinc-500 text-xs mt-1">Revise os dados antes de confirmar</p>
+                    </div>
+                    <div className="p-5 space-y-3">
+                      <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                        <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Equipe</span>
+                        <span className={`text-sm font-bold ${pendingGoalIsOpponent ? 'text-red-400' : 'text-green-400'}`}>
+                          {pendingGoalIsOpponent ? 'Adversário' : pendingGoalType === 'contra' ? 'Gol Contra' : 'Nosso Time'}
+                        </span>
+                      </div>
+                      {pendingGoalPlayerId && (() => {
+                        const p = players.find((x) => String(x.id).trim() === pendingGoalPlayerId);
+                        return (
+                          <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                            <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Autor</span>
+                            <span className="text-white text-sm font-bold">
+                              {p?.jerseyNumber ? `#${p.jerseyNumber} ` : ''}{p?.nickname || p?.name || '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {pendingGoalMethod && (() => {
+                        const ui = GOAL_METHOD_UI[pendingGoalMethod] || { icon: <Goal size={16} />, bg: 'bg-zinc-600', text: 'text-white' };
+                        return (
+                          <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                            <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Método</span>
+                            <span className={`flex items-center gap-2 text-sm font-bold ${ui.text}`}>
+                              {ui.icon} {pendingGoalMethod}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {pendingGoalTime !== null && (
+                        <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
+                          <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Tempo</span>
+                          <span className="text-[#00f0ff] text-sm font-bold">
+                            {Math.floor(pendingGoalTime / 60)}&apos;{String(pendingGoalTime % 60).padStart(2, '0')}&quot;
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex gap-3">
+                      <button
+                        onClick={() =>
+                          handleRegisterGoal(
+                            pendingGoalType || 'normal',
+                            pendingGoalIsOpponent,
+                            pendingGoalPlayerId
+                          )
+                        }
+                        className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-500/20"
+                      >
+                        Confirmar Gol
+                      </button>
+                      <button
+                        onClick={() => {
+                          setGoalStep(null);
+                          setPendingGoalType(null);
+                          setPendingGoalIsOpponent(false);
+                          setPendingGoalPlayerId(null);
+                          setPendingGoalTime(null);
+                        }}
+                        className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
