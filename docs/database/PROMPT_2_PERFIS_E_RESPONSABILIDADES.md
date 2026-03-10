@@ -1,7 +1,7 @@
 # PROMPT 2 — PERFIS DE USO E RESPONSABILIDADE DOS DADOS
 
 ## Objetivo
-Definir quem cria, quem vê e quem é dono dos dados no SCOUT21PRO, baseado no fluxo "Crie sua conta → Monte sua equipe → Registre jogos" da landing page.
+Definir quem cria, quem vê e quem é dono dos dados no SCOUT21, baseado no fluxo "Crie sua conta → Monte sua equipe → Registre jogos" da landing page.
 
 ---
 
@@ -321,4 +321,4 @@ Conta → Clube → Equipe → Dados Operacionais
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO e fluxo "Como Funciona"
+**Baseado em:** Landing Page do SCOUT21 e fluxo "Como Funciona"

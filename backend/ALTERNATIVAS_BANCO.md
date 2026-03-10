@@ -15,14 +15,14 @@ Funciona **offline** e não depende de internet.
 
 **1. Subir o PostgreSQL:**
 ```powershell
-docker run --name scout21pro-db -e POSTGRES_USER=scout21pro -e POSTGRES_PASSWORD=scout21pro -e POSTGRES_DB=scout21pro -p 5432:5432 -d postgres:14
+docker run --name scout21-db -e POSTGRES_USER=scout21 -e POSTGRES_PASSWORD=scout21 -e POSTGRES_DB=scout21 -p 5432:5432 -d postgres:14
 ```
 
 **2. Atualizar o `backend/.env`:**
 ```env
 # PostgreSQL Local (Docker)
-DATABASE_URL=postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public
-DIRECT_URL=postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public
+DATABASE_URL=postgresql://scout21:scout21@localhost:5432/scout21?schema=public
+DIRECT_URL=postgresql://scout21:scout21@localhost:5432/scout21?schema=public
 ```
 
 **3. Criar tabelas e popular dados:**
@@ -41,13 +41,13 @@ npm run dev
 ### Comandos úteis Docker
 ```powershell
 # Parar o banco
-docker stop scout21pro-db
+docker stop scout21-db
 
 # Iniciar novamente
-docker start scout21pro-db
+docker start scout21-db
 
 # Remover (se precisar recriar)
-docker rm -f scout21pro-db
+docker rm -f scout21-db
 ```
 
 ---
@@ -84,12 +84,12 @@ Se preferir instalar o PostgreSQL diretamente (sem Docker):
 
 1. Baixe: **https://www.postgresql.org/download/windows/**
 2. Instale e anote a senha do usuário `postgres`
-3. Crie o banco: `createdb scout21pro` (ou via pgAdmin)
+3. Crie o banco: `createdb scout21` (ou via pgAdmin)
 4. Atualize o `.env`:
 
 ```env
-DATABASE_URL=postgresql://postgres:SUA_SENHA@localhost:5432/scout21pro?schema=public
-DIRECT_URL=postgresql://postgres:SUA_SENHA@localhost:5432/scout21pro?schema=public
+DATABASE_URL=postgresql://postgres:SUA_SENHA@localhost:5432/scout21?schema=public
+DIRECT_URL=postgresql://postgres:SUA_SENHA@localhost:5432/scout21?schema=public
 ```
 
 ---

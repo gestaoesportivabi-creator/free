@@ -1,7 +1,7 @@
 # PROMPT 5 — JOGO COMO EVENTO CENTRAL DO SISTEMA
 
 ## Objetivo
-Definir o conceito de **JOGO** como evento central do SCOUT21PRO, alinhando "Scout de Jogo" com a estrutura de banco de dados.
+Definir o conceito de **JOGO** como evento central do SCOUT21, alinhando "Scout de Jogo" com a estrutura de banco de dados.
 
 ---
 
@@ -440,4 +440,4 @@ Jogo (concluído)
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - "Scout de Jogo"
+**Baseado em:** Landing Page do SCOUT21 - "Scout de Jogo"

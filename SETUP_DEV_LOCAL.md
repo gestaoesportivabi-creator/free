@@ -38,7 +38,7 @@ PORT=3000
 NODE_ENV=development
 
 # JWT - Chave secreta para autenticação
-JWT_SECRET=scout21pro-secret-key-change-in-production-2024
+JWT_SECRET=scout21-secret-key-change-in-production-2024
 JWT_EXPIRES_IN=7d
 
 # CORS - URL do frontend local

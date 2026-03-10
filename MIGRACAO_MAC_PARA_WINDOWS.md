@@ -1,6 +1,6 @@
 # 🪟 Migração Mac → Windows
 
-Guia para rodar o projeto SCOUT 21 PRO no Windows (o projeto foi desenvolvido no Mac).
+Guia para rodar o projeto SCOUT 21 no Windows (o projeto foi desenvolvido no Mac).
 
 ---
 
@@ -35,7 +35,7 @@ Os arquivos `.sh` são para **Mac/Linux** e **não rodam nativamente** no Window
 
 **Exemplo – Banco com Docker (em vez de `setup-database.sh`):**
 ```powershell
-docker run --name scout21pro-db -e POSTGRES_USER=scout21pro -e POSTGRES_PASSWORD=scout21pro -e POSTGRES_DB=scout21pro -p 5432:5432 -d postgres:14
+docker run --name scout21-db -e POSTGRES_USER=scout21 -e POSTGRES_PASSWORD=scout21 -e POSTGRES_DB=scout21 -p 5432:5432 -d postgres:14
 ```
 
 ### 2. Separador de caminhos

@@ -1,4 +1,4 @@
-# SCOUT 21 PRO - Backend PostgreSQL
+# SCOUT 21 - Backend PostgreSQL
 
 Backend completo para sistema de gestão esportiva, construído com Node.js, Express, TypeScript e PostgreSQL.
 
@@ -87,7 +87,7 @@ O sistema usa PostgreSQL com schema completo definido em `migrations/`.
 
 Para criar o banco:
 ```bash
-createdb scout21pro
+createdb scout21
 npm run migrate
 ```
 

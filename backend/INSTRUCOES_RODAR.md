@@ -41,7 +41,7 @@ Edite `.env` com suas configurações:
 npx prisma migrate dev --name init
 
 # OU executar migrations SQL manualmente
-psql -d scout21pro -f migrations/000_seed_roles.sql
+psql -d scout21 -f migrations/000_seed_roles.sql
 # ... (executar todas as migrations na ordem)
 ```
 

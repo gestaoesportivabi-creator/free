@@ -415,4 +415,4 @@ Definir como o banco de dados deve permitir histórico completo do atleta, evolu
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - "Evolução e Ranking" e "Acompanhe evolução"
+**Baseado em:** Landing Page do SCOUT21 - "Evolução e Ranking" e "Acompanhe evolução"

@@ -97,7 +97,7 @@ const ImageCarousel: React.FC = () => {
         >
           <img
             src={img}
-            alt={`SCOUT21PRO - ${idx + 1}`}
+            alt={`SCOUT21 - ${idx + 1}`}
             className="w-full h-full object-cover"
             loading="lazy"
           />
@@ -177,7 +177,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
         <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-12 py-3 md:py-4">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center shrink-0">
-              <img src="/public-logo.png.png" alt="SCOUT21PRO Logo" className="h-12 md:h-14 w-auto" />
+              <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-12 md:h-14 w-auto" />
             </div>
             <div className="hidden md:flex items-center gap-8">
               {NAV_LINKS.map(({ href, label }) => (
@@ -227,7 +227,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
             </div>
           </div>
           <div className="relative w-full md:max-w-[65%] lg:max-w-[62%] xl:max-w-[65%] md:flex-shrink-0 flex items-start justify-end -mt-4 md:-mt-8">
-            <img src="/gestaoespo.png" alt="SCOUT21PRO — interface de gestão esportiva e scout" className="relative z-10 w-full max-w-[820px] h-auto object-contain py-px box-content" />
+            <img src="/gestaoespo.png" alt="SCOUT21 — interface de gestão esportiva e scout" className="relative z-10 w-full max-w-[820px] h-auto object-contain py-px box-content" />
           </div>
         </div>
       </header>
@@ -333,7 +333,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
       <section id="diferenciais" ref={refDiferenciais} className={`py-24 px-4 sm:px-6 transition-all duration-700 ${inViewDiferenciais ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="landing-headline text-4xl md:text-5xl text-white mb-4">Por Que SCOUT21PRO?</h2>
+            <h2 className="landing-headline text-4xl md:text-5xl text-white mb-4">Por Que SCOUT21?</h2>
             <div className="w-24 h-1 bg-[#00f0ff] mx-auto"></div>
           </div>
           
@@ -602,21 +602,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
         </div>
       </section>
 
-      <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20mais%20informações%20sobre%20o%20SCOUT21PRO" target="_blank" rel="noopener noreferrer" className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-[#25D366] text-white shadow-lg hover:bg-[#20bd5a] hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 focus:ring-offset-black" aria-label="Contato pelo WhatsApp">
+      <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20mais%20informações%20sobre%20o%20SCOUT21" target="_blank" rel="noopener noreferrer" className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-[#25D366] text-white shadow-lg hover:bg-[#20bd5a] hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 focus:ring-offset-black" aria-label="Contato pelo WhatsApp">
         <WhatsAppIcon className="w-8 h-8" />
       </a>
 
       <footer className="py-12 px-4 sm:px-6 bg-black border-t border-zinc-800">
         <div className="max-w-5xl mx-auto text-center space-y-4">
           <div className="inline-flex items-center justify-center">
-            <img src="/public-logo.png.png" alt="SCOUT21PRO Logo" className="h-12 w-auto" />
+            <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-12 w-auto" />
           </div>
           <p className="landing-body text-zinc-500">
             Plataforma brasileira de gestão e performance para futsal
           </p>
           <div className="pt-8 border-t border-zinc-900">
             <p className="landing-body text-zinc-700 text-xs">
-              © 2026 SCOUT21PRO. Todos os direitos reservados.
+              © 2026 SCOUT21. Todos os direitos reservados.
             </p>
           </div>
         </div>

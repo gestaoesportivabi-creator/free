@@ -1,11 +1,11 @@
 # Entidades Conceituais do Banco de Dados
-## Baseado na Análise da Landing Page do SCOUT21PRO
+## Baseado na Análise da Landing Page do SCOUT21
 
 ---
 
 ## 📋 RESUMO EXECUTIVO
 
-Este documento lista todas as **entidades conceituais** que PRECISAM existir no banco de dados do SCOUT21PRO, baseado exclusivamente no conteúdo prometido na landing page. O objetivo é garantir que o banco de dados represente fielmente o que o produto promete.
+Este documento lista todas as **entidades conceituais** que PRECISAM existir no banco de dados do SCOUT21, baseado exclusivamente no conteúdo prometido na landing page. O objetivo é garantir que o banco de dados represente fielmente o que o produto promete.
 
 ---
 
@@ -344,4 +344,4 @@ Campeonato/Competição
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO (branch `landingPage`)
+**Baseado em:** Landing Page do SCOUT21 (branch `landingPage`)

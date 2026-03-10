@@ -349,4 +349,4 @@ Programação (genérica)
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - "Programação"
+**Baseado em:** Landing Page do SCOUT21 - "Programação"

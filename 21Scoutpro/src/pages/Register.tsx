@@ -67,7 +67,7 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
                         <div className="relative w-40 h-40 flex items-center justify-center border-[3px] border-[#00f0ff] bg-black/60 shadow-[0_0_40px_rgba(0,240,255,0.3)] rounded-2xl transform rotate-3 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_50px_rgba(0,240,255,0.5)] overflow-hidden">
                             <img
                                 src={LOGO_IMAGE}
-                                alt="SCOUT21PRO"
+                                alt="SCOUT21"
                                 className="w-full h-full object-contain p-4"
                             />
                         </div>
@@ -155,12 +155,12 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
                     <div className="h-[1px] w-40 bg-gradient-to-r from-transparent via-zinc-600 to-transparent"></div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-700/70 backdrop-blur-sm rounded-md">
                         <span className="text-zinc-300 font-light text-xs md:text-sm tracking-wide">
-                            Junte-se ao <span className="text-[#00f0ff] font-bold italic">SCOUT21PRO</span>
+                            Junte-se ao <span className="text-[#00f0ff] font-bold italic">SCOUT21</span>
                         </span>
                         <div className="w-5 h-5 border border-zinc-600/50 rounded flex items-center justify-center bg-black/90 shrink-0 ml-1 overflow-hidden">
                             <img
                                 src={LOGO_IMAGE}
-                                alt="SCOUT21PRO"
+                                alt="SCOUT21"
                                 className="w-full h-full object-contain p-0.5"
                             />
                         </div>

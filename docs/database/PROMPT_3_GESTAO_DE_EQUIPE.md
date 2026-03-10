@@ -365,4 +365,4 @@ Atleta: Maria Santos
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - "Gestão de Equipe" e "Monte sua equipe"
+**Baseado em:** Landing Page do SCOUT21 - "Gestão de Equipe" e "Monte sua equipe"

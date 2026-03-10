@@ -370,4 +370,4 @@ Clube
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - Multi-tenancy implícito e "Pensado para clubes pequenos e médios do Brasil"
+**Baseado em:** Landing Page do SCOUT21 - Multi-tenancy implícito e "Pensado para clubes pequenos e médios do Brasil"

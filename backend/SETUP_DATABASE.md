@@ -16,10 +16,10 @@
 
 3. **Ou criar manualmente:**
    ```bash
-   docker run --name scout21pro-postgres \
-     -e POSTGRES_USER=scout21pro \
-     -e POSTGRES_PASSWORD=scout21pro \
-     -e POSTGRES_DB=scout21pro \
+   docker run --name scout21-postgres \
+     -e POSTGRES_USER=scout21 \
+     -e POSTGRES_PASSWORD=scout21 \
+     -e POSTGRES_DB=scout21 \
      -p 5432:5432 \
      -d postgres:14
    ```
@@ -34,19 +34,19 @@
 
 2. **Criar banco de dados:**
    ```bash
-   createdb scout21pro
+   createdb scout21
    ```
 
 3. **Atualizar .env:**
    ```bash
-   DATABASE_URL="postgresql://$(whoami)@localhost:5432/scout21pro?schema=public"
+   DATABASE_URL="postgresql://$(whoami)@localhost:5432/scout21?schema=public"
    ```
 
 ### Opção 3: PostgreSQL Local (Instalação Manual)
 
 1. Baixe do site oficial: https://www.postgresql.org/download/
 2. Siga as instruções de instalação
-3. Crie o banco: `createdb scout21pro`
+3. Crie o banco: `createdb scout21`
 4. Atualize o `.env` com suas credenciais
 
 ## 🔄 Executar Migrations
@@ -61,15 +61,15 @@ npx prisma migrate dev --name init
 
 # Opção B: Executar migrations SQL manualmente
 # Primeiro, execute a migration de roles:
-psql -d scout21pro -f migrations/000_seed_roles.sql
+psql -d scout21 -f migrations/000_seed_roles.sql
 
 # Depois, execute as outras migrations na ordem:
-psql -d scout21pro -f migrations/001_add_missing_fields.sql
-psql -d scout21pro -f migrations/002_normalize_competitions.sql
-psql -d scout21pro -f migrations/003_fix_lesoes_and_add_constraints.sql
-psql -d scout21pro -f migrations/004_add_programacoes_and_campeonatos_fields.sql
-psql -d scout21pro -f migrations/005_add_eav_constraints_and_validation.sql
-psql -d scout21pro -f migrations/006_add_multitenancy_indexes.sql
+psql -d scout21 -f migrations/001_add_missing_fields.sql
+psql -d scout21 -f migrations/002_normalize_competitions.sql
+psql -d scout21 -f migrations/003_fix_lesoes_and_add_constraints.sql
+psql -d scout21 -f migrations/004_add_programacoes_and_campeonatos_fields.sql
+psql -d scout21 -f migrations/005_add_eav_constraints_and_validation.sql
+psql -d scout21 -f migrations/006_add_multitenancy_indexes.sql
 ```
 
 ## ✅ Verificar se Está Funcionando
@@ -80,7 +80,7 @@ cd backend
 npx prisma db pull
 
 # Ou testar conexão direta
-psql -d scout21pro -c "SELECT version();"
+psql -d scout21 -c "SELECT version();"
 ```
 
 ## 🔧 Atualizar .env
@@ -88,17 +88,17 @@ psql -d scout21pro -c "SELECT version();"
 Certifique-se de que o arquivo `.env` tem a URL correta:
 
 ```env
-DATABASE_URL="postgresql://usuario:senha@localhost:5432/scout21pro?schema=public"
+DATABASE_URL="postgresql://usuario:senha@localhost:5432/scout21?schema=public"
 ```
 
 **Para Docker:**
 ```env
-DATABASE_URL="postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public"
+DATABASE_URL="postgresql://scout21:scout21@localhost:5432/scout21?schema=public"
 ```
 
 **Para PostgreSQL local (sem senha):**
 ```env
-DATABASE_URL="postgresql://$(whoami)@localhost:5432/scout21pro?schema=public"
+DATABASE_URL="postgresql://$(whoami)@localhost:5432/scout21?schema=public"
 ```
 
 ## 🚨 Problemas Comuns
@@ -109,9 +109,9 @@ DATABASE_URL="postgresql://$(whoami)@localhost:5432/scout21pro?schema=public"
 - Verifique as credenciais no `.env`
 
 ### Erro: "database does not exist"
-- Crie o banco: `createdb scout21pro`
+- Crie o banco: `createdb scout21`
 - Ou use Docker que cria automaticamente
 
 ### Erro: "role does not exist"
-- Execute a migration de roles: `psql -d scout21pro -f migrations/000_seed_roles.sql`
+- Execute a migration de roles: `psql -d scout21 -f migrations/000_seed_roles.sql`
 

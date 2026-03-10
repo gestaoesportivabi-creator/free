@@ -66,13 +66,13 @@ Se funcionar, o schema será baixado. Se falhar, o problema é de rede ou creden
 Se o Supabase não estiver acessível, use Docker para rodar PostgreSQL localmente:
 
 ```powershell
-docker run --name scout21pro-postgres -e POSTGRES_USER=scout21pro -e POSTGRES_PASSWORD=scout21pro -e POSTGRES_DB=scout21pro -p 5432:5432 -d postgres:14
+docker run --name scout21-postgres -e POSTGRES_USER=scout21 -e POSTGRES_PASSWORD=scout21 -e POSTGRES_DB=scout21 -p 5432:5432 -d postgres:14
 ```
 
 Depois atualize o `backend/.env`:
 
 ```env
-DATABASE_URL=postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public
+DATABASE_URL=postgresql://scout21:scout21@localhost:5432/scout21?schema=public
 ```
 
 E execute as migrations:

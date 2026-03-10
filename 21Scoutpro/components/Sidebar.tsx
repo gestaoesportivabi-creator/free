@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         <div className="w-12 h-12 border-2 border-white rounded-xl flex items-center justify-center bg-black shrink-0 shadow-[0_0_15px_rgba(255,255,255,0.1)] overflow-hidden">
              <img 
                 src={LOGO_IMAGE} 
-                alt="SCOUT21PRO" 
+                alt="SCOUT21" 
                 className="w-full h-full object-contain p-1.5"
              />
         </div>

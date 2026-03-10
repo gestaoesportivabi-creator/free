@@ -1,4 +1,4 @@
-# 🗄️ Opções de Banco de Dados - SCOUT 21 PRO
+# 🗄️ Opções de Banco de Dados - SCOUT 21
 
 ## 📊 Análise Comparativa
 
@@ -339,11 +339,11 @@ Esta aba armazena as metas de estatísticas. Pode ter apenas 1 linha ou várias 
 
 ```sql
 -- ============================================
--- SCOUT 21 PRO - Estrutura de Banco de Dados
+-- SCOUT 21 - Estrutura de Banco de Dados
 -- ============================================
 
-CREATE DATABASE IF NOT EXISTS scout21pro CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE scout21pro;
+CREATE DATABASE IF NOT EXISTS scout21 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE scout21;
 
 -- ============================================
 -- TABELA: players (Jogadores)

@@ -220,7 +220,7 @@ O schema Prisma final está **completo e validado** contra:
 - ✅ Requisitos da landing page
 - ✅ Princípios de design estabelecidos
 
-O banco de dados está pronto para representar fielmente o produto SCOUT21PRO conforme prometido na landing page.
+O banco de dados está pronto para representar fielmente o produto SCOUT21 conforme prometido na landing page.
 
 ---
 

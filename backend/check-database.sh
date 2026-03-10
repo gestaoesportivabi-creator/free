@@ -15,11 +15,11 @@ echo ""
 echo "📦 Verificando Docker..."
 if command -v docker &> /dev/null; then
     echo "✅ Docker instalado"
-    if docker ps | grep -q scout21pro-postgres; then
+    if docker ps | grep -q scout21-postgres; then
         echo "✅ Container PostgreSQL rodando"
     else
         echo "⚠️  Container PostgreSQL não está rodando"
-        echo "   Execute: docker start scout21pro-postgres"
+        echo "   Execute: docker start scout21-postgres"
     fi
 else
     echo "⚠️  Docker não instalado"

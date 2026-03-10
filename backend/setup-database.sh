@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Script para configurar o banco de dados PostgreSQL
-# SCOUT 21 PRO - Backend Setup
+# SCOUT 21 - Backend Setup
 
 set -e
 
-echo "🚀 Configurando banco de dados PostgreSQL para SCOUT 21 PRO..."
+echo "🚀 Configurando banco de dados PostgreSQL para SCOUT 21..."
 
 # Verificar se Docker está instalado
 if ! command -v docker &> /dev/null; then
@@ -14,10 +14,10 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Nome do container
-CONTAINER_NAME="scout21pro-postgres"
-DB_NAME="scout21pro"
-DB_USER="scout21pro"
-DB_PASSWORD="scout21pro"
+CONTAINER_NAME="scout21-postgres"
+DB_NAME="scout21"
+DB_USER="scout21"
+DB_PASSWORD="scout21"
 DB_PORT="5432"
 
 # Verificar se o container já existe

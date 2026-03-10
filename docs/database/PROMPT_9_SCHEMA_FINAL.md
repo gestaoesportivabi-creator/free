@@ -1,7 +1,7 @@
 # PROMPT 9 — CONVERSÃO FINAL EM BANCO DE DADOS
 
 ## Objetivo
-Criar a estrutura de banco de dados do SCOUT21PRO baseada em TODAS as definições dos prompts anteriores, garantindo coerência com a landing page, uso real, simplicidade e escalabilidade.
+Criar a estrutura de banco de dados do SCOUT21 baseada em TODAS as definições dos prompts anteriores, garantindo coerência com a landing page, uso real, simplicidade e escalabilidade.
 
 ---
 

@@ -1,7 +1,7 @@
 # Script para configurar o banco de dados PostgreSQL no Windows
-# SCOUT 21 PRO - Backend Setup (equivalente ao setup-database.sh do Mac)
+# SCOUT 21 - Backend Setup (equivalente ao setup-database.sh do Mac)
 
-Write-Host "Configurando banco de dados PostgreSQL para SCOUT 21 PRO..." -ForegroundColor Cyan
+Write-Host "Configurando banco de dados PostgreSQL para SCOUT 21..." -ForegroundColor Cyan
 
 # Verificar se Docker está instalado
 try {
@@ -12,10 +12,10 @@ try {
     exit 1
 }
 
-$CONTAINER_NAME = "scout21pro-db"
-$DB_NAME = "scout21pro"
-$DB_USER = "scout21pro"
-$DB_PASSWORD = "scout21pro"
+$CONTAINER_NAME = "scout21-db"
+$DB_NAME = "scout21"
+$DB_USER = "scout21"
+$DB_PASSWORD = "scout21"
 $DB_PORT = "5432"
 
 # Verificar se o container já existe
@@ -46,8 +46,8 @@ Write-Host ""
 Write-Host "Banco configurado com sucesso!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Atualize o backend/.env com:" -ForegroundColor Yellow
-Write-Host "DATABASE_URL=postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public"
-Write-Host "DIRECT_URL=postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public"
+Write-Host "DATABASE_URL=postgresql://scout21:scout21@localhost:5432/scout21?schema=public"
+Write-Host "DIRECT_URL=postgresql://scout21:scout21@localhost:5432/scout21?schema=public"
 Write-Host ""
 Write-Host "Depois execute:" -ForegroundColor Yellow
 Write-Host "  npx prisma db push"

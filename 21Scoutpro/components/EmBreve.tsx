@@ -12,7 +12,7 @@ export const EmBreve: React.FC = () => (
       {MENSAGEM_EM_BREVE}
     </p>
     <a
-      href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20sugestões%20e%20informações%20sobre%20o%20SCOUT21PRO."
+      href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20sugestões%20e%20informações%20sobre%20o%20SCOUT21."
       target="_blank"
       rel="noopener noreferrer"
       className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-white text-sm font-medium rounded-xl transition-colors"

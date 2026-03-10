@@ -472,4 +472,4 @@ Definir como o banco de dados deve suportar scout individual, scout coletivo, in
 ---
 
 **Documento criado em:** 2026-01-09  
-**Baseado em:** Landing Page do SCOUT21PRO - "Scout de Jogo" e "Transforme informação em vantagem competitiva"
+**Baseado em:** Landing Page do SCOUT21 - "Scout de Jogo" e "Transforme informação em vantagem competitiva"

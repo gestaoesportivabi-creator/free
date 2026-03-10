@@ -39,17 +39,17 @@ Ou execute as migrations SQL manualmente (veja [SETUP_DATABASE.md](./SETUP_DATAB
 
 ### 1. Criar Container
 ```bash
-docker run --name scout21pro-postgres \
-  -e POSTGRES_USER=scout21pro \
-  -e POSTGRES_PASSWORD=scout21pro \
-  -e POSTGRES_DB=scout21pro \
+docker run --name scout21-postgres \
+  -e POSTGRES_USER=scout21 \
+  -e POSTGRES_PASSWORD=scout21 \
+  -e POSTGRES_DB=scout21 \
   -p 5432:5432 \
   -d postgres:14
 ```
 
 ### 2. Configurar .env
 ```env
-DATABASE_URL="postgresql://scout21pro:scout21pro@localhost:5432/scout21pro?schema=public"
+DATABASE_URL="postgresql://scout21:scout21@localhost:5432/scout21?schema=public"
 ```
 
 ### 3. Executar Migrations
@@ -74,7 +74,7 @@ O servidor estará em `http://localhost:3000`
 curl http://localhost:3000/health
 
 # Deve retornar:
-# {"success":true,"message":"SCOUT 21 PRO Backend is running"}
+# {"success":true,"message":"SCOUT 21 Backend is running"}
 ```
 
 ## 📚 Documentação Completa
