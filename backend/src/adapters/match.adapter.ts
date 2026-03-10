@@ -47,7 +47,6 @@ interface JogoEstatisticaEquipeDB {
   golsMarcadosBolaParada: number;
   golsSofridosJogoAberto: number;
   golsSofridosBolaParada: number;
-  metodoGol?: string | null;
 }
 
 interface JogoEstatisticaJogadorDB {
@@ -124,12 +123,6 @@ export function transformMatchToFrontend(
         tacklesCounterAttack: 0,
         transitionErrors: 0,
       };
-
-  if (estatisticasEquipe?.metodoGol) {
-    try {
-      teamStats.goalMethodsScored = JSON.parse(estatisticasEquipe.metodoGol);
-    } catch { /* ignore parse errors */ }
-  }
 
   // Formatar data para string YYYY-MM-DD
   const dateStr = typeof jogo.data === 'string' 

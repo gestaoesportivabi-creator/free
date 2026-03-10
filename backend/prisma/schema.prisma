@@ -181,7 +181,7 @@ model JogosEstatisticasEquipe {
   golsMarcadosBolaParada Int    @default(0) @map("gols_marcados_bola_parada")
   golsSofridosJogoAberto Int     @default(0) @map("gols_sofridos_jogo_aberto")
   golsSofridosBolaParada Int     @default(0) @map("gols_sofridos_bola_parada")
-  metodoGol              String? @map("metodo_gol")
+  // metodoGol gerenciado via raw SQL (coluna existe no banco mas fora do Prisma para evitar cache stale no Vercel)
   jogo                   Jogo    @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@map("jogos_estatisticas_equipe")

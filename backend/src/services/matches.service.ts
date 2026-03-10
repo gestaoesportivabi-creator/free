@@ -31,8 +31,10 @@ export const matchesService = {
       porJogoJogadores.set(j.jogoId, arr);
     }
 
-    // Buscar status via raw SQL (coluna fora do Prisma schema)
-    const statusMap = await matchesRepository.getStatusByIds(jogoIds);
+    const [statusMap, metodoGolMap] = await Promise.all([
+      matchesRepository.getStatusByIds(jogoIds),
+      matchesRepository.getMetodoGolByJogoIds(jogoIds),
+    ]);
 
     const matches: MatchRecord[] = [];
     for (const jogo of jogos) {
@@ -42,6 +44,10 @@ export const matchesService = {
         const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
         const st = statusMap.get(jogo.id);
         if (st) match.status = st as MatchRecord['status'];
+        const mg = metodoGolMap.get(jogo.id);
+        if (mg && match.teamStats) {
+          try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+        }
         matches.push(match);
       }
     }
@@ -59,9 +65,16 @@ export const matchesService = {
     if (!estatisticasEquipe) throw new NotFoundError('Estatísticas do jogo', id);
 
     const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
-    const statusMap = await matchesRepository.getStatusByIds([id]);
+    const [statusMap, metodoGolMap] = await Promise.all([
+      matchesRepository.getStatusByIds([id]),
+      matchesRepository.getMetodoGolByJogoIds([id]),
+    ]);
     const st = statusMap.get(id);
     if (st) match.status = st as MatchRecord['status'];
+    const mg = metodoGolMap.get(id);
+    if (mg && match.teamStats) {
+      try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+    }
     return match;
   },
 
@@ -156,8 +169,11 @@ export const matchesService = {
       golsMarcadosBolaParada: 0,
       golsSofridosJogoAberto: 0,
       golsSofridosBolaParada: 0,
-      metodoGol,
     }, tx);
+
+    if (metodoGol) {
+      await matchesRepository.setMetodoGol(jogo.id, metodoGol, tx);
+    }
 
     const jogadoresTenant = await playersRepository.findAll(tenantInfo, tx);
     const validJogadorIds = new Set(jogadoresTenant.map((j) => j.id));
@@ -267,8 +283,11 @@ export const matchesService = {
         golsMarcadosBolaParada: 0,
         golsSofridosJogoAberto: 0,
         golsSofridosBolaParada: 0,
-        metodoGol,
       }, tx);
+
+      if (metodoGol) {
+        await matchesRepository.setMetodoGol(id, metodoGol, tx);
+      }
     }
 
     // Update player stats if provided

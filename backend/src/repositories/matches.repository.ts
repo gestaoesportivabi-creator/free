@@ -49,7 +49,6 @@ type JogoEstatisticaEquipeDB = {
   golsMarcadosBolaParada: number;
   golsSofridosJogoAberto: number;
   golsSofridosBolaParada: number;
-  metodoGol: string | null;
 };
 
 type JogoEstatisticaJogadorDB = {
@@ -209,6 +208,27 @@ export const matchesRepository = {
     const map = new Map<string, string>();
     for (const r of rows) {
       if (r.status) map.set(r.id, r.status);
+    }
+    return map;
+  },
+
+  async setMetodoGol(jogoId: string, metodoGol: string, tx?: TransactionClient): Promise<void> {
+    await db(tx).$executeRawUnsafe(
+      `UPDATE jogos_estatisticas_equipe SET metodo_gol = $1 WHERE jogo_id = $2`,
+      metodoGol,
+      jogoId
+    );
+  },
+
+  async getMetodoGolByJogoIds(jogoIds: string[]): Promise<Map<string, string>> {
+    if (jogoIds.length === 0) return new Map();
+    const rows = await prisma.$queryRawUnsafe<{ jogo_id: string; metodo_gol: string }[]>(
+      `SELECT jogo_id, metodo_gol FROM jogos_estatisticas_equipe WHERE jogo_id = ANY($1::text[])`,
+      jogoIds
+    );
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.metodo_gol) map.set(r.jogo_id, r.metodo_gol);
     }
     return map;
   },
