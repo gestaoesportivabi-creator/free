@@ -1595,9 +1595,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <button
                 onClick={handleEndCollection}
                 disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                className={`px-2 py-1 rounded-lg border text-[10px] uppercase font-normal transition-colors ${
+                className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
                   (isPostmatch && matchEvents.length >= 1) || isMatchEnded
-                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer'
+                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
                     : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
                 }`}
               >
