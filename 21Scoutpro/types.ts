@@ -8,6 +8,10 @@ export interface User {
   role: UserRole;
   photoUrl?: string;
   linkedPlayerId?: string;
+  /** Nome do time (exibição) — persiste no backend para outro dispositivo */
+  teamDisplayName?: string;
+  /** URL ou base64 do escudo — persiste no backend para outro dispositivo */
+  teamShieldUrl?: string;
 }
 
 // Championship Table Types

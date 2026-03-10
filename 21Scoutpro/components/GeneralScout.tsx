@@ -784,47 +784,58 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </div>
             </ExpandableCard>
 
-            {/* Posse de Bola - Donut (dados do jogo após coleta encerrada) */}
+            {/* Posse de Bola - bloqueado no plano free */}
             <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]">
-                <p className="text-xs text-zinc-500 mb-4 font-medium">Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
-                {hasPossessionData && possessionDonutData ? (
-                  <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="h-56 w-56 flex-shrink-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={possessionDonutData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius="50%"
-                            outerRadius="85%"
-                            paddingAngle={2}
-                            dataKey="value"
-                            nameKey="name"
-                            stroke="none"
-                            label={({ name, value }) => `${name} ${value}%`}
-                          >
-                            {possessionDonutData.map((entry, index) => (
-                              <Cell key={`posse-${index}`} fill={entry.fill} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="flex flex-col gap-2 text-sm">
-                      {possessionDonutData.map((entry, i) => (
-                        <div key={entry.name} className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
-                          <span className="text-zinc-300 font-medium">{entry.name}</span>
-                          <span className="text-white font-bold">{entry.value}%</span>
-                        </div>
-                      ))}
-                    </div>
+                {IS_FREE_PLAN ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
+                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
+                    <p className="text-zinc-400 text-sm max-w-md">
+                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
+                    </p>
                   </div>
                 ) : (
-                  <p className="text-zinc-500 text-sm py-8 text-center">Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
+                  <>
+                    <p className="text-xs text-zinc-500 mb-4 font-medium">Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
+                    {hasPossessionData && possessionDonutData ? (
+                      <div className="flex flex-col md:flex-row items-center gap-6">
+                        <div className="h-56 w-56 flex-shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={possessionDonutData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius="50%"
+                                outerRadius="85%"
+                                paddingAngle={2}
+                                dataKey="value"
+                                nameKey="name"
+                                stroke="none"
+                                label={({ name, value }) => `${name} ${value}%`}
+                              >
+                                {possessionDonutData.map((entry, index) => (
+                                  <Cell key={`posse-${index}`} fill={entry.fill} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex flex-col gap-2 text-sm">
+                          {possessionDonutData.map((entry, i) => (
+                            <div key={entry.name} className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
+                              <span className="text-zinc-300 font-medium">{entry.name}</span>
+                              <span className="text-white font-bold">{entry.value}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-zinc-500 text-sm py-8 text-center">Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
+                    )}
+                  </>
                 )}
             </ExpandableCard>
        </div>

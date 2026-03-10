@@ -226,6 +226,8 @@ export const authController = {
           email: user.email,
           role: user.role.name,
           photoUrl: user.photoUrl,
+          teamDisplayName: user.teamDisplayName ?? undefined,
+          teamShieldUrl: user.teamShieldUrl ?? undefined,
         },
       });
     } catch (error) {
@@ -282,17 +284,21 @@ export const authController = {
         });
       }
 
-      const { name, email, photoUrl, password } = req.body as {
+      const { name, email, photoUrl, password, teamDisplayName, teamShieldUrl } = req.body as {
         name?: string;
         email?: string;
         photoUrl?: string;
         password?: string;
+        teamDisplayName?: string;
+        teamShieldUrl?: string;
       };
 
-      const updateData: { name?: string; email?: string; photoUrl?: string | null; passwordHash?: string } = {};
+      const updateData: { name?: string; email?: string; photoUrl?: string | null; passwordHash?: string; teamDisplayName?: string | null; teamShieldUrl?: string | null } = {};
       if (name != null && String(name).trim()) updateData.name = String(name).trim();
       if (email != null && String(email).trim()) updateData.email = String(email).trim();
       if (photoUrl !== undefined) updateData.photoUrl = photoUrl ? String(photoUrl) : null;
+      if (teamDisplayName !== undefined) updateData.teamDisplayName = teamDisplayName != null && String(teamDisplayName).trim() ? String(teamDisplayName).trim() : null;
+      if (teamShieldUrl !== undefined) updateData.teamShieldUrl = teamShieldUrl != null && String(teamShieldUrl).length > 0 ? String(teamShieldUrl) : null;
       if (password != null && String(password).length >= 4) {
         updateData.passwordHash = await bcrypt.hash(String(password), 10);
       }
@@ -337,6 +343,8 @@ export const authController = {
           email: user.email,
           role: user.role.name,
           photoUrl: user.photoUrl,
+          teamDisplayName: user.teamDisplayName ?? undefined,
+          teamShieldUrl: user.teamShieldUrl ?? undefined,
         },
       });
     } catch (error) {

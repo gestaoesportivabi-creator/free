@@ -84,6 +84,8 @@ export interface MatchStats {
   yellowCards?: number;
   redCards?: number;
   goalMethodsScored?: Record<string, number>;
+  minutesPlayed?: number;
+  goalsConceded?: number;
 }
 
 export interface WeeklySchedule {

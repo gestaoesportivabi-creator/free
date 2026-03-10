@@ -752,16 +752,32 @@ export default function App() {
           }
 
           if (result.success && result.data) {
-              // Atualizar estado local com dados retornados
+              const d = result.data as { name?: string; email?: string; photoUrl?: string; role?: string; teamDisplayName?: string; teamShieldUrl?: string };
               if (currentUser) {
                   const updatedUser: User = {
                       ...currentUser,
-                      name: result.data.name,
-                      email: result.data.email,
-                      photoUrl: result.data.photoUrl,
-                      role: result.data.role === 'TECNICO' ? 'Treinador' : result.data.role,
+                      name: d.name ?? currentUser.name,
+                      email: d.email ?? currentUser.email,
+                      photoUrl: d.photoUrl,
+                      role: (d.role === 'TECNICO' ? 'Treinador' : d.role) ?? currentUser.role,
+                      teamDisplayName: d.teamDisplayName,
+                      teamShieldUrl: d.teamShieldUrl,
                   };
                   setCurrentUser(updatedUser);
+              }
+              if (d.teamDisplayName != null || d.teamShieldUrl != null) {
+                  try {
+                      const cur = JSON.parse(localStorage.getItem('scout21_settings_current_team') || '{}');
+                      localStorage.setItem('scout21_settings_current_team', JSON.stringify({
+                          ...cur,
+                          teamName: d.teamDisplayName ?? cur.teamName ?? '',
+                          shieldUrl: d.teamShieldUrl ?? cur.shieldUrl ?? '',
+                      }));
+                      setOverviewTeamSettings(prev => ({
+                          teamName: d.teamDisplayName ?? prev.teamName,
+                          teamShieldUrl: d.teamShieldUrl ?? prev.teamShieldUrl,
+                      }));
+                  } catch (_) {}
               }
           } else {
               alert(result.error || 'Erro ao atualizar perfil. Tente novamente.');
@@ -1146,7 +1162,18 @@ export default function App() {
             email: u.email,
             role: u.role === 'TECNICO' ? 'Treinador' : u.role,
             photoUrl: u.photoUrl,
+            teamDisplayName: u.teamDisplayName,
+            teamShieldUrl: u.teamShieldUrl,
           });
+          if (u.teamDisplayName != null || u.teamShieldUrl != null) {
+            try {
+              const cur = JSON.parse(localStorage.getItem('scout21_settings_current_team') || '{}');
+              const teamName = u.teamDisplayName ?? cur.teamName ?? '';
+              const shieldUrl = u.teamShieldUrl ?? cur.shieldUrl ?? '';
+              localStorage.setItem('scout21_settings_current_team', JSON.stringify({ ...cur, teamName, shieldUrl }));
+              setOverviewTeamSettings({ teamName, teamShieldUrl: shieldUrl });
+            } catch (_) {}
+          }
           setCurrentRoute('app');
           setIsInitializing(false);
           restored = true;

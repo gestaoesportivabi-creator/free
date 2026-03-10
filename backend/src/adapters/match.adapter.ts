@@ -78,7 +78,7 @@ interface JogoEstatisticaJogadorDB {
  * Transforma estatísticas do banco para formato MatchStats do frontend
  */
 function transformStatsToMatchStats(stat: JogoEstatisticaJogadorDB | JogoEstatisticaEquipeDB): MatchStats {
-  return {
+  const base: MatchStats = {
     goals: stat.gols,
     assists: stat.assistencias,
     passesCorrect: stat.passesCorretos,
@@ -92,6 +92,9 @@ function transformStatsToMatchStats(stat: JogoEstatisticaJogadorDB | JogoEstatis
     yellowCards: stat.cartoesAmarelos,
     redCards: stat.cartoesVermelhos,
   };
+  if ('minutosJogados' in stat) base.minutesPlayed = stat.minutosJogados;
+  if ('golsSofridos' in stat) base.goalsConceded = stat.golsSofridos;
+  return base;
 }
 
 /**
@@ -113,6 +116,8 @@ export function transformMatchToFrontend(
     ? transformStatsToMatchStats(estatisticasEquipe)
     : {
         goals: jogo.golsPro,
+        goalsConceded: jogo.golsContra,
+        minutesPlayed: 40,
         assists: 0,
         passesCorrect: 0,
         passesWrong: 0,

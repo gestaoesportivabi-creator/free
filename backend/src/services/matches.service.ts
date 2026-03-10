@@ -40,16 +40,14 @@ export const matchesService = {
     for (const jogo of jogos) {
       const estatisticasEquipe = porJogoEquipe.get(jogo.id);
       const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
-      if (estatisticasEquipe) {
-        const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
-        const st = statusMap.get(jogo.id);
-        if (st) match.status = st as MatchRecord['status'];
-        const mg = metodoGolMap.get(jogo.id);
-        if (mg && match.teamStats) {
-          try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
-        }
-        matches.push(match);
+      const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+      const st = statusMap.get(jogo.id);
+      if (st) match.status = st as MatchRecord['status'];
+      const mg = metodoGolMap.get(jogo.id);
+      if (mg && match.teamStats) {
+        try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
       }
+      matches.push(match);
     }
     return matches;
   },

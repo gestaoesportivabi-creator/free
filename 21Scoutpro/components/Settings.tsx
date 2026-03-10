@@ -131,9 +131,11 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
     const updates: Partial<User> = {
       name,
       email,
-      photoUrl
+      photoUrl,
+      teamDisplayName: teamName.trim() || undefined,
+      teamShieldUrl: teamShieldUrl || undefined,
     };
-    
+
     onUpdateUser(updates);
     saveCurrentTeam();
 
