@@ -1156,11 +1156,6 @@ export default function App() {
         return;
       }
       dashboardDataLoadStarted.current = true;
-      loadPlayers();
-      loadMatches();
-      loadChampionshipMatches();
-      loadSchedules();
-      loadChampionships();
       try {
         const { getApiUrl } = await import('./config');
         const response = await fetch(`${getApiUrl()}/auth/profile`, {
@@ -1170,6 +1165,14 @@ export default function App() {
         if (cancelled) return;
         if (result.success && result.data) {
           const u = result.data;
+          await Promise.all([
+            loadPlayers(),
+            loadMatches(),
+            loadChampionshipMatches(),
+          ]);
+          if (cancelled) return;
+          loadSchedules();
+          loadChampionships();
           setCurrentUser({
             id: u.id,
             name: u.name,
