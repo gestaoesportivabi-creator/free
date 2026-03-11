@@ -132,9 +132,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       }
 
       acc.totalGames += 1;
-      acc.wins += curr.result === 'Vitória' ? 1 : 0;
-      acc.losses += curr.result === 'Derrota' ? 1 : 0;
-      acc.draws += curr.result === 'Empate' ? 1 : 0;
+      const gf = curr.goalsFor ?? curr.teamStats.goals ?? 0;
+      const ga = curr.goalsAgainst ?? curr.teamStats.goalsConceded ?? 0;
+      const resolved = curr.result === 'V' || curr.result === 'Vitória' ? 'V'
+        : curr.result === 'D' || curr.result === 'Derrota' ? 'D'
+        : curr.result === 'E' || curr.result === 'Empate' ? 'E'
+        : gf > ga ? 'V' : ga > gf ? 'D' : 'E';
+      acc.wins += resolved === 'V' ? 1 : 0;
+      acc.losses += resolved === 'D' ? 1 : 0;
+      acc.draws += resolved === 'E' ? 1 : 0;
       acc.totalMinutes += curr.teamStats.minutesPlayed || 0;
       acc.goalsConceded += curr.teamStats.goalsConceded || 0;
       acc.goalsScored += curr.teamStats.goals || 0;
@@ -144,7 +150,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
       
-      acc.wrongPassesTransition += curr.teamStats.wrongPassesTransition || 0;
+      acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? curr.teamStats.wrongPassesTransition ?? 0;
       acc.tacklesCounterAttack += curr.teamStats.tacklesCounterAttack || 0;
       acc.tacklesWithBall += curr.teamStats.tacklesWithBall || 0;
       acc.tacklesWithoutBall += curr.teamStats.tacklesWithoutBall || 0;
@@ -341,14 +347,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const chartData = useMemo(() => {
     return filteredMatches.map(match => ({
       name: match.opponent,
-      wrongPassesTransition: match.teamStats.wrongPassesTransition,
-      tacklesCounterAttack: match.teamStats.tacklesCounterAttack,
-      tacklesWithBall: match.teamStats.tacklesWithBall,
-      tacklesWithoutBall: match.teamStats.tacklesWithoutBall,
-      passesCorrect: match.teamStats.passesCorrect,
-      passesWrong: match.teamStats.passesWrong,
-      shotsOn: match.teamStats.shotsOnTarget,
-      shotsOff: match.teamStats.shotsOffTarget,
+      transitionErrors: match.teamStats.transitionErrors ?? match.teamStats.wrongPassesTransition ?? 0,
+      tacklesCounterAttack: match.teamStats.tacklesCounterAttack ?? 0,
+      tacklesWithBall: match.teamStats.tacklesWithBall ?? 0,
+      tacklesWithoutBall: match.teamStats.tacklesWithoutBall ?? 0,
+      passesCorrect: match.teamStats.passesCorrect ?? 0,
+      passesWrong: match.teamStats.passesWrong ?? 0,
+      shotsOn: match.teamStats.shotsOnTarget ?? 0,
+      shotsOff: match.teamStats.shotsOffTarget ?? 0,
       result: match.result
     }));
   }, [filteredMatches]);
@@ -918,7 +924,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard title="Erros Críticos (Transição)" icon={BarChart3} headerColor="text-[#ff0055]">
-           <SimpleColumnChart data={chartData} dataKey="wrongPassesTransition" fill={COLORS.rose} axisStyle={axisStyle} tooltipStyle={tooltipStyle} labelStyle={labelStyle} />
+           <SimpleColumnChart data={chartData} dataKey="transitionErrors" fill={COLORS.rose} axisStyle={axisStyle} tooltipStyle={tooltipStyle} labelStyle={labelStyle} />
         </ExpandableCard>
       </div>
 
