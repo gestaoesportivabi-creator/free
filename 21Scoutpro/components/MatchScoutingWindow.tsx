@@ -154,6 +154,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [pendingGoalIsOpponent, setPendingGoalIsOpponent] = useState<boolean>(false); // Se o gol é do adversário
   const [pendingGoalPlayerId, setPendingGoalPlayerId] = useState<string | null>(null); // ID do jogador autor do gol (se gol nosso)
   const [pendingGoalTime, setPendingGoalTime] = useState<number | null>(null); // Tempo capturado quando GOL foi clicado
+  const [pendingGoalPeriod, setPendingGoalPeriod] = useState<'1T' | '2T' | null>(null); // Período do gol (editável no confirm)
+  const [goalConfirmEditingTime, setGoalConfirmEditingTime] = useState<boolean>(false); // Toggle editar tempo no popup confirmar
   const [goalStep, setGoalStep] = useState<'team' | 'author' | 'method' | 'confirm' | null>(null); // Fluxo inline do gol
   const [pendingGoalMethod, setPendingGoalMethod] = useState<string | null>(null); // Método do gol (para nosso ou tomado)
   
@@ -223,6 +225,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [penaltyStep, setPenaltyStep] = useState<'team' | 'kicker' | 'result' | null>(null);
   
   const [showPenaltyTeamSelection, setShowPenaltyTeamSelection] = useState<boolean>(false);
+
+  // Novo fluxo: Ação → Detalhes (popup) → Jogador (popup) → Tempo (popup se necessário)
+  type ActionFlowStep = 'details' | 'player' | 'time' | null;
+  const [actionFlow, setActionFlow] = useState<{
+    step: ActionFlowStep;
+    action: string | null;
+    details: string | null;
+    selectedPlayerId?: string | null;
+    cardType?: 'yellow' | 'secondYellow' | 'red';
+    foulTeam?: 'for' | 'against';
+    zone?: LateralResult;
+    pendingTime?: number;
+    pendingPeriod?: '1T' | '2T';
+  } | null>(null);
   const [showPenaltyKickerSelection, setShowPenaltyKickerSelection] = useState<boolean>(false);
   const [showPenaltyResult, setShowPenaltyResult] = useState<boolean>(false);
   const [pendingPenaltyTeam, setPendingPenaltyTeam] = useState<'for' | 'against' | null>(null);
@@ -318,6 +334,113 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       default:
         return { tipo: type, subtipo: '' };
     }
+  };
+
+  // Helpers para o novo fluxo action-first
+  const needsDetails = (action: string): boolean => {
+    switch (action) {
+      case 'pass': case 'shot': case 'foul': case 'tackle': case 'card': case 'save': case 'lateral':
+        return true;
+      case 'corner': case 'block':
+        return false;
+      default:
+        return false;
+    }
+  };
+
+  const startActionFlow = (action: string) => {
+    const step = needsDetails(action) ? 'details' : 'player';
+    const flow = { step, action, details: null as string | null };
+    if (step === 'player' && selectedPlayerId) {
+      if (needsTimePopup()) {
+        setActionFlow({ ...flow, step: 'time', selectedPlayerId });
+      } else {
+        executeActionFlow(flow as NonNullable<typeof actionFlow>, selectedPlayerId);
+        setActionFlow(null);
+        setSelectedAction(null);
+      }
+      return;
+    }
+    setActionFlow(flow);
+  };
+
+  const advanceActionFlowToPlayer = (details: string, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult }) => {
+    const nextFlow = actionFlow ? { ...actionFlow, step: 'player' as const, details, ...extra } : null;
+    if (nextFlow && selectedPlayerId) {
+      if (needsTimePopup()) {
+        setActionFlow({ ...nextFlow, step: 'time', selectedPlayerId });
+      } else {
+        executeActionFlow(nextFlow, selectedPlayerId);
+        cancelActionFlow();
+      }
+      return;
+    }
+    setActionFlow(nextFlow);
+  };
+
+  const cancelActionFlow = () => {
+    setActionFlow(null);
+    setSelectedAction(null);
+  };
+
+  const needsTimePopup = (): boolean =>
+    isPostmatch && manualMinute === 0 && manualSecond === 0;
+
+  const executeActionFlow = (
+    flow: NonNullable<typeof actionFlow>,
+    playerId: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T'
+  ) => {
+    if (!flow?.action) return;
+    const time = timeOverride ?? getTimeForEvent() ?? matchTime;
+    const period = periodOverride ?? currentPeriod;
+
+    const run = () => {
+      switch (flow.action) {
+        case 'pass':
+          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period);
+          break;
+        case 'shot':
+          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, time, period);
+          break;
+        case 'foul':
+          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, time, period);
+          break;
+        case 'tackle':
+          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, time, period);
+          break;
+        case 'card':
+          handleRegisterCard(flow.cardType ?? 'yellow', playerId, time, period);
+          break;
+        case 'save':
+          handleRegisterSave(flow.details as 'simple' | 'hard', playerId, time, period);
+          break;
+        case 'lateral':
+          handleRegisterLateral(flow.zone, playerId, time, period);
+          break;
+        case 'corner':
+          handleRegisterCorner(flow.zone, playerId, time, period);
+          break;
+        case 'block':
+          handleRegisterBlock(playerId, time, period);
+          break;
+        default:
+          break;
+      }
+      cancelActionFlow();
+    };
+
+    run();
+  };
+
+  const completeActionFlowWithPlayer = (
+    playerId: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T'
+  ) => {
+    if (!actionFlow?.action) return;
+    executeActionFlow(actionFlow, playerId, timeOverride, periodOverride);
   };
 
   // Opções de tipo de ação para a tela de logs (value = MatchEvent['type'])
@@ -805,7 +928,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setBenchPlayers(prev => [...prev, playerId]);
   };
 
-  // Selecionar ação
+  // Selecionar ação — novo fluxo: ação → detalhes (popup) → jogador (popup) → tempo (popup se necessário)
   const handleSelectAction = (action: string) => {
     if (!isMatchStarted) {
       alert('A partida ainda não foi iniciada. Complete a escalação primeiro.');
@@ -815,20 +938,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     // Bloquear comandos quando tempo está parado (exceto GOL e substituições) - apenas em realtime
     if (!isPostmatch && !isRunning && action !== 'goal') {
       alert('O cronômetro está parado. Inicie o cronômetro para registrar ações.');
-      return;
-    }
-    
-    // Em postmatch, validar tempo manual antes de registrar
-    if (isPostmatch && action !== 'goal') {
-      const t = getTimeForEvent();
-      if (t === null) {
-        alert('Informe o tempo (apenas números, ex.: 0100 para 01:00, 125 para 01:25).');
-        return;
-      }
-    }
-    
-    if (!selectedPlayerId) {
-      alert('Por favor, selecione um jogador primeiro.');
       return;
     }
     
@@ -842,27 +951,31 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     
-    setSelectedAction(action);
-    
-    // Se for falta, definir zona como pendente (opções inline, sem modal)
-    if (action === 'foul') {
-      setPendingFoulZone(null);
+    // Ações que usam fluxo próprio (GOL, PÊNALTI, TIRO LIVRE) — não usam actionFlow
+    if (action === 'goal' || action === 'penalty' || action === 'freeKick') {
+      setSelectedAction(action);
+      return;
     }
+    
+    // Novo fluxo action-first: iniciar actionFlow (sem exigir jogador pré-selecionado)
+    startActionFlow(action);
+    setSelectedAction(action);
   };
   
   // Registrar desarme
-  const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter') => {
-    if (!selectedPlayerId) return;
+  const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
     
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('tackle', result);
     const newEvent: MatchEvent = {
       id: `tackle-${Date.now()}`,
       type: 'tackle',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.nickname || player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       result,
       tipo,
       subtipo,
@@ -885,18 +998,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar defesa (apenas para goleiro atual): Simples ou Difícil
-  const handleRegisterSave = (difficulty: 'simple' | 'hard') => {
-    if (!selectedPlayerId || selectedPlayerId !== currentGoalkeeperId) return;
+  const handleRegisterSave = (difficulty: 'simple' | 'hard', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid || pid !== currentGoalkeeperId) return;
     
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('save', difficulty);
     const newEvent: MatchEvent = {
       id: `save-${Date.now()}`,
       type: 'save',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.nickname?.trim() || player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       result: difficulty,
       tipo,
       subtipo,
@@ -910,18 +1024,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
   
   // Registrar bloqueio
-  const handleRegisterBlock = () => {
-    if (!selectedPlayerId) return;
+  const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
     
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('block');
     const newEvent: MatchEvent = {
       id: `block-${Date.now()}`,
       type: 'block',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       tipo,
       subtipo,
     };
@@ -937,18 +1052,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar falta: Nosso ou Adversário. Contagem continua após 5; a partir da 6ª o botão Tiro Livre fica disponível.
-  const handleRegisterFoul = (team: 'for' | 'against') => {
-    if (!selectedPlayerId) return;
+  const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
 
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const subtipoText = team === 'for' ? 'Nosso' : 'Adversário';
     const newEvent: MatchEvent = {
       id: `foul-${Date.now()}`,
       type: 'foul',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       tipo: 'Falta',
       subtipo: subtipoText,
       foulTeam: team,
@@ -966,19 +1082,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar resultado de passe
-  const handleRegisterPass = (result: 'correct' | 'wrong') => {
-    if (!selectedPlayerId) return;
+  const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
     
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('pass', result);
     const eventId = `pass-${Date.now()}`;
     const newEvent: MatchEvent = {
       id: eventId,
       type: 'pass',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       result,
       tipo,
       subtipo,
@@ -988,7 +1105,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     // Se passe foi correto, aguardar próximo jogador selecionado como receptor
     if (result === 'correct') {
-      setPendingPassSenderId(selectedPlayerId);
+      setPendingPassSenderId(pid);
       setPendingPassEventId(eventId);
       setPendingPassResult('correct');
       // Retomar cronômetro (passe certo = bola em jogo)
@@ -1034,18 +1151,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar resultado de chute — posse fica selecionável depois (usuário define com Com posse / Sem posse)
-  const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked') => {
-    if (!selectedPlayerId) return;
+  const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
     
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('shot', result);
     const newEvent: MatchEvent = {
       id: `shot-${Date.now()}`,
       type: 'shot',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.nickname?.trim() || player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       result,
       tipo,
       subtipo,
@@ -1067,19 +1185,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
   
   // Registrar escanteio (zone opcional: Defesa/Ataque - Esquerda/Direita)
-  const handleRegisterCorner = (zone?: LateralResult) => {
-    if (!selectedPlayerId) return;
+  const handleRegisterCorner = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
     setIsRunning(false);
 
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('corner', zone);
     const newEvent: MatchEvent = {
       id: `corner-${Date.now()}`,
       type: 'corner',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       ...(zone && { result: zone }),
       tipo,
       subtipo,
@@ -1090,18 +1209,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar lateral (cronômetro já parado ao clicar em LATERAL); zona opcional (preenchida em outro momento)
-  const handleRegisterLateral = (zone?: LateralResult) => {
-    if (!selectedPlayerId) return;
+  const handleRegisterLateral = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
 
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo: subtipoText } = getTipoSubtipo('lateral', zone);
     const newEvent: MatchEvent = {
       id: `lateral-${Date.now()}`,
       type: 'lateral',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       ...(zone && { result: zone }),
       tipo,
       subtipo: subtipoText,
@@ -1128,22 +1248,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar gol
-  const handleRegisterGoal = (goalType: 'normal' | 'contra', isOpponent: boolean = false, playerId: string | null = null) => {
+  const handleRegisterGoal = (goalType: 'normal' | 'contra', isOpponent: boolean = false, playerId: string | null = null, goalMethod?: string | null, goalTimeOverride?: number | null, goalPeriodOverride?: '1T' | '2T' | null) => {
     const player = playerId ? activePlayers.find(p => String(p.id).trim() === playerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('goal', goalType);
-    // Usar o tempo capturado quando GOL foi clicado, ou matchTime como fallback
-    const goalTime = pendingGoalTime !== null ? pendingGoalTime : matchTime;
+    const goalTime = goalTimeOverride ?? pendingGoalTime ?? matchTime;
+    const goalPeriod = goalPeriodOverride ?? pendingGoalPeriod ?? currentPeriod;
+    const method = goalMethod ?? pendingGoalMethod;
     const newEvent: MatchEvent = {
       id: `goal-${Date.now()}`,
       type: 'goal',
       playerId: playerId || undefined,
       playerName: player?.name || (isOpponent ? 'Adversário' : 'Gol Contra'),
       time: goalTime,
-      period: currentPeriod,
+      period: goalPeriod,
       result: goalType,
       isOpponentGoal: isOpponent,
       tipo,
       subtipo,
+      ...(method && { goalMethod: method }),
     };
     
     // Verificar se houve passe que resultou em gol (assistência)
@@ -1178,7 +1300,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingGoalIsOpponent(false);
     setPendingGoalPlayerId(null);
     setPendingGoalTime(null);
-    setGoalStep(null); // Limpar fluxo inline
+    setPendingGoalPeriod(null);
+    setGoalConfirmEditingTime(false);
+    setGoalStep(null);
+    // Em postmatch: resetar tempo manual para que o próximo evento peça o tempo novamente
+    if (isPostmatch) {
+      setManualMinute(0);
+      setManualSecond(0);
+    }
   };
   
   // Registrar tiro livre
@@ -1295,18 +1424,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar cartão
-  const handleRegisterCard = (cardType: 'yellow' | 'secondYellow' | 'red') => {
-    if (!selectedPlayerId) return;
-    
-    const player = activePlayers.find(p => String(p.id).trim() === selectedPlayerId);
+  const handleRegisterCard = (cardType: 'yellow' | 'secondYellow' | 'red', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+    const pid = playerIdOverride ?? selectedPlayerId;
+    if (!pid) return;
+
+    const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('card', undefined, cardType);
     const newEvent: MatchEvent = {
       id: `card-${Date.now()}`,
       type: 'card',
-      playerId: selectedPlayerId,
+      playerId: pid,
       playerName: player?.name || '',
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
+      period: periodOverride ?? currentPeriod,
       cardType,
       tipo,
       subtipo,
@@ -1316,15 +1446,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     // Adicionar cartão ao histórico do jogador
     setPlayerCards(prev => {
-      const updatedCards = [...(prev[selectedPlayerId] || []), cardType];
+      const updatedCards = [...(prev[pid] || []), cardType];
       return {
         ...prev,
-        [selectedPlayerId]: updatedCards,
+        [pid]: updatedCards,
       };
     });
-    
+
     // Verificar expulsão após atualizar cartões (usar useEffect ou verificação imediata)
-    const currentCards = [...(playerCards[selectedPlayerId] || []), cardType];
+    const currentCards = [...(playerCards[pid] || []), cardType];
     const yellowCount = currentCards.filter(c => c === 'yellow').length;
     const hasSecondYellow = currentCards.some(c => c === 'secondYellow');
     const hasRed = currentCards.some(c => c === 'red');
@@ -1332,13 +1462,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     if (isExpelled) {
       // Remover jogador da escalação (time fica com um a menos); não colocar no banco
-      if (lineupPlayers.includes(selectedPlayerId)) {
-        const newLineup = lineupPlayers.filter(id => id !== selectedPlayerId);
+      if (lineupPlayers.includes(pid)) {
+        const newLineup = lineupPlayers.filter(id => id !== pid);
         setLineupPlayers(newLineup);
         // Não adicionar expulso ao banco: slot de expulsão até 2 min (cronômetro) ou gol adversário
         
         // Se goleiro foi expulso, atualizar currentGoalkeeperId
-        if (selectedPlayerId === currentGoalkeeperId) {
+        if (pid === currentGoalkeeperId) {
           if (newLineup.length > 0) {
             setCurrentGoalkeeperId(newLineup[0]);
           } else {
@@ -1348,7 +1478,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         
         // Registrar slot de expulsão: pode repor após 2 min (cronômetro) ou gol do adversário
         setExpulsionState({
-          expelledPlayerId: selectedPlayerId,
+          expelledPlayerId: pid,
           expelledAtTime: matchTime,
           period: currentPeriod,
         });
@@ -1870,13 +2000,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}
         <div className="flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
           {/* Painel Esquerdo - Seleção de Jogador (ocupa toda a altura; lista + substituição preenchem o card) */}
-          <div className={`w-52 min-w-[7rem] max-w-[14rem] rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 ${
-            goalStep === 'author' && !pendingGoalIsOpponent
-              ? 'bg-green-500/10 border-green-500'
-              : 'bg-black border-zinc-800'
-          }`}>
+          <div className="w-52 min-w-[7rem] max-w-[14rem] rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black border-zinc-800">
             <h3 className="text-white font-bold uppercase text-sm mb-2 text-center shrink-0">
-              {goalStep === 'author' && !pendingGoalIsOpponent ? 'SELECIONAR AUTOR DO GOL' : 'SELECIONAR JOGADOR'}
+              SELECIONAR JOGADOR
             </h3>
             
             <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
@@ -2068,12 +2194,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         onClick={() => {
                           if (!isMatchStarted) return;
                           const clickedPlayerId = String(player.id).trim();
-                          if (goalStep === 'author' && !pendingGoalIsOpponent) {
-                            setPendingGoalPlayerId(clickedPlayerId);
-                            setGoalStep('method');
-                            setPendingGoalMethod(null);
-                            return;
-                          }
                           if (pendingPassEventId && pendingPassSenderId && clickedPlayerId !== pendingPassSenderId) {
                             handleConfirmPassReceiver(clickedPlayerId);
                           } else {
@@ -2091,8 +2211,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className={`w-full rounded-lg p-2 text-left transition-all ${
                           !isMatchStarted
                             ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed'
-                            : goalStep === 'author' && !pendingGoalIsOpponent
-                            ? 'bg-green-500/20 border border-green-500/90 hover:border-green-400'
                             : isSelected
                             ? 'bg-[#00f0ff]/20 border-2 border-[#00f0ff]'
                             : pendingPassEventId && String(player.id).trim() !== pendingPassSenderId
@@ -2112,8 +2230,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           </div>
                           <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
                             {isGoalkeeper && '🥅 '}{player.nickname?.trim() || player.name} · {player.jerseyNumber}
-                            {goalStep === 'author' && !pendingGoalIsOpponent && ' (autor do gol)'}
-                            {goalStep !== 'author' && pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
+                            {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
                           </p>
                         </div>
                       </button>
@@ -2151,14 +2268,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         if (!isMatchStarted) return;
                         const clickedPlayerId = String(player.id).trim();
 
-                        // Se aguardando autor do gol nosso, ir para seleção de método
-                        if (goalStep === 'author' && !pendingGoalIsOpponent) {
-                          setPendingGoalPlayerId(clickedPlayerId);
-                          setGoalStep('method');
-                          setPendingGoalMethod(null);
-                          return;
-                        }
-
                         // Se há passe pendente, completar o passe
                         if (pendingPassEventId && pendingPassSenderId && clickedPlayerId !== pendingPassSenderId) {
                           handleConfirmPassReceiver(clickedPlayerId);
@@ -2179,8 +2288,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       className={`w-full rounded-lg p-2 text-left transition-all ${
                         !isMatchStarted
                           ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed'
-                          : goalStep === 'author' && !pendingGoalIsOpponent
-                          ? 'bg-green-500/20 border border-green-500/90 hover:border-green-400'
                           : isSelected
                           ? 'bg-[#00f0ff]/20 border-2 border-[#00f0ff]'
                           : pendingPassEventId && String(player.id).trim() !== pendingPassSenderId
@@ -2200,8 +2307,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </div>
                         <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
                           {isGoalkeeper && '🥅 '}{player.nickname?.trim() || player.name} · {player.jerseyNumber}
-                          {goalStep === 'author' && !pendingGoalIsOpponent && ' (autor do gol)'}
-                          {goalStep !== 'author' && pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
+                          {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
                         </p>
                       </div>
                     </button>
@@ -2227,11 +2333,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
           {/* Painel Direito - Ações/Eventos (flex-1 + min-w-0 para responsivo) */}
           <div className="flex-1 min-w-0 bg-black border-2 border-blue-500 rounded-lg p-2 flex flex-col min-h-0">
-            {/* Mensagem se jogador não selecionado */}
+            {/* Mensagem opcional: jogador pré-selecionado acelera o fluxo */}
             {!selectedPlayerId && (
-              <div className="mb-2 p-2 bg-yellow-500/20 border border-yellow-500 rounded-lg">
-                <p className="text-yellow-400 text-xs font-bold text-center">
-                  Selecione um jogador no painel esquerdo para registrar ações
+              <div className="mb-2 p-2 bg-zinc-800/50 border border-zinc-700 rounded-lg">
+                <p className="text-zinc-500 text-xs font-bold text-center">
+                  Dica: selecione um jogador na quadra para pular o popup de jogador
                 </p>
               </div>
             )}
@@ -2240,230 +2346,105 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             <div className="flex-1 border-2 border-zinc-800 rounded-lg p-2 flex flex-col min-h-0">
               {/* Parte superior (~20%): zona reservada para opções de Passe/Chute/Falta/Cartão */}
               <div className="flex-[2] min-h-0 overflow-auto flex-shrink-0">
-              {/* Opções para Passe - ACIMA dos botões */}
-              {selectedAction === 'pass' && selectedPlayerId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-2 font-bold uppercase">Resultado do Passe</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleRegisterPass('correct')}
-                      className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      Certo
-                    </button>
-                    <button
-                      onClick={() => handleRegisterPass('wrong')}
-                      className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Errado
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Chute - ACIMA dos botões */}
-              {selectedAction === 'shot' && selectedPlayerId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-2 font-bold uppercase">Resultado do Chute</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleRegisterShot('inside')}
-                      className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      Dentro
-                    </button>
-                    <button
-                      onClick={() => handleRegisterShot('outside')}
-                      className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Fora
-                    </button>
-                    <button
-                      onClick={() => handleRegisterShot('post')}
-                      className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors"
-                    >
-                      Trave
-                    </button>
-                    <button
-                      onClick={() => handleRegisterShot('blocked')}
-                      className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors"
-                    >
-                      Bloqueado
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Falta: Nosso ou Adversário */}
-              {selectedAction === 'foul' && selectedPlayerId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-2 font-bold uppercase">Quem cometeu a falta?</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleRegisterFoul('for')}
-                      className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-[#00f0ff]/20 border-[#00f0ff] text-[#00f0ff] hover:bg-[#00f0ff]/30"
-                    >
-                      Nosso {foulsForCount > 0 && <span className="text-zinc-400">({foulsForCount})</span>}
-                      {foulsForCount >= 5 && <span className="block text-[9px] mt-1 text-amber-400">Tiro Livre disponível</span>}
-                    </button>
-                    <button
-                      onClick={() => handleRegisterFoul('against')}
-                      className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30"
-                    >
-                      Adversário {foulsAgainstCount > 0 && <span className="text-zinc-400">({foulsAgainstCount})</span>}
-                      {foulsAgainstCount >= 5 && <span className="block text-[9px] mt-1 text-amber-400">Tiro Livre disponível</span>}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Cartão - inline (amarelo, 2º amarelo, vermelho) */}
-              {selectedAction === 'card' && selectedPlayerId && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-3 font-bold uppercase">Tipo de Cartão</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button
-                      onClick={() => handleRegisterCard('yellow')}
-                      className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors"
-                    >
-                      Amarelo
-                    </button>
-                    <button
-                      onClick={() => handleRegisterCard('secondYellow')}
-                      className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors"
-                    >
-                      2º Amarelo
-                    </button>
-                    <button
-                      onClick={() => handleRegisterCard('red')}
-                      className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Vermelho
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Desarme - parte superior */}
-              {selectedAction === 'tackle' && selectedPlayerId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-2 font-bold uppercase">Tipo de Desarme</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      onClick={() => handleRegisterTackle('withBall')}
-                      className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
-                    >
-                      Com Posse
-                    </button>
-                    <button
-                      onClick={() => handleRegisterTackle('withoutBall')}
-                      className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
-                    >
-                      Sem Posse
-                    </button>
-                    <button
-                      onClick={() => handleRegisterTackle('counter')}
-                      className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
-                    >
-                      Contra-ataque
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Defesa: Simples ou Difícil (só quando goleiro está selecionado) */}
-              {selectedAction === 'save' && selectedPlayerId && selectedPlayerId === currentGoalkeeperId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-2 font-bold uppercase">Tipo de defesa</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => handleRegisterSave('simple')}
-                      className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors"
-                    >
-                      Simples
-                    </button>
-                    <button
-                      onClick={() => handleRegisterSave('hard')}
-                      className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors"
-                    >
-                      Difícil
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Opções para Bloqueio - parte superior */}
-              {selectedAction === 'block' && selectedPlayerId && (
-                <div className="mb-3 p-3 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <button
-                    onClick={handleRegisterBlock}
-                    className="w-full px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors"
-                  >
-                    Registrar Bloqueio
-                  </button>
-                </div>
-              )}
-
-              {/* Fluxo inline do Gol (equipe → autor → confirmar) */}
+              {/* Popup Gol - Equipe (Gol Nosso / Gol Adversário) */}
               {goalStep === 'team' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        setPendingGoalIsOpponent(false);
-                        setGoalStep('author');
-                      }}
-                      className="flex-1 min-w-0 px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      Gol Nosso
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPendingGoalIsOpponent(true);
-                        setPendingGoalType('normal');
-                        setGoalStep('method');
-                        setPendingGoalMethod(null);
-                      }}
-                      className="flex-1 min-w-0 px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Gol Adversário
-                    </button>
-                    <button
-                      onClick={() => {
-                        setGoalStep(null);
-                        setPendingGoalTime(null);
-                      }}
-                      className="flex-1 min-w-0 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-lg transition-colors"
-                    >
-                      Cancelar
-                    </button>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setGoalConfirmEditingTime(false); }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-green-400 font-black uppercase text-sm tracking-wider flex items-center gap-2">
+                        <Goal size={18} />
+                        Tipo de gol
+                      </h3>
+                    </div>
+                    <div className="p-4 flex flex-col gap-3">
+                      <button
+                        onClick={() => {
+                          setPendingGoalIsOpponent(false);
+                          setPendingGoalType('normal');
+                          setGoalStep('author');
+                        }}
+                        className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
+                      >
+                        Gol Nosso
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPendingGoalIsOpponent(false);
+                          setPendingGoalType('contra');
+                          setPendingGoalPlayerId(null);
+                          setGoalStep('method');
+                          setPendingGoalMethod(null);
+                        }}
+                        className="w-full px-4 py-4 bg-amber-500/20 border-2 border-amber-500 text-amber-400 font-bold uppercase text-sm rounded-xl hover:bg-amber-500/30 transition-colors"
+                      >
+                        Gol Contra
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPendingGoalIsOpponent(true);
+                          setPendingGoalType('normal');
+                          setGoalStep('method');
+                          setPendingGoalMethod(null);
+                        }}
+                        className="w-full px-4 py-4 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-sm rounded-xl hover:bg-red-500/30 transition-colors"
+                      >
+                        Gol Adversário
+                      </button>
+                      <button
+                        onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setGoalConfirmEditingTime(false); }}
+                        className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
+              {/* Popup Gol - Autor (selecionar jogador que marcou) */}
               {goalStep === 'author' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setPendingGoalPlayerId(null);
-                        setPendingGoalType('contra');
-                        setGoalStep('method');
-                        setPendingGoalMethod(null);
-                      }}
-                      className="flex-1 min-w-0 px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Gol Contra
-                    </button>
-                    <button
-                      onClick={() => {
-                        setGoalStep('team');
-                        setPendingGoalPlayerId(null);
-                        setPendingGoalType(null);
-                      }}
-                      className="flex-1 min-w-0 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-lg transition-colors"
-                    >
-                      Cancelar
-                    </button>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { setGoalStep('team'); setPendingGoalPlayerId(null); setPendingGoalType(null); setGoalConfirmEditingTime(false); }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-green-400 font-black uppercase text-sm tracking-wider flex items-center gap-2">
+                        <Goal size={18} />
+                        Autor do gol
+                      </h3>
+                    </div>
+                    <div className="p-4 max-h-[50vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-2">
+                        {activePlayers.map((player) => (
+                          <button
+                            key={player.id}
+                            onClick={() => {
+                              setPendingGoalPlayerId(String(player.id).trim());
+                              setGoalStep('method');
+                              setPendingGoalMethod(null);
+                            }}
+                            className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-green-500 hover:bg-green-500/10 transition-colors text-left"
+                          >
+                            #{player.jerseyNumber} {player.nickname?.trim() || player.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        onClick={() => { setGoalStep('team'); setPendingGoalPlayerId(null); setPendingGoalType(null); setGoalConfirmEditingTime(false); }}
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
+                      >
+                        Voltar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2472,7 +2453,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
+                    onClick={() => { setGoalStep((pendingGoalIsOpponent || pendingGoalType === 'contra') ? 'team' : 'author'); setPendingGoalMethod(null); }}
                     aria-hidden="true"
                   />
                   <div className="relative w-full max-w-lg bg-zinc-950 border-2 border-[#00f0ff]/40 rounded-2xl shadow-2xl shadow-[#00f0ff]/10 overflow-hidden">
@@ -2507,7 +2488,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                     <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
                       <button
-                        onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
+                        onClick={() => { setGoalStep((pendingGoalIsOpponent || pendingGoalType === 'contra') ? 'team' : 'author'); setPendingGoalMethod(null); }}
                         className="flex items-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
                       >
                         <ArrowLeft size={14} /> Voltar
@@ -2526,6 +2507,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       setPendingGoalIsOpponent(false);
                       setPendingGoalPlayerId(null);
                       setPendingGoalTime(null);
+                      setPendingGoalPeriod(null);
+                      setGoalConfirmEditingTime(false);
                     }}
                     aria-hidden="true"
                   />
@@ -2569,9 +2552,56 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       {pendingGoalTime !== null && (
                         <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
                           <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Tempo</span>
-                          <span className="text-[#00f0ff] text-sm font-bold">
-                            {Math.floor(pendingGoalTime / 60)}&apos;{String(pendingGoalTime % 60).padStart(2, '0')}&quot;
-                          </span>
+                          {goalConfirmEditingTime ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <select
+                                value={Math.floor(pendingGoalTime / 60)}
+                                onChange={(e) => setPendingGoalTime(parseInt(e.target.value, 10) * 60 + (pendingGoalTime % 60))}
+                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                              >
+                                {Array.from({ length: 41 }, (_, i) => (
+                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                ))}
+                              </select>
+                              <span className="text-zinc-500 font-bold">:</span>
+                              <select
+                                value={pendingGoalTime % 60}
+                                onChange={(e) => setPendingGoalTime(Math.floor(pendingGoalTime / 60) * 60 + parseInt(e.target.value, 10))}
+                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                              >
+                                {Array.from({ length: 60 }, (_, i) => (
+                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={pendingGoalPeriod ?? currentPeriod}
+                                onChange={(e) => setPendingGoalPeriod(e.target.value as '1T' | '2T')}
+                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-xs font-bold outline-none focus:border-[#00f0ff]"
+                              >
+                                <option value="1T">1º tempo</option>
+                                <option value="2T">2º tempo</option>
+                              </select>
+                              <button
+                                onClick={() => setGoalConfirmEditingTime(false)}
+                                className="ml-auto px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-bold rounded"
+                              >
+                                Ok
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="text-[#00f0ff] text-sm font-bold">
+                                {Math.floor(pendingGoalTime / 60)}&apos;{String(pendingGoalTime % 60).padStart(2, '0')}&quot;
+                                {(pendingGoalPeriod ?? currentPeriod) === '2T' && ' (2º tempo)'}
+                              </span>
+                              <button
+                                onClick={() => setGoalConfirmEditingTime(true)}
+                                className="ml-auto px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-400 text-xs font-bold rounded transition-colors"
+                              >
+                                Editar tempo
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2581,7 +2611,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           handleRegisterGoal(
                             pendingGoalType || 'normal',
                             pendingGoalIsOpponent,
-                            pendingGoalPlayerId
+                            pendingGoalPlayerId,
+                            pendingGoalMethod,
+                            pendingGoalTime,
+                            pendingGoalPeriod ?? currentPeriod
                           )
                         }
                         className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-500/20"
@@ -2595,9 +2628,208 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setPendingGoalIsOpponent(false);
                           setPendingGoalPlayerId(null);
                           setPendingGoalTime(null);
+                          setPendingGoalPeriod(null);
+                          setGoalConfirmEditingTime(false);
                         }}
                         className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
                       >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ActionDetailsPopup — opções de detalhe por ação */}
+              {actionFlow?.step === 'details' && actionFlow.action && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={cancelActionFlow}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-[#00f0ff] font-black uppercase text-sm tracking-wider">
+                        {actionFlow.action === 'pass' && 'Resultado do Passe'}
+                        {actionFlow.action === 'shot' && 'Resultado do Chute'}
+                        {actionFlow.action === 'foul' && 'Quem cometeu a falta?'}
+                        {actionFlow.action === 'tackle' && 'Tipo de Desarme'}
+                        {actionFlow.action === 'card' && 'Tipo de Cartão'}
+                        {actionFlow.action === 'save' && 'Tipo de Defesa'}
+                        {actionFlow.action === 'lateral' && 'Zona do Lateral'}
+                      </h3>
+                    </div>
+                    <div className="p-4">
+                      {actionFlow.action === 'pass' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('correct'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">Certo</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('wrong'); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Errado</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'shot' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('inside'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">No gol</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('outside'); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Fora</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('post'); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Trave</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('blocked'); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">Bloqueado</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'foul' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('for', { foulTeam: 'for' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-[#00f0ff]/20 border-[#00f0ff] text-[#00f0ff] hover:bg-[#00f0ff]/30">Nosso {foulsForCount > 0 && <span className="text-zinc-400">({foulsForCount})</span>}</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('against', { foulTeam: 'against' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30">Adversário {foulsAgainstCount > 0 && <span className="text-zinc-400">({foulsAgainstCount})</span>}</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'tackle' && (
+                        <div className="grid grid-cols-3 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('withBall'); }} className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors">Com Posse</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('withoutBall'); }} className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors">Sem Posse</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('counter'); }} className="px-4 py-3 bg-blue-500/20 border-2 border-blue-500 text-blue-400 font-bold uppercase text-xs rounded-lg hover:bg-blue-500/30 transition-colors">Contra-ataque</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'card' && (
+                        <div className="grid grid-cols-3 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow' }); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Amarelo</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('secondYellow', { cardType: 'secondYellow' }); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">2º Amarelo</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'save' && currentGoalkeeperId && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Simples</button>
+                          <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Difícil</button>
+                        </div>
+                      )}
+                      {actionFlow.action === 'lateral' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => { advanceActionFlowToPlayer('defesaDireita', { zone: 'defesaDireita' }); }} className="px-4 py-3 bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 font-bold uppercase text-xs rounded-lg hover:bg-cyan-500/30 transition-colors">Defesa - Direita</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('defesaEsquerda', { zone: 'defesaEsquerda' }); }} className="px-4 py-3 bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 font-bold uppercase text-xs rounded-lg hover:bg-cyan-500/30 transition-colors">Defesa - Esquerda</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('ataqueDireita', { zone: 'ataqueDireita' }); }} className="px-4 py-3 bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 font-bold uppercase text-xs rounded-lg hover:bg-cyan-500/30 transition-colors">Ataque - Direita</button>
+                          <button onClick={() => { advanceActionFlowToPlayer('ataqueEsquerda', { zone: 'ataqueEsquerda' }); }} className="px-4 py-3 bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 font-bold uppercase text-xs rounded-lg hover:bg-cyan-500/30 transition-colors">Ataque - Esquerda</button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button onClick={cancelActionFlow} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* PlayerSelectPopup — selecionar jogador */}
+              {actionFlow?.step === 'player' && actionFlow.action && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={cancelActionFlow}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-[#00f0ff] font-black uppercase text-sm tracking-wider">Selecionar jogador</h3>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-2">
+                        {activePlayers.map((player) => {
+                          const pid = String(player.id).trim();
+                          return (
+                            <button
+                              key={player.id}
+                              onClick={() => {
+                                if (needsTimePopup()) {
+                                  setActionFlow(prev => prev ? { ...prev, step: 'time', selectedPlayerId: pid } : null);
+                                } else {
+                                  completeActionFlowWithPlayer(pid);
+                                }
+                              }}
+                              className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-[#00f0ff] hover:bg-[#00f0ff]/10 transition-colors text-left"
+                            >
+                              #{player.jerseyNumber} {player.nickname?.trim() || player.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button onClick={cancelActionFlow} className="flex items-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TimeInputPopup — postmatch quando tempo não preenchido */}
+              {actionFlow?.step === 'time' && actionFlow.selectedPlayerId && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={cancelActionFlow}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-[#00f0ff] font-black uppercase text-sm tracking-wider">Informar tempo</h3>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Minuto</label>
+                        <select
+                          value={Math.floor((actionFlow.pendingTime ?? 0) / 60)}
+                          onChange={(e) => {
+                            const m = parseInt(e.target.value, 10);
+                            setActionFlow(prev => prev ? { ...prev, pendingTime: (prev.pendingTime ?? 0) % 60 + m * 60 } : null);
+                          }}
+                          className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                        >
+                          {Array.from({ length: 41 }, (_, i) => (
+                            <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Segundo</label>
+                        <select
+                          value={(actionFlow.pendingTime ?? 0) % 60}
+                          onChange={(e) => {
+                            const s = parseInt(e.target.value, 10);
+                            setActionFlow(prev => prev ? { ...prev, pendingTime: Math.floor((prev.pendingTime ?? 0) / 60) * 60 + s } : null);
+                          }}
+                          className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                        >
+                          {Array.from({ length: 60 }, (_, i) => (
+                            <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Período</label>
+                        <select
+                          value={actionFlow.pendingPeriod ?? '1T'}
+                          onChange={(e) => setActionFlow(prev => prev ? { ...prev, pendingPeriod: e.target.value as '1T' | '2T' } : null)}
+                          className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-bold outline-none focus:border-[#00f0ff]"
+                        >
+                          <option value="1T">1º tempo</option>
+                          <option value="2T">2º tempo</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex gap-3">
+                      <button
+                        onClick={() => {
+                          const pid = actionFlow.selectedPlayerId!;
+                          const time = (actionFlow.pendingTime ?? 0);
+                          const period = actionFlow.pendingPeriod ?? '1T';
+                          completeActionFlowWithPlayer(pid, time, period);
+                        }}
+                        className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all"
+                      >
+                        Confirmar
+                      </button>
+                      <button onClick={cancelActionFlow} className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors">
                         Cancelar
                       </button>
                     </div>
@@ -2690,88 +2922,119 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </div>
               )}
 
-              {/* Fluxo inline - Pênalti */}
+              {/* Popup Pênalti - Equipe */}
               {penaltyStep === 'team' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-3 font-bold uppercase">Pênalti - Qual equipe?</p>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <button
-                      onClick={() => {
-                        setPendingPenaltyTeam('for');
-                        setPenaltyStep('kicker');
-                      }}
-                      className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors"
-                    >
-                      A Favor (Nossa Equipe)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPendingPenaltyTeam('against');
-                        setPenaltyStep('result');
-                      }}
-                      className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      Contra (Adversário)
-                    </button>
-                  </div>
-                  <button
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                     onClick={() => { setPenaltyStep(null); setPendingPenaltyTeam(null); }}
-                    className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              )}
-              {penaltyStep === 'kicker' && pendingPenaltyTeam === 'for' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-3 font-bold uppercase">Selecionar cobrador</p>
-                  <div className="max-h-40 overflow-y-auto space-y-2 mb-3">
-                    {activePlayers?.length ? activePlayers.map((player) => (
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-purple-500/40 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-purple-400 font-black uppercase text-sm tracking-wider">Pênalti - Qual equipe?</h3>
+                    </div>
+                    <div className="p-4 flex flex-col gap-3">
                       <button
-                        key={player.id}
-                        onClick={() => {
-                          setPendingPenaltyKickerId(String(player.id).trim());
-                          setPenaltyStep('result');
-                        }}
-                        className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-purple-500 hover:bg-purple-500/10 transition-colors text-left"
+                        onClick={() => { setPendingPenaltyTeam('for'); setPenaltyStep('kicker'); }}
+                        className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
                       >
-                        #{player.jerseyNumber} {player.name}
+                        A Favor (Nossa Equipe)
                       </button>
-                    )) : (
-                      <p className="text-zinc-500 text-xs text-center py-2">Nenhum jogador ativo</p>
-                    )}
+                      <button
+                        onClick={() => { setPendingPenaltyTeam('against'); setPenaltyStep('result'); }}
+                        className="w-full px-4 py-4 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-sm rounded-xl hover:bg-red-500/30 transition-colors"
+                      >
+                        Contra (Adversário)
+                      </button>
+                      <button
+                        onClick={() => { setPenaltyStep(null); setPendingPenaltyTeam(null); }}
+                        className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => { setPenaltyStep('team'); setPendingPenaltyKickerId(null); }}
-                    className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-lg transition-colors"
-                  >
-                    Voltar
-                  </button>
                 </div>
               )}
+              {/* Popup Pênalti - Cobrador */}
+              {penaltyStep === 'kicker' && pendingPenaltyTeam === 'for' && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { setPenaltyStep('team'); setPendingPenaltyKickerId(null); }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-purple-500/40 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-purple-400 font-black uppercase text-sm tracking-wider">Selecionar cobrador</h3>
+                    </div>
+                    <div className="p-4 max-h-[50vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-2">
+                        {activePlayers?.length ? activePlayers.map((player) => (
+                          <button
+                            key={player.id}
+                            onClick={() => {
+                              setPendingPenaltyKickerId(String(player.id).trim());
+                              setPenaltyStep('result');
+                            }}
+                            className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-purple-500 hover:bg-purple-500/10 transition-colors text-left"
+                          >
+                            #{player.jerseyNumber} {player.nickname?.trim() || player.name}
+                          </button>
+                        )) : (
+                          <p className="col-span-2 text-zinc-500 text-xs text-center py-2">Nenhum jogador ativo</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        onClick={() => { setPenaltyStep('team'); setPendingPenaltyKickerId(null); }}
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Popup Pênalti - Resultado */}
               {penaltyStep === 'result' && (
-                <div className="mb-4 p-4 bg-zinc-950 rounded-lg border border-zinc-800">
-                  <p className="text-zinc-400 text-xs mb-3 font-bold uppercase">Resultado do Pênalti</p>
-                  {pendingPenaltyTeam === 'for' ? (
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'goal')} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30">Gol</button>
-                      <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'saved')} className="px-4 py-3 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-xs rounded-lg hover:bg-purple-500/30">Defendido</button>
-                      <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'outside')} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30">Pra Fora</button>
-                      <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'post')} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30">Trave</button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      <button onClick={() => handleRegisterPenalty('against', null, 'goal')} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30">Gol Adversário</button>
-                      <button onClick={() => handleRegisterPenalty('against', null, 'saved')} className="px-4 py-3 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-xs rounded-lg hover:bg-purple-500/30">Defesa</button>
-                      <button onClick={() => handleRegisterPenalty('against', null, 'noGoal')} className="px-4 py-3 bg-zinc-500/20 border-2 border-zinc-500 text-zinc-400 font-bold uppercase text-xs rounded-lg hover:bg-zinc-500/30">Não Gol</button>
-                    </div>
-                  )}
-                  <button
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                     onClick={() => { setPenaltyStep(null); setPendingPenaltyTeam(null); setPendingPenaltyKickerId(null); }}
-                    className="w-full px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-lg transition-colors"
-                  >
-                    Cancelar
-                  </button>
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-purple-500/40 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-purple-400 font-black uppercase text-sm tracking-wider">Resultado do Pênalti</h3>
+                    </div>
+                    <div className="p-4">
+                      {pendingPenaltyTeam === 'for' ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'goal')} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">Gol</button>
+                          <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'saved')} className="px-4 py-3 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defendido</button>
+                          <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'outside')} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Pra Fora</button>
+                          <button onClick={() => handleRegisterPenalty('for', pendingPenaltyKickerId, 'post')} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Trave</button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-3">
+                          <button onClick={() => handleRegisterPenalty('against', null, 'goal')} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Gol Adversário</button>
+                          <button onClick={() => handleRegisterPenalty('against', null, 'saved')} className="px-4 py-3 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defesa</button>
+                          <button onClick={() => handleRegisterPenalty('against', null, 'noGoal')} className="px-4 py-3 bg-zinc-500/20 border-2 border-zinc-500 text-zinc-400 font-bold uppercase text-xs rounded-lg hover:bg-zinc-500/30 transition-colors">Não Gol</button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        onClick={() => { setPenaltyStep(null); setPendingPenaltyTeam(null); setPendingPenaltyKickerId(null); }}
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2816,6 +3079,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         }
                         if (!isPostmatch) setIsRunning(false);
                         setPendingGoalTime(isPostmatch ? t! : matchTime);
+                        setPendingGoalPeriod(currentPeriod);
                         setGoalStep('team');
                         setPendingGoalIsOpponent(false);
                         setPendingGoalType(null);
@@ -2854,17 +3118,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
                         <button
                           onClick={() => {
-                            if (!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty) return;
-                            if (isPostmatch && getTimeForEvent() === null) {
-                              alert('Informe o tempo (ex.: 0100 para 01:00).');
-                              return;
-                            }
+                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
                             if (!isPostmatch && selectedAction !== 'foul') setIsRunning(false);
                             handleSelectAction('foul');
                           }}
-                          disabled={!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                           className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                            (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : selectedAction === 'foul'
                               ? 'bg-orange-500/20 border-orange-500 text-orange-400'
@@ -2875,27 +3135,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            if (!isMatchStarted) {
-                              alert('A partida ainda não foi iniciada. Complete a escalação primeiro.');
-                              return;
-                            }
-                            if (!isPostmatch && !isRunning) {
-                              alert('O cronômetro está parado. Inicie o cronômetro para registrar ações.');
-                              return;
-                            }
-                            if (isPostmatch && getTimeForEvent() === null) {
-                              alert('Informe o tempo (ex.: 0100 para 01:00).');
-                              return;
-                            }
-                            if (!selectedPlayerId) {
-                              alert('Por favor, selecione um jogador primeiro.');
-                              return;
-                            }
-                            handleRegisterCorner();
+                            if (!isMatchStarted) return;
+                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
+                            if (!isPostmatch) setIsRunning(false);
+                            handleSelectAction('corner');
                           }}
-                          disabled={!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                          disabled={!isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty}
                           className={`flex-1 min-h-[44px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                            (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : 'bg-cyan-500/20 border-cyan-500 text-cyan-400 hover:bg-cyan-500/30'
                           }`}
@@ -2915,7 +3162,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 onChange={(e) => setManualMinute(parseInt(e.target.value, 10))}
                                 className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
                               >
-                                {Array.from({ length: 21 }, (_, i) => (
+                                {Array.from({ length: 41 }, (_, i) => (
                                   <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
                                 ))}
                               </select>
@@ -2970,9 +3217,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <>
                             <button
                               onClick={() => handleSelectAction('pass')}
-                              disabled={!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'pass'
                                   ? 'bg-black border-zinc-600 text-white'
@@ -2983,9 +3230,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('shot')}
-                              disabled={!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'shot'
                                   ? 'bg-red-500/20 border-red-500 text-red-400'
@@ -2999,9 +3246,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <>
                             <button
                               onClick={() => handleSelectAction('tackle')}
-                              disabled={!selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'tackle'
                                   ? 'bg-blue-500/20 border-blue-500 text-blue-400'
@@ -3012,9 +3259,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('save')}
-                              disabled={!selectedPlayerId || selectedPlayerId !== currentGoalkeeperId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                !selectedPlayerId || selectedPlayerId !== currentGoalkeeperId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'save'
                                   ? 'bg-purple-500/20 border-purple-500 text-purple-400'
@@ -3022,6 +3269,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               }`}
                             >
                               DEFESA
+                            </button>
+                            <button
+                              onClick={() => handleSelectAction('block')}
+                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
+                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                  ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : selectedAction === 'block'
+                                  ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400'
+                                  : 'bg-zinc-900 border-yellow-500/50 text-zinc-400 hover:border-yellow-500'
+                              }`}
+                            >
+                              BLOQUEIO
                             </button>
                           </>
                         )}
@@ -3081,25 +3341,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (!isMatchStarted) {
-                            alert('A partida ainda não foi iniciada. Complete a escalação primeiro.');
-                            return;
-                          }
-                          if (!selectedPlayerId) {
-                            alert('Por favor, selecione um jogador primeiro.');
-                            return;
-                          }
+                          if (!isMatchStarted) return;
                           if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
-                          if (isPostmatch && getTimeForEvent() === null) {
-                            alert('Informe o tempo (ex.: 0100 para 01:00).');
-                            return;
-                          }
                           if (!isPostmatch) setIsRunning(false);
-                          handleRegisterLateral();
+                          handleSelectAction('lateral');
                         }}
-                        disabled={!isMatchStarted || !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                        disabled={!isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty}
                         className={`min-h-[48px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                          !isMatchStarted || !selectedPlayerId || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                          !isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : 'bg-cyan-500/20 border-cyan-500 text-cyan-400 hover:bg-cyan-500/30'
                         }`}
@@ -3108,20 +3357,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (!isMatchStarted) {
-                            alert('A partida ainda não foi iniciada. Complete a escalação primeiro.');
-                            return;
-                          }
-                          if (!selectedPlayerId) {
-                            alert('Por favor, selecione um jogador primeiro.');
-                            return;
-                          }
+                          if (!isMatchStarted) return;
                           if (isBlockedByPenalty) return;
-                          setSelectedAction(selectedAction === 'card' ? null : 'card');
+                          handleSelectAction('card');
                         }}
-                        disabled={!isMatchStarted || !selectedPlayerId || isBlockedByPenalty}
+                        disabled={!isMatchStarted || isBlockedByPenalty}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                          !isMatchStarted || !selectedPlayerId || isBlockedByPenalty
+                          !isMatchStarted || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : selectedAction === 'card'
                             ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'

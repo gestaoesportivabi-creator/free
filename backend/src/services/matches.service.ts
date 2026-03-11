@@ -42,7 +42,7 @@ export const matchesService = {
       const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
       const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
       const st = statusMap.get(jogo.id);
-      if (st) match.status = st as MatchRecord['status'];
+      match.status = (st || 'encerrado') as MatchRecord['status'];
       const mg = metodoGolMap.get(jogo.id);
       if (mg && match.teamStats) {
         try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
@@ -68,7 +68,7 @@ export const matchesService = {
       matchesRepository.getMetodoGolByJogoIds([id]),
     ]);
     const st = statusMap.get(id);
-    if (st) match.status = st as MatchRecord['status'];
+    match.status = (st || 'encerrado') as MatchRecord['status'];
     const mg = metodoGolMap.get(id);
     if (mg && match.teamStats) {
       try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
@@ -336,7 +336,7 @@ export const matchesService = {
       matchesRepository.getMetodoGolByJogoIds([id]),
     ]);
     const st = statusMap.get(id);
-    if (st) result.status = st as MatchRecord['status'];
+    result.status = (st || 'encerrado') as MatchRecord['status'];
     const mg = metodoGolMap.get(id);
     if (mg && result.teamStats) {
       try { result.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }

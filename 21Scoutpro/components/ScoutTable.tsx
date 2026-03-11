@@ -3,6 +3,7 @@ import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, 
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
+import { parseLocalDateOnly } from '../utils/dateUtils';
 import { timeControlsApi } from '../services/api';
 import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
@@ -1692,11 +1693,12 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         
         if (item.type === 'scheduled') {
             if (isPast) {
+                const matchDateNorm = parseLocalDateOnly(item.date);
                 const hasMatchRecord = matches.find(m => {
-                    const mDate = new Date(m.date);
-                    mDate.setHours(0, 0, 0, 0);
-                    return mDate.getTime() === matchDate.getTime() &&
-                           m.opponent === item.opponent;
+                    const mDate = parseLocalDateOnly(m.date);
+                    if (Number.isNaN(mDate.getTime()) || Number.isNaN(matchDateNorm.getTime())) return false;
+                    return mDate.getTime() === matchDateNorm.getTime() &&
+                           (m.opponent || '').trim().toLowerCase() === (item.opponent || '').trim().toLowerCase();
                 });
                 return hasMatchRecord ? 'finalizado' : 'incompleto';
             }
@@ -1707,13 +1709,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             const match = item as MatchRecord;
             if (match.status === 'em_andamento') return 'incompleto';
             if (match.status === 'encerrado') return 'finalizado';
-            const hasData = 
-                match.teamStats &&
-                (match.teamStats.goals > 0 ||
-                 (match.teamStats.goalsConceded ?? 0) > 0 ||
-                 Object.keys(match.playerStats || {}).length > 0);
-            
-            return hasData ? 'finalizado' : 'incompleto';
+            if (match.teamStats) return 'finalizado';
+            return 'incompleto';
         }
         
         return 'programada';
@@ -1726,16 +1723,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
 
         const savedKeys = new Set(
             matches.map((m) => {
-                const d = new Date(m.date);
-                d.setHours(0, 0, 0, 0);
+                const d = parseLocalDateOnly(m.date);
+                if (Number.isNaN(d.getTime())) return '';
                 return `${d.getTime()}_${(m.opponent || '').trim().toLowerCase()}`;
-            })
+            }).filter(Boolean)
         );
 
         const scheduled: CalendarMatchItem[] = championshipMatches
             .filter((cm) => {
-                const d = new Date(cm.date);
-                d.setHours(0, 0, 0, 0);
+                const d = parseLocalDateOnly(cm.date);
+                if (Number.isNaN(d.getTime())) return true;
                 const key = `${d.getTime()}_${(cm.opponent || '').trim().toLowerCase()}`;
                 return !savedKeys.has(key);
             })
@@ -3456,6 +3453,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     matchType={selectedMatchType}
                     extraTimeMinutes={selectedExtraTimeMinutes}
                     selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
+                    mode="realtime"
+                    onSave={async (saved) => {
+                        await onSave?.(saved);
+                        setShowScoutingWindow(false);
+                        setSelectedMatchType('normal');
+                        setSelectedExtraTimeMinutes(5);
+                        setSelectedPlayersForMatch(new Set());
+                    }}
                 />
             )}
         </div>

@@ -101,7 +101,7 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
     const physio = (playerId: string) => playerPhysiology[String(playerId).trim()] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
 
     const renderPlayerCards = (list: Player[]) => (
-        <div className="max-h-[22rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+        <div className="max-h-[22rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {list.map((player) => {
                 const id = String(player.id).trim();
                 const isSelected = selectedIds.has(id);
@@ -114,7 +114,7 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                         type="button"
                         onClick={() => togglePlayer(player.id, !isSelected)}
                         disabled={disabled && !isSelected}
-                        className={`flex flex-row items-stretch gap-1.5 p-2 min-h-0 rounded-xl transition-all border-2 text-left ${
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all border-2 text-center min-w-0 ${
                             disabled
                                 ? 'opacity-90 cursor-not-allowed border-red-800 bg-red-600/90 hover:bg-red-600/90'
                                 : isSelected
@@ -122,48 +122,44 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                                     : 'cursor-pointer border-green-800 bg-green-600/90 hover:bg-green-500 hover:border-green-600'
                         }`}
                     >
-                        {/* Esquerda: foto + número + posição */}
-                        <div className="flex flex-col items-center flex-shrink-0">
-                            <div className="relative flex items-center justify-center">
-                                {status === 'injured' && (
-                                    <span className="absolute -top-0.5 -right-0.5 z-10 bg-red-600/90 p-0.5 rounded" title="Lesão">
-                                        <Ambulance size={8} className="text-white" />
-                                    </span>
+                        <div className="relative flex items-center justify-center">
+                            {status === 'injured' && (
+                                <span className="absolute -top-0.5 -right-0.5 z-10 bg-red-600/90 p-0.5 rounded" title="Lesão">
+                                    <Ambulance size={8} className="text-white" />
+                                </span>
+                            )}
+                            {status === 'suspended' && (
+                                <span className="absolute -top-0.5 -right-0.5 z-10 bg-amber-600/90 p-0.5 rounded" title="Suspenso">
+                                    <Ban size={8} className="text-white" />
+                                </span>
+                            )}
+                            <div className={`w-10 h-10 rounded-full overflow-hidden border-2 flex-shrink-0 ${disabled ? 'border-red-900 bg-zinc-800' : isSelected ? 'border-white bg-zinc-800' : 'border-green-900 bg-zinc-800'} transition-transform hover:scale-105`}>
+                                {player.photoUrl ? (
+                                    <img src={player.photoUrl} alt="" className="w-full h-full object-cover scale-110" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-medium">
+                                        {name.substring(0, 2).toUpperCase()}
+                                    </div>
                                 )}
-                                {status === 'suspended' && (
-                                    <span className="absolute -top-0.5 -right-0.5 z-10 bg-amber-600/90 p-0.5 rounded" title="Suspenso">
-                                        <Ban size={8} className="text-white" />
-                                    </span>
-                                )}
-                                <div className={`w-9 h-9 rounded-full overflow-hidden border flex-shrink-0 ${disabled ? 'border-red-900 bg-zinc-800' : isSelected ? 'border-white bg-zinc-800' : 'border-green-900 bg-zinc-800'} transition-transform hover:scale-105`}>
-                                    {player.photoUrl ? (
-                                        <img src={player.photoUrl} alt="" className="w-full h-full object-cover scale-110" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-zinc-500 text-[10px] font-medium">
-                                            {name.substring(0, 2).toUpperCase()}
-                                        </div>
-                                    )}
-                                </div>
                             </div>
-                            <span className={`text-[9px] font-normal mt-0.5 leading-tight ${disabled ? 'text-red-200' : 'text-green-100'}`}>Nº{player.jerseyNumber}</span>
-                            <span className={`text-[8px] uppercase leading-tight ${disabled ? 'text-red-200/80' : 'text-green-100'}`}>{player.position}</span>
                         </div>
 
-                        {/* Centro: apelido */}
-                        <div className="flex-1 flex flex-col justify-center min-w-0 py-0.5">
-                            <span className={`text-[11px] font-bold truncate leading-tight ${disabled ? 'text-red-100' : 'text-white'}`}>
+                        <div className="flex flex-col items-center min-w-0 w-full">
+                            <span className={`text-xs font-bold truncate leading-tight w-full ${disabled ? 'text-red-100' : 'text-white'}`}>
                                 {name}
+                            </span>
+                            <span className={`text-[9px] leading-tight ${disabled ? 'text-red-200' : 'text-green-100'}`}>
+                                #{player.jerseyNumber} · {player.position}
                             </span>
                         </div>
 
-                        {/* Direita: dentro do card — título Índices Físicos acima do cadeado */}
                         {!disabled && (
                             <div
-                                className="flex flex-col justify-center items-center gap-0.5 flex-shrink-0 rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1 min-w-[4rem]"
+                                className="flex items-center gap-1 rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-2 py-1 w-full justify-center"
                                 title="Em breve, estamos desenvolvendo. Entre em contato para mais informações."
                             >
-                                <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
-                                <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                             </div>
                         )}
                     </button>
