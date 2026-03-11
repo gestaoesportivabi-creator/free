@@ -853,11 +853,25 @@ export default function App() {
             try {
               const refreshed = await matchesApi.getAll();
               const valid = (refreshed as MatchRecord[]).filter(m => m && m.teamStats);
-              setMatches(valid);
-              console.log('✅ Partida salva e lista recarregada do banco de dados');
+              if (valid.length > 0) {
+                setMatches(valid);
+                console.log('✅ Partida salva e lista recarregada do banco de dados');
+              } else {
+                // GET retornou vazio (falha silenciosa da API) — não limpar a lista; incluir a partida salva
+                setMatches(prev => {
+                  const exists = prev.some(m => m.id === saved.id);
+                  if (exists) return prev;
+                  return [saved, ...prev];
+                });
+                console.warn('Recarregar matches retornou vazio; partida salva mantida na lista.');
+              }
             } catch (e) {
               console.warn('Recarregar matches falhou, usando resposta do save:', e);
-              setMatches(prev => [...prev, saved]);
+              setMatches(prev => {
+                const exists = prev.some(m => m.id === saved.id);
+                if (exists) return prev;
+                return [saved, ...prev];
+              });
             }
             alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
             setActiveTab('general');
