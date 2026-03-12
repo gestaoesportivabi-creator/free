@@ -36,9 +36,12 @@ interface ProgramacaoDiaDB {
  */
 function formatDate(date: Date | string): string {
   if (typeof date === 'string') {
-    return date.split('T')[0]; // Remove hora se houver
+    return date.slice(0, 10); // Remove hora se houver
   }
-  return date.toISOString().split('T')[0];
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /**

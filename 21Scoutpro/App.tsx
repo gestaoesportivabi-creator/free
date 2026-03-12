@@ -1521,6 +1521,7 @@ export default function App() {
           championshipMatches={championshipMatches}
           schedules={schedules}
           teams={teams}
+          championships={championships}
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
           onPostMatchOpenChange={(open) => setSidebarRetracted(open)}

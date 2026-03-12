@@ -108,8 +108,24 @@ export const matchesService = {
 
     const equipeId = data.equipeId || equipeIds[0];
     const adversario = data.adversario ?? data.opponent ?? '';
-    let dataDate: Date = data.data ?? (typeof data.date === 'string' ? new Date(data.date) : data.date);
-    if (!dataDate || !(dataDate instanceof Date) || isNaN(dataDate.getTime())) dataDate = new Date();
+    // Normalizar data: strings YYYY-MM-DD devem ser salvas sem shift de timezone.
+    // new Date('2026-03-09') cria meia-noite UTC, mas em fusos negativos (ex: Vercel rodando em UTC) funciona.
+    // Para evitar qualquer deslocamento, forçamos T12:00:00Z (meio-dia UTC) em datas date-only.
+    const rawDate = data.data ?? data.date;
+    let dataDate: Date;
+    if (typeof rawDate === 'string') {
+      const dateOnly = rawDate.slice(0, 10); // 'YYYY-MM-DD'
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+        dataDate = new Date(dateOnly + 'T12:00:00Z');
+      } else {
+        dataDate = new Date(rawDate);
+      }
+    } else if (rawDate instanceof Date) {
+      dataDate = rawDate;
+    } else {
+      dataDate = new Date();
+    }
+    if (isNaN(dataDate.getTime())) dataDate = new Date();
     const golsPro = data.golsPro ?? data.goalsFor ?? 0;
     const golsContra = data.golsContra ?? data.goalsAgainst ?? 0;
 

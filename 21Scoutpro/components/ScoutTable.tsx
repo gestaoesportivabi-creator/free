@@ -82,11 +82,12 @@ interface ScoutTableProps {
     championshipMatches?: ChampionshipMatch[];
     schedules?: { days?: unknown[]; isActive?: unknown }[];
     teams?: Team[];
+    championships?: Championship[];
     /** Chamado quando o popup Depois da Partida abre/fecha (para recolher sidebar e dar espaço) */
     onPostMatchOpenChange?: (open: boolean) => void;
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], onPostMatchOpenChange }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange }) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -1326,7 +1327,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         const suspensionWarnings: string[] = [];
         if (competition) {
             // Carregar campeonatos do localStorage
-            const savedChampionships = JSON.parse(localStorage.getItem('championships') || '[]');
+            const savedChampionships = championships;
             const championship = savedChampionships.find((c: any) => c.name === competition);
             
             if (championship && championship.suspensionRules) {
@@ -1838,11 +1839,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
 
     // Preparação: fisiologia (PSE/PSR/Sono) e status de suspenso/pendurado por campeonato
     const preparationData = useMemo(() => {
-        const championships: Championship[] = [];
-        try {
-            const raw = localStorage.getItem('championships');
-            if (raw) championships.push(...JSON.parse(raw));
-        } catch (_) {}
+        const champs: Championship[] = [...championships];
         const match = selectedScheduledMatch;
         if (!match || !players.length) {
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
@@ -1863,15 +1860,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             }
         }
         return { physiology, suspendedIds, penduradoIds };
-    }, [selectedScheduledMatch, players, schedules, championshipMatches]);
+    }, [selectedScheduledMatch, players, schedules, championshipMatches, championships]);
 
     // Mesmo para preparação de partida salva (tempo real)
     const preparationDataSavedMatch = useMemo(() => {
-        const championships: Championship[] = [];
-        try {
-            const raw = localStorage.getItem('championships');
-            if (raw) championships.push(...JSON.parse(raw));
-        } catch (_) {}
+        const champs2: Championship[] = [...championships];
         const match = selectedMatch;
         if (!match || !players.length) {
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
@@ -1892,7 +1885,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             }
         }
         return { physiology, suspendedIds, penduradoIds };
-    }, [selectedMatch, players, schedules, championshipMatches]);
+    }, [selectedMatch, players, schedules, championshipMatches, championships]);
     
     const isPlayerSuspended = (playerId: string): boolean => {
         const entry = entries.find(e => String(e.athleteId).trim() === String(playerId).trim());

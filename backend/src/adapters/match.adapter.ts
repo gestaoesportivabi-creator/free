@@ -129,10 +129,21 @@ export function transformMatchToFrontend(
         transitionErrors: 0,
       };
 
-  // Formatar data para string YYYY-MM-DD
-  const dateStr = typeof jogo.data === 'string' 
-    ? jogo.data 
-    : jogo.data.toISOString().split('T')[0];
+  // Formatar data para string YYYY-MM-DD (sem conversão UTC)
+  // O PostgreSQL armazena @db.Date como meia-noite UTC, mas representa uma data local.
+  // Usando toISOString() o dia pode ficar errado em fusos negativos (ex: Brasil UTC-3).
+  let dateStr: string;
+  if (typeof jogo.data === 'string') {
+    dateStr = jogo.data.slice(0, 10); // 'YYYY-MM-DD' ou 'YYYY-MM-DDT...'
+  } else {
+    // Date object: extrair componentes SEM converter para UTC
+    // Para @db.Date, Prisma entrega Date em UTC meia-noite.
+    // Precisamos do valor UTC (que é o dia correto salvo no DB).
+    const y = jogo.data.getUTCFullYear();
+    const m = String(jogo.data.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(jogo.data.getUTCDate()).padStart(2, '0');
+    dateStr = `${y}-${m}-${d}`;
+  }
 
   const result: MatchRecord = {
     id: jogo.id,

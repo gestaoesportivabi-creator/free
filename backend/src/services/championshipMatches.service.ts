@@ -16,7 +16,9 @@ function db(tx?: TransactionClient) {
 function transformChampionshipMatchToFrontend(jogo: any) {
   return {
     id: jogo.id,
-    date: jogo.data instanceof Date ? jogo.data.toISOString().split('T')[0] : jogo.data,
+    date: jogo.data instanceof Date 
+      ? `${jogo.data.getUTCFullYear()}-${String(jogo.data.getUTCMonth()+1).padStart(2,'0')}-${String(jogo.data.getUTCDate()).padStart(2,'0')}`
+      : (typeof jogo.data === 'string' ? jogo.data.slice(0, 10) : jogo.data),
     time: jogo.horario || '',
     opponent: jogo.adversario,
     competition: jogo.competicao || '',
@@ -55,7 +57,7 @@ export const championshipMatchesService = {
 
     const jogoData = {
       campeonatoId: campeonato.id,
-      data: new Date(data.date),
+      data: /^\d{4}-\d{2}-\d{2}$/.test((data.date || '').slice(0,10)) ? new Date(data.date.slice(0,10) + 'T12:00:00Z') : new Date(data.date),
       horario: data.time || null,
       equipe: 'Minha Equipe',
       adversario: data.opponent,
@@ -73,7 +75,7 @@ export const championshipMatchesService = {
     if (!existing) throw new NotFoundError('Jogo de campeonato', id);
 
     const jogoData: any = {};
-    if (data.date) jogoData.data = new Date(data.date);
+    if (data.date) jogoData.data = /^\d{4}-\d{2}-\d{2}$/.test((data.date || '').slice(0,10)) ? new Date(data.date.slice(0,10) + 'T12:00:00Z') : new Date(data.date);
     if (data.time !== undefined) jogoData.horario = data.time || null;
     if (data.opponent !== undefined) jogoData.adversario = data.opponent;
     if (data.competition !== undefined) jogoData.competicao = data.competition || null;
