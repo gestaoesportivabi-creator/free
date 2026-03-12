@@ -32,7 +32,7 @@ import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
-import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi } from './services/api';
+import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { IS_FREE_PLAN } from './config';
@@ -495,22 +495,40 @@ export default function App() {
     }
   };
 
-  const loadSchedules = () => {
+  const loadSchedules = async () => {
     try {
+      // Cache local p/ render rápido
       const localSchedules = JSON.parse(localStorage.getItem('scout21_schedules_local') || '[]');
-      const validSchedules = localSchedules
+      if (localSchedules.length > 0) {
+        setSchedules(localSchedules);
+      }
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoadedResources(prev => ({ ...prev, schedules: true }));
+        return;
+      }
+
+      const apiSchedules = await schedulesApi.getAll().catch(err => {
+        console.error('❌ Erro ao carregar schedules da API:', err);
+        return [] as WeeklySchedule[];
+      });
+
+      const validSchedules = (Array.isArray(apiSchedules) ? apiSchedules : [])
         .filter((s: WeeklySchedule) => s && s.id)
         .map((s: WeeklySchedule) => ({
           ...s,
           days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
-          isActive: s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true'
+          isActive: s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true'
         }))
         .sort((a: WeeklySchedule, b: WeeklySchedule) => {
           if (a.isActive && !b.isActive) return -1;
           if (!a.isActive && b.isActive) return 1;
           return (b.createdAt || 0) - (a.createdAt || 0);
         });
+
       setSchedules(validSchedules);
+      localStorage.setItem('scout21_schedules_local', JSON.stringify(validSchedules));
       setLoadedResources(prev => ({ ...prev, schedules: true }));
     } catch {
       setSchedules([]);
@@ -544,10 +562,30 @@ export default function App() {
     }
   };
 
-  const loadChampionships = () => {
-    const saved = JSON.parse(localStorage.getItem('championships') || '[]');
-    setChampionships(saved);
-    setLoadedResources(prev => ({ ...prev, championships: true }));
+  const loadChampionships = async () => {
+    try {
+      // Cache rápido do localStorage
+      const cached = JSON.parse(localStorage.getItem('championships') || '[]');
+      if (cached.length > 0) setChampionships(cached);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoadedResources(prev => ({ ...prev, championships: true }));
+        return;
+      }
+
+      const apiData = await championshipsApi.getAll().catch(err => {
+        console.error('❌ Erro ao carregar championships da API:', err);
+        return [];
+      });
+
+      const result = Array.isArray(apiData) ? apiData : [];
+      setChampionships(result);
+      localStorage.setItem('championships', JSON.stringify(result));
+      setLoadedResources(prev => ({ ...prev, championships: true }));
+    } catch {
+      setLoadedResources(prev => ({ ...prev, championships: true }));
+    }
   };
 
   const loadAssessments = async () => {
@@ -831,7 +869,7 @@ export default function App() {
           const statsSource = newMatch.playerStats || saved.playerStats;
           if (competitionName && statsSource) {
             try {
-              const savedChampionships = JSON.parse(localStorage.getItem('championships') || '[]');
+              const savedChampionships = championships;
               const championship = savedChampionships.find((c: any) => c.name === competitionName);
               if (championship?.id && championship?.suspensionRules) {
                 const { updateCardsFromMatch } = await import('./utils/championshipCards');
@@ -1067,22 +1105,19 @@ export default function App() {
           createdAt: newSchedule.createdAt || Date.now()
         };
         
-        const localSchedules = JSON.parse(localStorage.getItem(SCHEDULES_LOCAL_KEY) || '[]');
-        const exists = localSchedules.find((s: WeeklySchedule) => s.id === normalizedSchedule.id);
+        const exists = schedules.find((s: WeeklySchedule) => s.id === normalizedSchedule.id);
         
-        let updatedSchedules;
+        let saved: WeeklySchedule;
         if (exists) {
-          updatedSchedules = localSchedules.map((s: WeeklySchedule) => 
-            s.id === normalizedSchedule.id ? normalizedSchedule : s
-          );
+          saved = await schedulesApi.update(normalizedSchedule.id, normalizedSchedule);
           alert('Programação atualizada com sucesso!');
         } else {
-          updatedSchedules = [normalizedSchedule, ...localSchedules];
-          alert('Programação salva com sucesso! Ela ficará disponível por 30 dias.');
+          saved = await schedulesApi.create(normalizedSchedule);
+          alert('Programação salva com sucesso!');
         }
         
-        localStorage.setItem(SCHEDULES_LOCAL_KEY, JSON.stringify(updatedSchedules));
-        setSchedules(updatedSchedules);
+        // Recarregar do backend para manter consistência
+        await loadSchedules();
       } catch (error) {
         console.error('❌ Erro ao salvar programação:', error);
         alert('Erro ao salvar programação. Verifique o console para mais detalhes.');
@@ -1097,10 +1132,8 @@ export default function App() {
       if (!confirmDelete) return;
       
       try {
-        const localSchedules = JSON.parse(localStorage.getItem(SCHEDULES_LOCAL_KEY) || '[]');
-        const updatedSchedules = localSchedules.filter((s: WeeklySchedule) => s.id !== id);
-        localStorage.setItem(SCHEDULES_LOCAL_KEY, JSON.stringify(updatedSchedules));
-        setSchedules(updatedSchedules);
+        await schedulesApi.delete(id);
+        await loadSchedules();
         alert('Programação deletada com sucesso!');
       } catch (error) {
         console.error('Erro ao deletar programação:', error);
@@ -1114,14 +1147,15 @@ export default function App() {
         if (!schedule) return;
         
         const newActiveState = !schedule.isActive;
-        const localSchedules = JSON.parse(localStorage.getItem(SCHEDULES_LOCAL_KEY) || '[]');
-        const updatedSchedules = localSchedules.map((s: WeeklySchedule) => ({
-          ...s,
-          isActive: s.id === id ? newActiveState : false,
-          days: s.days ?? []
-        }));
-        localStorage.setItem(SCHEDULES_LOCAL_KEY, JSON.stringify(updatedSchedules));
-        setSchedules(updatedSchedules);
+        // Desativar todas, ativar a selecionada
+        for (const s of schedules) {
+          if (s.id === id) {
+            await schedulesApi.update(s.id, { ...s, isActive: newActiveState });
+          } else if (s.isActive) {
+            await schedulesApi.update(s.id, { ...s, isActive: false });
+          }
+        }
+        await loadSchedules();
         
         if (newActiveState) {
           alert(`✅ Programação "${schedule.title}" marcada como ATIVA!\n\nEsta programação será considerada para exibir alertas na Visão Geral.`);
@@ -1393,13 +1427,25 @@ export default function App() {
             competitions={competitions}
             championships={championships}
             allMatches={matches}
-            onSaveChampionship={(championship) => {
-              setChampionships(prev => {
-                const updated = prev.filter(c => c.id !== championship.id);
-                updated.push(championship);
-                localStorage.setItem('championships', JSON.stringify(updated));
-                return updated;
-              });
+            onSaveChampionship={async (championship) => {
+              try {
+                let saved;
+                const existing = championships.find(c => c.id === championship.id);
+                if (existing) {
+                  saved = await championshipsApi.update(championship.id, championship);
+                } else {
+                  saved = await championshipsApi.create(championship);
+                }
+                await loadChampionships();
+              } catch (err) {
+                console.error('Erro ao salvar campeonato:', err);
+                // Fallback: atualizar localmente
+                setChampionships(prev => {
+                  const updated = prev.filter(c => c.id !== championship.id);
+                  updated.push(championship);
+                  return updated;
+                });
+              }
             }}
             onSave={async (match) => {
               try {

@@ -63,24 +63,12 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isAmistoso, setIsAmistoso] = useState(false);
-    // Campeonatos do localStorage (fallback para quando o estado do App ainda não atualizou)
-    const championshipsFromStorage = useMemo(() => {
-        try {
-            const raw = localStorage.getItem('championships');
-            if (!raw) return [];
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    }, [championships.length]); // re-ler quando championships do parent mudar (ex.: novo campeonato salvo)
-    // Lista de competições: campeonatos (props + localStorage) primeiro, depois da API
+    // Lista de competições: campeonatos (props) primeiro, depois da API
     const competitionOptions = useMemo(() => {
         const fromChampionships = championships.map((c: Championship) => c.name);
-        const fromStorage = (championshipsFromStorage as Championship[]).map((c: Championship) => c.name).filter((n: string) => !fromChampionships.includes(n));
-        const fromApi = competitions.filter((c: string) => !fromChampionships.includes(c) && !fromStorage.includes(c));
-        return [...fromChampionships, ...fromStorage, ...fromApi];
-    }, [championships, championshipsFromStorage, competitions]);
+        const fromApi = competitions.filter((c: string) => !fromChampionships.includes(c));
+        return [...fromChampionships, ...fromApi];
+    }, [championships, competitions]);
 
     const [formData, setFormData] = useState<ChampionshipMatch>({
         id: '',
@@ -222,15 +210,10 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             createdAt: new Date().toISOString()
         };
         
+        // Callback para o parent salvar via API
         if (onSaveChampionship) {
             onSaveChampionship(championshipToSave);
         }
-        
-        // Salvar no localStorage também
-        const savedChampionships = JSON.parse(localStorage.getItem('championships') || '[]');
-        const updatedChampionships = savedChampionships.filter((c: Championship) => c.id !== championshipToSave.id);
-        updatedChampionships.push(championshipToSave);
-        localStorage.setItem('championships', JSON.stringify(updatedChampionships));
         
         // Fechar modal e abrir formulário de partidas
         setShowChampionshipModal(false);

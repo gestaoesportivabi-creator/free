@@ -332,6 +332,7 @@ model Campeonato {
   id        String             @id @default(uuid())
   nome      String             @db.VarChar(255)
   equipeId  String?            @map("equipe_id")
+  dados     Json?              @db.Json
   createdAt DateTime           @default(now()) @map("created_at")
   equipe    Equipe?            @relation(fields: [equipeId], references: [id])
   jogos     CampeonatosJogos[]

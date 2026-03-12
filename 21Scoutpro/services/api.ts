@@ -442,3 +442,13 @@ export const wellnessApi = {
   saveBulk: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono', items: any[]) => 
     post<any>(`wellness/${type}/bulk`, { items }),
 };
+
+/**
+ * API específica para Championships (Campeonatos)
+ */
+export const championshipsApi = {
+  getAll: () => get<any>('championships'),
+  create: (championship: any) => post<any>('championships', championship),
+  update: (id: string, championship: any) => put<any>('championships', id, championship),
+  delete: (id: string) => del('championships', id),
+};
