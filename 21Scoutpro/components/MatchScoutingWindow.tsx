@@ -407,9 +407,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     const run = () => {
       switch (flow.action) {
-        case 'pass':
-          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period, flow.wrongPassTransition);
+        case 'pass': {
+          const isWrong = flow.details === 'wrong';
+          const generatedTransition = isWrong ? (flow.wrongPassTransition === true) : undefined;
+          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period, generatedTransition);
           break;
+        }
         case 'shot':
           handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, time, period);
           break;
@@ -1101,7 +1104,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  // Registrar resultado de passe (wrongPassGeneratedTransition: true quando o passe errado gerou transição)
+  // Registrar resultado de passe (wrongPassGeneratedTransition: true = gerou transição; false = não gerou; undefined = passe certo)
   const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', wrongPassGeneratedTransition?: boolean) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
@@ -1119,7 +1122,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       result,
       tipo,
       subtipo,
-      ...(result === 'wrong' && wrongPassGeneratedTransition !== undefined && { wrongPassGeneratedTransition }),
+      ...(result === 'wrong' && { wrongPassGeneratedTransition: wrongPassGeneratedTransition === true }),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -2695,8 +2698,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <div className="space-y-3">
                           <p className="text-zinc-300 text-sm font-medium">Gerou transição?</p>
                           <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player', wrongPassTransition: true } : null); }} className="px-4 py-3 bg-rose-500/20 border-2 border-rose-500 text-rose-400 font-bold uppercase text-xs rounded-lg hover:bg-rose-500/30 transition-colors">Sim</button>
-                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player', wrongPassTransition: false } : null); }} className="px-4 py-3 bg-zinc-500/20 border-2 border-zinc-500 text-zinc-300 font-bold uppercase text-xs rounded-lg hover:bg-zinc-500/30 transition-colors">Não</button>
+                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player' as const, details: 'wrong', action: 'pass', wrongPassTransition: true } : null); }} className="px-4 py-3 bg-rose-500/20 border-2 border-rose-500 text-rose-400 font-bold uppercase text-xs rounded-lg hover:bg-rose-500/30 transition-colors">Sim</button>
+                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player' as const, details: 'wrong', action: 'pass', wrongPassTransition: false } : null); }} className="px-4 py-3 bg-zinc-500/20 border-2 border-zinc-500 text-zinc-300 font-bold uppercase text-xs rounded-lg hover:bg-zinc-500/30 transition-colors">Não</button>
                           </div>
                         </div>
                       )}
@@ -2778,7 +2781,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               key={player.id}
                               onClick={() => {
                                 if (needsTimePopup()) {
-                                  setActionFlow(prev => prev ? { ...prev, step: 'time', selectedPlayerId: pid } : null);
+                                  setActionFlow(prev => prev ? { ...prev, step: 'time' as const, selectedPlayerId: pid, details: prev.details || undefined, wrongPassTransition: prev.wrongPassTransition } : null);
                                 } else {
                                   completeActionFlowWithPlayer(pid);
                                 }

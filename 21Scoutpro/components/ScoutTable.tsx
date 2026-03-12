@@ -2143,27 +2143,27 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
-                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
                                                 </div>
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
-                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
-                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
-                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
+                                                    <p className={`font-bold text-[10px] truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[9px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
-                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
-                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
-                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
+                                                            <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
                                                         </div>
                                                     ) : (
-                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        <div className="flex flex-col gap-0 text-[9px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2289,27 +2289,27 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
-                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
                                                 </div>
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
-                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
-                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
-                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
+                                                    <p className={`font-bold text-[10px] truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[9px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
-                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
-                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
-                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
+                                                            <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
                                                         </div>
                                                     ) : (
-                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        <div className="flex flex-col gap-0 text-[9px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2457,27 +2457,27 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-2 p-2 rounded-lg border transition-colors bg-zinc-900/90 min-w-[240px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
-                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-11 h-11 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-sm">{player.jerseyNumber}</div>}
+                                                    {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
                                                 </div>
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
-                                                    <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
-                                                    <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
-                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
+                                                    <p className={`font-bold text-[10px] truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                    <p className="text-[9px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
-                                                        <div className="flex flex-col items-center justify-center gap-0.5 rounded border border-zinc-600/50 bg-zinc-800/50 px-1.5 py-1">
-                                                            <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
-                                                            <Lock className="w-4 h-4 text-zinc-500 shrink-0" strokeWidth={1.5} />
+                                                        <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
+                                                            <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
+                                                            <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
                                                         </div>
                                                     ) : (
-                                                        <div className="flex flex-col gap-0 text-[10px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-xs">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-xs">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-xs">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                        <div className="flex flex-col gap-0 text-[9px] text-right">
+                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
+                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2960,8 +2960,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             }}
                                             className="w-4 h-4 text-[#00f0ff] bg-zinc-900 border-zinc-700 rounded focus:ring-[#00f0ff]"
                                         />
-                                        <span className="text-white text-xs font-bold">#{player.jerseyNumber} {player.name}</span>
-                                        {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
+                                        <span className="text-white text-[10px] font-bold">#{player.jerseyNumber} {player.name}</span>
+                                        {player.position && <span className="block text-[9px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
                                     </label>
                                 );
                             })}
@@ -2992,27 +2992,27 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             setSelectedPlayerId(String(player.id).trim());
                                         }}
                                         disabled={isViewMode}
-                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                                        className={`w-full p-2.5 rounded-xl border-2 transition-all text-left ${
                                             isSelected 
                                                 ? 'border-[#00f0ff] bg-[#00f0ff]/10 shadow-[0_0_20px_rgba(0,240,255,0.5)]' 
                                                 : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
                                         } ${isDisabled ? 'opacity-60' : ''}`}
                                     >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${isSelected ? 'border-[#00f0ff]' : 'border-zinc-700'} bg-zinc-900 flex-shrink-0`}>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-10 h-10 rounded-full overflow-hidden border-2 ${isSelected ? 'border-[#00f0ff]' : 'border-zinc-700'} bg-zinc-900 flex-shrink-0`}>
                                                 {player.photoUrl ? (
                                                     <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-bold">
+                                                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-[10px] font-bold">
                                                         {player.name?.substring(0, 2).toUpperCase() || '??'}
                                                     </div>
                                                 )}
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-white font-bold text-sm truncate">{player.name}</p>
-                                                <p className={`text-xs ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-400'}`}>#{player.jerseyNumber} • {player.position === 'Goleiro' ? '🥅 Goleiro' : (player.position || '—')}</p>
+                                                <p className="text-white font-bold text-xs truncate">{player.name}</p>
+                                                <p className={`text-[10px] ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-400'}`}>#{player.jerseyNumber} • {player.position === 'Goleiro' ? '🥅 Goleiro' : (player.position || '—')}</p>
                                                 {entry && (
-                                                    <div className="flex items-center gap-2 mt-1 text-[10px]">
+                                                    <div className="flex items-center gap-2 mt-0.5 text-[9px]">
                                                         {entry.goals > 0 && <span className="text-[#ccff00] font-bold">⚽{entry.goals}</span>}
                                                         {entry.assists > 0 && <span className="text-blue-400 font-bold">🎯{entry.assists}</span>}
                                                         {yellowCards > 0 && <span className="text-yellow-400 font-bold">🟨{yellowCards}</span>}
