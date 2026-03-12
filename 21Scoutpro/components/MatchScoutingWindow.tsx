@@ -742,7 +742,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       // Garantir que gols do adversário sejam contabilizados mesmo se, por algum motivo, vierem sem playerId
       if (action === 'goal' && e.isOpponentGoal && !e.playerId) {
         goalsAgainst += 1;
-        teamStats.goals += 1;
+        teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+        // Métodos de gols tomados (fallback)
+        if (e.goalMethod && e.goalMethod.trim() !== '') {
+          if (!teamStats.goalMethodsConceded) teamStats.goalMethodsConceded = {};
+          const method = e.goalMethod.trim();
+          teamStats.goalMethodsConceded[method] = (teamStats.goalMethodsConceded[method] || 0) + 1;
+        }
         // Não cria playerStats para esse evento "órfão"
         const timeStrFallback = formatTimeToMMSS(e.time);
         const postEventFallback: PostMatchEvent = {
@@ -768,10 +774,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       const timeStr = formatTimeToMMSS(e.time);
 
       if (action === 'goal') {
-        ps.goals += 1;
-        teamStats.goals += 1;
-        if (e.isOpponentGoal) goalsAgainst += 1;
-        else goalsFor += 1;
+        if (e.isOpponentGoal) {
+          // Gol do adversário: contabilizar apenas nos dados do time (não em playerStats, que pertence à nossa equipe)
+          goalsAgainst += 1;
+          teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+          if (e.goalMethod && e.goalMethod.trim() !== '') {
+            if (!teamStats.goalMethodsConceded) teamStats.goalMethodsConceded = {};
+            const method = e.goalMethod.trim();
+            teamStats.goalMethodsConceded[method] = (teamStats.goalMethodsConceded[method] || 0) + 1;
+          }
+        } else {
+          // Gol nosso: contabilizar em playerStats e nos dados do time
+          ps.goals += 1;
+          teamStats.goals += 1;
+          goalsFor += 1;
+          if (e.goalMethod && e.goalMethod.trim() !== '') {
+            if (!teamStats.goalMethodsScored) teamStats.goalMethodsScored = {};
+            const method = e.goalMethod.trim();
+            teamStats.goalMethodsScored[method] = (teamStats.goalMethodsScored[method] || 0) + 1;
+          }
+        }
       } else if (action === 'passCorrect') {
         ps.passesCorrect += 1;
         teamStats.passesCorrect += 1;

@@ -1063,13 +1063,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       {/* Row 3: Donut Charts - Métodos de Gol */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
-           <div className="h-72 w-full">
+        <div className="h-80 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <PieChart margin={{ top: 0, right: 0, bottom: 60, left: 0 }}>
+             <PieChart margin={{ top: 10, right: 0, bottom: 70, left: 0 }}>
                     <Pie
                         data={originScoredData}
                         cx="50%"
-                        cy="40%"
+                    cy="45%"
                         innerRadius={70}
                         outerRadius={100}
                         paddingAngle={5}
@@ -1087,20 +1087,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name
                       ]}
                     />
-                    <Legend verticalAlign="bottom" height={36} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '20px'}} />
+                    <Legend verticalAlign="bottom" height={40} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '24px'}} />
                 </PieChart>
              </ResponsiveContainer>
            </div>
         </ExpandableCard>
 
         <ExpandableCard title={`Métodos de ${config.labels.goals} Tomado`} icon={PieChartIcon} headerColor="text-white">
-           <div className="h-72 w-full">
+        <div className="h-80 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <PieChart margin={{ top: 0, right: 0, bottom: 60, left: 0 }}>
+             <PieChart margin={{ top: 10, right: 0, bottom: 70, left: 0 }}>
                     <Pie
                         data={originConcededData}
                         cx="50%"
-                        cy="40%"
+                    cy="45%"
                         innerRadius={70}
                         outerRadius={100}
                         paddingAngle={5}
@@ -1118,7 +1118,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name
                       ]}
                     />
-                    <Legend verticalAlign="bottom" height={36} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '20px'}} />
+                    <Legend verticalAlign="bottom" height={40} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '24px'}} />
                 </PieChart>
              </ResponsiveContainer>
            </div>
