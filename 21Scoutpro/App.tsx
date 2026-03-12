@@ -104,7 +104,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   team: ['players'],
   schedule: ['schedules'],
   championship: ['championshipMatches', 'competitions', 'championships', 'matches'],
-  table: ['players', 'competitions', 'matches', 'championshipMatches', 'schedules', 'teams'],
+  table: ['players', 'competitions', 'matches', 'championshipMatches', 'championships', 'schedules', 'teams'],
   general: ['matches', 'players'],
   individual: ['matches', 'players', 'timeControls'],
   ranking: [],
@@ -1466,7 +1466,7 @@ export default function App() {
             <ScoutTable 
           onSave={handleSaveMatch} 
           players={players} 
-          competitions={competitions} 
+          competitions={Array.from(new Set([...championships.map(c => c.name), ...competitions]))} 
           matches={matches}
           initialData={(window as any).selectedChampionshipMatch}
           onInitialDataUsed={() => {

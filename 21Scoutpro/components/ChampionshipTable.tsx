@@ -63,12 +63,24 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isAmistoso, setIsAmistoso] = useState(false);
-    // Lista de competições: campeonatos salvos primeiro, depois da API
+    // Campeonatos do localStorage (fallback para quando o estado do App ainda não atualizou)
+    const championshipsFromStorage = useMemo(() => {
+        try {
+            const raw = localStorage.getItem('championships');
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }, [championships.length]); // re-ler quando championships do parent mudar (ex.: novo campeonato salvo)
+    // Lista de competições: campeonatos (props + localStorage) primeiro, depois da API
     const competitionOptions = useMemo(() => {
-        const fromChampionships = championships.map(c => c.name);
-        const fromApi = competitions.filter(c => !fromChampionships.includes(c));
-        return [...fromChampionships, ...fromApi];
-    }, [championships, competitions]);
+        const fromChampionships = championships.map((c: Championship) => c.name);
+        const fromStorage = (championshipsFromStorage as Championship[]).map((c: Championship) => c.name).filter((n: string) => !fromChampionships.includes(n));
+        const fromApi = competitions.filter((c: string) => !fromChampionships.includes(c) && !fromStorage.includes(c));
+        return [...fromChampionships, ...fromStorage, ...fromApi];
+    }, [championships, championshipsFromStorage, competitions]);
 
     const [formData, setFormData] = useState<ChampionshipMatch>({
         id: '',
