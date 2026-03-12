@@ -53,11 +53,11 @@ elif [ "$project_choice" = "2" ]; then
     PROJECT_TYPE="backend"
     
     # DATABASE_URL - Pooler (porta 6543) para serverless Vercel
-    # Alinhado com package.json supabase:link - projeto jhjrqnggsfeztgkpqcjm
-    DATABASE_URL="postgresql://postgres.jhjrqnggsfeztgkpqcjm:%23Gestaoesportiva21@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
-    
+    # Projeto: mymuvraqtnoqrtuzoimj - substitua [SENHA] pela senha do Supabase
+    DATABASE_URL="postgresql://postgres.mymuvraqtnoqrtuzoimj:[SENHA]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+
     # DIRECT_URL - Obrigatório pelo Prisma schema (porta 5432)
-    DIRECT_URL="postgresql://postgres:%23Gestaoesportiva21@db.jhjrqnggsfeztgkpqcjm.supabase.co:5432/postgres?sslmode=require"
+    DIRECT_URL="postgresql://postgres:[SENHA]@db.mymuvraqtnoqrtuzoimj.supabase.co:5432/postgres?sslmode=require"
     
     # Gera JWT_SECRET
     echo "🔑 Gerando JWT_SECRET..."

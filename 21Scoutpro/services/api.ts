@@ -39,6 +39,7 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
         'Authorization': `Bearer ${token}`,
       },
       signal: controller.signal,
+      cache: 'no-store',
     });
     
     clearTimeout(timeoutId);

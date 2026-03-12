@@ -40,11 +40,12 @@ Configure no Vercel Dashboard → Settings → Environment Variables:
 ### Obrigatórias:
 ```
 # DATABASE_URL - Pooler (porta 6543) para serverless
-# Projeto Supabase: jhjrqnggsfeztgkpqcjm (mesmo banco para local e produção)
-DATABASE_URL=postgresql://postgres.jhjrqnggsfeztgkpqcjm:%23Gestaoesportiva21@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
+# Projeto Supabase: mymuvraqtnoqrtuzoimj - https://supabase.com/dashboard/project/mymuvraqtnoqrtuzoimj
+# Substitua [SENHA] pela senha do banco (Settings → Database → Connection string)
+DATABASE_URL=postgresql://postgres.mymuvraqtnoqrtuzoimj:[SENHA]@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require
 
 # DIRECT_URL - Obrigatório pelo Prisma schema (porta 5432)
-DIRECT_URL=postgresql://postgres:%23Gestaoesportiva21@db.jhjrqnggsfeztgkpqcjm.supabase.co:5432/postgres?sslmode=require
+DIRECT_URL=postgresql://postgres:[SENHA]@db.mymuvraqtnoqrtuzoimj.supabase.co:5432/postgres?sslmode=require
 
 # Use o MESMO JWT_SECRET em backend/.env (local) para tokens funcionarem em ambos os ambientes
 JWT_SECRET=sua-chave-secreta-forte-aqui

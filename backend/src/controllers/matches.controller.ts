@@ -21,6 +21,7 @@ export const matchesController = {
   getAll: async (req: Request, res: Response) => {
     if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       const matches = await runWithTenant(req, (tx) => matchesService.getAll(req.tenantInfo!, tx));
       return res.json({ success: true, data: matches });
     } catch (error) {
@@ -31,6 +32,7 @@ export const matchesController = {
   getById: async (req: Request, res: Response) => {
     if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       const match = await runWithTenant(req, (tx) => matchesService.getById(req.params.id, req.tenantInfo!, tx));
       return res.json({ success: true, data: match });
     } catch (error) {

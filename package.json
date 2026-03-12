@@ -5,7 +5,7 @@
   "description": "SCOUT 21 PRO - Sistema de Gestão Esportiva (Frontend + Backend)",
   "scripts": {
     "supabase:login": "supabase login",
-    "supabase:link": "supabase link --project-ref jhjrqnggsfeztgkpqcjm",
+    "supabase:link": "supabase link --project-ref mymuvraqtnoqrtuzoimj",
     "supabase:db-pull": "supabase db pull",
     "supabase:db-push": "supabase db push",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
