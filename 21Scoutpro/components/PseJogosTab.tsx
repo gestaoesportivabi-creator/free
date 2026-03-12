@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Activity, ChevronDown, ChevronRight, Trophy } from 'lucide-react';
 import { Player } from '../types';
 
+import { wellnessApi } from '../services/api';
+
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 
 export type ChampionshipMatchForPse = {
@@ -24,21 +26,52 @@ export const PseJogosTab: React.FC<PseJogosTabProps> = ({ championshipMatches, p
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (raw) setStored(JSON.parse(raw));
-    } catch (_) {}
+    let mounted = true;
+    const loadFromApi = async () => {
+      try {
+        const rawLocal = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
+        if (rawLocal && mounted) setStored(JSON.parse(rawLocal));
+
+        const apiData = await wellnessApi.getAll('pse-jogo');
+        if (!mounted || !Array.isArray(apiData)) return;
+
+        const newData: StoredPseJogos = {};
+        apiData.forEach((item: any) => {
+          if (!newData[item.jogoId]) newData[item.jogoId] = {};
+          newData[item.jogoId][item.jogadorId] = item.valor;
+        });
+
+        setStored(newData);
+        localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(newData));
+      } catch (err) {
+        console.error('Erro ao carregar PSE Jogos:', err);
+      }
+    };
+    loadFromApi();
+    return () => { mounted = false; };
   }, []);
 
-  const save = (matchId: string, playerId: string, value: number | '') => {
+  const save = async (matchId: string, playerId: string, value: number | '') => {
     setStored(prev => {
       const matchData = { ...(prev[matchId] || {}) };
       if (value === '') delete matchData[playerId];
-      else matchData[playerId] = value;
+      else matchData[playerId] = value as number;
       const next = { ...prev, [matchId]: matchData };
       try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+
+    if (value !== '') {
+       try {
+         await wellnessApi.saveBulk('pse-jogo', [{
+            jogoId: matchId,
+            jogadorId: playerId,
+            value
+         }]);
+       } catch (err) {
+         console.error('Erro ao salvar PSE Jogo no backend:', err);
+       }
+    }
   };
 
   const sortedMatches = useMemo(() => {

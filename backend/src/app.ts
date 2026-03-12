@@ -22,6 +22,7 @@ import statTargetsRoutes from './routes/statTargets.routes';
 import championshipMatchesRoutes from './routes/championshipMatches.routes';
 import timeControlsRoutes from './routes/timeControls.routes';
 import teamsRoutes from './routes/teams.routes';
+import wellnessRoutes from './routes/wellness.routes';
 
 const app: Express = express();
 
@@ -75,6 +76,7 @@ app.use('/api/assessments', authMiddleware, tenantMiddleware(), assessmentsRoute
 app.use('/api/stat-targets', authMiddleware, tenantMiddleware(), statTargetsRoutes);
 app.use('/api/championship-matches', authMiddleware, tenantMiddleware(), championshipMatchesRoutes);
 app.use('/api/time-controls', authMiddleware, tenantMiddleware(), timeControlsRoutes);
+app.use('/api/wellness', authMiddleware, tenantMiddleware(), wellnessRoutes);
 
 // Competições são globais (sem tenant, mas com auth)
 app.use('/api/competitions', authMiddleware, competitionsRoutes);

@@ -429,3 +429,16 @@ export interface RegisteredUser {
 export const usersApi = {
   getAll: () => get<RegisteredUser>('auth/users'),
 };
+
+/**
+ * API específica para Wellness (PSE, PSR, Qualidade de Sono)
+ */
+export const wellnessApi = {
+  // Buscar histórico de um tipo
+  getAll: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono') => 
+    get<any>(`wellness/${type}`),
+  
+  // Salvar em lote
+  saveBulk: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono', items: any[]) => 
+    post<any>(`wellness/${type}/bulk`, { items }),
+};

@@ -82,6 +82,9 @@ model Equipe {
   jogos             Jogo[]
   metasEstatisticas MetasEstatisticas[]
   programacoes      Programacao[]
+  pseTreinos        PseTreino[]
+  psrTreinos        PsrTreino[]
+  qualidadesSono    QualidadeSono[]
 
   @@index([tecnicoId])
   @@index([clubeId])
@@ -112,6 +115,11 @@ model Jogador {
   estatisticasJogador JogosEstatisticasJogador[]
   eventos             JogosEventos[]
   lesoes              Lesao[]
+  pseTreinos          PseTreino[]
+  pseJogos            PseJogo[]
+  psrTreinos          PsrTreino[]
+  psrJogos            PsrJogo[]
+  qualidadesSono      QualidadeSono[]
 
   @@map("jogadores")
 }
@@ -155,6 +163,8 @@ model Jogo {
   estatisticasEquipe  JogosEstatisticasEquipe?
   estatisticasJogador JogosEstatisticasJogador[]
   eventos             JogosEventos[]
+  pseJogos            PseJogo[]
+  psrJogos            PsrJogo[]
 
   @@index([equipeId, data(sort: Desc)])
   @@index([competicaoId])
@@ -375,4 +385,92 @@ model MetasEstatisticas {
 
   @@index([equipeId])
   @@map("metas_estatisticas")
+}
+
+model PseTreino {
+  id          String   @id @default(uuid())
+  equipeId    String   @map("equipe_id")
+  jogadorId   String   @map("jogador_id")
+  data        DateTime @db.Date // Salva a data do evento (treino)
+  valor       Int      @db.SmallInt // 0 a 10
+  observacoes String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([equipeId, data])
+  @@index([jogadorId])
+  @@map("pse_treinos")
+}
+
+model PseJogo {
+  id          String   @id @default(uuid())
+  jogoId      String   @map("jogo_id")
+  jogadorId   String   @map("jogador_id")
+  valor       Int      @db.SmallInt // 0 a 10
+  observacoes String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([jogoId])
+  @@index([jogadorId])
+  @@map("pse_jogos")
+}
+
+model PsrTreino {
+  id          String   @id @default(uuid())
+  equipeId    String   @map("equipe_id")
+  jogadorId   String   @map("jogador_id")
+  data        DateTime @db.Date
+  valor       Int      @db.SmallInt // 0 a 10
+  observacoes String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([equipeId, data])
+  @@index([jogadorId])
+  @@map("psr_treinos")
+}
+
+model PsrJogo {
+  id          String   @id @default(uuid())
+  jogoId      String   @map("jogo_id")
+  jogadorId   String   @map("jogador_id")
+  valor       Int      @db.SmallInt // 0 a 10
+  observacoes String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([jogoId])
+  @@index([jogadorId])
+  @@map("psr_jogos")
+}
+
+model QualidadeSono {
+  id          String   @id @default(uuid())
+  equipeId    String   @map("equipe_id")
+  jogadorId   String   @map("jogador_id")
+  data        DateTime @db.Date
+  valor       Int      @db.SmallInt
+  observacoes String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+
+  @@index([equipeId, data])
+  @@index([jogadorId])
+  @@map("qualidade_sono")
 }

@@ -286,6 +286,7 @@ export interface WeeklySchedule {
   weekEnd: string;
   startDate?: string;  // Alias para weekStart
   endDate?: string;    // Alias para weekEnd
+  equipeId?: string;
   days: ScheduleDay[] | DaySchedule[];  // Aceita formato flat ou agrupado
   isActive?: boolean;
   createdAt?: number;

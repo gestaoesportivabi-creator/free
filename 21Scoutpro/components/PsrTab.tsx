@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { wellnessApi } from '../services/api';
 
 const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
@@ -46,38 +47,112 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const j = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-      if (j) setPsrJogos(JSON.parse(j));
-      const t = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-      if (t) setPsrTreinos(JSON.parse(t));
-    } catch (_) {}
+    let mounted = true;
+    const loadFromApi = async () => {
+      try {
+        const lpj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
+        if (lpj && mounted) setPsrJogos(JSON.parse(lpj));
+        const lpt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
+        if (lpt && mounted) setPsrTreinos(JSON.parse(lpt));
+
+        const [apiJogos, apiTreinos] = await Promise.all([
+          wellnessApi.getAll('psr-jogo'),
+          wellnessApi.getAll('psr-treino')
+        ]);
+
+        if (!mounted) return;
+
+        // Jogos
+        if (Array.isArray(apiJogos)) {
+          const newJogos: StoredPsrJogos = {};
+          apiJogos.forEach((item: any) => {
+            if (!newJogos[item.jogoId]) newJogos[item.jogoId] = {};
+            newJogos[item.jogoId][item.jogadorId] = item.valor;
+          });
+          setPsrJogos(newJogos);
+          localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(newJogos));
+        }
+
+        // Treinos
+        if (Array.isArray(apiTreinos)) {
+          const newTreinos: StoredPsrTreinos = {};
+          apiTreinos.forEach((item: any) => {
+             const key = new Date(item.data).toISOString().split('T')[0];
+             if (!newTreinos[key]) newTreinos[key] = {};
+             newTreinos[key][item.jogadorId] = item.valor;
+          });
+          
+          if (lpt) {
+            const merged = JSON.parse(lpt);
+            for (const key of Object.keys(merged)) {
+              const dt = key.split('_')[0];
+              if (newTreinos[dt]) merged[key] = { ...merged[key], ...newTreinos[dt] };
+            }
+            setPsrTreinos(merged);
+            localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(merged));
+          } else {
+             setPsrTreinos(newTreinos);
+          }
+        }
+
+      } catch (err) {
+        console.error('Erro ao buscar dados de PSR:', err);
+      }
+    };
+    loadFromApi();
+    return () => { mounted = false; };
   }, []);
 
-  const saveJogo = (matchId: string, playerId: string, value: number | '') => {
+  const saveJogo = async (matchId: string, playerId: string, value: number | '') => {
     setPsrJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
-      else next[matchId][playerId] = value;
+      else next[matchId][playerId] = value as number;
       try { localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+
+    if (value !== '') {
+      try {
+        await wellnessApi.saveBulk('psr-jogo', [{
+          jogoId: matchId,
+          jogadorId: playerId,
+          value
+        }]);
+      } catch (e) {
+        console.error('Falha ao salvar PSR jogo', e);
+      }
+    }
   };
 
-  const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
+  const saveTreino = async (sessionKey: string, playerId: string, value: number | '') => {
     setPsrTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
-      else next[sessionKey][playerId] = value;
+      else next[sessionKey][playerId] = value as number;
       try { localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+
+    if (value !== '') {
+      try {
+        const datePart = sessionKey.split('_')[0];
+        await wellnessApi.saveBulk('psr-treino', [{
+          equipeId: schedules[0]?.equipeId || 'default-equipe',
+          data: datePart,
+          jogadorId: playerId,
+          value
+        }]);
+      } catch (e) {
+         console.error('Falha ao salvar PSR treino', e);
+      }
+    }
   };
 
   const events = useMemo((): PsrEvent[] => {
     const list: PsrEvent[] = [];
     const active = (Array.isArray(schedules) ? schedules : []).filter(
-      s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true')
+      s => s && (s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true')
     );
     const seenTreino = new Set<string>();
     active.forEach(s => {

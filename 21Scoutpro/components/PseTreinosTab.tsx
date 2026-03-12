@@ -3,6 +3,8 @@ import { Activity, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 
+import { wellnessApi } from '../services/api';
+
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
 
 type Period = 'matutino' | 'vespertino' | 'noturno';
@@ -40,25 +42,87 @@ export const PseTreinosTab: React.FC<PseTreinosTabProps> = ({ schedules, players
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (raw) setStored(JSON.parse(raw));
-    } catch (_) {}
+    let mounted = true;
+    const loadFromApi = async () => {
+      try {
+        const rawLocal = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+        if (rawLocal && mounted) setStored(JSON.parse(rawLocal));
+
+        // Busca PSEs de treino do backend
+        const apiData = await wellnessApi.getAll('pse-treino');
+        if (!mounted || !Array.isArray(apiData)) return;
+
+        const newData: StoredPseTreinos = {};
+        
+        // Reconstrói as "sessões" usando a data. (Ex: "YYYY-MM-DD_15:00_Treino") 
+        // Como o backend salva equipeId e data, a view mapeará isso buscando por dia
+        apiData.forEach((item: any) => {
+           // Formata timestamp do DB para YYYY-MM-DD local
+           const dbDate = new Date(item.data);
+           const yyyyMmDd = dbDate.toISOString().split('T')[0];
+           
+           // Para parear corretamente, associamos a data. Como a PK do frontend é Date_Time_Act
+           // Vamos encontrar as chaves parciais na tela... 
+           // NOTA: Para uma arquitetura mais profunda a tabela PseTreino deve ter programacao_dia_id. 
+           // Aqui nós unificamos com base apenas na data. Se tiverem 2 treinos no dia, a PSE replica para as chaves com mesmo 'YYYY-MM-DD' nas keys locais do frontend durante a carga inicial.
+           
+           // A estratégia simples atual: guardaremos na chave 'YYYY-MM-DD' apenas e na query varremos.
+           const sessionKey = yyyyMmDd; 
+           
+           if (!newData[sessionKey]) newData[sessionKey] = {};
+           newData[sessionKey][item.jogadorId] = item.valor;
+        });
+
+        // Restaurar com merge das localKeys caso a migração do formato não feche exato (Para não quebrar a demo inicial)
+        if (rawLocal) {
+          const lData = JSON.parse(rawLocal);
+          for (const key of Object.keys(lData)) {
+             const dt = key.split('_')[0]; // YYYY-MM-DD
+             if (newData[dt]) {
+                lData[key] = { ...lData[key], ...newData[dt] };
+             }
+          }
+          setStored(lData);
+          localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(lData));
+        } else {
+          setStored(newData); // Se cru, fica com JSON flat na store (que logo se alinha)
+        }
+      } catch (err) {
+        console.error('Erro ao carregar PSE Treinos:', err);
+      }
+    };
+    loadFromApi();
+    return () => { mounted = false; };
   }, []);
 
-  const save = (sessionKey: string, playerId: string, value: number | '') => {
+  const save = async (sessionKey: string, playerId: string, value: number | '') => {
     setStored(prev => {
       const sessionData = { ...(prev[sessionKey] || {}) };
       if (value === '') delete sessionData[playerId];
-      else sessionData[playerId] = value;
+      else sessionData[playerId] = value as number;
       const next = { ...prev, [sessionKey]: sessionData };
       try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+
+    if (value !== '') {
+       try {
+         // O sessionKey tem formato 'YYYY-MM-DD_HH:MM_Treino'
+         const datePart = sessionKey.split('_')[0];
+         await wellnessApi.saveBulk('pse-treino', [{
+            equipeId: schedules[0]?.equipeId || 'default-equipe',  // fallback caso nao venha populado
+            data: datePart, // YYYY-MM-DD -> passa limpo
+            jogadorId: playerId,
+            value
+         }]);
+       } catch (err) {
+         console.error('Erro ao salvar PSE Treino no backend:', err);
+       }
+    }
   };
 
   const sessions = useMemo((): TrainingSessionRow[] => {
-    const active = schedules.filter(s => s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true');
+    const active = schedules.filter(s => s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true');
     const list: TrainingSessionRow[] = [];
     const seen = new Set<string>();
     active.forEach(s => {

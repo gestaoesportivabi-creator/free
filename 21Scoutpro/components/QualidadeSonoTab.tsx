@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Moon, ChevronDown, ChevronRight, Calendar, Trophy } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { wellnessApi } from '../services/api';
 
 export const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
 
@@ -45,22 +46,70 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
   const safePlayers = Array.isArray(players) ? players : [];
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-      if (raw) setStored(JSON.parse(raw));
-    } catch (_) {}
+    let mounted = true;
+    const loadFromApi = async () => {
+      try {
+        const raw = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
+        if (raw && mounted) setStored(JSON.parse(raw));
+
+        const apiData = await wellnessApi.getAll('qualidade-sono');
+        if (!mounted || !Array.isArray(apiData)) return;
+
+        const newData: StoredQualidadeSono = {};
+        apiData.forEach((item: any) => {
+          // A data no backend é salva como timestamp, vamos padronizar pra o formato da string eventKey
+          const date = new Date(item.data).toISOString().split('T')[0];
+          // O frontend junta a string treino_YYYY-MM-DD
+          const eventKey = `treino_${date}`; 
+          
+          if (!newData[eventKey]) newData[eventKey] = {};
+          newData[eventKey][item.jogadorId] = item.valor;
+        });
+
+        if (raw) {
+          const lData = JSON.parse(raw);
+          for (const key of Object.keys(lData)) {
+            if (newData[key]) lData[key] = { ...lData[key], ...newData[key] };
+          }
+          setStored(lData);
+          localStorage.setItem(QUALIDADE_SONO_STORAGE_KEY, JSON.stringify(lData));
+        } else {
+          setStored(newData);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados de Qualidade Sono:', err);
+      }
+    };
+    loadFromApi();
+    return () => { mounted = false; };
   }, []);
 
-  const save = (eventKey: string, playerId: string, value: number) => {
+  const save = async (eventKey: string, playerId: string, value: number | '') => {
     setStored(prev => {
       const eventData = { ...(prev[eventKey] || {}) };
-      eventData[playerId] = value;
+      if (value === '') delete eventData[playerId];
+      else eventData[playerId] = value as number;
       const next = { ...prev, [eventKey]: eventData };
       try {
         localStorage.setItem(QUALIDADE_SONO_STORAGE_KEY, JSON.stringify(next));
       } catch (_) {}
       return next;
     });
+
+    if (value !== '') {
+      try {
+        // Formato da key: treino_YYYY-MM-DD ou jogo_YYYY-MM-DD
+        const datePart = eventKey.split('_')[1];
+        await wellnessApi.saveBulk('qualidade-sono', [{
+           equipeId: schedules[0]?.equipeId || 'default-equipe',
+           data: datePart,
+           jogadorId: playerId,
+           value
+        }]);
+      } catch (err) {
+        console.error('Falha ao salvar a qualidade do sono', err);
+      }
+    }
   };
 
   const events = useMemo((): SleepEvent[] => {
@@ -68,7 +117,7 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
     const seen = new Set<string>();
 
     const active = safeSchedules.filter(
-      s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true')
+      s => s && (s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true')
     );
     active.forEach(s => {
       try {
