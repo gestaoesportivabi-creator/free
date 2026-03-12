@@ -59,16 +59,22 @@ export async function authMiddleware(
       throw new UnauthorizedError('Usuário não encontrado ou inativo');
     }
 
+    const roleName = user.role?.name ?? 'TECNICO';
+
     // Adicionar user ao request
     req.user = {
       id: user.id,
       email: user.email,
       name: user.name,
-      role_id: user.role.name,
+      role_id: roleName,
     };
 
     next();
   } catch (error) {
+    // Logar erro inesperado em desenvolvimento/produção para facilitar diagnóstico
+    // (não expõe detalhes sensíveis na resposta)
+    // eslint-disable-next-line no-console
+    console.error('[authMiddleware] Erro inesperado ao verificar autenticação:', error);
     if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({
         success: false,
