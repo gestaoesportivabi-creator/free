@@ -87,6 +87,10 @@ const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; hover:
   'Perda de bola na primeira linha da defesa': { icon: <ShieldOff size={16} />, bg: 'bg-red-600', hover: 'hover:bg-red-700', text: 'text-white' },
 };
 
+// Jogador "fake" para o adversário — usado apenas para contabilizar gols sofridos e métodos de gols do adversário
+const OPPONENT_FAKE_PLAYER_ID = 'OPPONENT_TEAM';
+const OPPONENT_FAKE_PLAYER_NAME = 'Adversário';
+
 interface MatchEvent {
   id: string;
   type: 'pass' | 'shot' | 'foul' | 'goal' | 'card' | 'tackle' | 'save' | 'block' | 'corner' | 'freeKick' | 'penalty' | 'lateral';
@@ -733,7 +737,29 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
 
       const action = matchEventToPostMatchAction(e);
-      if (!action || !e.playerId) continue;
+      if (!action) continue;
+
+      // Garantir que gols do adversário sejam contabilizados mesmo se, por algum motivo, vierem sem playerId
+      if (action === 'goal' && e.isOpponentGoal && !e.playerId) {
+        goalsAgainst += 1;
+        teamStats.goals += 1;
+        // Não cria playerStats para esse evento "órfão"
+        const timeStrFallback = formatTimeToMMSS(e.time);
+        const postEventFallback: PostMatchEvent = {
+          id: e.id,
+          time: timeStrFallback,
+          period: e.period,
+          playerId: OPPONENT_FAKE_PLAYER_ID,
+          action,
+          tipo: e.tipo,
+          subtipo: e.subtipo,
+          isOpponentGoal: true,
+        };
+        postMatchEventLog.push(postEventFallback);
+        continue;
+      }
+
+      if (!e.playerId) continue;
 
       const playerId = String(e.playerId).trim();
       if (!playerStats[playerId]) playerStats[playerId] = emptyStats();
@@ -1278,11 +1304,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const goalTime = goalTimeOverride ?? pendingGoalTime ?? matchTime;
     const goalPeriod = goalPeriodOverride ?? pendingGoalPeriod ?? currentPeriod;
     const method = goalMethod ?? pendingGoalMethod;
+
+    const effectivePlayerId = isOpponent
+      ? OPPONENT_FAKE_PLAYER_ID
+      : (playerId || undefined);
+
+    const effectivePlayerName = isOpponent
+      ? OPPONENT_FAKE_PLAYER_NAME
+      : (player?.name || 'Gol Contra');
+
     const newEvent: MatchEvent = {
       id: `goal-${Date.now()}`,
       type: 'goal',
-      playerId: playerId || undefined,
-      playerName: player?.name || (isOpponent ? 'Adversário' : 'Gol Contra'),
+      playerId: effectivePlayerId,
+      playerName: effectivePlayerName,
       time: goalTime,
       period: goalPeriod,
       result: goalType,
