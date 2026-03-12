@@ -149,8 +149,11 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                                 {name}
                             </span>
                             <span className={`text-[9px] leading-tight ${disabled ? 'text-red-200' : 'text-green-100'}`}>
-                                #{player.jerseyNumber} · {player.position}
+                                #{player.jerseyNumber} · {player.position || '—'}
                             </span>
+                            {player.position === 'Goleiro' && (
+                                <span className="text-[8px] font-black uppercase tracking-wider text-amber-400 mt-0.5">Goleiro</span>
+                            )}
                         </div>
 
                         {!disabled && (

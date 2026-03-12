@@ -401,7 +401,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
                 <option value="">Selecionar...</option>
                 {players.map((p) => (
                   <option key={p.id} value={String(p.id).trim()}>
-                    #{p.jerseyNumber} {p.name}
+                    #{p.jerseyNumber} {p.name}{p.position ? ` · ${p.position}` : ''}
                   </option>
                 ))}
               </select>

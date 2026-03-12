@@ -519,6 +519,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setBenchPlayers([]);
       setIsMatchStarted(true);
       setShowLineupModal(false);
+      // Definir goleiro atual: primeiro goleiro na lista de ativos, ou primeiro da lista
+      if (ids.length > 0) {
+        const gkId = ids.find(id => players.find(p => String(p.id).trim() === id)?.position === 'Goleiro') ?? ids[0];
+        setCurrentGoalkeeperId(gkId);
+      }
       return;
     }
     if (!isMatchStarted && !showLineupModal) {
@@ -1012,10 +1017,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  // Registrar defesa (apenas para goleiro atual): Simples ou Difícil
+  // Registrar defesa (goleiro atual ou jogador selecionado): Simples ou Difícil
   const handleRegisterSave = (difficulty: 'simple' | 'hard', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
-    if (!pid || pid !== currentGoalkeeperId) return;
+    const pid = playerIdOverride ?? currentGoalkeeperId ?? selectedPlayerId;
+    if (!pid) return;
     
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('save', difficulty);
@@ -2245,7 +2250,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             )}
                           </div>
                           <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
-                            {isGoalkeeper && '🥅 '}{player.nickname?.trim() || player.name} · {player.jerseyNumber}
+                            {(player.position === 'Goleiro' || isGoalkeeper) && '🥅 '}{player.nickname?.trim() || player.name} · #{player.jerseyNumber}
+                            {player.position && <span className="text-zinc-400 text-[10px] ml-1">· {player.position}</span>}
                             {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
                           </p>
                         </div>
@@ -2322,7 +2328,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           )}
                         </div>
                         <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
-                          {isGoalkeeper && '🥅 '}{player.nickname?.trim() || player.name} · {player.jerseyNumber}
+                          {(player.position === 'Goleiro' || isGoalkeeper) && '🥅 '}{player.nickname?.trim() || player.name} · #{player.jerseyNumber}
+                          {player.position && <span className="text-zinc-400 text-[10px] ml-1">· {player.position}</span>}
                           {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
                         </p>
                       </div>
@@ -2721,10 +2728,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
                         </div>
                       )}
-                      {actionFlow.action === 'save' && currentGoalkeeperId && (
-                        <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defesa fácil</button>
-                          <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Defesa difícil</button>
+                      {actionFlow.action === 'save' && (
+                        <div className="space-y-3">
+                          {!currentGoalkeeperId && !selectedPlayerId && (
+                            <p className="text-zinc-400 text-xs">Selecione o goleiro na lista à esquerda antes de registrar.</p>
+                          )}
+                          <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId ?? selectedPlayerId ?? undefined); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defesa fácil</button>
+                            <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId ?? selectedPlayerId ?? undefined); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Defesa difícil</button>
+                          </div>
                         </div>
                       )}
                       {actionFlow.action === 'lateral' && (
@@ -2773,7 +2785,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               }}
                               className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-[#00f0ff] hover:bg-[#00f0ff]/10 transition-colors text-left"
                             >
-                              #{player.jerseyNumber} {player.nickname?.trim() || player.name}
+                              <span>#{player.jerseyNumber} {player.nickname?.trim() || player.name}</span>
+                              {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
                             </button>
                           );
                         })}
@@ -3006,7 +3019,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             }}
                             className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-purple-500 hover:bg-purple-500/10 transition-colors text-left"
                           >
-                            #{player.jerseyNumber} {player.nickname?.trim() || player.name}
+                            <span>#{player.jerseyNumber} {player.nickname?.trim() || player.name}</span>
+                            {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
                           </button>
                         )) : (
                           <p className="col-span-2 text-zinc-500 text-xs text-center py-2">Nenhum jogador ativo</p>
@@ -3481,7 +3495,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             {player ? (
                               <>
                                 <p className="text-[#00f0ff] text-xs font-bold mb-1">
-                                  {index === 0 ? '🥅 GOLEIRO' : `Jogador ${index}`}
+                                  {player.position === 'Goleiro' || index === 0 ? '🥅 GOLEIRO' : `Jogador ${index + 1}`}
                                 </p>
                                 <p className="text-white font-bold text-sm text-center">
                                   #{player.jerseyNumber}
@@ -3489,6 +3503,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <p className="text-zinc-400 text-xs text-center truncate w-full">
                                   {player.name}
                                 </p>
+                                {player.position && <p className="text-zinc-500 text-[10px] text-center">{player.position}</p>}
                                 <button
                                   onClick={() => handleRemoveFromLineup(playerId)}
                                   className="mt-2 text-red-400 hover:text-red-300 text-xs"
@@ -3539,7 +3554,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             <p className="text-white font-bold text-xs">
                               #{player.jerseyNumber} {player.name}
                             </p>
-                            <p className="text-zinc-500 text-[10px]">{player.position}</p>
+                            <p className={`text-[10px] font-medium ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>
+                              {player.position === 'Goleiro' ? '🥅 Goleiro' : (player.position || '—')}
+                            </p>
                           </button>
                         );
                       })}

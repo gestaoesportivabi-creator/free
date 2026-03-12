@@ -485,8 +485,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                          )}
                      </div>
                      
-                     <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10">
-                         <span className="text-2xl font-black text-white italic">#{player.jerseyNumber}</span>
+                     <div className="absolute top-4 right-4 flex items-center gap-2">
+                         {player.position === 'Goleiro' && (
+                             <span className="bg-amber-500/90 text-black text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">Goleiro</span>
+                         )}
+                         <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10">
+                             <span className="text-2xl font-black text-white italic">#{player.jerseyNumber}</span>
+                         </div>
                      </div>
 
                      {/* Edit e Excluir */}
@@ -519,7 +524,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                      
                      <div className="absolute bottom-4 left-4">
                          <h3 className="text-xl font-black text-white uppercase italic tracking-tighter drop-shadow-lg">{player.nickname || player.name}</h3>
-                         <p className="text-[#10b981] font-bold text-xs uppercase tracking-widest">{player.position}</p>
+                         <p className={`font-bold text-xs uppercase tracking-widest ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-[#10b981]'}`}>{player.position || '—'}</p>
                      </div>
                 </div>
 

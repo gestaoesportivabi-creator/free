@@ -2151,6 +2151,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
                                                     <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
@@ -2296,6 +2297,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
                                                     <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
@@ -2463,6 +2465,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                 <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
                                                     <p className={`font-bold text-xs truncate w-full text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
                                                     <p className="text-[10px] text-zinc-500 font-medium" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</p>
+                                                    {player.position && <p className={`text-[9px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
@@ -2958,6 +2961,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             className="w-4 h-4 text-[#00f0ff] bg-zinc-900 border-zinc-700 rounded focus:ring-[#00f0ff]"
                                         />
                                         <span className="text-white text-xs font-bold">#{player.jerseyNumber} {player.name}</span>
+                                        {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
                                     </label>
                                 );
                             })}
@@ -3006,7 +3010,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-white font-bold text-sm truncate">{player.name}</p>
-                                                <p className="text-zinc-400 text-xs">#{player.jerseyNumber} • {player.position}</p>
+                                                <p className={`text-xs ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-400'}`}>#{player.jerseyNumber} • {player.position === 'Goleiro' ? '🥅 Goleiro' : (player.position || '—')}</p>
                                                 {entry && (
                                                     <div className="flex items-center gap-2 mt-1 text-[10px]">
                                                         {entry.goals > 0 && <span className="text-[#ccff00] font-bold">⚽{entry.goals}</span>}
