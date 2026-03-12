@@ -156,6 +156,7 @@ model Jogo {
   playerRelationships   Json?                      @map("player_relationships")
   lineup                Json?                      @map("lineup")
   substitutionHistory   Json?                      @map("substitution_history")
+  status                String?                    @default("encerrado") @db.VarChar(50)
   createdAt             DateTime                   @default(now()) @map("created_at")
   campeonatosJogos    CampeonatosJogos[]
   competicao          Competicao?                @relation(fields: [competicaoId], references: [id])
@@ -193,7 +194,8 @@ model JogosEstatisticasEquipe {
   golsMarcadosBolaParada Int    @default(0) @map("gols_marcados_bola_parada")
   golsSofridosJogoAberto Int     @default(0) @map("gols_sofridos_jogo_aberto")
   golsSofridosBolaParada Int     @default(0) @map("gols_sofridos_bola_parada")
-  // metodoGol gerenciado via raw SQL (coluna existe no banco mas fora do Prisma para evitar cache stale no Vercel)
+  metodoGol              String? @map("metodo_gol") @db.Text
+  metodoGolTomado        String? @map("metodo_gol_tomado") @db.Text
   jogo                   Jogo    @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@map("jogos_estatisticas_equipe")
