@@ -191,6 +191,8 @@ export interface PostMatchEvent {
   isOpponentGoal?: boolean;
   /** Falta cometida por nossa equipe ('for') ou pelo adversário ('against') */
   foulTeam?: 'for' | 'against';
+  /** Passe errado que gerou transição (para gráfico Erros Críticos) */
+  wrongPassGeneratedTransition?: boolean;
 }
 
 export interface MatchRecord {

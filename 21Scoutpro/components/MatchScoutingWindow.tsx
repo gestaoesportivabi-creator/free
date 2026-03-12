@@ -114,6 +114,8 @@ interface MatchEvent {
   goalMethod?: string;
   /** Período do gol (1–10) para gráfico de períodos no scout coletivo */
   goalPeriod?: number;
+  /** Passe errado que gerou transição (para gráfico Erros Críticos) */
+  wrongPassGeneratedTransition?: boolean;
 }
 
 export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
@@ -226,8 +228,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   const [showPenaltyTeamSelection, setShowPenaltyTeamSelection] = useState<boolean>(false);
 
-  // Novo fluxo: Ação → Detalhes (popup) → Jogador (popup) → Tempo (popup se necessário)
-  type ActionFlowStep = 'details' | 'player' | 'time' | null;
+  // Novo fluxo: Ação → Detalhes (popup) → [Passe Errado: Gerou transição?] → Jogador (popup) → Tempo (popup se necessário)
+  type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'time' | null;
   const [actionFlow, setActionFlow] = useState<{
     step: ActionFlowStep;
     action: string | null;
@@ -238,6 +240,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     zone?: LateralResult;
     pendingTime?: number;
     pendingPeriod?: '1T' | '2T';
+    /** Passe errado: true = gerou transição, false = não gerou */
+    wrongPassTransition?: boolean;
   } | null>(null);
   const [showPenaltyKickerSelection, setShowPenaltyKickerSelection] = useState<boolean>(false);
   const [showPenaltyResult, setShowPenaltyResult] = useState<boolean>(false);
@@ -365,6 +369,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const advanceActionFlowToPlayer = (details: string, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult }) => {
+    // Passe Errado: em vez de ir direto ao jogador, mostrar "Gerou transição?" SIM/NÃO
+    if (actionFlow?.action === 'pass' && details === 'wrong') {
+      setActionFlow(actionFlow ? { ...actionFlow, step: 'wrongPassTransition' as const, details: 'wrong' } : null);
+      return;
+    }
     const nextFlow = actionFlow ? { ...actionFlow, step: 'player' as const, details, ...extra } : null;
     if (nextFlow && selectedPlayerId) {
       if (needsTimePopup()) {
@@ -399,7 +408,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const run = () => {
       switch (flow.action) {
         case 'pass':
-          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period);
+          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period, flow.wrongPassTransition);
           break;
         case 'shot':
           handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, time, period);
@@ -735,6 +744,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else if (action === 'passWrong') {
         ps.passesWrong += 1;
         teamStats.passesWrong += 1;
+        if (e.wrongPassGeneratedTransition) {
+          teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
+        }
       } else if (action === 'shotOn') {
         ps.shotsOnTarget += 1;
         teamStats.shotsOnTarget += 1;
@@ -776,6 +788,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if ((action === 'passCorrect' || action === 'passWrong') && e.passToPlayerId) {
         postEvent.passToPlayerId = String(e.passToPlayerId).trim();
         if (e.passToPlayerName) postEvent.passToPlayerName = e.passToPlayerName;
+      }
+      if (action === 'passWrong' && e.wrongPassGeneratedTransition !== undefined) {
+        postEvent.wrongPassGeneratedTransition = e.wrongPassGeneratedTransition;
       }
       const lateralToZone: Record<string, 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR'> = {
         ataqueEsquerda: 'AT_ESQ',
@@ -1081,8 +1096,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  // Registrar resultado de passe
-  const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  // Registrar resultado de passe (wrongPassGeneratedTransition: true quando o passe errado gerou transição)
+  const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', wrongPassGeneratedTransition?: boolean) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
     
@@ -1099,6 +1114,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       result,
       tipo,
       subtipo,
+      ...(result === 'wrong' && wrongPassGeneratedTransition !== undefined && { wrongPassGeneratedTransition }),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -2640,8 +2656,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </div>
               )}
 
-              {/* ActionDetailsPopup — opções de detalhe por ação */}
-              {actionFlow?.step === 'details' && actionFlow.action && (
+              {/* ActionDetailsPopup — opções de detalhe por ação (incl. Gerou transição? para passe errado) */}
+              {(actionFlow?.step === 'details' || actionFlow?.step === 'wrongPassTransition') && actionFlow.action && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -2651,7 +2667,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-[#00f0ff] font-black uppercase text-sm tracking-wider">
-                        {actionFlow.action === 'pass' && 'Resultado do Passe'}
+                        {actionFlow.action === 'pass' && actionFlow.step === 'wrongPassTransition' && 'Gerou transição?'}
+                        {actionFlow.action === 'pass' && actionFlow.step !== 'wrongPassTransition' && 'Resultado do Passe'}
                         {actionFlow.action === 'shot' && 'Resultado do Chute'}
                         {actionFlow.action === 'foul' && 'Quem cometeu a falta?'}
                         {actionFlow.action === 'tackle' && 'Tipo de Desarme'}
@@ -2661,10 +2678,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </h3>
                     </div>
                     <div className="p-4">
-                      {actionFlow.action === 'pass' && (
+                      {actionFlow.action === 'pass' && actionFlow.step === 'details' && (
                         <div className="grid grid-cols-2 gap-3">
                           <button onClick={() => { advanceActionFlowToPlayer('correct'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">Certo</button>
                           <button onClick={() => { advanceActionFlowToPlayer('wrong'); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Errado</button>
+                        </div>
+                      )}
+                      {actionFlow.step === 'wrongPassTransition' && actionFlow.action === 'pass' && (
+                        <div className="space-y-3">
+                          <p className="text-zinc-300 text-sm font-medium">Gerou transição?</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player', wrongPassTransition: true } : null); }} className="px-4 py-3 bg-rose-500/20 border-2 border-rose-500 text-rose-400 font-bold uppercase text-xs rounded-lg hover:bg-rose-500/30 transition-colors">Sim</button>
+                            <button onClick={() => { setActionFlow(prev => prev ? { ...prev, step: 'player', wrongPassTransition: false } : null); }} className="px-4 py-3 bg-zinc-500/20 border-2 border-zinc-500 text-zinc-300 font-bold uppercase text-xs rounded-lg hover:bg-zinc-500/30 transition-colors">Não</button>
+                          </div>
                         </div>
                       )}
                       {actionFlow.action === 'shot' && (
@@ -2697,8 +2723,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       )}
                       {actionFlow.action === 'save' && currentGoalkeeperId && (
                         <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Simples</button>
-                          <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Difícil</button>
+                          <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defesa fácil</button>
+                          <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Defesa difícil</button>
                         </div>
                       )}
                       {actionFlow.action === 'lateral' && (

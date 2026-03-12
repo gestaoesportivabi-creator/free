@@ -94,7 +94,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     return Array.from(new Set(filtered.map(m => m.opponent)));
   }, [compFilter, monthFilter, matches]);
 
-  // BLUE COLOR PALETTE
+  // BLUE COLOR PALETTE + accent
   const COLORS = {
     blue: '#00f0ff',    // Cyan Blue (escudo)
     blueLight: '#60a5fa', // Light Blue
@@ -103,6 +103,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     blueDarker: '#1e40af', // Darker Blue
     blueCyan: '#0ea5e9', // Cyan Blue
     slate: '#71717a',   // Zinc
+    rose: '#ff0055',    // Erros / transição
   };
 
   const filteredMatches = useMemo(() => {
@@ -924,7 +925,23 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard title="Erros Críticos (Transição)" icon={BarChart3} headerColor="text-[#ff0055]">
-           <SimpleColumnChart data={chartData} dataKey="transitionErrors" fill={COLORS.rose} axisStyle={axisStyle} tooltipStyle={tooltipStyle} labelStyle={labelStyle} />
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
+                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
+                 <YAxis hide />
+                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
+                 <Legend wrapperStyle={{ fontSize: '11px' }} formatter={(value) => <span className="text-zinc-300">{value}</span>} />
+                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
+                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
+                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
+                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
+               </BarChart>
+             </ResponsiveContainer>
+           </div>
         </ExpandableCard>
       </div>
 
