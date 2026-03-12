@@ -5,7 +5,7 @@
   "outputDirectory": "21Scoutpro/dist",
   "framework": null,
   "env": {
-    "PRISMA_SCHEMA_CACHE_BUST": "v4"
+    "PRISMA_SCHEMA_CACHE_BUST": "v5"
   },
   "rewrites": [
     {
