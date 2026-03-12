@@ -232,5 +232,26 @@ export const matchesRepository = {
     }
     return map;
   },
+
+  async setMetodoGolTomado(jogoId: string, metodoGolTomado: string, tx?: TransactionClient): Promise<void> {
+    await db(tx).$executeRawUnsafe(
+      `UPDATE jogos_estatisticas_equipe SET metodo_gol_tomado = $1 WHERE jogo_id = $2`,
+      metodoGolTomado,
+      jogoId
+    );
+  },
+
+  async getMetodoGolTomadoByJogoIds(jogoIds: string[]): Promise<Map<string, string>> {
+    if (jogoIds.length === 0) return new Map();
+    const rows = await prisma.$queryRawUnsafe<{ jogo_id: string; metodo_gol_tomado: string }[]>(
+      `SELECT jogo_id, metodo_gol_tomado FROM jogos_estatisticas_equipe WHERE jogo_id = ANY($1::text[])`,
+      jogoIds
+    );
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.metodo_gol_tomado) map.set(r.jogo_id, r.metodo_gol_tomado);
+    }
+    return map;
+  },
 };
 

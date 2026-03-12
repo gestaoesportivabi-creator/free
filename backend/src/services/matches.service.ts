@@ -31,9 +31,10 @@ export const matchesService = {
       porJogoJogadores.set(j.jogoId, arr);
     }
 
-    const [statusMap, metodoGolMap] = await Promise.all([
+    const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
       matchesRepository.getStatusByIds(jogoIds),
       matchesRepository.getMetodoGolByJogoIds(jogoIds),
+      matchesRepository.getMetodoGolTomadoByJogoIds(jogoIds),
     ]);
 
     const matches: MatchRecord[] = [];
@@ -46,6 +47,10 @@ export const matchesService = {
       const mg = metodoGolMap.get(jogo.id);
       if (mg && match.teamStats) {
         try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+      }
+      const mgTomado = metodoGolTomadoMap.get(jogo.id);
+      if (mgTomado && match.teamStats) {
+        try { match.teamStats.goalMethodsConceded = JSON.parse(mgTomado); } catch { /* ignore */ }
       }
       matches.push(match);
     }
@@ -63,15 +68,20 @@ export const matchesService = {
     if (!estatisticasEquipe) throw new NotFoundError('Estatísticas do jogo', id);
 
     const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
-    const [statusMap, metodoGolMap] = await Promise.all([
+    const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
       matchesRepository.getStatusByIds([id]),
       matchesRepository.getMetodoGolByJogoIds([id]),
+      matchesRepository.getMetodoGolTomadoByJogoIds([id]),
     ]);
     const st = statusMap.get(id);
     match.status = (st || 'encerrado') as MatchRecord['status'];
     const mg = metodoGolMap.get(id);
     if (mg && match.teamStats) {
       try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+    }
+    const mgTomado = metodoGolTomadoMap.get(id);
+    if (mgTomado && match.teamStats) {
+      try { match.teamStats.goalMethodsConceded = JSON.parse(mgTomado); } catch { /* ignore */ }
     }
     return match;
   },
@@ -147,6 +157,23 @@ export const matchesService = {
       metodoGol = JSON.stringify(teamStats.goalMethodsScored);
     }
 
+    // Extrair métodos de gols tomados (adversário) do eventLog ou teamStats
+    let metodoGolTomado: string | null = null;
+    if (eventLog && Array.isArray(eventLog)) {
+      const concededCounts: Record<string, number> = {};
+      for (const ev of eventLog) {
+        if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+          concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
+        }
+      }
+      if (Object.keys(concededCounts).length > 0) {
+        metodoGolTomado = JSON.stringify(concededCounts);
+      }
+    }
+    if (!metodoGolTomado && teamStats.goalMethodsConceded && Object.keys(teamStats.goalMethodsConceded).length > 0) {
+      metodoGolTomado = JSON.stringify(teamStats.goalMethodsConceded);
+    }
+
     await matchesRepository.upsertEstatisticasEquipe(jogo.id, {
       minutosJogados: 40,
       gols: teamStats.goals ?? golsPro,
@@ -171,6 +198,9 @@ export const matchesService = {
 
     if (metodoGol) {
       await matchesRepository.setMetodoGol(jogo.id, metodoGol, tx);
+    }
+    if (metodoGolTomado) {
+      await matchesRepository.setMetodoGolTomado(jogo.id, metodoGolTomado, tx);
     }
 
     const jogadoresTenant = await playersRepository.findAll(tenantInfo, tx);
@@ -214,6 +244,9 @@ export const matchesService = {
     result.status = matchStatus as MatchRecord['status'];
     if (metodoGol && result.teamStats) {
       try { result.teamStats.goalMethodsScored = JSON.parse(metodoGol); } catch { /* ignore */ }
+    }
+    if (metodoGolTomado && result.teamStats) {
+      try { result.teamStats.goalMethodsConceded = JSON.parse(metodoGolTomado); } catch { /* ignore */ }
     }
     return result;
   },
@@ -266,6 +299,23 @@ export const matchesService = {
         metodoGol = JSON.stringify(teamStats.goalMethodsScored);
       }
 
+      // Métodos de gols tomados (adversário)
+      let metodoGolTomado: string | null = null;
+      if (eventLog && Array.isArray(eventLog)) {
+        const concededCounts: Record<string, number> = {};
+        for (const ev of eventLog) {
+          if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+            concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
+          }
+        }
+        if (Object.keys(concededCounts).length > 0) {
+          metodoGolTomado = JSON.stringify(concededCounts);
+        }
+      }
+      if (!metodoGolTomado && teamStats.goalMethodsConceded && Object.keys(teamStats.goalMethodsConceded).length > 0) {
+        metodoGolTomado = JSON.stringify(teamStats.goalMethodsConceded);
+      }
+
       await matchesRepository.upsertEstatisticasEquipe(id, {
         minutosJogados: 40,
         gols: teamStats.goals ?? golsPro,
@@ -290,6 +340,9 @@ export const matchesService = {
 
       if (metodoGol) {
         await matchesRepository.setMetodoGol(id, metodoGol, tx);
+      }
+      if (metodoGolTomado) {
+        await matchesRepository.setMetodoGolTomado(id, metodoGolTomado, tx);
       }
     }
 
@@ -331,15 +384,20 @@ export const matchesService = {
     ]);
 
     const result = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe || undefined);
-    const [statusMap, metodoGolMap] = await Promise.all([
+    const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
       matchesRepository.getStatusByIds([id]),
       matchesRepository.getMetodoGolByJogoIds([id]),
+      matchesRepository.getMetodoGolTomadoByJogoIds([id]),
     ]);
     const st = statusMap.get(id);
     result.status = (st || 'encerrado') as MatchRecord['status'];
     const mg = metodoGolMap.get(id);
     if (mg && result.teamStats) {
       try { result.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+    }
+    const mgTomado = metodoGolTomadoMap.get(id);
+    if (mgTomado && result.teamStats) {
+      try { result.teamStats.goalMethodsConceded = JSON.parse(mgTomado); } catch { /* ignore */ }
     }
     return result;
   },

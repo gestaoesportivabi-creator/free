@@ -36,4 +36,6 @@ echo "Aplicando migração 015 (jogos: remover possession_seconds_with/without).
 psql "$DIRECT_URL" -f migrations/015_remove_possession_seconds.sql
 echo "Aplicando migração 016 (jogos_estatisticas_equipe: metodo_gol TEXT)..."
 psql "$DIRECT_URL" -f migrations/016_add_metodo_gol.sql
+echo "Aplicando migração 019 (jogos_estatisticas_equipe: metodo_gol_tomado TEXT)..."
+psql "$DIRECT_URL" -f migrations/019_add_metodo_gol_tomado.sql
 echo "Concluído."

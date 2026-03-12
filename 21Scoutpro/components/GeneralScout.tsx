@@ -1060,8 +1060,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Row 3: Donut Charts - Métodos de Gol */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Row 3: Donut Charts - Métodos de Gol (largura total, uma abaixo da outra) */}
+      <div className="flex flex-col gap-6 w-full">
         <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
         <div className="h-80 w-full">
              <ResponsiveContainer width="100%" height="100%">
