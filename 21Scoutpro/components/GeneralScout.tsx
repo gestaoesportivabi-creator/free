@@ -869,7 +869,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend />
+                    <Legend
+                      formatter={(value: string) => {
+                        if (value === 'Passes Certos') {
+                          return <span className="text-zinc-300">Passes Certos ({stats.passesCorrect || 0})</span>;
+                        }
+                        if (value === 'Passes Errados') {
+                          return <span className="text-zinc-300">Passes Errados ({stats.passesWrong || 0})</span>;
+                        }
+                        return <span className="text-zinc-300">{value}</span>;
+                      }}
+                    />
                     <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.blue} stackId="a">
                         <LabelList dataKey="passesCorrect" position="inside" {...labelStyle} />
                     </Bar>
@@ -900,7 +910,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend />
+                    <Legend
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300">No Gol ({stats.shotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300">Pra Fora ({stats.shotsOff || 0})</span>;
+                        }
+                        return <span className="text-zinc-300">{value}</span>;
+                      }}
+                    />
                     <Bar dataKey="shotsOn" name="No Gol" fill={COLORS.blueMedium}>
                         <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
                     </Bar>
@@ -934,7 +954,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend />
+                    <Legend
+                      formatter={(value: string) => {
+                        if (value === 'Com Posse') {
+                          return <span className="text-zinc-300">Com Posse ({stats.tacklesWithBall || 0})</span>;
+                        }
+                        if (value === 'Sem Posse') {
+                          return <span className="text-zinc-300">Sem Posse ({stats.tacklesWithoutBall || 0})</span>;
+                        }
+                        if (value === 'Contra-Ataque') {
+                          return <span className="text-zinc-300">Contra-Ataque ({stats.tacklesCounterAttack || 0})</span>;
+                        }
+                        return <span className="text-zinc-300">{value}</span>;
+                      }}
+                    />
                     <Bar dataKey="tacklesWithBall" name="Com Posse" fill={COLORS.blueLight}>
                         <LabelList dataKey="tacklesWithBall" position="inside" {...labelStyle} />
                     </Bar>
@@ -951,7 +984,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
            <PlayerStatsTable matches={filteredMatches} statType="tackles" players={players} />
         </ExpandableCard>
 
-        <ExpandableCard title="Erros Críticos (Transição)" icon={BarChart3} headerColor="text-[#ff0055]">
+        <ExpandableCard
+          title="Erros Críticos (Transição)"
+          icon={BarChart3}
+          headerColor="text-[#ff0055]"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
+            </span>
+          }
+        >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
                <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
@@ -959,7 +1001,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
                  <YAxis hide />
                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
-                 <Legend wrapperStyle={{ fontSize: '11px' }} formatter={(value) => <span className="text-zinc-300">{value}</span>} />
+                 <Legend
+                   wrapperStyle={{ fontSize: '11px' }}
+                   formatter={(value: string) => {
+                     if (value === 'Passes errados') {
+                       return <span className="text-zinc-300">Passes errados ({stats.passesWrong || 0})</span>;
+                     }
+                     if (value === 'Geraram transição') {
+                       return <span className="text-zinc-300">Geraram transição ({stats.wrongPassesTransition || 0})</span>;
+                     }
+                     return <span className="text-zinc-300">{value}</span>;
+                   }}
+                 />
                  <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
                    <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
                  </Bar>
@@ -969,6 +1022,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                </BarChart>
              </ResponsiveContainer>
            </div>
+           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
@@ -1213,7 +1267,7 @@ const KPICard: React.FC<{title: string, value: number | string, subtitle?: strin
 );
 
 // Componente de tabela de estatísticas por jogador
-const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles', players: Player[]}> = ({matches, statType, players}) => {
+const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors', players: Player[]}> = ({matches, statType, players}) => {
   const playerStats = useMemo(() => {
     const statsMap = new Map<string, {name: string, correct: number, wrong: number, total: number}>();
     
@@ -1245,6 +1299,11 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
           stats.correct += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0);
           stats.wrong += pStats.tacklesCounterAttack || 0;
           stats.total += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0) + (pStats.tacklesCounterAttack || 0);
+        } else if (statType === 'criticalErrors') {
+          // Só queremos passes errados que geraram transição
+          const transition = (pStats as any).wrongPassesTransition || 0;
+          stats.correct += transition;
+          stats.total += transition;
         }
       });
     });
@@ -1260,7 +1319,7 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
   return (
     <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
       <h4 className="text-white text-xs font-bold uppercase mb-3 tracking-wider">
-        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Chutes' : 'Desarmes'}
+        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Chutes' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
       </h4>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -1268,10 +1327,10 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
             <tr className="border-b border-zinc-800">
               <th className="text-left py-2 text-zinc-400 font-bold uppercase">Jogador</th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">
-                {statType === 'passes' ? 'Certos' : statType === 'shots' ? 'No Gol' : 'Total'}
+                {statType === 'passes' ? 'Certos' : statType === 'shots' ? 'No Gol' : statType === 'tackles' ? 'Total' : 'Erros Transição'}
               </th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">
-                {statType === 'passes' ? 'Errados' : statType === 'shots' ? 'Fora' : 'Contra-Ataque'}
+                {statType === 'passes' ? 'Errados' : statType === 'shots' ? 'Fora' : statType === 'tackles' ? 'Contra-Ataque' : '—'}
               </th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">Total</th>
             </tr>
