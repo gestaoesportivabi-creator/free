@@ -43,8 +43,23 @@ export const championshipMatchesService = {
   },
 
   async create(data: any, tenantInfo: TenantInfo, tx?: TransactionClient) {
-    const equipeId = tenantInfo.equipe_ids?.[0];
-    if (!equipeId) throw new Error('Equipe não encontrada para o tenant');
+    let equipeId = tenantInfo.equipe_ids?.[0];
+
+    if (!equipeId && tenantInfo.tecnico_id) {
+      const existente = await db(tx).equipe.findFirst({
+        where: { tecnicoId: tenantInfo.tecnico_id, nome: 'Elenco' },
+      });
+      if (existente) {
+        equipeId = existente.id;
+      } else {
+        const elenco = await db(tx).equipe.create({
+          data: { nome: 'Elenco', tecnicoId: tenantInfo.tecnico_id },
+        });
+        equipeId = elenco.id;
+      }
+    }
+
+    if (!equipeId) throw new Error('Equipe não encontrada para o tenant e não foi possível criar a equipe padrão.');
 
     let campeonato = await db(tx).campeonato.findFirst({
       where: { equipeId, nome: 'Jogos Agendados' },
