@@ -43,3 +43,33 @@ export function isDateInPast(dateStr: string | undefined): boolean {
   today.setHours(0, 0, 0, 0);
   return date < today;
 }
+
+/**
+ * Formata com segurança uma string de data para exibição no formato pt-BR (DD/MM/YYYY).
+ * Se for no formato YYYY-MM-DD, a formatação é feita através de split para evitar 
+ * que a conversão silenciosa de fuso-horário crie anomalias de "um dia a menos".
+ */
+export function formatDateSafe(dateStr: string | undefined): string {
+  if (!dateStr) return '';
+  
+  // Se for uma string de data ISO com YYYY-MM-DD
+  if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    const parts = dateStr.slice(0, 10).split('-');
+    if (parts.length === 3) {
+      // Retorna no formato DD/MM/YYYY
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+  }
+
+  // Falha segura: tentar converter usando o JS normal se não bater no Regex ou não for string
+  try {
+    const date = new Date(dateStr);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString('pt-BR');
+    }
+  } catch (e) {
+    console.warn(`Erro ao formatar data: ${dateStr}`);
+  }
+
+  return String(dateStr);
+}

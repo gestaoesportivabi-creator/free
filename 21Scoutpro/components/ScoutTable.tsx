@@ -3,7 +3,7 @@ import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, 
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
-import { parseLocalDateOnly } from '../utils/dateUtils';
+import { parseLocalDateOnly, formatDateSafe } from '../utils/dateUtils';
 import { timeControlsApi } from '../services/api';
 import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
@@ -1629,12 +1629,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     };
 
-    // Formatar data para exibição
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return '';
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('pt-BR');
-    };
+    // Formatar data para exibição de forma segura (sem deslocamento de fuso)
+    const formatDate = (dateStr: string) => formatDateSafe(dateStr);
     
     // Calcular placar em tempo real
     const totalGoalsScored = useMemo(() => {
@@ -1694,11 +1690,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         
         if (item.type === 'scheduled') {
             if (isPast) {
-                const matchDateNorm = parseLocalDateOnly(item.date);
+                // Ao invés de usar .getTime() que pode ter problema de fuso dependendo de como a data foi criada,
+                // vamos usar a string limpa YYYY-MM-DD para comparar de forma estrita
+                const schedDateStr = item.date.slice(0, 10);
+                
                 const hasMatchRecord = matches.find(m => {
-                    const mDate = parseLocalDateOnly(m.date);
-                    if (Number.isNaN(mDate.getTime()) || Number.isNaN(matchDateNorm.getTime())) return false;
-                    return mDate.getTime() === matchDateNorm.getTime() &&
+                    const mDateStr = m.date.slice(0, 10);
+                    return mDateStr === schedDateStr &&
                            (m.opponent || '').trim().toLowerCase() === (item.opponent || '').trim().toLowerCase();
                 });
                 return hasMatchRecord ? 'finalizado' : 'incompleto';
@@ -1724,17 +1722,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
 
         const savedKeys = new Set(
             matches.map((m) => {
-                const d = parseLocalDateOnly(m.date);
-                if (Number.isNaN(d.getTime())) return '';
-                return `${d.getTime()}_${(m.opponent || '').trim().toLowerCase()}`;
+                if (!m.date) return '';
+                // Usar a string direta YYYY-MM-DD para não ter problema de offset
+                const dStr = m.date.slice(0, 10);
+                return `${dStr}_${(m.opponent || '').trim().toLowerCase()}`;
             }).filter(Boolean)
         );
 
         const scheduled: CalendarMatchItem[] = championshipMatches
             .filter((cm) => {
-                const d = parseLocalDateOnly(cm.date);
-                if (Number.isNaN(d.getTime())) return true;
-                const key = `${d.getTime()}_${(cm.opponent || '').trim().toLowerCase()}`;
+                if (!cm.date) return true;
+                const dStr = cm.date.slice(0, 10);
+                const key = `${dStr}_${(cm.opponent || '').trim().toLowerCase()}`;
                 return !savedKeys.has(key);
             })
             .map((m) => ({ ...m, type: 'scheduled' as const }));

@@ -3,7 +3,7 @@ import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X
 import { Championship } from '../types';
 import { IS_FREE_PLAN } from '../config';
 import { setChampionshipCards } from '../utils/championshipCards';
-import { parseLocalDateOnly, isDateInPast } from '../utils/dateUtils';
+import { parseLocalDateOnly, isDateInPast, formatDateSafe } from '../utils/dateUtils';
 
 export interface ChampionshipMatch {
     id: string;
@@ -366,6 +366,15 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
 
     const formatMatchDate = (dateValue: string | undefined) => {
         if (!dateValue) return '-';
+        // Se a data já for no formato seguro YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+            const parts = dateValue.slice(0, 10).split('-');
+            const shortMonths = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+            const m = parseInt(parts[1], 10) - 1;
+            if (m >= 0 && m <= 11) {
+                return `${parts[2]} de ${shortMonths[m]}.`;
+            }
+        }
         try {
             const date = parseLocalDateOnly(dateValue);
             if (Number.isNaN(date.getTime())) return dateValue;
@@ -379,9 +388,9 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const savedMatchKeys = useMemo(() => {
         const keys = new Set<string>();
         allMatches.forEach(m => {
-            const d = new Date(m.date);
-            d.setHours(0, 0, 0, 0);
-            keys.add(`${d.getTime()}_${(m.opponent || '').trim().toLowerCase()}`);
+            if (!m.date) return;
+            const dStr = m.date.slice(0, 10);
+            keys.add(`${dStr}_${(m.opponent || '').trim().toLowerCase()}`);
         });
         return keys;
     }, [allMatches]);
@@ -399,7 +408,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             const matchDate = parseLocalDateOnly(match.date);
             if (Number.isNaN(matchDate.getTime())) return;
 
-            const key = `${matchDate.getTime()}_${(match.opponent || '').trim().toLowerCase()}`;
+            const dStr = match.date.slice(0, 10);
+            const key = `${dStr}_${(match.opponent || '').trim().toLowerCase()}`;
             const hasSavedData = savedMatchKeys.has(key);
 
             if (matchDate < now || hasSavedData) {
@@ -813,17 +823,14 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                             ) : (() => {
                                 // Função auxiliar para renderizar uma linha de partida
                                 const renderMatchRow = (match: ChampionshipMatch) => {
-                                    let dateDisplay = '-';
-                                    try {
-                                        if (match.date) {
-                                            const date = parseLocalDateOnly(match.date);
-                                            if (!Number.isNaN(date.getTime())) {
-                                                dateDisplay = date.toLocaleDateString('pt-BR');
+                                        let dateDisplay = '-';
+                                        try {
+                                            if (match.date) {
+                                                dateDisplay = formatDateSafe(match.date);
                                             }
+                                        } catch (e) {
+                                            console.error('Erro ao formatar data:', match.date, e);
                                         }
-                                    } catch (e) {
-                                        console.error('Erro ao formatar data:', match.date, e);
-                                    }
                                     
                                     return (
                                         <tr key={match.id} className="border-b border-zinc-900 hover:bg-zinc-950">
