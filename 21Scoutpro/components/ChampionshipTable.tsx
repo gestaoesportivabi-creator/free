@@ -390,7 +390,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         allMatches.forEach(m => {
             if (!m.date) return;
             const dStr = m.date.slice(0, 10);
-            keys.add(`${dStr}_${(m.opponent || '').trim().toLowerCase()}`);
+            const normalizedOpponent = (m.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            keys.add(`${dStr}_${normalizedOpponent}`);
         });
         return keys;
     }, [allMatches]);
@@ -409,7 +410,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             if (Number.isNaN(matchDate.getTime())) return;
 
             const dStr = match.date.slice(0, 10);
-            const key = `${dStr}_${(match.opponent || '').trim().toLowerCase()}`;
+            const normalizedOpponent = (match.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            const key = `${dStr}_${normalizedOpponent}`;
             const hasSavedData = savedMatchKeys.has(key);
 
             if (matchDate < now || hasSavedData) {

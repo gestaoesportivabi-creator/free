@@ -1723,9 +1723,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         const savedKeys = new Set(
             matches.map((m) => {
                 if (!m.date) return '';
-                // Usar a string direta YYYY-MM-DD para não ter problema de offset
                 const dStr = m.date.slice(0, 10);
-                return `${dStr}_${(m.opponent || '').trim().toLowerCase()}`;
+                const normalizedOpponent = (m.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                return `${dStr}_${normalizedOpponent}`;
             }).filter(Boolean)
         );
 
@@ -1733,7 +1733,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             .filter((cm) => {
                 if (!cm.date) return true;
                 const dStr = cm.date.slice(0, 10);
-                const key = `${dStr}_${(cm.opponent || '').trim().toLowerCase()}`;
+                const normalizedOpponent = (cm.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+                const key = `${dStr}_${normalizedOpponent}`;
                 return !savedKeys.has(key);
             })
             .map((m) => ({ ...m, type: 'scheduled' as const }));
