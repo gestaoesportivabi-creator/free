@@ -152,11 +152,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
       
       acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? curr.teamStats.wrongPassesTransition ?? 0;
-      acc.tacklesCounterAttack += curr.teamStats.tacklesCounterAttack || 0;
-      acc.tacklesWithBall += curr.teamStats.tacklesWithBall || 0;
-      acc.tacklesWithoutBall += curr.teamStats.tacklesWithoutBall || 0;
+      const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
+      const tacklesWith = curr.teamStats.tacklesWithBall || 0;
+      const tacklesWithout = curr.teamStats.tacklesWithoutBall || 0;
+      acc.tacklesCounterAttack += tacklesCounter;
+      acc.tacklesWithBall += tacklesWith;
+      acc.tacklesWithoutBall += tacklesWithout;
       
-      acc.tacklesTotal += ((curr.teamStats.tacklesWithBall || 0) + (curr.teamStats.tacklesWithoutBall || 0));
+      acc.tacklesTotal += (tacklesWith + tacklesWithout + tacklesCounter);
       
       acc.yellowCards += curr.teamStats.yellowCards || 0;
       acc.redCards += curr.teamStats.redCards || 0;
