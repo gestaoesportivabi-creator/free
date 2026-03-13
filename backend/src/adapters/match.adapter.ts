@@ -22,6 +22,7 @@ interface JogoDB {
   playerRelationships?: unknown;
   lineup?: unknown;
   substitutionHistory?: unknown;
+  status?: string | null;
   createdAt: Date | string;
 }
 
@@ -155,6 +156,7 @@ export function transformMatchToFrontend(
     competition: jogo.campeonato || undefined,
     playerStats,
     teamStats,
+    status: (jogo.status as MatchRecord['status']) || 'encerrado',
   };
   if (jogo.postMatchEventLog) result.postMatchEventLog = jogo.postMatchEventLog as MatchRecord['postMatchEventLog'];
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
