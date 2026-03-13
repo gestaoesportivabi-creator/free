@@ -3465,3 +3465,5 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         </div>
     );
 };
+
+// v1.0.1 - Deduplication sync fix
