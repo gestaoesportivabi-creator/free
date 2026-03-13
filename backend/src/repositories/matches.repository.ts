@@ -199,9 +199,9 @@ export const matchesRepository = {
     );
   },
 
-  async getStatusByIds(jogoIds: string[]): Promise<Map<string, string>> {
+  async getStatusByIds(jogoIds: string[], tx?: TransactionClient): Promise<Map<string, string>> {
     if (jogoIds.length === 0) return new Map();
-    const rows = await prisma.$queryRawUnsafe<{ id: string; status: string }[]>(
+    const rows = await db(tx).$queryRawUnsafe<{ id: string; status: string }[]>(
       `SELECT id, status FROM jogos WHERE id = ANY($1::text[])`,
       jogoIds
     );
@@ -220,9 +220,9 @@ export const matchesRepository = {
     );
   },
 
-  async getMetodoGolByJogoIds(jogoIds: string[]): Promise<Map<string, string>> {
+  async getMetodoGolByJogoIds(jogoIds: string[], tx?: TransactionClient): Promise<Map<string, string>> {
     if (jogoIds.length === 0) return new Map();
-    const rows = await prisma.$queryRawUnsafe<{ jogo_id: string; metodo_gol: string }[]>(
+    const rows = await db(tx).$queryRawUnsafe<{ jogo_id: string; metodo_gol: string }[]>(
       `SELECT jogo_id, metodo_gol FROM jogos_estatisticas_equipe WHERE jogo_id = ANY($1::text[])`,
       jogoIds
     );
@@ -241,9 +241,9 @@ export const matchesRepository = {
     );
   },
 
-  async getMetodoGolTomadoByJogoIds(jogoIds: string[]): Promise<Map<string, string>> {
+  async getMetodoGolTomadoByJogoIds(jogoIds: string[], tx?: TransactionClient): Promise<Map<string, string>> {
     if (jogoIds.length === 0) return new Map();
-    const rows = await prisma.$queryRawUnsafe<{ jogo_id: string; metodo_gol_tomado: string }[]>(
+    const rows = await db(tx).$queryRawUnsafe<{ jogo_id: string; metodo_gol_tomado: string }[]>(
       `SELECT jogo_id, metodo_gol_tomado FROM jogos_estatisticas_equipe WHERE jogo_id = ANY($1::text[])`,
       jogoIds
     );

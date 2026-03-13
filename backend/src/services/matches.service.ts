@@ -33,9 +33,9 @@ export const matchesService = {
     }
 
     const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
-      matchesRepository.getStatusByIds(jogoIds),
-      matchesRepository.getMetodoGolByJogoIds(jogoIds),
-      matchesRepository.getMetodoGolTomadoByJogoIds(jogoIds),
+      matchesRepository.getStatusByIds(jogoIds, tx),
+      matchesRepository.getMetodoGolByJogoIds(jogoIds, tx),
+      matchesRepository.getMetodoGolTomadoByJogoIds(jogoIds, tx),
     ]);
 
     const matches: MatchRecord[] = [];
@@ -70,9 +70,9 @@ export const matchesService = {
 
     const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
     const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
-      matchesRepository.getStatusByIds([id]),
-      matchesRepository.getMetodoGolByJogoIds([id]),
-      matchesRepository.getMetodoGolTomadoByJogoIds([id]),
+      matchesRepository.getStatusByIds([id], tx),
+      matchesRepository.getMetodoGolByJogoIds([id], tx),
+      matchesRepository.getMetodoGolTomadoByJogoIds([id], tx),
     ]);
     const st = statusMap.get(id);
     match.status = (st || 'encerrado') as MatchRecord['status'];
