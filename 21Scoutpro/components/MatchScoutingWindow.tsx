@@ -719,6 +719,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     let goalsFor = 0;
     let goalsAgainst = 0;
 
+    // Armazenar tempos reais dos gols feitos e tomados para os gráficos de período
+    const goalTimes: Array<{ time: string; method?: string }> = [];
+    const goalsConcededTimes: Array<{ time: string; method?: string }> = [];
+
     for (const e of events) {
       // Cartões: atualizar yellowCards/redCards em playerStats (não têm PostMatchAction)
       if (e.type === 'card' && e.playerId) {
@@ -751,6 +755,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         }
         // Não cria playerStats para esse evento "órfão"
         const timeStrFallback = formatTimeToMMSS(e.time);
+        // Registrar tempo de gol tomado para distribuição por período
+        goalsConcededTimes.push({
+          time: `${timeStrFallback} (${e.period})`,
+          method: e.goalMethod && e.goalMethod.trim() !== '' ? e.goalMethod.trim() : undefined,
+        });
         const postEventFallback: PostMatchEvent = {
           id: e.id,
           time: timeStrFallback,
@@ -783,6 +792,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             const method = e.goalMethod.trim();
             teamStats.goalMethodsConceded[method] = (teamStats.goalMethodsConceded[method] || 0) + 1;
           }
+          // Registrar tempo de gol tomado para distribuição por período
+          goalsConcededTimes.push({
+            time: `${timeStr} (${e.period})`,
+            method: e.goalMethod && e.goalMethod.trim() !== '' ? e.goalMethod.trim() : undefined,
+          });
         } else {
           // Gol nosso: contabilizar em playerStats e nos dados do time
           ps.goals += 1;
@@ -793,6 +807,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             const method = e.goalMethod.trim();
             teamStats.goalMethodsScored[method] = (teamStats.goalMethodsScored[method] || 0) + 1;
           }
+          // Registrar tempo de gol feito para distribuição por período
+          goalTimes.push({
+            time: `${timeStr} (${e.period})`,
+            method: e.goalMethod && e.goalMethod.trim() !== '' ? e.goalMethod.trim() : undefined,
+          });
         }
       } else if (action === 'passCorrect') {
         ps.passesCorrect += 1;
@@ -871,6 +890,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
 
     const playerRelationships = processPlayerRelationships();
+
+    // Anexar tempos de gols feitos/tomados ao teamStats (usados pelos gráficos de gols por período)
+    if (goalTimes.length > 0) {
+      (teamStats as any).goalTimes = goalTimes;
+    }
+    if (goalsConcededTimes.length > 0) {
+      (teamStats as any).goalsConcededTimes = goalsConcededTimes;
+    }
 
     const result: 'V' | 'D' | 'E' = goalsFor > goalsAgainst ? 'V' : goalsAgainst > goalsFor ? 'D' : 'E';
     return {
