@@ -1060,25 +1060,27 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Row 3: Donut Charts - Métodos de Gol (rosca centralizada, legenda no rodapé com método e %) */}
+      {/* Row 3: Donut Charts - Métodos de Gol: rosca com % fora em branco; rodapé = quadrado da cor + método em branco */}
       <div className="flex flex-col gap-6 w-full">
         <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
         <div className="h-[340px] w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 16, right: 24, bottom: 88, left: 24 }}>
+             <PieChart margin={{ top: 16, right: 24, bottom: 48, left: 24 }}>
                     <Pie
-                        data={originScoredData}
+                        data={originScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
                         cx="50%"
-                        cy="38%"
+                        cy="40%"
                         innerRadius={72}
-                        outerRadius={104}
+                        outerRadius={108}
                         paddingAngle={4}
                         dataKey="value"
                         isAnimationActive={true}
+                        labelLine={{ stroke: '#52525b', strokeWidth: 1 }}
                     >
                         {originScoredData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="none" />
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1.5} />
                         ))}
+                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily="Poppins" formatter={(v: string) => `${v}%`} />
                     </Pie>
                     <Tooltip 
                       contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
@@ -1091,11 +1093,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     />
                     <Legend
                       verticalAlign="bottom"
-                      height={72}
-                      wrapperStyle={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins' }}
-                      formatter={(_, entry: any) => (
-                        <span className="text-zinc-300 text-xs font-medium">
-                          {entry.payload?.name}: <span className="text-white font-semibold">{entry.payload?.percentage}%</span>
+                      height={40}
+                      wrapperStyle={{ fontFamily: 'Poppins', paddingTop: '8px' }}
+                      formatter={(_: unknown, entry: any) => (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: entry.color || '#71717a' }} />
+                          <span className="text-white text-xs font-medium whitespace-nowrap">{entry.payload?.name ?? ''}</span>
                         </span>
                       )}
                     />
@@ -1107,20 +1110,22 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard title={`Métodos de ${config.labels.goals} Tomado`} icon={PieChartIcon} headerColor="text-white">
         <div className="h-[340px] w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 16, right: 24, bottom: 88, left: 24 }}>
+             <PieChart margin={{ top: 16, right: 24, bottom: 48, left: 24 }}>
                     <Pie
-                        data={originConcededData}
+                        data={originConcededData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_CONCEDED[i % PIE_COLORS_CONCEDED.length] }))}
                         cx="50%"
-                        cy="38%"
+                        cy="40%"
                         innerRadius={72}
-                        outerRadius={104}
+                        outerRadius={108}
                         paddingAngle={4}
                         dataKey="value"
                         isAnimationActive={true}
+                        labelLine={{ stroke: '#52525b', strokeWidth: 1 }}
                     >
                         {originConcededData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="none" />
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="#fff" strokeWidth={1.5} />
                         ))}
+                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily="Poppins" formatter={(v: string) => `${v}%`} />
                     </Pie>
                     <Tooltip 
                       contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
@@ -1133,11 +1138,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     />
                     <Legend
                       verticalAlign="bottom"
-                      height={72}
-                      wrapperStyle={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins' }}
-                      formatter={(_, entry: any) => (
-                        <span className="text-zinc-300 text-xs font-medium">
-                          {entry.payload?.name}: <span className="text-white font-semibold">{entry.payload?.percentage}%</span>
+                      height={40}
+                      wrapperStyle={{ fontFamily: 'Poppins', paddingTop: '8px' }}
+                      formatter={(_: unknown, entry: any) => (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: entry.color || '#71717a' }} />
+                          <span className="text-white text-xs font-medium whitespace-nowrap">{entry.payload?.name ?? ''}</span>
                         </span>
                       )}
                     />
