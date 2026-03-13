@@ -2340,9 +2340,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </>
               ) : activePlayers && activePlayers.length > 0 ? (
                 <div className="flex flex-col min-h-full gap-1">
-                  {activePlayers.map((player) => {
+                  {[...activePlayers]
+                    .sort((a, b) => {
+                      const aId = String(a.id).trim();
+                      const bId = String(b.id).trim();
+                      const aGK = a.position === 'Goleiro' || aId === currentGoalkeeperId;
+                      const bGK = b.position === 'Goleiro' || bId === currentGoalkeeperId;
+                      if (aGK && !bGK) return -1;
+                      if (!aGK && bGK) return 1;
+                      if (aGK && bGK && currentGoalkeeperId) {
+                        if (aId === currentGoalkeeperId) return -1;
+                        if (bId === currentGoalkeeperId) return 1;
+                      }
+                      return 0;
+                    })
+                    .map((player) => {
                   const isSelected = selectedPlayerId === String(player.id).trim();
                   const isGoalkeeper = String(player.id).trim() === currentGoalkeeperId;
+                  const isGk = player.position === 'Goleiro' || isGoalkeeper;
                   return (
                     <button
                       key={player.id}
@@ -2367,7 +2382,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         }
                       }}
                       disabled={!isMatchStarted}
-                      className={`w-full rounded-lg p-2 text-left transition-all ${
+                      className={`w-full rounded-lg p-1.5 text-left transition-all ${
                         !isMatchStarted
                           ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed'
                           : isSelected
@@ -2377,21 +2392,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           : 'bg-green-500/10 border border-green-500/80 hover:border-green-400'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
                           {player.photoUrl ? (
                             <img src={player.photoUrl} alt="" className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-medium">
+                            <div className="w-full h-full flex items-center justify-center text-zinc-500 text-[10px] font-medium">
                               {(player.nickname?.trim() || player.name).substring(0, 2).toUpperCase() || '?'}
                             </div>
                           )}
                         </div>
-                        <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
-                          {(player.position === 'Goleiro' || isGoalkeeper) && '🥅 '}{player.nickname?.trim() || player.name} · #{player.jerseyNumber}
-                          {player.position && <span className="text-zinc-400 text-[10px] ml-1">· {player.position}</span>}
-                          {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-medium text-[11px] truncate leading-tight">
+                            {player.nickname?.trim() || player.name} · #{player.jerseyNumber}
+                            {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
+                          </p>
+                          <p className={`text-[9px] leading-tight mt-0.5 ${isGk ? 'text-amber-400' : 'text-zinc-400'}`}>
+                            {isGk ? '🥅 Goleiro' : (player.position || '—')}
+                          </p>
+                        </div>
                       </div>
                     </button>
                   );
