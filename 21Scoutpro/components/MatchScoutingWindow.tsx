@@ -801,7 +801,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         ps.passesWrong += 1;
         teamStats.passesWrong += 1;
         if (e.wrongPassGeneratedTransition) {
+          // Erro crítico: passe errado que gerou transição
           teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
+          // Também registrar no jogador para permitir Top 10 por atleta no Scout Coletivo
+          (ps as any).transitionErrors = ((ps as any).transitionErrors ?? 0) + 1;
         }
       } else if (action === 'shotOn') {
         ps.shotsOnTarget += 1;
