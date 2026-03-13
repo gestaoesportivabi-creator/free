@@ -160,6 +160,28 @@ export function transformMatchToFrontend(
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
+
+  // Derivar goalTimes e goalsConcededTimes do postMatchEventLog para os gráficos de gols por período
+  const eventLog = result.postMatchEventLog;
+  if (eventLog && Array.isArray(eventLog)) {
+    const goalTimes: Array<{ time: string; method?: string }> = [];
+    const goalsConcededTimes: Array<{ time: string; method?: string }> = [];
+    for (const ev of eventLog) {
+      const e = ev as { action?: string; time?: string; period?: string; isOpponentGoal?: boolean; goalMethod?: string };
+      if (e.action !== 'goal' || !e.time) continue;
+      const timeStr = typeof e.time === 'string' ? e.time : String(e.time);
+      const period = e.period || '1T';
+      const entry = { time: `${timeStr} (${period})`, method: e.goalMethod?.trim() || undefined };
+      if (e.isOpponentGoal) {
+        goalsConcededTimes.push(entry);
+      } else {
+        goalTimes.push(entry);
+      }
+    }
+    if (goalTimes.length > 0) result.teamStats.goalTimes = goalTimes;
+    if (goalsConcededTimes.length > 0) result.teamStats.goalsConcededTimes = goalsConcededTimes;
+  }
+
   return result;
 }
 

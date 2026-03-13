@@ -87,6 +87,10 @@ export interface MatchStats {
   goalMethodsConceded?: Record<string, number>;
   minutesPlayed?: number;
   goalsConceded?: number;
+  /** Tempos dos gols marcados (para gráficos por período); derivado do eventLog se não persistido */
+  goalTimes?: Array<{ time: string; method?: string }>;
+  /** Tempos dos gols sofridos (para gráficos por período); derivado do eventLog se não persistido */
+  goalsConcededTimes?: Array<{ time: string; method?: string }>;
 }
 
 export interface WeeklySchedule {
