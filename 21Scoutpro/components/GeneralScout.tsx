@@ -1095,11 +1095,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </PieChart>
                </ResponsiveContainer>
              </div>
-             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 flex flex-col gap-1.5 justify-end">
+             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 grid grid-cols-5 gap-x-4 gap-y-1.5 items-center">
                {originScoredData.map((entry, index) => (
-                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2">
+                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
                    <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                   <span className="text-white text-xs font-medium">{entry.name}</span>
+                   <span className="text-white text-xs font-medium truncate" title={entry.name}>{entry.name}</span>
                  </div>
                ))}
              </div>
@@ -1139,11 +1139,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </PieChart>
                </ResponsiveContainer>
              </div>
-             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 flex flex-col gap-1.5 justify-end">
+             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 grid grid-cols-5 gap-x-4 gap-y-1.5 items-center">
                {originConcededData.map((entry, index) => (
-                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2">
+                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
                    <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
-                   <span className="text-white text-xs font-medium">{entry.name}</span>
+                   <span className="text-white text-xs font-medium truncate" title={entry.name}>{entry.name}</span>
                  </div>
                ))}
              </div>
