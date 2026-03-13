@@ -8,6 +8,7 @@ interface ExpandableCardProps {
   icon?: React.ElementType;
   headerColor?: string; // Used for icon accent only now
   noPadding?: boolean;
+  headerRight?: React.ReactNode;
 }
 
 export const ExpandableCard: React.FC<ExpandableCardProps> = ({ 
@@ -16,7 +17,8 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
   className = "", 
   icon: Icon,
   headerColor = "text-[#10b981]", 
-  noPadding = false
+  noPadding = false,
+  headerRight
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -56,13 +58,16 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
                  {title}
                </h2>
             </div>
-            <button 
-              onClick={toggleExpand}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white p-3 rounded-full transition-colors border border-zinc-700"
-              title="Minimizar"
-            >
-              <Minimize2 size={24} />
-            </button>
+            <div className="flex items-center gap-3">
+              {headerRight}
+              <button 
+                onClick={toggleExpand}
+                className="bg-zinc-900 hover:bg-zinc-800 text-white p-3 rounded-full transition-colors border border-zinc-700"
+                title="Minimizar"
+              >
+                <Minimize2 size={24} />
+              </button>
+            </div>
           </div>
 
           {/* Expanded Content */}
@@ -99,13 +104,16 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
                     {title}
                 </h3>
             </div>
-            <button 
-                onClick={toggleExpand}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-[#10b981] p-1"
-                title="Expandir"
-            >
-                <Maximize2 size={16} />
-            </button>
+            <div className="flex items-center gap-3">
+              {headerRight}
+              <button 
+                  onClick={toggleExpand}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-[#10b981] p-1"
+                  title="Expandir"
+              >
+                  <Maximize2 size={16} />
+              </button>
+            </div>
           </div>
       )}
 

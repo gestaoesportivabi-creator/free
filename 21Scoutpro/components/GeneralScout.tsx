@@ -852,7 +852,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       
       {/* Passes & Shots */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <ExpandableCard title="Passes Certos vs Errados" icon={BarChart3} headerColor="text-blue-400">
+        <ExpandableCard
+          title="Passes Certos vs Errados"
+          icon={BarChart3}
+          headerColor="text-blue-400"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{(stats.passesCorrect || 0) + (stats.passesWrong || 0)}</span>
+            </span>
+          }
+        >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
