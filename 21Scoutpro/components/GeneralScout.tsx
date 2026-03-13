@@ -1303,12 +1303,20 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
           stats.wrong += pStats.tacklesCounterAttack || 0;
           stats.total += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0) + (pStats.tacklesCounterAttack || 0);
         } else if (statType === 'criticalErrors') {
-          // Só queremos passes errados que geraram transição
+          // Comparativo: total de passes errados vs quantos geraram transição
+          const totalWrong = pStats.passesWrong || 0;
           const transition =
             (pStats as any).wrongPassesTransition ??
             (pStats as any).transitionErrors ??
             0;
-          stats.correct += transition;
+
+          // Coluna verde: passes errados (comparativo)
+          stats.correct += totalWrong;
+
+          // Coluna vermelha: passes errados que geraram transição
+          stats.wrong += transition;
+
+          // Total/ordenação: apenas erros que geraram transição
           stats.total += transition;
         }
       });
@@ -1333,10 +1341,22 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
             <tr className="border-b border-zinc-800">
               <th className="text-left py-2 text-zinc-400 font-bold uppercase">Jogador</th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">
-                {statType === 'passes' ? 'Certos' : statType === 'shots' ? 'No Gol' : statType === 'tackles' ? 'Total' : 'Erros Transição'}
+                {statType === 'passes'
+                  ? 'Certos'
+                  : statType === 'shots'
+                  ? 'No Gol'
+                  : statType === 'tackles'
+                  ? 'Total'
+                  : 'Passes Errados'}
               </th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">
-                {statType === 'passes' ? 'Errados' : statType === 'shots' ? 'Fora' : statType === 'tackles' ? 'Contra-Ataque' : '—'}
+                {statType === 'passes'
+                  ? 'Errados'
+                  : statType === 'shots'
+                  ? 'Fora'
+                  : statType === 'tackles'
+                  ? 'Contra-Ataque'
+                  : 'Geraram Transição'}
               </th>
               <th className="text-right py-2 text-zinc-400 font-bold uppercase">Total</th>
             </tr>
