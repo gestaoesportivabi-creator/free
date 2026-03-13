@@ -1304,7 +1304,10 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
           stats.total += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0) + (pStats.tacklesCounterAttack || 0);
         } else if (statType === 'criticalErrors') {
           // Só queremos passes errados que geraram transição
-          const transition = (pStats as any).wrongPassesTransition || 0;
+          const transition =
+            (pStats as any).wrongPassesTransition ??
+            (pStats as any).transitionErrors ??
+            0;
           stats.correct += transition;
           stats.total += transition;
         }
