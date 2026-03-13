@@ -1060,65 +1060,87 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Row 3: Donut Charts - Métodos de Gol (largura total, uma abaixo da outra) */}
+      {/* Row 3: Donut Charts - Métodos de Gol (rosca centralizada, legenda no rodapé com método e %) */}
       <div className="flex flex-col gap-6 w-full">
         <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
-        <div className="h-80 w-full">
+        <div className="h-[340px] w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 10, right: 0, bottom: 70, left: 0 }}>
+             <PieChart margin={{ top: 16, right: 24, bottom: 88, left: 24 }}>
                     <Pie
                         data={originScoredData}
                         cx="50%"
-                    cy="45%"
-                        innerRadius={70}
-                        outerRadius={100}
-                        paddingAngle={5}
+                        cy="38%"
+                        innerRadius={72}
+                        outerRadius={104}
+                        paddingAngle={4}
                         dataKey="value"
-                        label={({name, value, percentage}) => `${name}: ${value} (${percentage}%)`}
+                        isAnimationActive={true}
                     >
                         {originScoredData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="none" />
                         ))}
                     </Pie>
                     <Tooltip 
-                      contentStyle={tooltipStyle}
+                      contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                      labelStyle={{ color: '#fafafa', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#e4e4e7' }}
                       formatter={(value: number, name: string, props: any) => [
                         `${value} (${props.payload.percentage}%)`,
                         name
                       ]}
                     />
-                    <Legend verticalAlign="bottom" height={40} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '24px'}} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={72}
+                      wrapperStyle={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins' }}
+                      formatter={(_, entry: any) => (
+                        <span className="text-zinc-300 text-xs font-medium">
+                          {entry.payload?.name}: <span className="text-white font-semibold">{entry.payload?.percentage}%</span>
+                        </span>
+                      )}
+                    />
                 </PieChart>
              </ResponsiveContainer>
            </div>
         </ExpandableCard>
 
         <ExpandableCard title={`Métodos de ${config.labels.goals} Tomado`} icon={PieChartIcon} headerColor="text-white">
-        <div className="h-80 w-full">
+        <div className="h-[340px] w-full min-h-0">
              <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 10, right: 0, bottom: 70, left: 0 }}>
+             <PieChart margin={{ top: 16, right: 24, bottom: 88, left: 24 }}>
                     <Pie
                         data={originConcededData}
                         cx="50%"
-                    cy="45%"
-                        innerRadius={70}
-                        outerRadius={100}
-                        paddingAngle={5}
+                        cy="38%"
+                        innerRadius={72}
+                        outerRadius={104}
+                        paddingAngle={4}
                         dataKey="value"
-                        label={({name, value, percentage}) => `${name}: ${value} (${percentage}%)`}
+                        isAnimationActive={true}
                     >
                         {originConcededData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="none" />
                         ))}
                     </Pie>
                     <Tooltip 
-                      contentStyle={tooltipStyle}
+                      contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                      labelStyle={{ color: '#fafafa', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#e4e4e7' }}
                       formatter={(value: number, name: string, props: any) => [
                         `${value} (${props.payload.percentage}%)`,
                         name
                       ]}
                     />
-                    <Legend verticalAlign="bottom" height={40} wrapperStyle={{color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins', paddingTop: '24px'}} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={72}
+                      wrapperStyle={{ color: '#a1a1aa', fontSize: '12px', fontFamily: 'Poppins' }}
+                      formatter={(_, entry: any) => (
+                        <span className="text-zinc-300 text-xs font-medium">
+                          {entry.payload?.name}: <span className="text-white font-semibold">{entry.payload?.percentage}%</span>
+                        </span>
+                      )}
+                    />
                 </PieChart>
              </ResponsiveContainer>
            </div>
