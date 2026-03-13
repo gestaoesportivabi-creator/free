@@ -883,7 +883,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
            <PlayerStatsTable matches={filteredMatches} statType="passes" players={players} />
         </ExpandableCard>
 
-        <ExpandableCard title="Chutes no Gol vs Fora" icon={BarChart3} headerColor="text-purple-400">
+        <ExpandableCard
+          title="Chutes no Gol vs Fora"
+          icon={BarChart3}
+          headerColor="text-purple-400"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{(stats.shotsOn || 0) + (stats.shotsOff || 0)}</span>
+            </span>
+          }
+        >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
@@ -908,7 +917,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       {/* Defensive Stats (Tackles & Errors) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <ExpandableCard title="Tipos de Desarme" icon={BarChart3} headerColor="text-emerald-400">
+        <ExpandableCard
+          title="Tipos de Desarme"
+          icon={BarChart3}
+          headerColor="text-emerald-400"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{stats.tacklesTotal || 0}</span>
+            </span>
+          }
+        >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
