@@ -27,5 +27,8 @@ export async function runWithTenant<T>(
     await tx.$executeRawUnsafe("SELECT set_config('app.tecnico_id', $1, true)", tenantInfo.tecnico_id ?? '');
     await tx.$executeRawUnsafe("SELECT set_config('app.clube_id', $1, true)", tenantInfo.clube_id ?? '');
     return fn(tx);
+  }, {
+    maxWait: 10000,  // tempo máximo para adquirir conexão (10s)
+    timeout: 30000,  // tempo máximo da transação (30s)
   });
 }

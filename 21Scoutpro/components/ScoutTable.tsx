@@ -1728,19 +1728,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             matches.map((m) => getMatchKey(m.date, m.opponent)).filter(Boolean)
         );
 
-        // DEBUG: Log para diagnóstico em produção
-        console.log('[DEDUP] matches.length:', matches.length);
-        console.log('[DEDUP] championshipMatches.length:', championshipMatches.length);
-        console.log('[DEDUP] savedKeys:', Array.from(savedKeys));
-        matches.forEach(m => console.log(`[DEDUP] saved: date="${m.date}" opp="${m.opponent}" status="${m.status}" key="${getMatchKey(m.date, m.opponent)}"`));
-        championshipMatches.forEach(cm => console.log(`[DEDUP] sched: date="${cm.date}" opp="${cm.opponent}" key="${getMatchKey(cm.date, cm.opponent)}"`));
-
         const scheduled: CalendarMatchItem[] = championshipMatches
             .filter((cm) => {
                 const key = getMatchKey(cm.date, cm.opponent);
-                const isDuplicate = key && savedKeys.has(key);
-                if (isDuplicate) console.log(`[DEDUP] ✅ Removendo agendada "${cm.opponent}" (key=${key}) - já tem versão salva`);
-                else console.log(`[DEDUP] ⚠️ Mantendo agendada "${cm.opponent}" (key=${key}) - SEM versão salva`);
                 return key && !savedKeys.has(key);
             })
             .map((m) => ({ ...m, type: 'scheduled' as const }));
@@ -1752,18 +1742,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
 
-        const result = all
+        return all
             .filter((match) => {
                 const matchDate = new Date(match.date);
                 matchDate.setHours(12, 0, 0, 0);
                 return matchDate >= start && matchDate <= end;
             })
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        
-        console.log('[DEDUP] resultado final:', result.length, 'partidas');
-        result.forEach(r => console.log(`[DEDUP] final: type="${r.type}" date="${r.date}" opp="${r.opponent}"`));
-        return result;
     }, [matches, championshipMatches, startDate, endDate]);
+
 
     const handleResetToCurrentMonth = () => {
         const now = new Date();
