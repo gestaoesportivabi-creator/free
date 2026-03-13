@@ -2455,12 +2455,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                 <div className="flex-shrink-0 flex items-center">
                                                     {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
                                                 </div>
-                                                <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5">
-                                                    <div className="flex items-center justify-center gap-1.5 w-full min-w-0">
-                                                        <p className={`font-bold text-sm truncate flex-1 min-w-0 text-center ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
+                                                <div className="flex-1 min-w-0 flex flex-col items-center justify-center py-0.5 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5 min-w-0">
+                                                        <p className={`font-bold text-sm truncate max-w-[100px] ${unavailable ? 'text-zinc-400' : 'text-white'}`} title={nickname || player.name}>{nickname || player.name}</p>
                                                         <span className="text-[10px] text-zinc-500 font-medium shrink-0" title={`Camisa ${player.jerseyNumber}`}>#{player.jerseyNumber}</span>
                                                     </div>
-                                                    {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
+                                                    {player.position && (
+                                                        <p className={`text-[8px] font-medium mt-0.5 uppercase tracking-wide ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-[#10b981]'}`}>
+                                                            {player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
                                                     {IS_FREE_PLAN ? (
