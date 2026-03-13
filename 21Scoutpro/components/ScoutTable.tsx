@@ -1663,6 +1663,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     };
 
     // Função para verificar se uma partida não foi executada
+    const isMatchNotExecuted = (match: MatchRecord | null): boolean => {
         if (!match) return false;
         
         // Verificar se é uma partida programada que foi salva mas não executada
