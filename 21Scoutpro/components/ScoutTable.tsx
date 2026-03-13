@@ -1654,8 +1654,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const scoreMessage = getScoreMessage();
     const teamName = teams.length > 0 ? teams[0].nome : 'Nossa Equipe';
 
+    // Função para normalizar a chave de comparação de partidas (Data + Adversário)
+    const getMatchKey = (date: string | undefined, opponent: string | undefined) => {
+        if (!date) return '';
+        const dStr = date.slice(0, 10);
+        const normalizedOpponent = (opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        return `${dStr}_${normalizedOpponent}`;
+    };
+
     // Função para verificar se uma partida não foi executada
-    const isMatchNotExecuted = (match: MatchRecord | null): boolean => {
         if (!match) return false;
         
         // Verificar se é uma partida programada que foi salva mas não executada
@@ -1690,14 +1697,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         
         if (item.type === 'scheduled') {
             if (isPast) {
-                // Ao invés de usar .getTime() que pode ter problema de fuso dependendo de como a data foi criada,
-                // vamos usar a string limpa YYYY-MM-DD para comparar de forma estrita
-                const schedDateStr = item.date.slice(0, 10);
+                const schedKey = getMatchKey(item.date, item.opponent);
                 
                 const hasMatchRecord = matches.find(m => {
-                    const mDateStr = m.date.slice(0, 10);
-                    return mDateStr === schedDateStr &&
-                           (m.opponent || '').trim().toLowerCase() === (item.opponent || '').trim().toLowerCase();
+                    return getMatchKey(m.date, m.opponent) === schedKey;
                 });
                 return hasMatchRecord ? 'finalizado' : 'incompleto';
             }
@@ -1721,21 +1724,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         const saved: CalendarMatchItem[] = matches.map((m) => ({ ...m, type: 'saved' as const }));
 
         const savedKeys = new Set(
-            matches.map((m) => {
-                if (!m.date) return '';
-                const dStr = m.date.slice(0, 10);
-                const normalizedOpponent = (m.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-                return `${dStr}_${normalizedOpponent}`;
-            }).filter(Boolean)
+            matches.map((m) => getMatchKey(m.date, m.opponent)).filter(Boolean)
         );
 
         const scheduled: CalendarMatchItem[] = championshipMatches
             .filter((cm) => {
-                if (!cm.date) return true;
-                const dStr = cm.date.slice(0, 10);
-                const normalizedOpponent = (cm.opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-                const key = `${dStr}_${normalizedOpponent}`;
-                return !savedKeys.has(key);
+                const key = getMatchKey(cm.date, cm.opponent);
+                return key && !savedKeys.has(key);
             })
             .map((m) => ({ ...m, type: 'scheduled' as const }));
 
