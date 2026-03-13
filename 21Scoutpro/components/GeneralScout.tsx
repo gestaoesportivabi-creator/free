@@ -1060,18 +1060,19 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Row 3: Donut Charts - Métodos de Gol: rosca com % fora em branco; rodapé = quadrado da cor + método em branco */}
+      {/* Row 3: Donut Charts - gráfico ocupa todo o espaço; legenda em lista no canto esquerdo do rodapé */}
       <div className="flex flex-col gap-6 w-full">
         <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
-        <div className="h-[340px] w-full min-h-0">
-             <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 16, right: 24, bottom: 48, left: 24 }}>
+        <div className="flex flex-col h-[380px] w-full min-h-0">
+             <div className="flex-1 min-h-0 w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                     <Pie
                         data={originScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
                         cx="50%"
-                        cy="40%"
-                        innerRadius={72}
-                        outerRadius={108}
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={128}
                         paddingAngle={4}
                         dataKey="value"
                         isAnimationActive={true}
@@ -1091,32 +1092,31 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name
                       ]}
                     />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={40}
-                      wrapperStyle={{ fontFamily: 'Poppins', paddingTop: '8px' }}
-                      formatter={(_: unknown, entry: any) => (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: entry.color || '#71717a' }} />
-                          <span className="text-white text-xs font-medium whitespace-nowrap">{entry.payload?.name ?? ''}</span>
-                        </span>
-                      )}
-                    />
                 </PieChart>
-             </ResponsiveContainer>
+               </ResponsiveContainer>
+             </div>
+             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 flex flex-col gap-1.5 justify-end">
+               {originScoredData.map((entry, index) => (
+                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                   <span className="text-white text-xs font-medium">{entry.name}</span>
+                 </div>
+               ))}
+             </div>
            </div>
         </ExpandableCard>
 
         <ExpandableCard title={`Métodos de ${config.labels.goals} Tomado`} icon={PieChartIcon} headerColor="text-white">
-        <div className="h-[340px] w-full min-h-0">
-             <ResponsiveContainer width="100%" height="100%">
-             <PieChart margin={{ top: 16, right: 24, bottom: 48, left: 24 }}>
+        <div className="flex flex-col h-[380px] w-full min-h-0">
+             <div className="flex-1 min-h-0 w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                     <Pie
                         data={originConcededData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_CONCEDED[i % PIE_COLORS_CONCEDED.length] }))}
                         cx="50%"
-                        cy="40%"
-                        innerRadius={72}
-                        outerRadius={108}
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={128}
                         paddingAngle={4}
                         dataKey="value"
                         isAnimationActive={true}
@@ -1136,19 +1136,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name
                       ]}
                     />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={40}
-                      wrapperStyle={{ fontFamily: 'Poppins', paddingTop: '8px' }}
-                      formatter={(_: unknown, entry: any) => (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: entry.color || '#71717a' }} />
-                          <span className="text-white text-xs font-medium whitespace-nowrap">{entry.payload?.name ?? ''}</span>
-                        </span>
-                      )}
-                    />
                 </PieChart>
-             </ResponsiveContainer>
+               </ResponsiveContainer>
+             </div>
+             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 flex flex-col gap-1.5 justify-end">
+               {originConcededData.map((entry, index) => (
+                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
+                   <span className="text-white text-xs font-medium">{entry.name}</span>
+                 </div>
+               ))}
+             </div>
            </div>
         </ExpandableCard>
       </div>
