@@ -647,10 +647,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     [filteredMatches]
   );
 
-  // Styles
-  const tooltipStyle = { backgroundColor: '#000', borderColor: '#333', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px', fontSize: '14px' };
-  const axisStyle = { fontSize: 12, fontFamily: 'Poppins', fill: '#a1a1aa', fontWeight: 'bold' };
-  const labelStyle = { fill: '#fff', fontSize: 12, fontWeight: 'bold', fontFamily: 'Poppins' };
+  // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
+  const CHART_FONT = 'Poppins';
+  const CHART_FONT_SIZE = 12;
+  const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE };
+
+  const tooltipStyle = { backgroundColor: '#000', borderColor: '#333', color: '#fff', fontFamily: CHART_FONT, borderRadius: '8px', fontSize: '14px' };
+  const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'bold' };
+  const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'bold', fontFamily: CHART_FONT };
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">
@@ -852,14 +856,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
                     <Legend
+                      wrapperStyle={legendLabelStyle}
                       formatter={(value: string) => {
                         if (value === 'Passes Certos') {
-                          return <span className="text-zinc-300">Passes Certos ({stats.passesCorrect || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Passes Certos ({stats.passesCorrect || 0})</span>;
                         }
                         if (value === 'Passes Errados') {
-                          return <span className="text-zinc-300">Passes Errados ({stats.passesWrong || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Passes Errados ({stats.passesWrong || 0})</span>;
                         }
-                        return <span className="text-zinc-300">{value}</span>;
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
                     <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.blue} stackId="a">
@@ -893,14 +898,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
                     <Legend
+                      wrapperStyle={legendLabelStyle}
                       formatter={(value: string) => {
                         if (value === 'No Gol') {
-                          return <span className="text-zinc-300">No Gol ({stats.shotsOn || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
                         }
                         if (value === 'Pra Fora') {
-                          return <span className="text-zinc-300">Pra Fora ({stats.shotsOff || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
                         }
-                        return <span className="text-zinc-300">{value}</span>;
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
                     <Bar dataKey="shotsOn" name="No Gol" fill={COLORS.blueMedium}>
@@ -937,17 +943,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <YAxis hide />
                     <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
                     <Legend
+                      wrapperStyle={legendLabelStyle}
                       formatter={(value: string) => {
                         if (value === 'Com Posse') {
-                          return <span className="text-zinc-300">Com Posse ({stats.tacklesWithBall || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Com Posse ({stats.tacklesWithBall || 0})</span>;
                         }
                         if (value === 'Sem Posse') {
-                          return <span className="text-zinc-300">Sem Posse ({stats.tacklesWithoutBall || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Sem Posse ({stats.tacklesWithoutBall || 0})</span>;
                         }
                         if (value === 'Contra-Ataque') {
-                          return <span className="text-zinc-300">Contra-Ataque ({stats.tacklesCounterAttack || 0})</span>;
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Contra-Ataque ({stats.tacklesCounterAttack || 0})</span>;
                         }
-                        return <span className="text-zinc-300">{value}</span>;
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
                     <Bar dataKey="tacklesWithBall" name="Com Posse" fill={COLORS.blueLight}>
@@ -984,15 +991,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  <YAxis hide />
                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
                  <Legend
-                   wrapperStyle={{ fontSize: '11px' }}
+                   wrapperStyle={legendLabelStyle}
                    formatter={(value: string) => {
                      if (value === 'Passes errados') {
-                       return <span className="text-zinc-300">Passes errados ({stats.passesWrong || 0})</span>;
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
                      }
                      if (value === 'Geraram transição') {
-                       return <span className="text-zinc-300">Geraram transição ({stats.wrongPassesTransition || 0})</span>;
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
                      }
-                     return <span className="text-zinc-300">{value}</span>;
+                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                    }}
                  />
                  <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
@@ -1079,16 +1086,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Feitos"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols feitos por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold">
+             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
                <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.period}</span>
              </p>
            </div>
@@ -1113,16 +1120,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Tomados"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols tomados por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold">
+             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
                <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.percentage}%</span> dos gols tomados saíram no período de <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.period}</span>
              </p>
            </div>
@@ -1159,12 +1166,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         {originScoredData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1.5} />
                         ))}
-                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily="Poppins" formatter={(v: string) => `${v}%`} />
+                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={CHART_FONT_SIZE} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
-                      labelStyle={{ color: '#fafafa', fontWeight: 'bold' }}
-                      itemStyle={{ color: '#e4e4e7' }}
+                      labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontFamily: CHART_FONT }}
+                      itemStyle={{ color: '#e4e4e7', fontFamily: CHART_FONT }}
                       formatter={(value: number, name: string, props: any) => [
                         `${value} (${props.payload.percentage}%)`,
                         name
@@ -1177,7 +1184,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                {originScoredData.map((entry, index) => (
                  <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
                    <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                   <span className="text-white text-xs font-medium truncate" title={entry.name}>{entry.name}</span>
+                   <span className="text-white text-xs font-medium truncate" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                  </div>
                ))}
              </div>
@@ -1212,12 +1219,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         {originConcededData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="#fff" strokeWidth={1.5} />
                         ))}
-                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily="Poppins" formatter={(v: string) => `${v}%`} />
+                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={CHART_FONT_SIZE} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                     </Pie>
                     <Tooltip 
                       contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
-                      labelStyle={{ color: '#fafafa', fontWeight: 'bold' }}
-                      itemStyle={{ color: '#e4e4e7' }}
+                      labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontFamily: CHART_FONT }}
+                      itemStyle={{ color: '#e4e4e7', fontFamily: CHART_FONT }}
                       formatter={(value: number, name: string, props: any) => [
                         `${value} (${props.payload.percentage}%)`,
                         name
@@ -1230,7 +1237,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                {originConcededData.map((entry, index) => (
                  <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
                    <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
-                   <span className="text-white text-xs font-medium truncate" title={entry.name}>{entry.name}</span>
+                   <span className="text-white text-xs font-medium truncate" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                  </div>
                ))}
              </div>
