@@ -648,7 +648,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   );
 
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
-  const CHART_FONT = 'Poppins';
+  const CHART_FONT = 'Calibri';
   const CHART_FONT_SIZE = 12;
   const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE };
 
