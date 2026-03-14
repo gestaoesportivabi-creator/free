@@ -789,11 +789,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  </Bar>
                </BarChart>
              </ResponsiveContainer>
-      <QuartetCard key={idx} quarteto={q} rank={idx + 1} variant="low" />
-                ))
-              )}
-            </div>
-          )}
+           </div>
+           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
