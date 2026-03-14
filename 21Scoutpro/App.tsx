@@ -855,18 +855,31 @@ export default function App() {
           playerStatsCount: Object.keys(newMatch.playerStats || {}).length
         });
 
-        // Verificar se é uma partida existente (ID real do banco) ou nova (sched-* ou sem ID)
-        const isExistingMatch = newMatch.id
-          && !newMatch.id.startsWith('sched-')
-          && matches.some(m => m.id === newMatch.id);
+        // Partida existente: id presente e não é sched-* (permite re-salvar ao editar log sem depender da lista em memória)
+        const idStr = newMatch.id != null ? String(newMatch.id).trim() : '';
+        const isExistingMatch = idStr.length > 0 && !idStr.startsWith('sched-');
 
         let saved: MatchRecord | null;
         if (isExistingMatch) {
-          console.log('📝 Atualizando partida existente:', newMatch.id);
-          saved = await matchesApi.update(newMatch.id, newMatch);
+          console.log('📝 Atualizando partida existente:', idStr);
+          try {
+            saved = await matchesApi.update(idStr, newMatch);
+          } catch (err: unknown) {
+            const is404 = err instanceof Error && (err.message.includes('404') || err.message.toLowerCase().includes('não encontrado') || err.message.toLowerCase().includes('not found'));
+            if (is404) {
+              console.warn('Partida não encontrada no servidor (404), criando nova.');
+              const matchToCreate = { ...newMatch };
+              delete (matchToCreate as any).id;
+              saved = await matchesApi.create(matchToCreate);
+            } else {
+              throw err;
+            }
+          }
         } else {
           const matchToCreate = { ...newMatch };
           if (matchToCreate.id?.startsWith('sched-')) {
+            delete (matchToCreate as any).id;
+          } else if (matchToCreate.id) {
             delete (matchToCreate as any).id;
           }
           console.log('➕ Criando nova partida');
