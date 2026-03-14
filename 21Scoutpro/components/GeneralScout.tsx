@@ -1106,7 +1106,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       {/* Row 3: Donut Charts - gráfico ocupa todo o espaço; legenda em lista no canto esquerdo do rodapé */}
       <div className="flex flex-col gap-6 w-full">
-        <ExpandableCard title={`Métodos de ${config.labels.goals} Marcado`} icon={PieChartIcon} headerColor="text-white">
+        <ExpandableCard
+          title={`Métodos de ${config.labels.goals} Marcado`}
+          icon={PieChartIcon}
+          headerColor="text-white"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{originScoredData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
+            </span>
+          }
+        >
         <div className="flex flex-col h-[380px] w-full min-h-0">
              <div className="flex-1 min-h-0 w-full">
                <ResponsiveContainer width="100%" height="100%">
@@ -1150,7 +1159,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
            </div>
         </ExpandableCard>
 
-        <ExpandableCard title={`Métodos de ${config.labels.goals} Tomado`} icon={PieChartIcon} headerColor="text-white">
+        <ExpandableCard
+          title={`Métodos de ${config.labels.goals} Tomado`}
+          icon={PieChartIcon}
+          headerColor="text-white"
+          headerRight={
+            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+              Total: <span className="text-white">{originConcededData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
+            </span>
+          }
+        >
         <div className="flex flex-col h-[380px] w-full min-h-0">
              <div className="flex-1 min-h-0 w-full">
                <ResponsiveContainer width="100%" height="100%">
