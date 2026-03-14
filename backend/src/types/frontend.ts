@@ -61,6 +61,8 @@ export interface MatchRecord {
   goalsFor: number;
   goalsAgainst: number;
   competition?: string;
+  /** Mandante ou Visitante (partidas da tabela de campeonato) */
+  location?: string;
   playerStats: { [playerId: string]: MatchStats };
   teamStats: MatchStats;
   playerRelationships?: { [p1: string]: { [p2: string]: { passes: number; assists: number } } };

@@ -150,7 +150,7 @@ export const matchesService = {
       data: dataDate,
       campeonato: data.campeonato ?? data.competition,
       competicaoId: data.competicaoId,
-      local: data.local,
+      local: data.local ?? data.location ?? undefined,
       resultado: data.resultado ?? data.result,
       golsPro,
       golsContra,
@@ -291,6 +291,7 @@ export const matchesService = {
       if (d instanceof Date && !isNaN(d.getTime())) jogoUpdate.data = d;
     }
     if (data.campeonato ?? data.competition) jogoUpdate.campeonato = data.campeonato ?? data.competition;
+    if (data.local !== undefined || data.location !== undefined) jogoUpdate.local = data.local ?? data.location ?? null;
     if (data.resultado ?? data.result) jogoUpdate.resultado = data.resultado ?? data.result;
     jogoUpdate.golsPro = golsPro;
     jogoUpdate.golsContra = golsContra;

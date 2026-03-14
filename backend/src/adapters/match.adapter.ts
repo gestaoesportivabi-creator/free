@@ -154,6 +154,7 @@ export function transformMatchToFrontend(
     goalsFor: jogo.golsPro,
     goalsAgainst: jogo.golsContra,
     competition: jogo.campeonato || undefined,
+    location: (jogo as { local?: string }).local || undefined,
     playerStats,
     teamStats,
     status: (jogo.status as MatchRecord['status']) || 'encerrado',

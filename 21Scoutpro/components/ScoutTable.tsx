@@ -1560,6 +1560,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             goalsAgainst: goalsConceded.length,
             opponent: opponent,
             result: calculatedResult === 'Vitória' ? 'V' : calculatedResult === 'Derrota' ? 'D' : 'E',
+            location: location.trim() || undefined,
             teamStats: teamStats,
             playerStats: playerStats
         };
@@ -2540,6 +2541,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                   goalsFor: 0,
                                   goalsAgainst: 0,
                                   competition: selectedScheduledMatch.competition,
+                                  location: selectedScheduledMatch.location || location.trim() || undefined,
                                   playerStats: {},
                                   teamStats: { goals: 0, assists: 0, passesCorrect: 0, passesWrong: 0, shotsOnTarget: 0, shotsOffTarget: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesCounterAttack: 0, transitionErrors: 0 },
                               }

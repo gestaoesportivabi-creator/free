@@ -203,6 +203,8 @@ export interface MatchRecord {
   goalsFor: number;
   goalsAgainst: number;
   competition?: string;
+  /** Mandante ou Visitante (partidas da tabela de campeonato) — usado no filtro do Scout Coletivo */
+  location?: string;
   playerStats: { [playerId: string]: MatchStats };
   teamStats: MatchStats;
   playerRelationships?: {

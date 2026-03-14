@@ -908,6 +908,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       goalsFor,
       goalsAgainst,
       competition: match.competition,
+      location: match.location,
       playerStats,
       teamStats,
       postMatchEventLog,
