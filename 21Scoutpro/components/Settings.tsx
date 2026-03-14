@@ -38,18 +38,26 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
       setName(currentUser.name || '');
       setEmail(currentUser.email || '');
       setPhotoUrl(currentUser.photoUrl || '');
+      // Nome do time e escudo: priorizar dados do backend (perfil) para persistir ao sair/voltar
+      if (currentUser.teamDisplayName != null && currentUser.teamDisplayName.trim() !== '') {
+        setTeamName(currentUser.teamDisplayName.trim());
+      }
+      if (currentUser.teamShieldUrl != null && currentUser.teamShieldUrl !== '') {
+        setTeamShieldUrl(currentUser.teamShieldUrl);
+      }
     }
   }, [currentUser]);
 
+  // Fallback: carregar do localStorage (ex.: antes do perfil ser buscado); o useEffect acima sobrescreve com dados do backend quando currentUser tiver teamDisplayName/teamShieldUrl
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CURRENT_TEAM_STORAGE_KEY);
       if (raw) {
         const data: CurrentTeam = JSON.parse(raw);
-        setTeamName(data.teamName || '');
+        setTeamName((prev) => (prev !== '' ? prev : data.teamName || ''));
         setTeamStartDate(data.startDate || '');
         setTeamEndDate(data.endDate || '');
-        setTeamShieldUrl(data.shieldUrl || '');
+        setTeamShieldUrl((prev) => (prev !== '' ? prev : data.shieldUrl || ''));
       }
     } catch (_) {}
   }, []);
