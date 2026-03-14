@@ -2705,14 +2705,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
                                 ))}
                               </select>
-                              <select
-                                value={pendingGoalPeriod ?? currentPeriod}
-                                onChange={(e) => setPendingGoalPeriod(e.target.value as '1T' | '2T')}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-xs font-bold outline-none focus:border-[#00f0ff]"
-                              >
-                                <option value="1T">1º tempo</option>
-                                <option value="2T">2º tempo</option>
-                              </select>
                               <button
                                 onClick={() => setGoalConfirmEditingTime(false)}
                                 className="ml-auto px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-bold rounded"
@@ -2724,7 +2716,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             <>
                               <span className="text-[#00f0ff] text-sm font-bold">
                                 {Math.floor(pendingGoalTime / 60)}&apos;{String(pendingGoalTime % 60).padStart(2, '0')}&quot;
-                                {(pendingGoalPeriod ?? currentPeriod) === '2T' && ' (2º tempo)'}
+                                {Math.floor(pendingGoalTime / 60) > 20 && ' (2º tempo)'}
                               </span>
                               <button
                                 onClick={() => setGoalConfirmEditingTime(true)}
@@ -2739,16 +2731,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                     <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex gap-3">
                       <button
-                        onClick={() =>
+                        onClick={() => {
+                          const minutes = pendingGoalTime != null ? Math.floor(pendingGoalTime / 60) : 0;
+                          const derivedPeriod: '1T' | '2T' = minutes > 20 ? '2T' : '1T';
                           handleRegisterGoal(
                             pendingGoalType || 'normal',
                             pendingGoalIsOpponent,
                             pendingGoalPlayerId,
                             pendingGoalMethod,
                             pendingGoalTime,
-                            pendingGoalPeriod ?? currentPeriod
-                          )
-                        }
+                            derivedPeriod
+                          );
+                        }}
                         className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-500/20"
                       >
                         Confirmar Gol
