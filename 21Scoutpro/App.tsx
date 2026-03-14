@@ -1644,8 +1644,8 @@ export default function App() {
               />
 
               {/* Elenco disponível + Próximo jogo */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                <div className="lg:col-span-2 min-h-0">
                   <DashboardSquadAvailability
                     players={players}
                     nextMatch={overviewStats.nextMatch}
@@ -1653,7 +1653,7 @@ export default function App() {
                     isFreePlan={IS_FREE_PLAN}
                   />
                 </div>
-                <div>
+                <div className="h-full min-h-0 w-full">
                   <DashboardNextGameCard
                     nextMatch={overviewStats.nextMatch}
                     championships={championships}

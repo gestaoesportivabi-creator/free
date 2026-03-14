@@ -30,7 +30,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
 }) => {
   if (!nextMatch) {
     return (
-      <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4">
+      <div className="h-full rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 flex flex-col">
         <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-2">
           <Trophy className="text-zinc-500" size={14} />
           Próximo jogo
@@ -46,7 +46,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
   const timeLabel = nextMatch.time ? nextMatch.time.slice(0, 5) : '';
 
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm">
+    <div className="h-full rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm flex flex-col">
       <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-3">
         <Trophy size={14} className="text-zinc-500" />
         Próximo jogo
