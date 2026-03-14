@@ -51,7 +51,7 @@ export const DashboardTodayBlock: React.FC<DashboardTodayBlockProps> = ({
             <p className="text-white font-semibold text-sm mt-0.5">
               {nextCommitment?.activityDisplay ?? (nextCommitment?.type === 'jogo' ? 'Jogo' : nextCommitment?.type === 'treino' ? 'Treino' : 'Dia sem compromisso')}
             </p>
-            {nextCommitment?.label && nextCommitment.type === 'jogo' && (
+            {nextCommitment?.label && nextCommitment.type === 'treino' && (
               <p className="text-zinc-400 text-xs truncate">{nextCommitment.label}</p>
             )}
           </div>
