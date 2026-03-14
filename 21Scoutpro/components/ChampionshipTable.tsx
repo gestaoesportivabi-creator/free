@@ -14,7 +14,7 @@ export interface ChampionshipMatch {
     competition: string;
     phase?: string; // Fase da partida (ex: "1 Fase classificatória", "1 PlayOffs")
     location?: string; // Mandante/Visitante
-    scoreTarget?: string; // Meta de pontuação esperada
+    scoreTarget?: string; // Meta de desarmes esperada
 }
 
 interface SavedMatch {
@@ -691,7 +691,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                 </select>
                             </div>
                             <div>
-                                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Meta de Pontuação</label>
+                                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Meta de desarmes</label>
                                 <input
                                     type="text"
                                     value={formData.scoreTarget || ''}
@@ -1239,7 +1239,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Meta de Pontuação</label>
+                                            <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Meta de desarmes</label>
                                             <input
                                                 type="text"
                                                 value={match.scoreTarget || ''}

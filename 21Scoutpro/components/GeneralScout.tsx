@@ -136,9 +136,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.totalGames += 1;
       const gf = curr.goalsFor ?? curr.teamStats.goals ?? 0;
       const ga = curr.goalsAgainst ?? curr.teamStats.goalsConceded ?? 0;
-      const resolved = curr.result === 'V' || curr.result === 'Vitória' ? 'V'
-        : curr.result === 'D' || curr.result === 'Derrota' ? 'D'
-        : curr.result === 'E' || curr.result === 'Empate' ? 'E'
+      const r = curr.result as string;
+      const resolved = (r === 'V' || r === 'Vitória') ? 'V'
+        : (r === 'D' || r === 'Derrota') ? 'D'
+        : (r === 'E' || r === 'Empate') ? 'E'
         : gf > ga ? 'V' : ga > gf ? 'D' : 'E';
       acc.wins += resolved === 'V' ? 1 : 0;
       acc.losses += resolved === 'D' ? 1 : 0;
@@ -152,7 +153,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
       
-      acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? curr.teamStats.wrongPassesTransition ?? 0;
+      acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? (curr.teamStats as any).wrongPassesTransition ?? 0;
       const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
       const tacklesWith = curr.teamStats.tacklesWithBall || 0;
       const tacklesWithout = curr.teamStats.tacklesWithoutBall || 0;
@@ -330,7 +331,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const chartData = useMemo(() => {
     return filteredMatches.map(match => ({
       name: match.opponent,
-      transitionErrors: match.teamStats.transitionErrors ?? match.teamStats.wrongPassesTransition ?? 0,
+      transitionErrors: match.teamStats.transitionErrors ?? (match.teamStats as any).wrongPassesTransition ?? 0,
       tacklesCounterAttack: match.teamStats.tacklesCounterAttack ?? 0,
       tacklesWithBall: match.teamStats.tacklesWithBall ?? 0,
       tacklesWithoutBall: match.teamStats.tacklesWithoutBall ?? 0,
@@ -605,7 +606,19 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const PIE_COLORS = [COLORS.blue, COLORS.blueLight, COLORS.blueMedium, COLORS.blueDark, COLORS.blueDarker, COLORS.blueCyan, COLORS.slate];
   const PIE_COLORS_CONCEDED = [COLORS.blueDarker, COLORS.blueDark, COLORS.blueMedium, COLORS.blue, COLORS.blueLight, COLORS.blueCyan, COLORS.slate];
 
-  const TACKLE_TARGET = 60;
+  const TACKLE_TARGET = useMemo(() => {
+    const targets = filteredMatches
+      .map(m => {
+        if (!m.scoreTarget) return null;
+        const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
+        return isNaN(num) ? null : num;
+      })
+      .filter((t): t is number => t !== null);
+    
+    if (targets.length === 0) return 60; // Fallback se nenhuma meta foi definida
+    return targets.reduce((a, b) => a + b, 0) / targets.length;
+  }, [filteredMatches]);
+
   const currentTackles = parseFloat(stats.avgTacklesPerGame.toString());
   const percentage = Math.min((currentTackles / TACKLE_TARGET) * 100, 100);
   const percentageDisplay = Math.round((currentTackles / TACKLE_TARGET) * 100);
@@ -732,7 +745,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Meta de Desarmes por Jogo</h2>
                          </div>
                          <p className="text-zinc-500 font-bold text-sm max-w-md">
-                             Monitoramento em tempo real da performance defensiva em relação ao objetivo estipulado pela comissão técnica.
+                             Monitoramento em tempo real da performance defensiva em relação à meta de {Math.round(TACKLE_TARGET)} desarmes por jogo.
                          </p>
                     </div>
 

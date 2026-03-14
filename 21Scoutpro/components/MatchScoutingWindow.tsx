@@ -66,25 +66,27 @@ function getGoalPeriod(period: '1T' | '2T', timeSeconds: number): number {
 }
 
 const GOAL_METHODS_OUR = [
-  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'Roubada de bola na primeira linha do ataque',
+  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'MARCAÇÃO ALTA',
 ];
 const GOAL_METHODS_CONCEDED = [
   'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'Perda de bola na primeira linha da defesa',
 ];
 
+const BOLA_PARADA_METHODS = ['Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti'];
+
 /** Ícone e cor de fundo viva por método de gol (futsal) */
-const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; hover: string; text: string }> = {
-  'Ataque': { icon: <Target size={16} />, bg: 'bg-blue-500', hover: 'hover:bg-blue-600', text: 'text-white' },
-  'Contra Ataque': { icon: <Zap size={16} />, bg: 'bg-amber-500', hover: 'hover:bg-amber-600', text: 'text-black' },
-  'Defesa de goleiro linha': { icon: <Shield size={16} />, bg: 'bg-indigo-500', hover: 'hover:bg-indigo-600', text: 'text-white' },
-  'Ataque de Goleiro Linha': { icon: <UserRound size={16} />, bg: 'bg-cyan-500', hover: 'hover:bg-cyan-600', text: 'text-black' },
-  'Escanteio': { icon: <CornerDownRight size={16} />, bg: 'bg-orange-500', hover: 'hover:bg-orange-600', text: 'text-white' },
-  'Laterais': { icon: <MoveHorizontal size={16} />, bg: 'bg-lime-500', hover: 'hover:bg-lime-600', text: 'text-black' },
-  'Faltas': { icon: <Flag size={16} />, bg: 'bg-red-500', hover: 'hover:bg-red-600', text: 'text-white' },
-  'Tiro Livre': { icon: <CircleDot size={16} />, bg: 'bg-violet-500', hover: 'hover:bg-violet-600', text: 'text-white' },
-  'Pênalti': { icon: <Circle size={16} />, bg: 'bg-rose-500', hover: 'hover:bg-rose-600', text: 'text-white' },
-  'Roubada de bola na primeira linha do ataque': { icon: <Hand size={16} />, bg: 'bg-emerald-500', hover: 'hover:bg-emerald-600', text: 'text-white' },
-  'Perda de bola na primeira linha da defesa': { icon: <ShieldOff size={16} />, bg: 'bg-red-600', hover: 'hover:bg-red-700', text: 'text-white' },
+const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border: string; hover: string; text: string }> = {
+  'Ataque': { icon: <Target size={16} />, bg: 'bg-blue-500/20', border: 'border-blue-500/50', hover: 'hover:bg-blue-500', text: 'text-blue-400 hover:text-white' },
+  'Contra Ataque': { icon: <Zap size={16} />, bg: 'bg-amber-500/20', border: 'border-amber-500/50', hover: 'hover:bg-amber-500', text: 'text-amber-400 hover:text-black' },
+  'Defesa de goleiro linha': { icon: <Shield size={16} />, bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', hover: 'hover:bg-indigo-600', text: 'text-indigo-400 hover:text-white' },
+  'Ataque de Goleiro Linha': { icon: <UserRound size={16} />, bg: 'bg-cyan-500/20', border: 'border-cyan-500/50', hover: 'hover:bg-cyan-600', text: 'text-cyan-400 hover:text-black' },
+  'Escanteio': { icon: <CornerDownRight size={16} />, bg: 'bg-orange-500/20', border: 'border-orange-500/50', hover: 'hover:bg-orange-600', text: 'text-orange-400 hover:text-white' },
+  'Laterais': { icon: <MoveHorizontal size={16} />, bg: 'bg-lime-500/20', border: 'border-lime-500/50', hover: 'hover:bg-lime-600', text: 'text-lime-400 hover:text-black' },
+  'Faltas': { icon: <Flag size={16} />, bg: 'bg-red-500/20', border: 'border-red-500/50', hover: 'hover:bg-red-600', text: 'text-red-400 hover:text-white' },
+  'Tiro Livre': { icon: <CircleDot size={16} />, bg: 'bg-violet-500/20', border: 'border-violet-500/50', hover: 'hover:bg-violet-600', text: 'text-violet-400 hover:text-white' },
+  'Pênalti': { icon: <Circle size={16} />, bg: 'bg-rose-500/20', border: 'border-rose-500/50', hover: 'hover:bg-rose-600', text: 'text-rose-400 hover:text-white' },
+  'MARCAÇÃO ALTA': { icon: <Hand size={16} />, bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', hover: 'hover:bg-emerald-600', text: 'text-emerald-400 hover:text-white' },
+  'Perda de bola na primeira linha da defesa': { icon: <ShieldOff size={16} />, bg: 'bg-red-600/20', border: 'border-red-600/50', hover: 'hover:bg-red-700', text: 'text-red-400 hover:text-white' },
 };
 
 // Jogador "fake" para o adversário — usado apenas para contabilizar gols sofridos e métodos de gols do adversário
@@ -2599,24 +2601,57 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         {pendingGoalIsOpponent ? 'Como o adversário marcou?' : 'Como foi o gol?'}
                       </p>
                     </div>
-                    <div className="p-4 max-h-[60vh] overflow-y-auto">
-                      <div className="grid grid-cols-2 gap-2">
-                        {(pendingGoalIsOpponent ? GOAL_METHODS_CONCEDED : GOAL_METHODS_OUR).map((method) => {
-                          const ui = GOAL_METHOD_UI[method] || { icon: <Goal size={16} />, bg: 'bg-zinc-600', hover: 'hover:bg-zinc-500', text: 'text-white' };
-                          return (
-                            <button
-                              key={method}
-                              onClick={() => {
-                                setPendingGoalMethod(method);
-                                setGoalStep('confirm');
-                              }}
-                              className={`flex items-center gap-2 px-4 py-3 ${ui.bg} ${ui.hover} ${ui.text} border-0 font-bold text-xs rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98]`}
-                            >
-                              {ui.icon}
-                              <span className="text-left truncate">{method}</span>
-                            </button>
-                          );
-                        })}
+                    <div className="p-4 max-h-[70vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Coluna Bola Rolando */}
+                        <div className="space-y-3">
+                          <h4 className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest border-b border-zinc-800 pb-1 mb-3">Bola Rolando</h4>
+                          <div className="flex flex-col gap-2">
+                            {(pendingGoalIsOpponent ? GOAL_METHODS_CONCEDED : GOAL_METHODS_OUR)
+                              .filter(method => !BOLA_PARADA_METHODS.includes(method))
+                              .map((method) => {
+                                const ui = GOAL_METHOD_UI[method] || { icon: <Goal size={16} />, bg: 'bg-zinc-600/20', border: 'border-zinc-600/50', hover: 'hover:bg-zinc-500', text: 'text-white' };
+                                return (
+                                  <button
+                                    key={method}
+                                    onClick={() => {
+                                      setPendingGoalMethod(method);
+                                      setGoalStep('confirm');
+                                    }}
+                                    className={`flex items-center gap-3 px-4 py-4 ${ui.bg} ${ui.border} border-2 ${ui.text} ${ui.hover} font-black uppercase text-[11px] rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98] group`}
+                                  >
+                                    <span className="shrink-0 group-hover:scale-110 transition-transform">{ui.icon}</span>
+                                    <span className="text-left leading-tight">{method}</span>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+
+                        {/* Coluna Bola Parada */}
+                        <div className="space-y-3">
+                          <h4 className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest border-b border-zinc-800 pb-1 mb-3">Bola Parada</h4>
+                          <div className="flex flex-col gap-2">
+                            {(pendingGoalIsOpponent ? GOAL_METHODS_CONCEDED : GOAL_METHODS_OUR)
+                              .filter(method => BOLA_PARADA_METHODS.includes(method))
+                              .map((method) => {
+                                const ui = GOAL_METHOD_UI[method] || { icon: <Goal size={16} />, bg: 'bg-zinc-600/20', border: 'border-zinc-600/50', hover: 'hover:bg-zinc-500', text: 'text-white' };
+                                return (
+                                  <button
+                                    key={method}
+                                    onClick={() => {
+                                      setPendingGoalMethod(method);
+                                      setGoalStep('confirm');
+                                    }}
+                                    className={`flex items-center gap-3 px-4 py-4 ${ui.bg} ${ui.border} border-2 ${ui.text} ${ui.hover} font-black uppercase text-[11px] rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98] group`}
+                                  >
+                                    <span className="shrink-0 group-hover:scale-110 transition-transform">{ui.icon}</span>
+                                    <span className="text-left leading-tight">{method}</span>
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
@@ -3207,8 +3242,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         isBlockedByPenalty
                           ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                           : ballPossessionNow === 'sem'
-                          ? 'bg-red-500/20 border-red-500 text-red-400'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                          ? 'bg-red-500/40 border-red-500 text-white'
+                          : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
                       }`}
                     >
                       Sem posse
@@ -3246,8 +3281,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         isBlockedByPenalty
                           ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                           : ballPossessionNow === 'com'
-                          ? 'bg-[#00f0ff]/20 border-[#00f0ff] text-[#00f0ff]'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                          ? 'bg-[#00f0ff]/40 border-[#00f0ff] text-white'
+                          : 'bg-zinc-900 border-[#00f0ff]/30 text-[#00f0ff]/70 hover:bg-[#00f0ff]/20 hover:border-[#00f0ff] hover:text-[#00f0ff]'
                       }`}
                     >
                       Com posse
@@ -3271,8 +3306,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : selectedAction === 'foul'
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                              : 'bg-zinc-900 border-orange-500/50 text-zinc-400 hover:border-orange-500'
+                              ? 'bg-orange-500/30 border-orange-500 text-orange-400'
+                              : 'bg-zinc-900 border-orange-500/30 text-orange-500/70 hover:bg-orange-500/20 hover:border-orange-500 hover:text-orange-400'
                           }`}
                         >
                           FALTA
@@ -3288,7 +3323,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           className={`flex-1 min-h-[44px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                             (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                              : 'bg-cyan-500/20 border-cyan-500 text-cyan-400 hover:bg-cyan-500/30'
+                              : 'bg-cyan-500/10 border-cyan-500/40 text-cyan-500/70 hover:bg-cyan-500/20 hover:border-cyan-500 hover:text-cyan-400 shadow-sm'
                           }`}
                         >
                           ESCANTEIO
@@ -3366,8 +3401,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'pass'
-                                  ? 'bg-black border-zinc-600 text-white'
-                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                                  ? 'bg-zinc-100 border-white text-black'
+                                  : 'bg-zinc-900 border-zinc-700/50 text-zinc-500 hover:bg-zinc-800 hover:border-white hover:text-white'
                               }`}
                             >
                               PASSE
@@ -3379,8 +3414,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'shot'
-                                  ? 'bg-red-500/20 border-red-500 text-red-400'
-                                  : 'bg-zinc-900 border-red-500/50 text-zinc-400 hover:border-red-500'
+                                  ? 'bg-red-500/30 border-red-500 text-red-400'
+                                  : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
                               }`}
                             >
                               CHUTE
@@ -3395,8 +3430,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'tackle'
-                                  ? 'bg-blue-500/20 border-blue-500 text-blue-400'
-                                  : 'bg-zinc-900 border-blue-500/50 text-zinc-400 hover:border-blue-500'
+                                  ? 'bg-blue-500/30 border-blue-500 text-blue-400'
+                                  : 'bg-zinc-900 border-blue-500/30 text-blue-500/70 hover:bg-blue-500/20 hover:border-blue-500 hover:text-blue-400'
                               }`}
                             >
                               DESARME
@@ -3408,8 +3443,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'save'
-                                  ? 'bg-purple-500/20 border-purple-500 text-purple-400'
-                                  : 'bg-zinc-900 border-purple-500/50 text-zinc-400 hover:border-purple-500'
+                                  ? 'bg-purple-500/30 border-purple-500 text-purple-400'
+                                  : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
                               }`}
                             >
                               DEFESA
@@ -3421,8 +3456,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'block'
-                                  ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400'
-                                  : 'bg-zinc-900 border-yellow-500/50 text-zinc-400 hover:border-yellow-500'
+                                  ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
+                                  : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
                               }`}
                             >
                               BLOQUEIO
@@ -3451,8 +3486,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           (!isPostmatch && !isRunning) || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                            : penaltyStep ? 'bg-purple-500/30 border-purple-500 text-purple-400'
-                            : 'bg-purple-500/20 border-purple-500 text-purple-400 hover:bg-purple-500/30'
+                            : penaltyStep ? 'bg-purple-500/40 border-purple-500 text-white'
+                            : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
                         }`}
                       >
                         PÊNALTI
@@ -3474,11 +3509,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setSelectedAction(null);
                         }}
                         disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty || (foulsForCount < 5 && foulsAgainstCount < 5)}
-                        className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
+                        className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
                           (!isPostmatch && !isRunning) || isBlockedByPenalty || (foulsForCount < 5 && foulsAgainstCount < 5)
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                            : freeKickStep ? 'bg-red-500/30 border-red-500 text-red-400'
-                            : 'bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                            : freeKickStep ? 'bg-red-500/40 border-red-500 text-white'
+                            : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
                         }`}
                       >
                         TIRO LIVRE
@@ -3494,7 +3529,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className={`min-h-[48px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                            : 'bg-cyan-500/20 border-cyan-500 text-cyan-400 hover:bg-cyan-500/30'
+                            : 'bg-cyan-500/10 border-cyan-500/40 text-cyan-500/70 hover:bg-cyan-500/20 hover:border-cyan-500 hover:text-cyan-400 shadow-sm'
                         }`}
                       >
                         LATERAL
@@ -3510,8 +3545,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           !isMatchStarted || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : selectedAction === 'card'
-                            ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
-                            : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 hover:bg-yellow-500/30'
+                            ? 'bg-yellow-500/40 border-yellow-500 text-white'
+                            : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
                         }`}
                       >
                         CARTÃO

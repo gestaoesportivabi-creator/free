@@ -142,7 +142,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const [opponent, setOpponent] = useState('');
     const [competition, setCompetition] = useState(''); // Vazio por padrão
     const [location, setLocation] = useState(''); // Vazio por padrão (Mandante/Visitante/vazio)
-    const [scoreTarget, setScoreTarget] = useState(''); // Meta de pontuação esperada
+    const [scoreTarget, setScoreTarget] = useState(''); // Meta de desarmes esperada
     const [matchResult, setMatchResult] = useState<'Vitória' | 'Derrota' | 'Empate' | 'Sem informação'>('Sem informação');
     const [goalsConceded, setGoalsConceded] = useState<GoalConceded[]>([]); // Array de gols tomados com tempo e método
     const [goalsConcededSaved, setGoalsConcededSaved] = useState(false); // Flag para indicar se gols tomados foram salvos
@@ -504,7 +504,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 setLocation('Mandante'); // Padrão
             }
             
-            // Preencher scoreTarget se disponível
+            // Preencher Meta de desarmes se disponível
             if (initialData.scoreTarget && initialData.scoreTarget.trim() !== '') {
                 setScoreTarget(initialData.scoreTarget);
             }
@@ -623,7 +623,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 setLocation('Mandante'); // Padrão apenas se location estiver vazio
             }
             
-            // Preencher scoreTarget se disponível
+            // Preencher Meta de desarmes se disponível
             if (matchingMatch.scoreTarget && matchingMatch.scoreTarget.trim() !== '' && scoreTarget.trim() === '') {
                 setScoreTarget(matchingMatch.scoreTarget);
             }
@@ -1561,6 +1561,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             opponent: opponent,
             result: calculatedResult === 'Vitória' ? 'V' : calculatedResult === 'Derrota' ? 'D' : 'E',
             location: location.trim() || undefined,
+            scoreTarget: scoreTarget.trim() || undefined,
             teamStats: teamStats,
             playerStats: playerStats
         };

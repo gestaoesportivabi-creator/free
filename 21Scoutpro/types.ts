@@ -23,7 +23,7 @@ export interface ChampionshipMatch {
   opponent: string; // Nome do adversário
   competition: string; // Nome da competição
   location?: string; // Mandante/Visitante
-  scoreTarget?: string; // Meta de pontuação esperada (texto livre)
+  scoreTarget?: string; // Meta de desarmes esperada (texto livre)
 }
 
 export interface Championship {
@@ -205,6 +205,8 @@ export interface MatchRecord {
   competition?: string;
   /** Mandante ou Visitante (partidas da tabela de campeonato) — usado no filtro do Scout Coletivo */
   location?: string;
+  /** Meta de desarmes esperada (texto livre) */
+  scoreTarget?: string;
   playerStats: { [playerId: string]: MatchStats };
   teamStats: MatchStats;
   playerRelationships?: {
@@ -339,4 +341,14 @@ export interface SportConfig {
   playerCount: number;
   fieldType: string;
   icon: string;
+  labels: {
+    goals: string;
+    assists: string;
+    tackles: string;
+    shots: string;
+    shotsOn: string;
+    shotsOff: string;
+    cards: string;
+    period: string;
+  };
 }
