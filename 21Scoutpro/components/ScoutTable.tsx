@@ -85,9 +85,11 @@ interface ScoutTableProps {
     championships?: Championship[];
     /** Chamado quando o popup Depois da Partida abre/fecha (para recolher sidebar e dar espaço) */
     onPostMatchOpenChange?: (open: boolean) => void;
+    /** Chamado ao excluir uma partida salva do calendário (partidas vinculadas à tabela de campeonato continuam lá) */
+    onDeleteMatch?: (matchId: string) => void | Promise<void>;
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange, onDeleteMatch }) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -1964,11 +1966,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredMatches.map((item) => (
-                            <button
+                            <div
                                 key={item.type === 'saved' ? item.id : `sched-${item.id}`}
-                                type="button"
-                                onClick={() => handleMatchClick(item)}
-                                className="bg-black rounded-2xl border-2 border-zinc-900 p-4 text-left hover:border-[#00f0ff]/50 hover:bg-zinc-950 transition-all cursor-pointer shadow-lg"
+                                className="bg-black rounded-2xl border-2 border-zinc-900 p-4 text-left hover:border-[#00f0ff]/50 hover:bg-zinc-950 transition-all shadow-lg relative"
                             >
                                 <div className="flex items-center justify-between mb-3">
                                     <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
@@ -1988,26 +1988,49 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             return 'N/A';
                                         })()}
                                     </span>
-                                    <span className="text-zinc-500 text-xs font-bold">{formatDate(item.date)}</span>
-                                </div>
-                                <p className="text-white font-bold text-sm truncate">{item.opponent || '-'}</p>
-                                <p className="text-zinc-500 text-xs mt-1 truncate">{item.competition || '-'}</p>
-                                {item.type === 'scheduled' && (item as ChampionshipMatch).time && (
-                                    <p className="text-zinc-400 text-xs mt-1 flex items-center gap-1">
-                                        <Clock size={12} /> {(item as ChampionshipMatch).time}
-                                    </p>
-                                )}
-                                {item.type === 'saved' && (
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <span className={`text-xs font-bold ${(item as MatchRecord).result === 'V' ? 'text-green-400' : (item as MatchRecord).result === 'D' ? 'text-red-400' : 'text-yellow-400'}`}>
-                                            {(item as MatchRecord).result === 'V' ? 'Vitória' : (item as MatchRecord).result === 'D' ? 'Derrota' : 'Empate'}
-                                        </span>
-                                        <span className="text-zinc-500 text-xs">
-                                            {(item as MatchRecord).goalsFor} x {(item as MatchRecord).goalsAgainst}
-                                        </span>
+                                    <div className="flex items-center gap-2">
+                                        {item.type === 'saved' && onDeleteMatch && item.id && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (window.confirm('Excluir esta partida? Esta ação não pode ser desfeita.')) {
+                                                        onDeleteMatch(item.id as string);
+                                                    }
+                                                }}
+                                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                                                title="Excluir partida"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                        <span className="text-zinc-500 text-xs font-bold">{formatDate(item.date)}</span>
                                     </div>
-                                )}
-                            </button>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleMatchClick(item)}
+                                    className="w-full text-left cursor-pointer"
+                                >
+                                    <p className="text-white font-bold text-sm truncate">{item.opponent || '-'}</p>
+                                    <p className="text-zinc-500 text-xs mt-1 truncate">{item.competition || '-'}</p>
+                                    {item.type === 'scheduled' && (item as ChampionshipMatch).time && (
+                                        <p className="text-zinc-400 text-xs mt-1 flex items-center gap-1">
+                                            <Clock size={12} /> {(item as ChampionshipMatch).time}
+                                        </p>
+                                    )}
+                                    {item.type === 'saved' && (
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <span className={`text-xs font-bold ${(item as MatchRecord).result === 'V' ? 'text-green-400' : (item as MatchRecord).result === 'D' ? 'text-red-400' : 'text-yellow-400'}`}>
+                                                {(item as MatchRecord).result === 'V' ? 'Vitória' : (item as MatchRecord).result === 'D' ? 'Derrota' : 'Empate'}
+                                            </span>
+                                            <span className="text-zinc-500 text-xs">
+                                                {(item as MatchRecord).goalsFor} x {(item as MatchRecord).goalsAgainst}
+                                            </span>
+                                        </div>
+                                    )}
+                                </button>
+                            </div>
                         ))}
                     </div>
                     {filteredMatches.length === 0 && (

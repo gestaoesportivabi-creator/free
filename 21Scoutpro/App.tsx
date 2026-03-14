@@ -826,6 +826,17 @@ export default function App() {
       }
   };
 
+  const handleDeleteMatch = async (matchId: string) => {
+    try {
+      await matchesApi.delete(matchId);
+      setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      alert('Partida excluída com sucesso.');
+    } catch (err) {
+      console.error('Erro ao excluir partida:', err);
+      alert('Não foi possível excluir a partida. Tente novamente.');
+    }
+  };
+
   const handleSaveMatch = async (newMatch: MatchRecord) => {
       try {
         // Validar match antes de salvar
@@ -1525,6 +1536,7 @@ export default function App() {
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
           onPostMatchOpenChange={(open) => setSidebarRetracted(open)}
+          onDeleteMatch={handleDeleteMatch}
             />
           </TabBackgroundWrapper>
         );
