@@ -30,7 +30,8 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu } from 'lucide-react';
+import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
+import { QuartetAnalysis } from './components/QuartetAnalysis';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
@@ -1396,45 +1397,7 @@ export default function App() {
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <div className="flex flex-col gap-6 w-full">
-              <div className="flex flex-col gap-2 mb-2 p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
-                <div className="flex items-center gap-2 mb-2">
-                   <div className="w-1 h-6 bg-[#00f0ff] rounded-full"></div>
-                   <h2 className="text-xl font-black text-white uppercase italic tracking-tighter">Análise de Quarteto de Linha</h2>
-                </div>
-                <p className="text-zinc-400 text-sm leading-relaxed border-l-2 border-zinc-800 pl-4 py-1">
-                   O <strong className="text-zinc-200">IPQ (Índice de Performance do Quarteto)</strong> mede a eficiência coletiva dos quatro atletas enquanto estiverem juntos em quadra. O sistema gera três indicadores: <span className="text-blue-400">IPQ Ofensivo</span> (produção ofensiva e geração de jogo), <span className="text-red-400">IPQ Defensivo</span> (solidez defensiva e controle de erros) e <span className="text-purple-400">IPQ Total</span> (ataque, defesa e disciplina). Todos são normalizados de 0 a 100 — quanto maior, melhor. Apenas quartetos com pelo menos 3 minutos juntos são considerados.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-6 bg-zinc-950/80 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center min-h-[400px] text-center group hover:border-[#00f0ff]/20 transition-all">
-                  <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <Trophy className="w-8 h-8 text-yellow-500/50" />
-                  </div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-tighter mb-2 italic">Quarteto Alta Performance</h3>
-                  <div className="w-full max-w-sm p-8 bg-zinc-900/40 rounded-xl border border-zinc-800/50 flex flex-col items-center gap-4">
-                    <Lock className="w-12 h-12 text-zinc-600" />
-                    <p className="text-zinc-500 text-sm font-bold uppercase leading-tight">
-                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-6 bg-zinc-950/80 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center min-h-[400px] text-center group hover:border-red-500/20 transition-all">
-                  <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <AlertTriangle className="w-8 h-8 text-red-500/50" />
-                  </div>
-                  <h3 className="text-lg font-black text-white uppercase tracking-tighter mb-2 italic">Quarteto Baixa Performance</h3>
-                  <div className="w-full max-w-sm p-8 bg-zinc-900/40 rounded-xl border border-zinc-800/50 flex flex-col items-center gap-4">
-                    <Lock className="w-12 h-12 text-zinc-600" />
-                    <p className="text-zinc-500 text-sm font-bold uppercase leading-tight">
-                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <QuartetAnalysis matches={matches} players={players} />
           </TabBackgroundWrapper>
         );
       case 'general':
