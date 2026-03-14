@@ -279,18 +279,30 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const maxScoredValue = scoredCounts.length ? Math.max(...scoredCounts) : 0;
     const maxConcededValue = concededCounts.length ? Math.max(...concededCounts) : 0;
 
-    // Criar distribuição com valores reais e flag isMax para colorir o rótulo
-    const scoredDist = periods.map((p, i) => ({
+    // Criar distribuição com valores reais; labelTop = valor acima (não-max), labelBottom = valor abaixo (só no período com mais gols)
+    const scoredDist = periods.map((p, i) => {
+      const val = scoredCounts[i];
+      const isMax = val === maxScoredValue && maxScoredValue > 0;
+      return {
         period: p,
-        value: scoredCounts[i],
-        isMax: scoredCounts[i] === maxScoredValue && maxScoredValue > 0
-    }));
-    
-    const concededDist = periods.map((p, i) => ({
+        value: val,
+        isMax,
+        labelTop: isMax ? '' : val,
+        labelBottom: isMax ? val : ''
+      };
+    });
+
+    const concededDist = periods.map((p, i) => {
+      const val = concededCounts[i];
+      const isMax = val === maxConcededValue && maxConcededValue > 0;
+      return {
         period: p,
-        value: concededCounts[i],
-        isMax: concededCounts[i] === maxConcededValue && maxConcededValue > 0
-    }));
+        value: val,
+        isMax,
+        labelTop: isMax ? '' : val,
+        labelBottom: isMax ? val : ''
+      };
+    });
 
     // Calcular total de gols para porcentagem
     const totalScored = scoredCounts.reduce((sum, count) => sum + count, 0);
@@ -1051,7 +1063,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]">
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
                     <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
                     <YAxis hide />
@@ -1066,22 +1078,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         activeDot={{r: 6}}
                         name="Gols Feitos"
                     >
-                        <LabelList 
-                          dataKey="value" 
-                          position="top" 
-                          fontSize={14} 
-                          fontWeight="bold" 
-                          dy={-25}
-                          content={(props: { x?: number; y?: number; value?: number; payload?: { isMax?: boolean } }) => {
-                            const { x = 0, y = 0, value, payload } = props;
-                            const fill = payload?.isMax ? '#eab308' : '#fff';
-                            return (
-                              <text x={x} y={y} fill={fill} textAnchor="middle" fontSize={14} fontWeight="bold" dy={-25}>
-                                {value}
-                              </text>
-                            );
-                          }}
-                        />
+                        {/* Rótulos acima da linha (demais períodos) */}
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -1097,7 +1097,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]">
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
+                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
                     <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
                     <YAxis hide />
@@ -1112,22 +1112,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         activeDot={{r: 6}}
                         name="Gols Tomados"
                     >
-                        <LabelList 
-                          dataKey="value" 
-                          position="top" 
-                          fontSize={14} 
-                          fontWeight="bold" 
-                          dy={-25}
-                          content={(props: { x?: number; y?: number; value?: number; payload?: { isMax?: boolean } }) => {
-                            const { x = 0, y = 0, value, payload } = props;
-                            const fill = payload?.isMax ? '#eab308' : '#fff';
-                            return (
-                              <text x={x} y={y} fill={fill} textAnchor="middle" fontSize={14} fontWeight="bold" dy={-25}>
-                                {value}
-                              </text>
-                            );
-                          }}
-                        />
+                        {/* Rótulos acima da linha (demais períodos) */}
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
