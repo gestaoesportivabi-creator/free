@@ -104,6 +104,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     blueCyan: '#0ea5e9', // Cyan Blue
     slate: '#71717a',   // Zinc
     rose: '#ff0055',    // Erros / transição
+    green: '#22c55e',   // Gols feitos por período
   };
 
   const filteredMatches = useMemo(() => {
@@ -274,15 +275,21 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       });
     });
     
-    // Criar distribuição com valores reais
+    // Máximo por chart para destacar o período com mais gols (label amarelo)
+    const maxScoredValue = scoredCounts.length ? Math.max(...scoredCounts) : 0;
+    const maxConcededValue = concededCounts.length ? Math.max(...concededCounts) : 0;
+
+    // Criar distribuição com valores reais e flag isMax para colorir o rótulo
     const scoredDist = periods.map((p, i) => ({
         period: p,
-        value: scoredCounts[i]
+        value: scoredCounts[i],
+        isMax: scoredCounts[i] === maxScoredValue && maxScoredValue > 0
     }));
     
     const concededDist = periods.map((p, i) => ({
         period: p,
-        value: concededCounts[i]
+        value: concededCounts[i],
+        isMax: concededCounts[i] === maxConcededValue && maxConcededValue > 0
     }));
 
     // Calcular total de gols para porcentagem
@@ -1041,25 +1048,40 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       {/* Row: Goals by Time Period */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#ccff00]">
+        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]">
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
                     <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
-                    <YAxis stroke="#71717a" tick={axisStyle} />
-                    <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.blue, strokeWidth: 1}} />
-                    <Area type="monotone" dataKey="value" fill={COLORS.blue} fillOpacity={0.25} stroke="none" />
+                    <YAxis hide />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.green, strokeWidth: 1}} />
+                    <Area type="monotone" dataKey="value" fill={COLORS.green} fillOpacity={0.25} stroke="none" />
                     <Line 
                         type="monotone" 
                         dataKey="value" 
-                        stroke={COLORS.blue} 
+                        stroke={COLORS.green} 
                         strokeWidth={1.5} 
-                        dot={{fill: COLORS.blue, r: 4}}
+                        dot={{fill: COLORS.green, r: 4}}
                         activeDot={{r: 6}}
                         name="Gols Feitos"
                     >
-                        <LabelList dataKey="value" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        <LabelList 
+                          dataKey="value" 
+                          position="top" 
+                          fontSize={14} 
+                          fontWeight="bold" 
+                          dy={-25}
+                          content={(props: { x?: number; y?: number; value?: number; payload?: { isMax?: boolean } }) => {
+                            const { x = 0, y = 0, value, payload } = props;
+                            const fill = payload?.isMax ? '#eab308' : '#fff';
+                            return (
+                              <text x={x} y={y} fill={fill} textAnchor="middle" fontSize={14} fontWeight="bold" dy={-25}>
+                                {value}
+                              </text>
+                            );
+                          }}
+                        />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -1067,7 +1089,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
            {/* Cartão com porcentagem do maior número de gols feitos por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
              <p className="text-white text-sm font-bold">
-               <span className="text-[#ccff00]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#ccff00]">{timePeriodData.maxScoredPeriod.period}</span>
+               <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.period}</span>
              </p>
            </div>
         </ExpandableCard>
@@ -1078,7 +1100,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
                     <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
-                    <YAxis stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
                     <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.rose, strokeWidth: 1}} />
                     <Area type="monotone" dataKey="value" fill={COLORS.rose} fillOpacity={0.25} stroke="none" />
                     <Line 
@@ -1090,7 +1112,22 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         activeDot={{r: 6}}
                         name="Gols Tomados"
                     >
-                        <LabelList dataKey="value" position="top" fill="#fff" fontSize={14} fontWeight="bold" dy={-25} />
+                        <LabelList 
+                          dataKey="value" 
+                          position="top" 
+                          fontSize={14} 
+                          fontWeight="bold" 
+                          dy={-25}
+                          content={(props: { x?: number; y?: number; value?: number; payload?: { isMax?: boolean } }) => {
+                            const { x = 0, y = 0, value, payload } = props;
+                            const fill = payload?.isMax ? '#eab308' : '#fff';
+                            return (
+                              <text x={x} y={y} fill={fill} textAnchor="middle" fontSize={14} fontWeight="bold" dy={-25}>
+                                {value}
+                              </text>
+                            );
+                          }}
+                        />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
