@@ -62,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         { id: 'general', label: 'Scout Coletivo', icon: Users, restricted: isAthlete },
         { id: 'individual', label: 'Scout Individual', icon: UserIcon, restricted: false },
         { id: 'ranking', label: 'Ranking', icon: Trophy, restricted: false },
+        { id: 'quarteto', label: 'Quarteto Alta Performance', icon: Lock, restricted: false },
       ]
     },
     {

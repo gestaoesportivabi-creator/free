@@ -359,7 +359,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const startActionFlow = (action: string) => {
-    const step = needsDetails(action) ? 'details' : 'player';
+    const step = needsDetails(action) ? 'details' as const : 'player' as const;
     const flow = { step, action, details: null as string | null };
     if (step === 'player' && selectedPlayerId) {
       if (needsTimePopup()) {
@@ -371,15 +371,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
       return;
     }
-    setActionFlow(flow);
+    setActionFlow(flow as any);
   };
 
-  const advanceActionFlowToPlayer = (details: string, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult }) => {
-    // Passe Errado: em vez de ir direto ao jogador, mostrar "Gerou transição?" SIM/NÃO
-    if (actionFlow?.action === 'pass' && details === 'wrong') {
-      setActionFlow(actionFlow ? { ...actionFlow, step: 'wrongPassTransition' as const, details: 'wrong' } : null);
+  const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult }) => {
+    // Simplificação de Passe: registrar direto se houver jogador selecionado
+    if (actionFlow?.action === 'pass') {
+      const nextFlow = { ...actionFlow, step: 'player' as const, details, ...extra };
+      const pid = selectedPlayerId;
+      if (pid) {
+        if (needsTimePopup()) {
+          setActionFlow({ ...nextFlow, step: 'time', selectedPlayerId: pid });
+        } else {
+          executeActionFlow(nextFlow, pid);
+          cancelActionFlow();
+        }
+        return;
+      }
+      setActionFlow(nextFlow);
       return;
     }
+
+    // Outras ações: manter fluxo normal
     const nextFlow = actionFlow ? { ...actionFlow, step: 'player' as const, details, ...extra } : null;
     if (nextFlow && selectedPlayerId) {
       if (needsTimePopup()) {
