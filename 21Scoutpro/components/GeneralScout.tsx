@@ -364,20 +364,31 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     })).sort((a, b) => b.value - a.value);
   }, [stats.goalMethodsConceded]);
 
-  // Fallback para dados antigos (Bola Rolando/Bola Parada)
+  // Dados de origem do gol (Bola Rolando vs Bola Parada)
+  const goalOriginScoredData = useMemo(() => {
+    const total = stats.goalsScored || 0;
+    return [
+      { name: 'Bola Rolando', value: stats.goalsScoredOpen, percentage: total > 0 ? ((stats.goalsScoredOpen / total) * 100).toFixed(1) : '0.0' },
+      { name: 'Bola Parada', value: stats.goalsScoredSet, percentage: total > 0 ? ((stats.goalsScoredSet / total) * 100).toFixed(1) : '0.0' },
+    ];
+  }, [stats.goalsScored, stats.goalsScoredOpen, stats.goalsScoredSet]);
+
+  const goalOriginConcededData = useMemo(() => {
+    const total = stats.goalsConceded || 0;
+    return [
+      { name: 'Bola Rolando', value: stats.goalsConcededOpen, percentage: total > 0 ? ((stats.goalsConcededOpen / total) * 100).toFixed(1) : '0.0' },
+      { name: 'Bola Parada', value: stats.goalsConcededSet, percentage: total > 0 ? ((stats.goalsConcededSet / total) * 100).toFixed(1) : '0.0' },
+    ];
+  }, [stats.goalsConceded, stats.goalsConcededOpen, stats.goalsConcededSet]);
+
+  // Fallback para dados antigos (Bola Rolando/Bola Parada) - Mantido para compatibilidade se necessário em outros lugares
   const originScoredData = goalMethodsScoredData.length > 0 
     ? goalMethodsScoredData
-    : [
-        { name: 'Bola Rolando', value: stats.goalsScoredOpen, percentage: '0.0' },
-        { name: 'Bola Parada', value: stats.goalsScoredSet, percentage: '0.0' },
-      ];
+    : goalOriginScoredData;
   
   const originConcededData = goalMethodsConcededData.length > 0
     ? goalMethodsConcededData
-    : [
-        { name: 'Bola Rolando', value: stats.goalsConcededOpen, percentage: '0.0' },
-        { name: 'Bola Parada', value: stats.goalsConcededSet, percentage: '0.0' },
-      ];
+    : goalOriginConcededData;
 
   // --- Análise de Quartetos de Linha (IPQ – Índice de Performance do Quarteto) ---
   const QUARTET_MATCH_DURATION_SEC = 40 * 60; // 40 min
@@ -1161,45 +1172,84 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </span>
           }
         >
-        <div className="flex flex-col h-[380px] w-full min-h-0">
-             <div className="flex-1 min-h-0 w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                    <Pie
-                        data={originScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={80}
-                        outerRadius={128}
-                        paddingAngle={4}
-                        dataKey="value"
-                        isAnimationActive={true}
-                        labelLine={{ stroke: '#52525b', strokeWidth: 1 }}
-                    >
-                        {originScoredData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1.5} />
-                        ))}
-                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={CHART_FONT_SIZE} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
-                      labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontFamily: CHART_FONT }}
-                      itemStyle={{ color: '#e4e4e7', fontFamily: CHART_FONT }}
-                      formatter={(value: number, name: string, props: any) => [
-                        `${value} (${props.payload.percentage}%)`,
-                        name
-                      ]}
-                    />
-                </PieChart>
-               </ResponsiveContainer>
+        <div className="flex flex-col lg:flex-row min-h-[380px] w-full gap-6 p-4">
+             {/* Gráfico 1: Métodos Detalhados */}
+             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Métodos Detalhados</h4>
+               <div className="flex-1 min-h-0 w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie
+                          data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={4}
+                          dataKey="value"
+                          isAnimationActive={true}
+                      >
+                          {goalMethodsScoredData.map((entry, index) => (
+                              <Cell key={`cell-scored-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1} />
+                          ))}
+                          <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
+                      />
+                  </PieChart>
+                 </ResponsiveContainer>
+               </div>
+               <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
+                 {goalMethodsScoredData.map((entry, index) => (
+                   <div key={`leg-scored-${index}`} className="flex items-center gap-1.5 min-w-0">
+                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                   </div>
+                 ))}
+               </div>
              </div>
-             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 grid grid-cols-5 gap-x-4 gap-y-1.5 items-center">
-               {originScoredData.map((entry, index) => (
-                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
-                   <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                   <span className="text-white text-xs font-medium truncate" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+
+             {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
+             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Origem do Gol</h4>
+               <div className="flex-1 min-h-0 w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie
+                          data={goalOriginScoredData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={8}
+                          dataKey="value"
+                          isAnimationActive={true}
+                      >
+                          <Cell fill={COLORS.blue} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
+                      />
+                  </PieChart>
+                 </ResponsiveContainer>
+               </div>
+               <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
+                 <div className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blue }} />
+                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredOpen}</span>
                  </div>
-               ))}
+                 <div className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
+                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
+                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredSet}</span>
+                 </div>
+               </div>
              </div>
            </div>
         </ExpandableCard>
@@ -1214,45 +1264,84 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </span>
           }
         >
-        <div className="flex flex-col h-[380px] w-full min-h-0">
-             <div className="flex-1 min-h-0 w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                    <Pie
-                        data={originConcededData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_CONCEDED[i % PIE_COLORS_CONCEDED.length] }))}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={80}
-                        outerRadius={128}
-                        paddingAngle={4}
-                        dataKey="value"
-                        isAnimationActive={true}
-                        labelLine={{ stroke: '#52525b', strokeWidth: 1 }}
-                    >
-                        {originConcededData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="#fff" strokeWidth={1.5} />
-                        ))}
-                        <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={CHART_FONT_SIZE} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
-                      labelStyle={{ color: '#fafafa', fontWeight: 'bold', fontFamily: CHART_FONT }}
-                      itemStyle={{ color: '#e4e4e7', fontFamily: CHART_FONT }}
-                      formatter={(value: number, name: string, props: any) => [
-                        `${value} (${props.payload.percentage}%)`,
-                        name
-                      ]}
-                    />
-                </PieChart>
-               </ResponsiveContainer>
+        <div className="flex flex-col lg:flex-row min-h-[380px] w-full gap-6 p-4">
+             {/* Gráfico 1: Métodos Detalhados */}
+             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Métodos Detalhados</h4>
+               <div className="flex-1 min-h-0 w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie
+                          data={goalMethodsConcededData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_CONCEDED[i % PIE_COLORS_CONCEDED.length] }))}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={4}
+                          dataKey="value"
+                          isAnimationActive={true}
+                      >
+                          {goalMethodsConcededData.map((entry, index) => (
+                              <Cell key={`cell-conceded-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="#fff" strokeWidth={1} />
+                          ))}
+                          <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
+                      />
+                  </PieChart>
+                 </ResponsiveContainer>
+               </div>
+               <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
+                 {goalMethodsConcededData.map((entry, index) => (
+                   <div key={`leg-conceded-${index}`} className="flex items-center gap-1.5 min-w-0">
+                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
+                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                   </div>
+                 ))}
+               </div>
              </div>
-             <div className="shrink-0 border-t border-zinc-800 px-3 py-2.5 grid grid-cols-5 gap-x-4 gap-y-1.5 items-center">
-               {originConcededData.map((entry, index) => (
-                 <div key={`legend-${entry.name}-${index}`} className="flex items-center gap-2 min-w-0">
-                   <span className="shrink-0 w-3 h-3 rounded-sm border border-zinc-600" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
-                   <span className="text-white text-xs font-medium truncate" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+
+             {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
+             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Origem do Gol</h4>
+               <div className="flex-1 min-h-0 w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie
+                          data={goalOriginConcededData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={8}
+                          dataKey="value"
+                          isAnimationActive={true}
+                      >
+                          <Cell fill={COLORS.blueDarker} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
+                      />
+                  </PieChart>
+                 </ResponsiveContainer>
+               </div>
+               <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
+                 <div className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blueDarker }} />
+                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededOpen}</span>
                  </div>
-               ))}
+                 <div className="flex items-center gap-2">
+                   <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
+                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
+                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededSet}</span>
+                 </div>
+               </div>
              </div>
            </div>
         </ExpandableCard>
