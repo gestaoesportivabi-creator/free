@@ -204,58 +204,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     };
   }, [filteredMatches]);
 
-  // Função auxiliar para converter tempo (ex: "12:43" ou "12:43 (1T)") em minutos totais
+  // Para o gráfico de gols por período: usar apenas o valor de minutos (e segundos) informado.
+  // Não somar 20 para 2T — o eixo do gráfico é só 00:00–50:00 pelo minuto cadastrado.
   const parseTimeToMinutes = (timeStr: string): number | null => {
     if (!timeStr || typeof timeStr !== 'string') return null;
-    
-    // Remover período se existir (ex: "12:43 (1T)" -> "12:43")
     const cleanTime = timeStr.split('(')[0].trim();
-    
-    // Extrair minutos e segundos (formato MM:SS ou M:SS)
     const parts = cleanTime.split(':');
-    if (parts.length !== 2) {
-      // Tentar como número simples (apenas minutos)
-      const minutesOnly = parseInt(cleanTime, 10);
-      if (!isNaN(minutesOnly)) {
-        // Se tem período, ajustar; senão, assumir primeiro tempo
-        if (timeStr.includes('(2T)') || timeStr.includes('2T')) {
-          return minutesOnly + 20; // Segundo tempo começa em 20 minutos (futsal)
-        } else if (timeStr.includes('(ET)') || timeStr.includes('ET')) {
-          return minutesOnly + 40; // Prorrogação começa em 40 minutos
-        }
-        return minutesOnly; // Primeiro tempo
-      }
-      return null;
+    if (parts.length === 2) {
+      const minutes = parseInt(parts[0], 10);
+      if (!isNaN(minutes)) return minutes;
     }
-    
-    const minutes = parseInt(parts[0], 10);
-    const seconds = parseInt(parts[1], 10);
-    
-    if (isNaN(minutes)) return null;
-    
-    // Em futsal: 1T = 0-20min, 2T = 20-40min
-    // Se o tempo contém período, ajustar
-    if (timeStr.includes('(1T)') || timeStr.includes('1T')) {
-      // Primeiro tempo: minutos diretos (0-20)
-      return minutes;
-    } else if (timeStr.includes('(2T)') || timeStr.includes('2T')) {
-      // Segundo tempo: minutos + 20 (20-40)
-      return minutes + 20;
-    } else if (timeStr.includes('(ET)') || timeStr.includes('ET')) {
-      // Prorrogação: minutos + 40 (40+)
-      return minutes + 40;
-    }
-    
-    // Se não tem período, usar heurística baseada no valor dos minutos
-    // Em futsal, se minutos > 20, provavelmente é segundo tempo
-    if (minutes > 20 && minutes <= 40) {
-      return minutes; // Já está no segundo tempo
-    } else if (minutes > 40) {
-      return minutes; // Prorrogação ou erro, mas manter o valor
-    }
-    
-    // Primeiro tempo (0-20)
-    return minutes;
+    const minutesOnly = parseInt(cleanTime, 10);
+    return !isNaN(minutesOnly) ? minutesOnly : null;
   };
 
   // Time Period Data - Faixa de 00:00 a 50:00 dividida de 5 em 5 minutos
