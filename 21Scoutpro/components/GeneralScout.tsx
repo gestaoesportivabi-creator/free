@@ -143,21 +143,41 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.yellowCards += curr.teamStats.yellowCards || 0;
       acc.redCards += curr.teamStats.redCards || 0;
 
-      acc.goalsScoredOpen += curr.teamStats.goalsScoredOpenPlay || 0;
-      acc.goalsScoredSet += curr.teamStats.goalsScoredSetPiece || 0;
-      
-      acc.goalsConcededOpen += curr.teamStats.goalsConcededOpenPlay || 0;
-      acc.goalsConcededSet += curr.teamStats.goalsConcededSetPiece || 0;
+      // Classificação manual de Origem do Gol baseada nos métodos (mais confiável no front)
+      const SET_PIECE_METHODS = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
 
-      // Agregar métodos de gols
+      // Agregar métodos de gols e calcular origem
       if (curr.teamStats.goalMethodsScored) {
         Object.entries(curr.teamStats.goalMethodsScored).forEach(([method, count]) => {
-          acc.goalMethodsScored[method] = (acc.goalMethodsScored[method] || 0) + count;
+          let normalizedMethod = method.trim().toUpperCase();
+          if (normalizedMethod === 'ROUBADA DE BOLA NA PRIMEIRA LINHA') {
+            normalizedMethod = 'MARCAÇÃO ALTA';
+          }
+          
+          acc.goalMethodsScored[normalizedMethod] = (acc.goalMethodsScored[normalizedMethod] || 0) + count;
+          
+          if (SET_PIECE_METHODS.includes(normalizedMethod)) {
+            acc.goalsScoredSet += count;
+          } else {
+            acc.goalsScoredOpen += count;
+          }
         });
       }
+
       if (curr.teamStats.goalMethodsConceded) {
         Object.entries(curr.teamStats.goalMethodsConceded).forEach(([method, count]) => {
-          acc.goalMethodsConceded[method] = (acc.goalMethodsConceded[method] || 0) + count;
+          let normalizedMethod = method.trim().toUpperCase();
+          if (normalizedMethod === 'ROUBADA DE BOLA NA PRIMEIRA LINHA') {
+            normalizedMethod = 'MARCAÇÃO ALTA';
+          }
+          
+          acc.goalMethodsConceded[normalizedMethod] = (acc.goalMethodsConceded[normalizedMethod] || 0) + count;
+          
+          if (SET_PIECE_METHODS.includes(normalizedMethod)) {
+            acc.goalsConcededSet += count;
+          } else {
+            acc.goalsConcededOpen += count;
+          }
         });
       }
       
