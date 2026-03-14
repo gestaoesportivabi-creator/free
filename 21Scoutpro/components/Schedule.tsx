@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { WeeklySchedule, ScheduleDay } from '../types';
 import { normalizeScheduleDays, normalizeWeeklySchedule } from '../utils/scheduleUtils';
-import { CalendarClock, Plus, Save, Printer, Share2, Trash2, Calendar, CheckCircle, ChevronDown, ChevronUp, Flag } from 'lucide-react';
+import { CalendarClock, Plus, Save, Printer, Trash2, Calendar, CheckCircle, ChevronDown, ChevronUp, Flag } from 'lucide-react';
 
 interface ScheduleProps {
     schedules: WeeklySchedule[];
@@ -121,34 +121,29 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, o
     };
 
     const handlePrint = () => {
-        window.print();
-    };
-
-    const handleShare = (schedule: WeeklySchedule) => {
-        let text = `📅 *${schedule.title}*\n\n`;
-        if (!schedule.days || !Array.isArray(schedule.days) || schedule.days.length === 0) {
-            text += 'Nenhum dia configurado.\n';
-            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-            window.open(url, '_blank');
-            return;
+        const styleId = 'schedule-print-a4-landscape';
+        let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = styleId;
+            styleEl.textContent = `
+                @page { size: A4 landscape; margin: 12mm; }
+                @media print {
+                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    #schedule-print-area { width: 100%; max-width: 100%; overflow: visible !important; }
+                    #schedule-print-area table { width: 100% !important; table-layout: fixed; font-size: 0.85rem; }
+                    #schedule-print-area th, #schedule-print-area td { padding: 0.35rem 0.5rem !important; }
+                }
+            `;
+            document.head.appendChild(styleEl);
         }
-        schedule.days.forEach(day => {
-            // Format date correctly (avoid timezone issues)
-            const formatDateForShare = (dateStr: string) => {
-                if (!dateStr) return '';
-                const [year, month, dayNum] = dateStr.split('-').map(Number);
-                return `${String(dayNum).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
-            };
-            
-            text += `*${day.weekday?.toUpperCase() || ''} (${formatDateForShare(day.date)})*\n`;
-            text += `⏰ ${day.time || ''} - ${day.activity || ''}\n`;
-            text += `📍 ${day.location || ''}\n`;
-            if (day.notes) text += `ℹ️ ${day.notes}\n`;
-            text += `----------------\n`;
-        });
-
-        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        window.open(url, '_blank');
+        const cleanup = () => {
+            const el = document.getElementById(styleId);
+            if (el) el.remove();
+            window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        window.print();
     };
 
     return (
@@ -175,9 +170,6 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, o
                     
                     {currentSchedule && (
                         <>
-                            <button onClick={() => handleShare(currentSchedule)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-3 rounded-xl font-bold uppercase text-xs flex items-center gap-2">
-                                <Share2 size={16} /> WhatsApp
-                            </button>
                             <button onClick={handlePrint} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-xl font-bold uppercase text-xs flex items-center gap-2">
                                 <Printer size={16} /> PDF
                             </button>
@@ -232,13 +224,13 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, o
             {currentSchedule && (() => {
                 const days = normalizeScheduleDays(currentSchedule);
                 return days.length > 0 && (
-                <div className="bg-white text-black p-0 md:p-8 rounded-3xl shadow-xl overflow-hidden print:shadow-none print:p-0">
+                <div id="schedule-print-area" className="bg-white text-black p-0 md:p-8 rounded-3xl shadow-xl overflow-hidden print:shadow-none print:p-0">
                     <div className="bg-black text-white p-6 md:rounded-t-2xl print:bg-black print:text-white mb-4 md:mb-0">
                         <h2 className="text-2xl font-black uppercase italic tracking-tighter text-center">{currentSchedule.title}</h2>
                     </div>
                     
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-[900px]">
+                    <div className="overflow-x-auto print:overflow-visible">
+                        <table className="w-full text-left border-collapse min-w-[900px] print:min-w-0">
                             <thead>
                                 <tr className="bg-zinc-100 text-zinc-600 text-xs uppercase tracking-wider border-b border-zinc-300">
                                     <th className="p-4 w-40 border-r border-zinc-200">Dia</th>
@@ -356,7 +348,6 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, o
                             onOpen={() => setCurrentSchedule(sch)}
                             onDelete={() => onDeleteSchedule(sch.id)}
                             onToggleActive={() => onToggleActive && onToggleActive(sch.id)}
-                            onShare={() => handleShare(sch)}
                         />
                     ))}
                 </div>
@@ -371,9 +362,8 @@ const SavedScheduleCard: React.FC<{
     schedule: WeeklySchedule, 
     onOpen: () => void, 
     onDelete: () => void,
-    onToggleActive: () => void,
-    onShare: () => void
-}> = ({ schedule, onOpen, onDelete, onToggleActive, onShare }) => {
+    onToggleActive: () => void
+}> = ({ schedule, onOpen, onDelete, onToggleActive }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
@@ -418,9 +408,6 @@ const SavedScheduleCard: React.FC<{
                 </div>
 
                 <div className="flex items-center gap-2">
-                     <button onClick={onShare} className="bg-green-900/20 hover:bg-green-900/40 text-green-500 p-2 rounded-lg transition-colors" title="Compartilhar">
-                        <Share2 size={18} />
-                    </button>
                     <button onClick={onOpen} className="bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors" title="Editar">
                         Editar / Ver
                     </button>
