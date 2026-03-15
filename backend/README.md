@@ -70,7 +70,7 @@ backend/
 
 ## 🔐 Variáveis de Ambiente
 
-Veja `.env.example` para todas as variáveis necessárias.
+Veja `.env.example` para todas as variáveis necessárias. Se a senha do banco tiver caracteres especiais (`#`, `@`, `:`, etc.), use codificação URL na connection string (ex.: `#` → `%23`, `@` → `%40`). Erro "invalid domain character in database URL"? Consulte [TROUBLESHOOTING_BANCO.md](./TROUBLESHOOTING_BANCO.md) — seção "Connection string – caracteres especiais na senha".
 
 ## 📖 Convenções
 

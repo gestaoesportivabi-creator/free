@@ -937,7 +937,7 @@ export default function App() {
               });
             }
             alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
-            setActiveTab('general');
+            if (!isExistingMatch) setActiveTab('general');
           } else {
             console.error('❌ Erro: Match salvo sem teamStats:', saved);
             alert("Partida salva, mas com dados incompletos. Verifique o console.");

@@ -50,6 +50,39 @@ Confirme no Supabase Dashboard (Settings > Database):
 
 ---
 
+## Connection string – caracteres especiais na senha
+
+Se aparecer **"invalid domain character in database URL"** ou **"Error parsing connection string"**, a `DATABASE_URL` ou `DIRECT_URL` no `backend/.env` tem um caractere inválido. O parser exige que caracteres especiais **na senha** sejam codificados (URL-encoded).
+
+### Tabela de codificação
+
+| Caractere | Substituir por |
+| --------- | -------------- |
+| `#`       | `%23`          |
+| `@`       | `%40`          |
+| `:`       | `%3A`          |
+| `/`       | `%2F`          |
+| `?`       | `%3F`          |
+| `&`       | `%26`          |
+| `=`       | `%3D`          |
+| `%`       | `%25`          |
+| espaço    | `%20`          |
+
+### Exemplo
+
+- Senha real: `P@ss#123`
+- Na URL use: `P%40ss%23123` em ambas as variáveis `DATABASE_URL` e `DIRECT_URL`.
+
+### Formato esperado (Supabase)
+
+- Sem espaços antes/depois do `=`, uma linha por variável.
+- `DATABASE_URL=postgresql://postgres.[REF]:[SENHA_CODIFICADA]@aws-0-[REGIAO].pooler.supabase.com:6543/postgres?pgbouncer=true&sslmode=require`
+- `DIRECT_URL=postgresql://postgres:[SENHA_CODIFICADA]@db.[REF].supabase.co:5432/postgres?sslmode=require`
+
+Evite aspas em volta do valor e não quebre a URL em mais de uma linha.
+
+---
+
 ## ✅ 4. Testar Conexão Manualmente
 
 ```powershell

@@ -189,6 +189,10 @@ export interface PostMatchEvent {
   goalMethod?: string;
   /** true se for gol do adversário */
   isOpponentGoal?: boolean;
+  /** ID do jogador que deu a assistência (apenas para gol nosso) */
+  assistPlayerId?: string;
+  /** Nome do jogador que deu a assistência */
+  assistPlayerName?: string;
   /** Falta cometida por nossa equipe ('for') ou pelo adversário ('against') */
   foulTeam?: 'for' | 'against';
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */

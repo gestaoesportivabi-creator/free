@@ -2572,7 +2572,12 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 onSave={async (saved) => {
                                     await onSave?.(saved);
                                     setShowPostMatchSheet(false);
-                                    handleBackToCalendar();
+                                    const isExistingMatch = saved?.id && !String(saved.id).startsWith('sched-');
+                                    if (isExistingMatch) {
+                                        setSelectedMatch(saved);
+                                    } else {
+                                        handleBackToCalendar();
+                                    }
                                 }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
