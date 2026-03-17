@@ -58,7 +58,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
   }, [players, nextMatch, championships]);
 
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 space-y-3">
+    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 space-y-3 overflow-hidden">
       <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold">Elenco disponível</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-emerald-500/80">

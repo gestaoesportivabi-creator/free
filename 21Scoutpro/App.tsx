@@ -134,8 +134,8 @@ const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
 };
 
 export default function App() {
-  // Route state: 'landing' | 'login' | 'register' | 'app'
-  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'register' | 'app'>('landing');
+  // Route state: 'landing' | 'login' | 'app'
+  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app'>('landing');
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -429,9 +429,9 @@ export default function App() {
   }, [players]);
 
   const StatCard = ({ label, value, helper, highlight = false }: StatCardProps) => (
-    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 p-3 min-h-0 flex flex-col justify-center">
-      <p className="text-[9px] uppercase tracking-[0.25em] text-zinc-500 font-medium">{label}</p>
-      <p className={`mt-1 text-base font-medium ${highlight ? 'text-slate-400' : 'text-zinc-300'}`}>
+    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 p-3 flex flex-col justify-center overflow-hidden min-w-0">
+      <p className="text-[9px] uppercase tracking-[0.25em] text-zinc-500 font-medium truncate">{label}</p>
+      <p className={`mt-1 text-base font-medium truncate ${highlight ? 'text-slate-400' : 'text-zinc-300'}`} title={String(value)}>
         {value}
       </p>
       {helper && <p className="mt-0.5 text-[11px] text-zinc-500">{helper}</p>}
@@ -1202,7 +1202,7 @@ export default function App() {
     const token = localStorage.getItem('token');
 
     const setRouteFromPath = () => {
-      if (path === '/registro' || path === '/register') setCurrentRoute('register');
+      if (path === '/registro' || path === '/register') setCurrentRoute('login');
       else if (path === '/login') setCurrentRoute('login');
       else if (path === '/dashboard') setCurrentRoute('login');
       else if (path === '/' || path === '') setCurrentRoute('landing');
@@ -1274,9 +1274,7 @@ export default function App() {
   useEffect(() => {
     if (isInitializing) return;
     if (window.location.pathname === '/scout-realtime') return;
-    if (currentRoute === 'register') {
-      window.history.pushState({}, '', '/registro');
-    } else if (currentRoute === 'login') {
+    if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
     } else if (currentRoute === 'landing') {
       window.history.pushState({}, '', '/');
@@ -1318,33 +1316,14 @@ export default function App() {
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return <LandingPage 
-      onGetStarted={() => {
-        console.log('🚀 Redirecionando para /registro');
-        setCurrentRoute('register');
-      }}
-      onGoToLogin={() => {
-        console.log('🔑 Redirecionando para /login');
-        setCurrentRoute('login');
-      }}
-    />;
-  }
-
-  // Mostrar página de registro
-  if (currentRoute === 'register') {
-    return <Login 
-      onLogin={handleLoginWithRoute} 
-      initialMode="register"
-      onSwitchToLogin={() => setCurrentRoute('login')}
-      onSwitchToRegister={() => setCurrentRoute('register')}
-      onBackToHome={() => setCurrentRoute('landing')}
+      onGetStarted={() => setCurrentRoute('login')}
+      onGoToLogin={() => setCurrentRoute('login')}
     />;
   }
 
   if (currentRoute === 'login') {
     return <Login 
       onLogin={handleLoginWithRoute}
-      initialMode="login"
-      onSwitchToRegister={() => setCurrentRoute('register')}
       onBackToHome={() => setCurrentRoute('landing')}
     />;
   }
@@ -1629,9 +1608,9 @@ export default function App() {
           : null;
 
         return (
-          <div className="h-full w-full rounded-lg border border-zinc-800 bg-zinc-950 p-6 md:p-8 shadow-sm animate-fade-in">
-            <div className="flex flex-col gap-8">
-              <header className="border-b border-zinc-800 pb-4">
+          <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:p-6 md:p-8 shadow-sm animate-fade-in overflow-x-hidden">
+            <div className="flex flex-col gap-6 sm:gap-8">
+              <header className="border-b border-zinc-800 pb-4 shrink-0">
                 <span className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-medium">Visão geral</span>
                 <h1
                   className="mt-1 text-xl md:text-2xl text-white uppercase font-black italic"
@@ -1642,45 +1621,47 @@ export default function App() {
                 <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
               </header>
 
-              {/* Bloco Status operacional do dia (compromisso, tempo, foco, resultado últimas partidas) */}
-              <DashboardTodayBlock
-                nextCommitment={nextCommitmentForToday}
-                focusOfDay={focusOfDay}
-                activeAlerts={activeAlertsForToday}
-                lastMatchResults={lastMatchResults}
-              />
+              {/* 1. Próxima Partida - início da visão geral */}
+              <section className="shrink-0">
+                <DashboardNextGameCard
+                  nextMatch={overviewStats.nextMatch}
+                  championships={championships}
+                  players={players}
+                  teamName={overviewTeamSettings.teamName}
+                  teamShieldUrl={overviewTeamSettings.teamShieldUrl}
+                />
+              </section>
 
-              {/* Elenco disponível + Próximo jogo */}
-              <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-                <div className="lg:col-span-2 min-h-0">
-                  <DashboardSquadAvailability
-                    players={players}
-                    nextMatch={overviewStats.nextMatch}
-                    championships={championships}
-                    isFreePlan={IS_FREE_PLAN}
-                  />
-                </div>
-                <div className="h-full min-h-0 w-full">
-                  <DashboardNextGameCard
-                    nextMatch={overviewStats.nextMatch}
-                    championships={championships}
-                    players={players}
-                    teamName={overviewTeamSettings.teamName}
-                    teamShieldUrl={overviewTeamSettings.teamShieldUrl}
-                  />
-                </div>
+              {/* 2. Bloco Status operacional do dia */}
+              <section className="shrink-0">
+                <DashboardTodayBlock
+                  nextCommitment={nextCommitmentForToday}
+                  focusOfDay={focusOfDay}
+                  activeAlerts={activeAlertsForToday}
+                  lastMatchResults={lastMatchResults}
+                />
+              </section>
+
+              {/* 3. Elenco disponível */}
+              <section className="shrink-0">
+                <DashboardSquadAvailability
+                  players={players}
+                  nextMatch={overviewStats.nextMatch}
+                  championships={championships}
+                  isFreePlan={IS_FREE_PLAN}
+                />
               </section>
 
               {/* 4. Indicadores gerais */}
-              <section className="grid grid-cols-2 lg:grid-cols-4 gap-4" aria-label="Indicadores gerais">
+              <section className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0" aria-label="Indicadores gerais">
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
                 <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
                 <StatCard label="Lesões no ano" value={IS_FREE_PLAN ? 'Em breve' : overviewStats.injuriesThisYear} helper={IS_FREE_PLAN ? '—' : String(overviewStats.currentYear)} />
               </section>
 
-              {/* 7. Ações principais no rodapé */}
-              <footer className="flex flex-wrap gap-3 pt-4 border-t border-zinc-700">
+              {/* 5. Ações principais no rodapé */}
+              <footer className="flex flex-wrap gap-3 pt-4 border-t border-zinc-700 shrink-0">
                 <button
                   onClick={() => handleTabChange('management-report')}
                   className="flex items-center gap-2 rounded-lg border border-[#0d2137] bg-[#0d2137] px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-[#1e3a5f]"
@@ -1698,13 +1679,13 @@ export default function App() {
 
   // Se não estiver na rota 'app', renderizar sem Sidebar
   if (currentRoute !== 'app') {
-    // Landing, login ou register - já renderizado acima
+    // Landing ou login - já renderizado acima
     return null; // Os returns acima já cobrem esses casos
   }
 
   // Rota 'app' - renderizar com Sidebar (escondida quando a janela Scout da Partida está aberta)
   return (
-    <div className="flex min-h-screen bg-black text-zinc-100 font-sans min-w-0">
+    <div className="platform-font flex min-h-screen bg-black text-zinc-100 min-w-0">
       {!scoutWindowOpen && (
         <>
           {/* Backdrop do drawer (apenas mobile) */}
@@ -1752,7 +1733,7 @@ export default function App() {
             </span>
           </header>
         )}
-        <div className="flex-1 p-6 min-w-0 print:p-0">
+        <div className="flex-1 p-4 sm:p-6 min-w-0 print:p-0 overflow-x-hidden">
           {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
         </div>
       </main>

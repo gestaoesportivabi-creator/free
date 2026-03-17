@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { UserRole, User } from '../types';
+import { User } from '../types';
 import { ShieldCheck } from 'lucide-react';
 import { getApiUrl } from '../config';
 
 // Importação explícita da logo oficial
 const LOGO_IMAGE = '/public-logo.png.png';
+const WHATSAPP_URL = 'https://wa.me/5548991486176?text=Olá!%20Gostaria%20de%20criar%20uma%20conta%20no%20SCOUT21.';
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -14,13 +15,10 @@ interface LoginProps {
   onBackToHome?: () => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', onSwitchToLogin, onSwitchToRegister, onBackToHome }) => {
-  const [isRegistering, setIsRegistering] = useState(initialMode === 'register');
+export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState<UserRole>('Treinador');
   const [resetEmail, setResetEmail] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -48,63 +46,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
     setIsLoading(true);
 
     try {
-      if (isRegistering) {
-        // Validações simples
-        if (!name || name.trim().length < 3) {
-          setError('Digite seu nome (mínimo 3 caracteres).');
-          setIsLoading(false);
-          return;
-        }
-        if (!email || !email.trim().includes('@')) {
-          setError('Digite um e-mail válido (ex: nome@email.com).');
-          setIsLoading(false);
-          return;
-        }
-        if (!password || password.length < 4) {
-          setError('Senha muito curta (mínimo 4 caracteres).');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Chamar API do backend para registro
-        const response = await fetch(`${getApiUrl()}/auth/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: name.trim(),
-            email: email.trim(),
-            password: password,
-            roleName: 'TECNICO' // Backend usa TECNICO como padrão
-          }),
-        });
-
-        const result = await response.json();
-        
-        if (result.success && result.data) {
-          // Salvar token
-          localStorage.setItem('token', result.data.token);
-          
-          // Criar objeto User
-          const newUser: User = {
-            id: result.data.user.id,
-            name: result.data.user.name,
-            email: result.data.user.email,
-            role: result.data.user.role === 'TECNICO' ? 'Treinador' : result.data.user.role,
-          };
-          
-          setSuccessMsg('Conta criada com sucesso!');
-          // Login automático após um breve delay
-          setTimeout(() => {
-            onLogin(newUser);
-          }, 500);
-        } else {
-          setError(result.error || 'Erro ao criar conta. Tente novamente.');
-          setIsLoading(false);
-        }
-      } else {
-        // Login - chamar API do backend (aceita email ou nome)
+      // Login - chamar API do backend (aceita email ou nome)
         const identifier = email.trim();
         
         console.log('🔐 Tentando login com:', identifier);
@@ -143,7 +85,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
           setError(result.error || 'Email ou senha incorretos.');
           setIsLoading(false);
         }
-      }
     } catch (error) {
       console.error('Erro ao autenticar:', error);
       setError('Erro de conexão. Verifique se o backend está rodando.');
@@ -198,7 +139,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
         <div className="mb-4 text-center">
             {/* Logo Oficial */}
             <div className="flex justify-center mb-3">
-                <div className={`relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border-2 ${isRegistering ? 'border-[#00f0ff]' : 'border-white'} bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden`}>
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border-2 border-white bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden">
                     <img 
                         src={LOGO_IMAGE} 
                         alt="SCOUT21" 
@@ -211,39 +152,25 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
                 SCOUT21
             </h1>
             <p className="text-[9px] text-zinc-200 font-light uppercase tracking-[0.25em] mt-0.5 drop-shadow-md">
-                {isRegistering ? 'Criar Conta Gratuita' : 'Performance Data Intelligence e Gestão'}
+                Performance Data Intelligence e Gestão
             </p>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-3">
-          {isRegistering && (
-             <div className="space-y-1.5">
-                <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Seu Nome</label>
-                <input
-                    type="text"
-                    required={isRegistering}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-                    placeholder="João Silva"
-                />
-            </div>
-          )}
-
           <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">{isRegistering ? 'E-mail' : 'E-mail ou Nome'}</label>
+            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail ou Nome</label>
             <input
-              type={isRegistering ? 'email' : 'text'}
+              type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder={isRegistering ? 'seu@email.com' : 'seu@email.com ou seu nome'}
+              placeholder="seu@email.com ou seu nome"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">{isRegistering ? 'Crie uma senha' : 'Senha'}</label>
+            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Senha</label>
             <input
               type="password"
               required
@@ -252,37 +179,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
               className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
               placeholder="••••••"
             />
-            {isRegistering && (
-              <p className="text-[10px] text-zinc-400 font-light text-center pt-1">Mínimo 4 caracteres</p>
-            )}
           </div>
           
-          {!isRegistering && (
-            <button
-              type="button"
-              onClick={() => setIsResettingPassword(true)}
-              className="w-full text-[10px] text-zinc-400 hover:text-[#00f0ff] font-light underline transition-colors text-center"
-            >
-              Esqueci minha senha
-            </button>
-          )}
-
-          {isRegistering && (
-            <div className="space-y-1.5 animate-fade-in">
-                <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Função</label>
-                <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] text-sm font-light uppercase backdrop-blur-sm"
-                >
-                    <option value="Treinador">Treinador</option>
-                    <option value="Preparador Físico">Preparador Físico</option>
-                    <option value="Supervisor">Supervisor</option>
-                    <option value="Diretor">Diretor</option>
-                    <option value="Atleta">Atleta</option>
-                </select>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsResettingPassword(true)}
+            className="w-full text-[10px] text-zinc-400 hover:text-[#00f0ff] font-light underline transition-colors text-center"
+          >
+            Esqueci minha senha
+          </button>
 
           {error && <div className="text-red-400 text-xs bg-red-950/60 p-3 rounded-xl border border-red-900/50 flex items-center gap-2 justify-center font-light backdrop-blur-sm"><ShieldCheck size={14}/> {error}</div>}
           {successMsg && <div className="text-[#00f0ff] text-xs bg-cyan-950/60 p-3 rounded-xl border border-cyan-900/50 text-center font-light backdrop-blur-sm">{successMsg}</div>}
@@ -338,31 +243,25 @@ export const Login: React.FC<LoginProps> = ({ onLogin, initialMode = 'login', on
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
-                  {isRegistering ? 'Criando conta...' : 'Entrando...'}
+                  Entrando...
                 </>
               ) : (
-                isRegistering ? 'Criar Conta Grátis' : 'Entrar em Quadra'
+                <>Entrar em Quadra</>
               )}
             </button>
           )}
         </form>
         
         <div className="mt-4 text-center pt-4 border-t border-white/10">
-             <button 
-                onClick={() => {
-                    if (isRegistering && onSwitchToLogin) {
-                      onSwitchToLogin();
-                    } else if (!isRegistering && onSwitchToRegister) {
-                      onSwitchToRegister();
-                    } else {
-                    setIsRegistering(!isRegistering);
-                    }
-                    setError('');
-                }}
-                className="text-[10px] text-zinc-300 hover:text-white font-light transition-colors uppercase tracking-widest"
+             <a 
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 text-[10px] text-zinc-300 hover:text-[#25D366] font-light transition-colors uppercase tracking-widest"
              >
-                 {isRegistering ? 'Já possui conta? Fazer Login' : 'Criar Conta Grátis'}
-             </button>
+                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                 Cadastre-se via WhatsApp
+             </a>
         </div>
       </div>
       </div>

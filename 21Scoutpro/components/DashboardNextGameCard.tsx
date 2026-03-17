@@ -32,12 +32,12 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
 }) => {
   if (!nextMatch) {
     return (
-      <div className="h-full rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 flex flex-col">
+      <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 flex flex-col min-h-0">
         <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-3 shrink-0">
           <Trophy className="text-zinc-500" size={14} />
           Próximo jogo
         </h3>
-        <div className="flex-1 flex items-center justify-center min-h-0">
+        <div className="flex items-center justify-center py-4">
           <p className="text-zinc-500 text-sm text-center">Nenhum jogo agendado.</p>
         </div>
       </div>
@@ -51,12 +51,12 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
   const locationLabel = nextMatch.location && nextMatch.location.trim() ? nextMatch.location.trim() : null;
 
   return (
-    <div className="h-full rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm flex flex-col">
+    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm flex flex-col min-h-0">
       <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-3 shrink-0">
         <Trophy size={14} className="text-zinc-500" />
         Próximo jogo
       </h3>
-      <div className="flex flex-col gap-3 flex-1 min-h-0">
+      <div className="flex flex-col gap-3">
         {nextMatch.competition && nextMatch.competition.trim() && (
           <div className="rounded-lg bg-black/30 border border-white/[0.06] px-3 py-2">
             <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Competição</p>

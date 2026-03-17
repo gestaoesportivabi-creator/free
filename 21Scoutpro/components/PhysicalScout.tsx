@@ -582,10 +582,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeMatchData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="date" stroke="#71717a" tick={{fontSize: 12, fontFamily: 'Poppins'}} />
+                    <XAxis dataKey="date" stroke="#71717a" tick={{fontSize: 12, fontFamily: 'Calibri'}} />
                     <YAxis domain={[0, 12]} stroke="#666" hide />
                     <Tooltip 
-                        contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }}
+                        contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }}
                         cursor={{stroke: '#ccff00'}}
                     />
                     <Area type="monotone" dataKey="rpe" fill="#ccff00" fillOpacity={0.25} stroke="none" />
@@ -598,7 +598,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                         activeDot={{r: 6}} 
                         name="PSE Média equipe"
                     >
-                        <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                        <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -611,10 +611,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeTrainingData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="date" stroke="#71717a" tick={{fontSize: 12, fontFamily: 'Poppins'}} />
+                    <XAxis dataKey="date" stroke="#71717a" tick={{fontSize: 12, fontFamily: 'Calibri'}} />
                     <YAxis domain={[0, 12]} stroke="#666" hide />
                     <Tooltip 
-                        contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }}
+                        contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }}
                     />
                     <Area type="monotone" dataKey="rpe" fill="#10b981" fillOpacity={0.25} stroke="none" />
                     <Line 
@@ -625,7 +625,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                         dot={{fill: '#10b981', r: 4}}
                         name="PSE Média equipe"
                     >
-                         <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                         <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -641,12 +641,12 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={psrMatchData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Poppins' }} />
+                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Calibri' }} />
                   <YAxis domain={[0, 12]} stroke="#666" hide />
-                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} cursor={{ stroke: '#38bdf8' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} cursor={{ stroke: '#38bdf8' }} />
                   <Area type="monotone" dataKey="rpe" fill="#38bdf8" fillOpacity={0.25} stroke="none" />
                   <Line type="monotone" dataKey="rpe" stroke="#38bdf8" strokeWidth={1.5} dot={{ fill: '#38bdf8', r: 4 }} activeDot={{ r: 6 }} name="PSR Média equipe">
-                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" />
                   </Line>
                 </LineChart>
               </ResponsiveContainer>
@@ -663,12 +663,12 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={psrTrainingData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Poppins' }} />
+                  <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 12, fontFamily: 'Calibri' }} />
                   <YAxis domain={[0, 12]} stroke="#666" hide />
-                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} />
                   <Area type="monotone" dataKey="rpe" fill="#0ea5e9" fillOpacity={0.25} stroke="none" />
                   <Line type="monotone" dataKey="rpe" stroke="#0ea5e9" strokeWidth={1.5} dot={{ fill: '#0ea5e9', r: 4 }} name="PSR Média equipe">
-                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" />
+                    <LabelList dataKey="rpe" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" />
                   </Line>
                 </LineChart>
               </ResponsiveContainer>
@@ -686,14 +686,14 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sleepChartData} margin={{ top: 20, right: 20, left: 10, bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="name" stroke="#71717a" tick={{ fontSize: 11, fontFamily: 'Poppins' }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis domain={[0, 5]} stroke="#666" tick={{ fontSize: 12, fontFamily: 'Poppins' }} allowDecimals={false} />
-                <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} formatter={(value: number) => [value, 'Média']} />
+                <XAxis dataKey="name" stroke="#71717a" tick={{ fontSize: 11, fontFamily: 'Calibri' }} angle={-35} textAnchor="end" interval={0} />
+                <YAxis domain={[0, 5]} stroke="#666" tick={{ fontSize: 12, fontFamily: 'Calibri' }} allowDecimals={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} formatter={(value: number) => [value, 'Média']} />
                 <Bar dataKey="media" radius={[4, 4, 0, 0]} barSize={32} name="Média sono">
                   {sleepChartData.map((entry, index) => (
                     <Cell key={`sono-${index}`} fill={entry.type === 'treino' ? '#10b981' : '#eab308'} />
                   ))}
-                  <LabelList dataKey="media" position="top" fill="#fff" fontSize={14} fontFamily="Poppins" fontWeight="bold" />
+                  <LabelList dataKey="media" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" fontWeight="bold" />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -719,8 +719,8 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={true} vertical={false} />
                     <XAxis type="number" stroke="#666" allowDecimals={false} hide />
-                    <YAxis dataKey="name" type="category" stroke="#71717a" width={80} tick={{fontFamily: 'Poppins', fontSize: 14}} />
-                    <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Poppins', borderRadius: '8px' }} />
+                    <YAxis dataKey="name" type="category" stroke="#71717a" width={80} tick={{fontFamily: 'Calibri', fontSize: 14}} />
+                    <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} />
                     <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={40} name="Ocorrências">
                       {injuryTypeData.map((entry, index) => (
                         <Cell 
@@ -729,7 +729,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                             stroke={entry.name === injuryFilter ? '#fff' : 'none'}
                         />
                       ))}
-                      <LabelList dataKey="value" position="right" fill="#fff" fontSize={14} fontWeight="bold" fontFamily="Poppins" />
+                      <LabelList dataKey="value" position="right" fill="#fff" fontSize={14} fontWeight="bold" fontFamily="Calibri" />
                     </Bar>
                 </BarChart>
              </ResponsiveContainer>

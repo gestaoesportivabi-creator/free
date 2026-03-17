@@ -149,10 +149,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSubmitted, setContactSubmitted] = useState(false);
 
-  const handleClick = () => {
-    console.log('🚀 Botão Começar Agora clicado!');
-    onGetStarted();
-  };
+  const WHATSAPP_CADASTRO = 'https://wa.me/5548991486176?text=Olá!%20Gostaria%20de%20criar%20uma%20conta%20no%20SCOUT21.';
 
   const handleContactSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -185,14 +182,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               ))}
             </div>
             <div className="hidden md:flex items-center gap-4">
-              <button type="button" onClick={handleClick} className="text-zinc-400 hover:text-white transition-colors text-sm font-medium">Cadastre-se</button>
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
               <button onClick={onGoToLogin} className="px-4 py-2.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm uppercase tracking-wider rounded-lg transition-all">Login</button>
             </div>
             <div className="flex items-center gap-2 md:hidden">
               <button type="button" onClick={() => setMobileMenuOpen((o) => !o)} className="p-2 text-zinc-400 hover:text-white rounded-lg" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}>
                 {mobileMenuOpen ? <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>}
               </button>
-              <button type="button" onClick={handleClick} className="text-zinc-400 hover:text-white text-sm font-medium">Cadastre-se</button>
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
               <button onClick={onGoToLogin} className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg">Login</button>
             </div>
           </div>
@@ -217,10 +214,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               Indicadores, scout e análise de performance para transformar dados em insights poderosos para o dia a dia do clube.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-start items-start sm:items-center pt-2">
-              <button onClick={handleClick} type="button" className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
                 Começar Agora
                 <ArrowRight className="group-hover:translate-x-0.5 transition-transform" size={18} />
-              </button>
+              </a>
               <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20entrar%20em%20contato" target="_blank" rel="noopener noreferrer" className="landing-body-medium text-zinc-400 hover:text-white text-sm transition-colors flex items-center gap-2 sm:self-center">
                 Novo: Entre em contato <WhatsAppIcon className="w-5 h-5 text-[#25D366]" />
               </a>

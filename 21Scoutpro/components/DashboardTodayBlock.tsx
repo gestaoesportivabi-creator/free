@@ -35,13 +35,13 @@ export const DashboardTodayBlock: React.FC<DashboardTodayBlockProps> = ({
   const hasResults = lastMatchResults.length > 0;
   return (
     <section
-      className="w-full rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-sm px-5 py-4 md:px-6 md:py-5"
+      className="w-full rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-sm px-4 py-4 sm:px-5 md:px-6 md:py-5 overflow-hidden"
       aria-label="Status operacional"
     >
       <h2 className="text-[10px] uppercase tracking-[0.35em] text-zinc-400 font-semibold mb-4">
         Status operacional do dia
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="flex items-center gap-3 rounded-lg border border-zinc-700/80 bg-zinc-800/50 px-4 py-3">
           <div className="w-9 h-9 rounded-lg bg-zinc-700 flex items-center justify-center flex-shrink-0">
             <Target className="text-zinc-300" size={18} />

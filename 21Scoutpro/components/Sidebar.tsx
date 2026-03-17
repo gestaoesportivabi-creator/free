@@ -115,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
 
   return (
     <div
-      className={`sidebar-drawer w-64 bg-black h-screen fixed left-0 top-0 text-zinc-400 flex flex-col border-r border-zinc-900 z-50 shadow-2xl font-sans print:hidden transition-all duration-300 ease-out md:translate-x-0 ${retracted ? 'md:w-16' : 'md:w-64'} ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`sidebar-drawer w-64 bg-black h-screen fixed left-0 top-0 text-zinc-400 flex flex-col border-r border-zinc-900 z-50 shadow-2xl print:hidden transition-all duration-300 ease-out md:translate-x-0 ${retracted ? 'md:w-16' : 'md:w-64'} ${open ? 'translate-x-0' : '-translate-x-full'}`}
       role="navigation"
       aria-label="Menu principal"
     >

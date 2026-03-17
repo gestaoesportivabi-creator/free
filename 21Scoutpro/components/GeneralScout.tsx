@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
-import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock } from 'lucide-react';
+import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown } from 'lucide-react';
 import { SportConfig, MatchRecord, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { IS_FREE_PLAN } from '../config';
+import { exportScoutToPdf } from '../utils/exportScoutPdf';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -33,6 +34,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const exportContentRef = useRef<HTMLDivElement>(null);
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
@@ -456,7 +459,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'bold', fontFamily: CHART_FONT };
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
       
       {/* Control Bar - Black Piano */}
       <div className="bg-black p-5 rounded-3xl border border-zinc-900 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-end">
@@ -467,6 +470,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             <p className="text-xs text-zinc-500 font-bold">Selecione os parâmetros para análise.</p>
         </div>
         
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-end">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto">
           <Select 
             value={compFilter} 
@@ -489,8 +493,35 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             options={[{value: 'Todos', label: 'Todos Locais'}, {value: 'Mandante', label: 'Mandante'}, {value: 'Visitante', label: 'Visitante'}]}
           />
         </div>
+        <button
+          type="button"
+          onClick={async () => {
+            setPdfExporting(true);
+            try {
+              await exportScoutToPdf(exportContentRef, {
+                compFilter,
+                monthFilter,
+                opponentFilter,
+                locationFilter,
+              });
+            } catch (err) {
+              console.error('Erro ao exportar PDF:', err);
+              alert('Erro ao gerar PDF. Tente novamente.');
+            } finally {
+              setPdfExporting(false);
+            }
+          }}
+          disabled={pdfExporting}
+          className="flex items-center justify-center gap-2 px-4 py-3 bg-[#00f0ff] hover:bg-[#00d4e6] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
+        >
+          <FileDown size={16} />
+          {pdfExporting ? 'Gerando PDF...' : 'Exportar PDF'}
+        </button>
+        </div>
       </div>
 
+      {/* Conteúdo exportável */}
+      <div ref={exportContentRef} id="scout-coletivo-export-content" className="space-y-8">
       {/* KPI Cards - Shaded Colors */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard title="Total de Jogos" value={stats.totalGames} icon={Trophy} color="text-[#00f0ff]" bg="bg-[#00f0ff]/10 border-[#00f0ff]/20" />
@@ -545,7 +576,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                              </div>
                         </div>
 
-                        <div className="h-32 w-64 relative pb-2">
+                        <div className="h-32 w-full max-w-[16rem] relative pb-2 shrink-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -590,7 +621,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <p className="text-xs text-zinc-500 mb-4 font-medium">Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
                     {hasPossessionData && possessionDonutData ? (
                       <div className="flex flex-col md:flex-row items-center gap-6">
-                        <div className="h-56 w-56 flex-shrink-0">
+                        <div className="h-56 w-56 max-w-full flex-shrink-0">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
@@ -897,11 +928,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </span>
           }
         >
-        <div className="flex flex-col lg:flex-row min-h-[380px] w-full gap-6 p-4">
+        <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
-             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Métodos Detalhados</h4>
-               <div className="flex-1 min-h-0 w-full">
+             <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
@@ -937,9 +968,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </div>
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
-             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Origem do Gol</h4>
-               <div className="flex-1 min-h-0 w-full">
+             <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
@@ -989,11 +1020,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </span>
           }
         >
-        <div className="flex flex-col lg:flex-row min-h-[380px] w-full gap-6 p-4">
+        <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
-             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Métodos Detalhados</h4>
-               <div className="flex-1 min-h-0 w-full">
+             <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
@@ -1029,9 +1060,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </div>
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
-             <div className="flex-1 flex flex-col min-h-0 bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center">Origem do Gol</h4>
-               <div className="flex-1 min-h-0 w-full">
+             <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
@@ -1070,6 +1101,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </div>
            </div>
         </ExpandableCard>
+      </div>
       </div>
     </div>
   );

@@ -76,7 +76,7 @@ const renderCustomAxisTick = ({ x, y, payload, cx, cy, radius, outerRadius }: an
             fill="#a1a1aa" 
             fontSize={11} 
             fontWeight="bold" 
-            fontFamily="Poppins"
+            fontFamily="Calibri"
         >
             {payload.value}
         </Text>

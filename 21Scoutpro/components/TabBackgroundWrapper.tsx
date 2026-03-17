@@ -6,7 +6,7 @@ interface TabBackgroundWrapperProps {
 
 export const TabBackgroundWrapper: React.FC<TabBackgroundWrapperProps> = ({ children }) => {
   return (
-    <div className="min-h-screen w-full relative bg-black overflow-hidden font-sans text-white">
+    <div className="min-h-screen w-full relative bg-black overflow-hidden text-white">
       {/* Content */}
       <div className="relative z-10">
         {children}

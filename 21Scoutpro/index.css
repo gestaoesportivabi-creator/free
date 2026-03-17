@@ -55,6 +55,11 @@ html {
   color: var(--text-primary-dark);
 }
 
+/* Plataforma (após login) - Calibri em todas as legendas e textos */
+.platform-font {
+  font-family: Calibri, 'Segoe UI', Tahoma, sans-serif;
+}
+
 /* Custom Scrollbar - Dark Theme */
 .custom-scrollbar::-webkit-scrollbar-track {
   background: #09090b;
