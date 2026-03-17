@@ -512,9 +512,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                   </li>
                 ))}
               </ul>
-              <button onClick={handleClick} type="button" className="mt-auto w-full py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-base rounded-xl transition-all shrink-0">
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="mt-auto w-full py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-base rounded-xl transition-all shrink-0 text-center block">
                 Cadastrar Grátis
-              </button>
+              </a>
             </div>
             <div className="bg-black border border-zinc-800 rounded-2xl p-10 min-h-[420px] hover:border-[#00f0ff]/50 transition-all flex flex-col min-w-0">
               <div className="flex items-center justify-start gap-2 mb-5">
