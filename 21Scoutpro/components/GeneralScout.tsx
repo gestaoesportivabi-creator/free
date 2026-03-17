@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
 import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown } from 'lucide-react';
 import { SportConfig, MatchRecord, Player } from '../types';
@@ -35,7 +35,6 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
-  const exportContentRef = useRef<HTMLDivElement>(null);
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
@@ -498,11 +497,30 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           onClick={async () => {
             setPdfExporting(true);
             try {
-              await exportScoutToPdf(exportContentRef, {
-                compFilter,
-                monthFilter,
-                opponentFilter,
-                locationFilter,
+              await exportScoutToPdf({
+                filters: {
+                  compFilter,
+                  monthFilter,
+                  opponentFilter,
+                  locationFilter,
+                },
+                stats,
+                timePeriodData: {
+                  maxScoredPeriod: timePeriodData.maxScoredPeriod,
+                  maxConcededPeriod: timePeriodData.maxConcededPeriod,
+                  scoredDist: timePeriodData.scoredDist.map(({ period, value }) => ({ period, value })),
+                  concededDist: timePeriodData.concededDist.map(({ period, value }) => ({ period, value })),
+                },
+                chartData,
+                goalMethodsScoredData,
+                goalMethodsConcededData,
+                goalOriginScoredData,
+                goalOriginConcededData,
+                gaugeData: {
+                  percentageDisplay,
+                  avgTackles: stats.avgTacklesPerGame.toString(),
+                  tackleTarget: TACKLE_TARGET,
+                },
               });
             } catch (err) {
               console.error('Erro ao exportar PDF:', err);
@@ -520,8 +538,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </div>
       </div>
 
-      {/* Conteúdo exportável */}
-      <div ref={exportContentRef} id="scout-coletivo-export-content" className="space-y-8">
+      {/* Conteúdo do Scout Coletivo */}
+      <div id="scout-coletivo-export-content" className="space-y-8">
       {/* KPI Cards - Shaded Colors */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard title="Total de Jogos" value={stats.totalGames} icon={Trophy} color="text-[#00f0ff]" bg="bg-[#00f0ff]/10 border-[#00f0ff]/20" />
