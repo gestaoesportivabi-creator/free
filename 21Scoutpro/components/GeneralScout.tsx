@@ -573,28 +573,26 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Meta de Desarmes por Jogo - Speedometer */}
             <ExpandableCard noPadding headerColor="text-[#ccff00]">
-                <div className="h-48 w-full flex flex-col md:flex-row items-center justify-between px-8 py-4 gap-8 bg-zinc-950/50">
-                    <div className="flex flex-col gap-2">
+                <div className="min-h-48 w-full flex flex-col lg:flex-row lg:items-center justify-between px-6 py-6 gap-6 bg-zinc-950/50">
+                    <div className="flex flex-col gap-3 min-w-0 flex-1">
                          <div className="flex items-center gap-3">
-                             <Gauge size={32} className="text-[#00f0ff]" />
-                             <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Meta de Desarmes por Jogo</h2>
+                             <Gauge size={32} className="text-[#00f0ff] shrink-0" />
+                             <h2 className="text-xl md:text-2xl font-black text-white uppercase italic tracking-tighter">Meta de Desarmes por Jogo</h2>
                          </div>
                          <p className="text-zinc-500 font-bold text-sm max-w-md">
                              Monitoramento em tempo real da performance defensiva em relação à meta de {Math.round(TACKLE_TARGET)} desarmes por jogo.
                          </p>
                     </div>
 
-                    <div className="flex items-center gap-12 flex-1 justify-end">
+                    <div className="flex items-center gap-6 lg:gap-8 shrink-0">
                         <div className="text-right">
                              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Resultado Atual</p>
-                             <div className="flex items-baseline justify-end gap-1">
-                                <p className={`text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
-                                    {stats.avgTacklesPerGame}
-                                </p>
-                             </div>
+                             <p className={`text-4xl md:text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
+                                 {stats.avgTacklesPerGame}
+                             </p>
                         </div>
 
-                        <div className="h-32 w-full max-w-[16rem] relative pb-2 shrink-0">
+                        <div className="h-32 w-40 shrink-0 relative pb-2">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
