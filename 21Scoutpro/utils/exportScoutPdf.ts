@@ -39,18 +39,27 @@ export function exportScoutToPdf(
       return;
     }
 
+    // Overlay para bloquear a tela durante a geração (evita flash)
+    const overlay = document.createElement('div');
+    overlay.id = 'pdf-export-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; z-index: 1000000;
+      background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center;
+      font-family: Calibri, sans-serif; font-size: 18px; color: #00f0ff; font-weight: bold;
+    `;
+    overlay.textContent = 'Gerando PDF...';
+
     const wrapper = document.createElement('div');
     wrapper.id = 'pdf-export-wrapper';
     Object.assign(wrapper.style, {
-      position: 'fixed',
-      left: '-9999px',
-      top: '0',
+      position: 'relative',
       width: '800px',
+      margin: '0 auto',
       backgroundColor: '#000',
       color: '#fff',
       fontFamily: 'Calibri, Segoe UI, sans-serif',
       padding: '0',
-      zIndex: '-1',
+      zIndex: '999999',
     });
 
     // Header
@@ -144,7 +153,8 @@ export function exportScoutToPdf(
     footer.textContent = `WhatsApp: ${WHATSAPP}  |  ${SITE.replace('https://', '')}`;
     wrapper.appendChild(footer);
 
-    document.body.appendChild(wrapper);
+    document.body.appendChild(overlay);
+    document.body.insertBefore(wrapper, document.body.firstChild);
 
     const filename = `scout-coletivo-${new Date().toISOString().slice(0, 10)}.pdf`;
 
@@ -152,14 +162,26 @@ export function exportScoutToPdf(
       margin: 10,
       filename,
       image: { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        letterRendering: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+      },
       jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as const },
     };
 
-    // Aguarda logo carregar e um frame para layout estável
+    const cleanup = () => {
+      wrapper.remove();
+      overlay.remove();
+    };
+
+    // Aguarda logo carregar e um frame para layout estável (elemento em viewport)
     preloadImage(LOGO_URL)
-      .then(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 150))))
+      .then(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 300))))
       .then(() =>
         html2pdf()
           .set(options)
@@ -167,11 +189,11 @@ export function exportScoutToPdf(
           .save()
       )
       .then(() => {
-        wrapper.remove();
+        cleanup();
         resolve();
       })
       .catch((err: unknown) => {
-        wrapper.remove();
+        cleanup();
         reject(err);
       });
   });
