@@ -67,6 +67,12 @@ html {
   font-style: normal !important;
 }
 
+/* Scout Coletivo - títulos em destaque (Arial Black itálico) */
+.scout-card-title-black-italic {
+  font-family: 'Arial Black', Arial, sans-serif !important;
+  font-style: italic !important;
+}
+
 /* Custom Scrollbar - Dark Theme */
 .custom-scrollbar::-webkit-scrollbar-track {
   background: #09090b;

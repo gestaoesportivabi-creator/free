@@ -83,7 +83,7 @@ export interface ScoutPdfData {
   goalMethodsConcededData: Array<{ name: string; value: number; percentage: string }>;
   goalOriginScoredData: Array<{ name: string; value: number; percentage: string }>;
   goalOriginConcededData: Array<{ name: string; value: number; percentage: string }>;
-  gaugeData?: { percentageDisplay: number; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
+  gaugeData?: { percentageDisplay: number | string; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
 }
 
 function loadLogoBase64(): Promise<string | null> {

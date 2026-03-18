@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
-import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown } from 'lucide-react';
+import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
 import { SportConfig, MatchRecord, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { IS_FREE_PLAN } from '../config';
@@ -392,6 +392,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
   // Cores para gráficos de rosca (expandir conforme necessário) - Tons de Azul
   const PIE_COLORS = [COLORS.blue, COLORS.blueLight, COLORS.blueMedium, COLORS.blueDark, COLORS.blueDarker, COLORS.blueCyan, COLORS.slate];
+  // Métodos Detalhados Gols Marcados - cores mais escuras
+  const PIE_COLORS_SCORED_DARK = ['#0099a3', '#4a8de8', '#2d6ad8', '#1d4fd6', '#16338c', '#0a8bc4', '#5a5a62'];
   const PIE_COLORS_CONCEDED = [COLORS.blueDarker, COLORS.blueDark, COLORS.blueMedium, COLORS.blue, COLORS.blueLight, COLORS.blueCyan, COLORS.slate];
 
   // Meta de desarmes = só partidas realizadas e salvas (com teamStats) que têm meta definida
@@ -414,7 +416,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       totalTackles: tacklesSum,
       hasTackleTarget: hasTarget,
       percentage: Math.min(pct, 100),
-      percentageDisplay: hasTarget ? Math.round(pct) : 0,
+      percentageDisplay: hasTarget ? pct.toFixed(2) : '0.00',
     };
   }, [filteredMatches]);
 
@@ -423,18 +425,38 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const hasTackleTarget = gaugeMeta.hasTackleTarget;
   const percentage = gaugeMeta.percentage;
   const percentageDisplay = gaugeMeta.percentageDisplay;
-  
+  const percentageDisplayNum = parseFloat(percentageDisplay);
+
   // Logic for Speedometer Color - Tons de Azul
   let gaugeColor = COLORS.blue;
-  if (percentageDisplay < 75) gaugeColor = '#ef4444'; // Red (mantido para erro)
-  else if (percentageDisplay <= 90) gaugeColor = COLORS.blueDark; // Dark Blue
-  else if (percentageDisplay <= 99) gaugeColor = COLORS.blueMedium; // Medium Blue
+  if (percentageDisplayNum < 75) gaugeColor = '#ef4444'; // Red (mantido para erro)
+  else if (percentageDisplayNum <= 90) gaugeColor = COLORS.blueDark; // Dark Blue
+  else if (percentageDisplayNum <= 99) gaugeColor = COLORS.blueMedium; // Medium Blue
   else gaugeColor = COLORS.blue; // Cyan Blue (>= 100%)
 
   const gaugeData = [
     { name: 'Conquistado', value: percentage },
     { name: 'Restante', value: 100 - percentage }
   ];
+
+  // Alerta: partidas em que a meta foi alcançada e quantas resultaram em vitória
+  const tackleTargetAlert = useMemo(() => {
+    const matchesWithTarget: Array<{ achieved: boolean; victory: boolean }> = [];
+    filteredMatches.forEach(m => {
+      if (!m.scoreTarget || !m.teamStats) return;
+      const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
+      if (isNaN(num) || num <= 0) return;
+      const tackles = (m.teamStats.tacklesWithBall || 0) + (m.teamStats.tacklesWithoutBall || 0) + (m.teamStats.tacklesCounterAttack || 0);
+      const achieved = tackles >= num;
+      const r = m.result as string;
+      const victory = (r === 'V' || r === 'Vitória');
+      matchesWithTarget.push({ achieved, victory });
+    });
+    const total = matchesWithTarget.length;
+    const achievedCount = matchesWithTarget.filter(x => x.achieved).length;
+    const achievedAndVictory = matchesWithTarget.filter(x => x.achieved && x.victory).length;
+    return { total, achievedCount, achievedAndVictory };
+  }, [filteredMatches]);
 
   // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
   const possessionDonutData = useMemo(() => {
@@ -591,11 +613,27 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <div className="flex flex-col gap-3 min-w-0 flex-1">
                          <div className="flex items-center gap-3">
                              <Gauge size={32} className="text-[#00f0ff] shrink-0" />
-                             <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title">Meta de Desarmes por Jogo</h2>
+                             <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title-black-italic">Meta de Desarmes por Jogo</h2>
                          </div>
                          <p className="text-zinc-500 text-sm max-w-md" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
                              A porcentagem é calculada em relação às metas definidas nas partidas já realizadas e salvas. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
+                         {hasTackleTarget && tackleTargetAlert.total > 0 && (
+                           <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
+                             <Info size={18} className="text-[#00f0ff] shrink-0 mt-0.5" />
+                             <p className="text-sm text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                               {tackleTargetAlert.total === 1 ? (
+                                 tackleTargetAlert.achievedCount === 1 ? (
+                                   tackleTargetAlert.achievedAndVictory === 1
+                                     ? 'Nesta partida, a meta de desarmes foi alcançada e o resultado foi vitória.'
+                                     : 'Nesta partida, a meta de desarmes foi alcançada, porém o resultado não foi vitória.'
+                                 ) : 'Nesta partida, a meta de desarmes não foi alcançada.'
+                               ) : (
+                                 <>Em total de <span className="text-white font-medium">{tackleTargetAlert.total}</span> partidas salvas (com meta definida), a meta de desarmes foi alcançada em <span className="text-[#00f0ff] font-medium">{tackleTargetAlert.achievedCount}</span> delas, porém somente <span className="text-[#22c55e] font-medium">{tackleTargetAlert.achievedAndVictory}</span> resultaram em vitória.</>
+                               )}
+                             </p>
+                           </div>
+                         )}
                     </div>
 
                     <div className="flex items-center gap-6 lg:gap-8 shrink-0">
@@ -633,7 +671,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                             </ResponsiveContainer>
                             <div className="absolute top-[60%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                                 <span className="text-2xl block mb-1">
-                                    {hasTackleTarget ? (percentageDisplay >= 100 ? '🚀' : percentageDisplay >= 75 ? '🔥' : '⚠️') : '—'}
+                                    {hasTackleTarget ? (percentageDisplayNum >= 100 ? '🚀' : percentageDisplayNum >= 75 ? '🔥' : '⚠️') : '—'}
                                 </span>
                                 <span className="text-white font-black text-xl">{hasTackleTarget ? `${percentageDisplay}%` : 'N/A'}</span>
                             </div>
@@ -643,7 +681,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </ExpandableCard>
 
             {/* Posse de Bola - bloqueado no plano free */}
-            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" scoutTitleStyle>
+            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" titleBlackItalic>
                 {IS_FREE_PLAN ? (
                   <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
@@ -976,7 +1014,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
-                          data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
+                          data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_SCORED_DARK[i % PIE_COLORS_SCORED_DARK.length] }))}
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
@@ -986,7 +1024,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           isAnimationActive={true}
                       >
                           {goalMethodsScoredData.map((entry, index) => (
-                              <Cell key={`cell-scored-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1} />
+                              <Cell key={`cell-scored-${index}`} fill={PIE_COLORS_SCORED_DARK[index % PIE_COLORS_SCORED_DARK.length]} stroke="#fff" strokeWidth={1} />
                           ))}
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
@@ -1002,7 +1040,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
                  {goalMethodsScoredData.map((entry, index) => (
                    <div key={`leg-scored-${index}`} className="flex items-center gap-1.5 min-w-0">
-                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS_SCORED_DARK[index % PIE_COLORS_SCORED_DARK.length] }} />
                      <span className="text-zinc-400 text-[10px] truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                    </div>
                  ))}
@@ -1025,8 +1063,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           dataKey="value"
                           isAnimationActive={true}
                       >
-                          <Cell fill={COLORS.blue} stroke="#fff" strokeWidth={2} />
-                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.blue} stroke="#fff" strokeWidth={1} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={1} />
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
@@ -1122,8 +1160,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           dataKey="value"
                           isAnimationActive={true}
                       >
-                          <Cell fill={COLORS.blueDarker} stroke="#fff" strokeWidth={2} />
-                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.blueDarker} stroke="#fff" strokeWidth={1} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={1} />
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
