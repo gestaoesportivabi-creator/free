@@ -453,14 +453,14 @@ export default function App() {
 
   // --- Funções de carregamento por recurso (sob demanda) ---
   const loadPlayers = async () => {
-    try {
-      const token = localStorage.getItem('token');
+      try {
+        const token = localStorage.getItem('token');
       if (!token) return;
       const apiPlayers = await playersApi.getAll().catch(err => { console.error('❌ Erro ao carregar players:', err); return []; });
-      const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-      const apiIds = new Set(apiPlayers.map(p => p.id));
-      const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
-      setPlayers([...apiPlayers, ...localOnly]);
+        const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
+        const apiIds = new Set(apiPlayers.map(p => p.id));
+        const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
+        setPlayers([...apiPlayers, ...localOnly]);
       setLoadedResources(prev => ({ ...prev, players: true }));
     } catch {
       const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
@@ -475,7 +475,7 @@ export default function App() {
       if (!token) return;
       const matchesData = await matchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar matches:', err); return []; });
       const validMatches = (matchesData as MatchRecord[]).filter(m => m && m.teamStats);
-      setMatches(validMatches);
+        setMatches(validMatches);
       setLoadedResources(prev => ({ ...prev, matches: true }));
     } catch {
       setMatches([]);
@@ -488,7 +488,7 @@ export default function App() {
       const token = localStorage.getItem('token');
       if (!token) return;
       const teamsData = await teamsApi.getAll().catch(err => { console.error('❌ Erro ao carregar teams:', err); return []; });
-      setTeams(teamsData as Team[]);
+        setTeams(teamsData as Team[]);
       setLoadedResources(prev => ({ ...prev, teams: true }));
     } catch {
       setTeams([]);
@@ -516,19 +516,19 @@ export default function App() {
       });
 
       const validSchedules = (Array.isArray(apiSchedules) ? apiSchedules : [])
-        .filter((s: WeeklySchedule) => s && s.id)
-        .map((s: WeeklySchedule) => ({
-          ...s,
-          days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
+            .filter((s: WeeklySchedule) => s && s.id)
+            .map((s: WeeklySchedule) => ({
+              ...s,
+              days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
           isActive: s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true'
-        }))
-        .sort((a: WeeklySchedule, b: WeeklySchedule) => {
-          if (a.isActive && !b.isActive) return -1;
-          if (!a.isActive && b.isActive) return 1;
+            }))
+            .sort((a: WeeklySchedule, b: WeeklySchedule) => {
+              if (a.isActive && !b.isActive) return -1;
+              if (!a.isActive && b.isActive) return 1;
           return (b.createdAt || 0) - (a.createdAt || 0);
-        });
+            });
 
-      setSchedules(validSchedules);
+          setSchedules(validSchedules);
       localStorage.setItem('scout21_schedules_local', JSON.stringify(validSchedules));
       setLoadedResources(prev => ({ ...prev, schedules: true }));
     } catch {
@@ -672,7 +672,7 @@ export default function App() {
     const now = Date.now();
     setSchedules(prev => {
         const validSchedules = prev.filter(s => {
-            const created = s.createdAt || now;
+            const created = s.createdAt || now; 
             return (now - created) < thirtyDaysInMs;
         });
         if (validSchedules.length !== prev.length) {
@@ -747,7 +747,7 @@ export default function App() {
       const token = localStorage.getItem('token');
       console.log('🔑 Token no localStorage:', token ? 'PRESENTE' : 'AUSENTE');
       setCurrentUser(user);
-      setActiveTab('dashboard');
+      setActiveTab('dashboard'); 
       console.log('✅ currentUser atualizado, useEffect deve ser disparado');
   };
 
@@ -835,7 +835,7 @@ export default function App() {
     } catch (err) {
       console.error('Erro ao excluir partida:', err);
       alert('Não foi possível excluir a partida. Tente novamente.');
-    }
+      }
   };
 
   const handleSaveMatch = async (newMatch: MatchRecord) => {
@@ -1367,12 +1367,12 @@ export default function App() {
             />
           </TabBackgroundWrapper>
         );
-      case 'ranking':
+      case 'ranking': 
         return (
           <TabBackgroundWrapper>
             <StatsRanking players={players} matches={matches} />
           </TabBackgroundWrapper>
-        );
+        ); 
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
@@ -1450,11 +1450,11 @@ export default function App() {
               } catch (err) {
                 console.error('Erro ao salvar campeonato:', err);
                 // Fallback: atualizar localmente
-                setChampionships(prev => {
-                  const updated = prev.filter(c => c.id !== championship.id);
-                  updated.push(championship);
-                  return updated;
-                });
+              setChampionships(prev => {
+                const updated = prev.filter(c => c.id !== championship.id);
+                updated.push(championship);
+                return updated;
+              });
               }
             }}
             onSave={async (match) => {
@@ -1590,8 +1590,8 @@ export default function App() {
       case 'settings':
         return (
           <TabBackgroundWrapper>
-            <Settings
-              currentUser={currentUser}
+            <Settings 
+              currentUser={currentUser} 
               onUpdateUser={handleUpdateUser}
             />
           </TabBackgroundWrapper>
@@ -1634,20 +1634,20 @@ export default function App() {
 
               {/* 2. Bloco Status operacional do dia */}
               <section className="shrink-0">
-                <DashboardTodayBlock
-                  nextCommitment={nextCommitmentForToday}
-                  focusOfDay={focusOfDay}
-                  activeAlerts={activeAlertsForToday}
+              <DashboardTodayBlock
+                nextCommitment={nextCommitmentForToday}
+                focusOfDay={focusOfDay}
+                activeAlerts={activeAlertsForToday}
                   lastMatchResults={lastMatchResults}
                 />
               </section>
 
               {/* 3. Elenco disponível */}
               <section className="shrink-0">
-                <DashboardSquadAvailability
-                  players={players}
-                  nextMatch={overviewStats.nextMatch}
-                  championships={championships}
+                  <DashboardSquadAvailability
+                    players={players}
+                    nextMatch={overviewStats.nextMatch}
+                    championships={championships}
                   isFreePlan={IS_FREE_PLAN}
                 />
               </section>
@@ -1697,16 +1697,16 @@ export default function App() {
               aria-label="Fechar menu"
             />
           )}
-          <Sidebar
-            activeTab={activeTab}
-            setActiveTab={handleTabChange}
-            onLogout={() => {
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={handleTabChange} 
+          onLogout={() => {
               console.log('👋 Logout - Limpando dados e voltando para home');
               clearAllUserData(true);
-              setCurrentUser(null);
-              setCurrentRoute('landing');
-            }}
-            currentUser={currentUser}
+            setCurrentUser(null);
+            setCurrentRoute('landing');
+          }}
+          currentUser={currentUser}
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             onNavigate={() => setSidebarOpen(false)}
@@ -1734,7 +1734,7 @@ export default function App() {
           </header>
         )}
         <div className="flex-1 p-4 sm:p-6 min-w-0 print:p-0 overflow-x-hidden">
-          {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
+        {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
         </div>
       </main>
     </div>

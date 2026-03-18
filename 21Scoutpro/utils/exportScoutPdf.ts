@@ -83,7 +83,7 @@ export interface ScoutPdfData {
   goalMethodsConcededData: Array<{ name: string; value: number; percentage: string }>;
   goalOriginScoredData: Array<{ name: string; value: number; percentage: string }>;
   goalOriginConcededData: Array<{ name: string; value: number; percentage: string }>;
-  gaugeData?: { percentageDisplay: number; avgTackles: string; tackleTarget: number };
+  gaugeData?: { percentageDisplay: number; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
 }
 
 function loadLogoBase64(): Promise<string | null> {
@@ -194,20 +194,15 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         ['Gols Sofridos (média)', data.stats.avgGoalsConceded],
         ['Período Mais Produtivo', `${data.timePeriodData.maxScoredPeriod.percentage}% - ${data.timePeriodData.maxScoredPeriod.period}`],
         ['Período Mais Vulnerável', `${data.timePeriodData.maxConcededPeriod.percentage}% - ${data.timePeriodData.maxConcededPeriod.period}`],
-        ['Desarmes por Jogo (média)', data.stats.avgTacklesPerGame],
+        ['Desarmes Realizados', data.gaugeData?.totalTackles ?? data.stats.tacklesTotal],
         ['Passes Certos', data.stats.passesCorrect],
         ['Passes Errados', data.stats.passesWrong],
         ['Chutes no Gol', data.stats.shotsOn],
         ['Chutes pra Fora', data.stats.shotsOff],
-        ['Desarmes Total', data.stats.tacklesTotal],
         ['Erros de Transição', data.stats.wrongPassesTransition],
         ['Cartões Amarelos', data.stats.yellowCards],
         ['Cartões Vermelhos', data.stats.redCards],
       ];
-      if (data.gaugeData) {
-        kpis.push(['Meta de Desarmes', `${data.gaugeData.percentageDisplay}% (meta: ${Math.round(data.gaugeData.tackleTarget)})`]);
-      }
-
       const col1X = MARGIN;
       const col2X = MARGIN + 100;
       let col = 0;
@@ -223,6 +218,11 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         }
       });
       y = rowY + (col === 1 ? 6 : 0) + 10;
+
+      // Meta de Desarmes - card dedicado
+      y = checkPageBreak(doc, y, 45);
+      y = drawGaugeSection(doc, y, data.gaugeData, data.stats.tacklesTotal);
+      y += 15;
 
       // Gráfico de barras - Passes
       y = checkPageBreak(doc, y, 80);
@@ -294,6 +294,43 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       reject(err);
     }
   });
+}
+
+function drawGaugeSection(
+  doc: jsPDF,
+  startY: number,
+  gaugeData: ScoutPdfData['gaugeData'],
+  tacklesTotal: number
+): number {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...COLORS.black);
+  doc.text('Meta de Desarmes', MARGIN, startY);
+  startY += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...COLORS.black);
+
+  const totalTackles = gaugeData?.totalTackles ?? tacklesTotal;
+
+  if (gaugeData?.hasTackleTarget) {
+    doc.text(`Desarmes realizados: ${totalTackles}`, MARGIN, startY);
+    startY += 6;
+    doc.text(`Meta total (soma das metas por partida): ${Math.round(gaugeData.tackleTarget)}`, MARGIN, startY);
+    startY += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Percentual: ${gaugeData.percentageDisplay}%`, MARGIN, startY);
+    doc.setFont('helvetica', 'normal');
+    startY += 8;
+  } else {
+    doc.text(`Desarmes realizados: ${totalTackles}`, MARGIN, startY);
+    startY += 6;
+    doc.text('Meta: cadastre metas nas partidas (tabela de campeonato) para acompanhar.', MARGIN, startY);
+    startY += 8;
+  }
+
+  return startY;
 }
 
 function drawBarChartSection(

@@ -394,22 +394,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const PIE_COLORS = [COLORS.blue, COLORS.blueLight, COLORS.blueMedium, COLORS.blueDark, COLORS.blueDarker, COLORS.blueCyan, COLORS.slate];
   const PIE_COLORS_CONCEDED = [COLORS.blueDarker, COLORS.blueDark, COLORS.blueMedium, COLORS.blue, COLORS.blueLight, COLORS.blueCyan, COLORS.slate];
 
+  // Meta de desarmes = soma das metas cadastradas em cada partida (tabela de campeonato)
   const TACKLE_TARGET = useMemo(() => {
-    const targets = filteredMatches
-      .map(m => {
-        if (!m.scoreTarget) return null;
-        const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
-        return isNaN(num) ? null : num;
-      })
-      .filter((t): t is number => t !== null);
-    
-    if (targets.length === 0) return 60; // Fallback se nenhuma meta foi definida
-    return targets.reduce((a, b) => a + b, 0) / targets.length;
+    const sum = filteredMatches.reduce((acc, m) => {
+      if (!m.scoreTarget) return acc;
+      const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
+      return acc + (isNaN(num) ? 0 : num);
+    }, 0);
+    return sum;
   }, [filteredMatches]);
 
-  const currentTackles = parseFloat(stats.avgTacklesPerGame.toString());
-  const percentage = Math.min((currentTackles / TACKLE_TARGET) * 100, 100);
-  const percentageDisplay = Math.round((currentTackles / TACKLE_TARGET) * 100);
+  const totalTackles = stats.tacklesTotal || 0;
+  const hasTackleTarget = TACKLE_TARGET > 0;
+  const percentage = hasTackleTarget ? Math.min((totalTackles / TACKLE_TARGET) * 100, 100) : 0;
+  const percentageDisplay = hasTackleTarget ? Math.round((totalTackles / TACKLE_TARGET) * 100) : 0;
   
   // Logic for Speedometer Color - Tons de Azul
   let gaugeColor = COLORS.blue;
@@ -451,11 +449,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
   const CHART_FONT_SIZE = 12;
-  const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE };
+  const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontStyle: 'normal' };
 
   const tooltipStyle = { backgroundColor: '#000', borderColor: '#333', color: '#fff', fontFamily: CHART_FONT, borderRadius: '8px', fontSize: '14px' };
-  const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'bold' };
-  const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'bold', fontFamily: CHART_FONT };
+  const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'normal', fontStyle: 'normal' };
+  const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontFamily: CHART_FONT };
 
   return (
     <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
@@ -463,10 +461,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       {/* Control Bar - Black Piano */}
       <div className="bg-black p-5 rounded-3xl border border-zinc-900 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-end">
         <div>
-            <h2 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wide mb-1">
+            <h2 className="text-sm text-white flex items-center gap-2 uppercase tracking-wide mb-1 scout-card-title">
             <Filter className="text-[#00f0ff]" size={16} /> Filtros de Dados
             </h2>
-            <p className="text-xs text-zinc-500 font-bold">Selecione os parâmetros para análise.</p>
+            <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Selecione os parâmetros para análise.</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-end">
@@ -518,8 +516,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 goalOriginConcededData,
                 gaugeData: {
                   percentageDisplay,
-                  avgTackles: stats.avgTacklesPerGame.toString(),
+                  totalTackles,
                   tackleTarget: TACKLE_TARGET,
+                  hasTackleTarget,
                 },
               });
             } catch (err) {
@@ -577,19 +576,24 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <div className="flex flex-col gap-3 min-w-0 flex-1">
                          <div className="flex items-center gap-3">
                              <Gauge size={32} className="text-[#00f0ff] shrink-0" />
-                             <h2 className="text-xl md:text-2xl font-black text-white uppercase italic tracking-tighter">Meta de Desarmes por Jogo</h2>
+                             <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title">Meta de Desarmes por Jogo</h2>
                          </div>
-                         <p className="text-zinc-500 font-bold text-sm max-w-md">
-                             Monitoramento em tempo real da performance defensiva em relação à meta de {Math.round(TACKLE_TARGET)} desarmes por jogo.
+                         <p className="text-zinc-500 text-sm max-w-md" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                             A meta de desarmes é definida pela soma das metas cadastradas de cada partida na tabela de campeonato. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
                     </div>
 
                     <div className="flex items-center gap-6 lg:gap-8 shrink-0">
                         <div className="text-right">
-                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Resultado Atual</p>
+                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Desarmes realizados</p>
                              <p className={`text-4xl md:text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
-                                 {stats.avgTacklesPerGame}
+                                 {totalTackles}
                              </p>
+                             {hasTackleTarget && (
+                               <p className="text-[10px] text-zinc-500 mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                                 Meta: {Math.round(TACKLE_TARGET)}
+                               </p>
+                             )}
                         </div>
 
                         <div className="h-32 w-40 shrink-0 relative pb-2">
@@ -614,9 +618,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                             </ResponsiveContainer>
                             <div className="absolute top-[60%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                                 <span className="text-2xl block mb-1">
-                                    {percentageDisplay >= 100 ? '🚀' : percentageDisplay >= 75 ? '🔥' : '⚠️'}
+                                    {hasTackleTarget ? (percentageDisplay >= 100 ? '🚀' : percentageDisplay >= 75 ? '🔥' : '⚠️') : '—'}
                                 </span>
-                                <span className="text-white font-black text-xl">{percentageDisplay}%</span>
+                                <span className="text-white font-black text-xl">{hasTackleTarget ? `${percentageDisplay}%` : 'N/A'}</span>
                             </div>
                         </div>
                     </div>
@@ -624,7 +628,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </ExpandableCard>
 
             {/* Posse de Bola - bloqueado no plano free */}
-            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]">
+            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" scoutTitleStyle>
                 {IS_FREE_PLAN ? (
                   <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
@@ -634,7 +638,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-zinc-500 mb-4 font-medium">Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
+                    <p className="text-xs text-zinc-500 mb-4" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
                     {hasPossessionData && possessionDonutData ? (
                       <div className="flex flex-col md:flex-row items-center gap-6">
                         <div className="h-56 w-56 max-w-full flex-shrink-0">
@@ -656,7 +660,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                                   <Cell key={`posse-${index}`} fill={entry.fill} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} />
+                              <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} />
                               <Legend />
                             </PieChart>
                           </ResponsiveContainer>
@@ -665,14 +669,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           {possessionDonutData.map((entry, i) => (
                             <div key={entry.name} className="flex items-center gap-2">
                               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
-                              <span className="text-zinc-300 font-medium">{entry.name}</span>
-                              <span className="text-white font-bold">{entry.value}%</span>
+                              <span className="text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.name}</span>
+                              <span className="text-white" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.value}%</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <p className="text-zinc-500 text-sm py-8 text-center">Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
+                      <p className="text-zinc-500 text-sm py-8 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
                     )}
                   </>
                 )}
@@ -680,7 +684,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        </div>
 
       {/* Distribution of Table Stats */}
-      <h3 className="text-white font-bold uppercase tracking-widest text-sm pl-2 border-l-4 border-[#00f0ff]">Distribuição de Estatísticas da Tabela</h3>
+      <h3 className="text-white uppercase tracking-widest text-sm pl-2 border-l-4 border-[#00f0ff] scout-card-title">Distribuição de Estatísticas da Tabela</h3>
       
       {/* Passes & Shots */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
@@ -688,8 +692,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title="Passes Certos vs Errados"
           icon={BarChart3}
           headerColor="text-blue-400"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{(stats.passesCorrect || 0) + (stats.passesWrong || 0)}</span>
             </span>
           }
@@ -730,8 +735,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title="Chutes no Gol vs Fora"
           icon={BarChart3}
           headerColor="text-purple-400"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{(stats.shotsOn || 0) + (stats.shotsOff || 0)}</span>
             </span>
           }
@@ -775,8 +781,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title="Tipos de Desarme"
           icon={BarChart3}
           headerColor="text-emerald-400"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{stats.tacklesTotal || 0}</span>
             </span>
           }
@@ -823,8 +830,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title="Erros Críticos (Transição)"
           icon={BarChart3}
           headerColor="text-[#ff0055]"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
             </span>
           }
@@ -863,7 +871,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       {/* Row: Goals by Time Period */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]">
+        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
@@ -882,22 +890,22 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Feitos"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols feitos por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
+             <p className="text-white text-sm" style={legendLabelStyle}>
                <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.period}</span>
              </p>
            </div>
         </ExpandableCard>
 
-        <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]">
+        <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
@@ -916,16 +924,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Tomados"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols tomados por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
+             <p className="text-white text-sm" style={legendLabelStyle}>
                <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.percentage}%</span> dos gols tomados saíram no período de <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.period}</span>
              </p>
            </div>
@@ -938,8 +946,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title={`Métodos de ${config.labels.goals} Marcado`}
           icon={PieChartIcon}
           headerColor="text-white"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{originScoredData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
             </span>
           }
@@ -947,7 +956,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -967,7 +976,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -977,7 +988,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  {goalMethodsScoredData.map((entry, index) => (
                    <div key={`leg-scored-${index}`} className="flex items-center gap-1.5 min-w-0">
                      <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                     <span className="text-zinc-400 text-[10px] truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                    </div>
                  ))}
                </div>
@@ -985,7 +996,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Origem do Gol</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -1004,7 +1015,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1013,13 +1026,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blue }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredOpen}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsScoredOpen}</span>
                  </div>
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredSet}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Parada</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsScoredSet}</span>
                  </div>
                </div>
              </div>
@@ -1030,8 +1043,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title={`Métodos de ${config.labels.goals} Tomado`}
           icon={PieChartIcon}
           headerColor="text-white"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{originConcededData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
             </span>
           }
@@ -1039,7 +1053,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -1059,7 +1073,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1069,7 +1085,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  {goalMethodsConcededData.map((entry, index) => (
                    <div key={`leg-conceded-${index}`} className="flex items-center gap-1.5 min-w-0">
                      <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
-                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                     <span className="text-zinc-400 text-[10px] truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                    </div>
                  ))}
                </div>
@@ -1077,7 +1093,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Origem do Gol</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -1096,7 +1112,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1105,13 +1123,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blueDarker }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededOpen}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsConcededOpen}</span>
                  </div>
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededSet}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Parada</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsConcededSet}</span>
                  </div>
                </div>
              </div>
@@ -1144,9 +1162,9 @@ const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelec
 const KPICard: React.FC<{title: string, value: number | string, subtitle?: string, icon: any, color: string, bg?: string}> = ({title, value, subtitle, icon: Icon, color, bg = "bg-black border-zinc-900"}) => (
     <div className={`rounded-3xl p-5 flex items-center justify-between shadow-lg transition-colors border ${bg}`}>
         <div>
-            <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">{title}</p>
+            <p className="text-xs text-zinc-400 uppercase tracking-wider mb-1 scout-card-title">{title}</p>
             <p className="text-3xl font-black text-white italic">{value}</p>
-            {subtitle && <p className="text-xs text-zinc-500 font-bold mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-zinc-500 mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{subtitle}</p>}
         </div>
         <div className={`p-3 rounded-xl bg-zinc-950/50 border border-zinc-900 ${color}`}>
             <Icon size={24} />
@@ -1215,17 +1233,18 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
 
   if (playerStats.length === 0) return null;
 
+  const legendStyle = { fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' };
   return (
     <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-      <h4 className="text-white text-xs font-bold uppercase mb-3 tracking-wider">
+      <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
         Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Chutes' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
       </h4>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-zinc-800">
-              <th className="text-left py-2 text-zinc-400 font-bold uppercase">Jogador</th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">
+              <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>Jogador</th>
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Certos'
                   : statType === 'shots'
@@ -1234,7 +1253,7 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
                   ? 'Total'
                   : 'Passes Errados'}
               </th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Errados'
                   : statType === 'shots'
@@ -1243,16 +1262,16 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
                   ? 'Contra-Ataque'
                   : 'Geraram Transição'}
               </th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">Total</th>
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>Total</th>
             </tr>
           </thead>
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                <td className="py-2 text-white font-bold">{stat.name}</td>
-                <td className="py-2 text-right text-[#10b981] font-bold">{stat.correct}</td>
-                <td className="py-2 text-right text-[#ff0055] font-bold">{stat.wrong}</td>
-                <td className="py-2 text-right text-zinc-300 font-bold">{stat.total}</td>
+                <td className="py-2 text-white" style={legendStyle}>{stat.name}</td>
+                <td className="py-2 text-right text-[#10b981]" style={legendStyle}>{stat.correct}</td>
+                <td className="py-2 text-right text-[#ff0055]" style={legendStyle}>{stat.wrong}</td>
+                <td className="py-2 text-right text-zinc-300" style={legendStyle}>{stat.total}</td>
               </tr>
             ))}
           </tbody>

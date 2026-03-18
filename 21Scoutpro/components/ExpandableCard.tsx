@@ -9,6 +9,8 @@ interface ExpandableCardProps {
   headerColor?: string; // Used for icon accent only now
   noPadding?: boolean;
   headerRight?: React.ReactNode;
+  /** Quando true, título usa Arial Black itálico (Scout Coletivo) */
+  scoutTitleStyle?: boolean;
 }
 
 export const ExpandableCard: React.FC<ExpandableCardProps> = ({ 
@@ -18,7 +20,8 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
   icon: Icon,
   headerColor = "text-[#10b981]", 
   noPadding = false,
-  headerRight
+  headerRight,
+  scoutTitleStyle = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -54,7 +57,7 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
                {Icon && (
                    <Icon size={24} className={accentColor} />
                )}
-               <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">
+               <h2 className={`text-2xl text-white uppercase tracking-tighter ${scoutTitleStyle ? 'scout-card-title' : 'font-black italic'}`}>
                  {title}
                </h2>
             </div>
@@ -100,7 +103,7 @@ export const ExpandableCard: React.FC<ExpandableCardProps> = ({
                 {Icon && (
                     <Icon size={20} className={accentColor} />
                 )}
-                <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-widest group-hover:text-white transition-colors">
+                <h3 className={`text-sm uppercase tracking-widest group-hover:text-white transition-colors ${scoutTitleStyle ? 'scout-card-title text-zinc-300' : 'font-bold text-zinc-300'}`}>
                     {title}
                 </h3>
             </div>
