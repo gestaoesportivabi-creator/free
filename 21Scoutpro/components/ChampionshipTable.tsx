@@ -14,7 +14,8 @@ export interface ChampionshipMatch {
     competition: string;
     phase?: string; // Fase da partida (ex: "1 Fase classificatória", "1 PlayOffs")
     location?: string; // Mandante/Visitante
-    scoreTarget?: string; // Meta de desarmes esperada
+    scoreTarget?: string; // Meta de desarmes esperada (campo na tabela de campeonato)
+    jogoId?: string | null; // ID do jogo realizado quando vinculado
 }
 
 interface SavedMatch {

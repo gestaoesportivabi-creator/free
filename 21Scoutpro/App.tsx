@@ -269,6 +269,25 @@ export default function App() {
     };
   }, [matches, players, championshipMatches]);
 
+  // Enriquecer matches com scoreTarget (meta de desarmes) da tabela de campeonato
+  const matchesWithScoreTarget = useMemo(() => {
+    if (!championshipMatches?.length) return matches;
+    const byJogoId = new Map<string, ChampionshipMatch>();
+    const byKey = new Map<string, ChampionshipMatch>();
+    championshipMatches.forEach(cm => {
+      if (cm.scoreTarget && cm.scoreTarget.trim() !== '') {
+        if (cm.jogoId) byJogoId.set(cm.jogoId, cm);
+        const k = `${cm.date}|${(cm.opponent || '').trim()}|${(cm.competition || '').trim()}`;
+        if (!byKey.has(k)) byKey.set(k, cm);
+      }
+    });
+    return matches.map(m => {
+      const cm = byJogoId.get(m.id) ?? byKey.get(`${m.date}|${(m.opponent || '').trim()}|${(m.competition || '').trim()}`);
+      if (!cm?.scoreTarget) return m;
+      return { ...m, scoreTarget: cm.scoreTarget };
+    });
+  }, [matches, championshipMatches]);
+
   // Atualizar a cada minuto para contagem regressiva ao vivo
   const [liveNow, setLiveNow] = useState(() => new Date());
   useEffect(() => {
@@ -1380,7 +1399,7 @@ export default function App() {
           </TabBackgroundWrapper>
         );
       case 'general':
-        return <GeneralScout config={config} matches={matches} players={players} />; 
+        return <GeneralScout config={config} matches={matchesWithScoreTarget} players={players} />; 
       case 'individual':
         if (IS_FREE_PLAN) {
           return (

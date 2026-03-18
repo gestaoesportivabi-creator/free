@@ -24,6 +24,7 @@ function transformChampionshipMatchToFrontend(jogo: any) {
     competition: jogo.competicao || '',
     location: jogo.local || '',
     scoreTarget: jogo.metaPontuacao || '',
+    jogoId: jogo.jogoId || null,
   };
 }
 

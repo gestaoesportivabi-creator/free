@@ -315,12 +315,12 @@ function drawGaugeSection(
   const totalTackles = gaugeData?.totalTackles ?? tacklesTotal;
 
   if (gaugeData?.hasTackleTarget) {
-    doc.text(`Desarmes realizados: ${totalTackles}`, MARGIN, startY);
+    doc.text(`Desarmes realizados (partidas com meta): ${totalTackles}`, MARGIN, startY);
     startY += 6;
     doc.text(`Meta total (soma das metas por partida): ${Math.round(gaugeData.tackleTarget)}`, MARGIN, startY);
     startY += 6;
     doc.setFont('helvetica', 'bold');
-    doc.text(`Percentual: ${gaugeData.percentageDisplay}%`, MARGIN, startY);
+    doc.text(`Percentual (em relação às metas das partidas realizadas e salvas): ${gaugeData.percentageDisplay}%`, MARGIN, startY);
     doc.setFont('helvetica', 'normal');
     startY += 8;
   } else {

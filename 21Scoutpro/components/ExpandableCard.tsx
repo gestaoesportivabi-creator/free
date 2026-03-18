@@ -9,7 +9,7 @@ interface ExpandableCardProps {
   headerColor?: string; // Used for icon accent only now
   noPadding?: boolean;
   headerRight?: React.ReactNode;
-  /** Quando true, título usa Arial Black itálico (Scout Coletivo) */
+  /** Quando true, título usa Arial normal (Scout Coletivo) */
   scoutTitleStyle?: boolean;
 }
 

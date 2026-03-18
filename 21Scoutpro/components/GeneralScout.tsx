@@ -394,20 +394,35 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const PIE_COLORS = [COLORS.blue, COLORS.blueLight, COLORS.blueMedium, COLORS.blueDark, COLORS.blueDarker, COLORS.blueCyan, COLORS.slate];
   const PIE_COLORS_CONCEDED = [COLORS.blueDarker, COLORS.blueDark, COLORS.blueMedium, COLORS.blue, COLORS.blueLight, COLORS.blueCyan, COLORS.slate];
 
-  // Meta de desarmes = soma das metas cadastradas em cada partida (tabela de campeonato)
-  const TACKLE_TARGET = useMemo(() => {
-    const sum = filteredMatches.reduce((acc, m) => {
-      if (!m.scoreTarget) return acc;
+  // Meta de desarmes = só partidas realizadas e salvas (com teamStats) que têm meta definida
+  // Porcentagem = desarmes dessas partidas / soma das metas dessas partidas
+  const gaugeMeta = useMemo(() => {
+    let targetSum = 0;
+    let tacklesSum = 0;
+    filteredMatches.forEach(m => {
+      if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
-      return acc + (isNaN(num) ? 0 : num);
-    }, 0);
-    return sum;
+      if (isNaN(num) || num <= 0) return;
+      targetSum += num;
+      const t = (m.teamStats.tacklesWithBall || 0) + (m.teamStats.tacklesWithoutBall || 0) + (m.teamStats.tacklesCounterAttack || 0);
+      tacklesSum += t;
+    });
+    const hasTarget = targetSum > 0;
+    const pct = hasTarget ? (tacklesSum / targetSum) * 100 : 0;
+    return {
+      TACKLE_TARGET: targetSum,
+      totalTackles: tacklesSum,
+      hasTackleTarget: hasTarget,
+      percentage: Math.min(pct, 100),
+      percentageDisplay: hasTarget ? Math.round(pct) : 0,
+    };
   }, [filteredMatches]);
 
-  const totalTackles = stats.tacklesTotal || 0;
-  const hasTackleTarget = TACKLE_TARGET > 0;
-  const percentage = hasTackleTarget ? Math.min((totalTackles / TACKLE_TARGET) * 100, 100) : 0;
-  const percentageDisplay = hasTackleTarget ? Math.round((totalTackles / TACKLE_TARGET) * 100) : 0;
+  const TACKLE_TARGET = gaugeMeta.TACKLE_TARGET;
+  const totalTackles = gaugeMeta.totalTackles;
+  const hasTackleTarget = gaugeMeta.hasTackleTarget;
+  const percentage = gaugeMeta.percentage;
+  const percentageDisplay = gaugeMeta.percentageDisplay;
   
   // Logic for Speedometer Color - Tons de Azul
   let gaugeColor = COLORS.blue;
@@ -579,7 +594,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                              <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title">Meta de Desarmes por Jogo</h2>
                          </div>
                          <p className="text-zinc-500 text-sm max-w-md" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                             A meta de desarmes é definida pela soma das metas cadastradas de cada partida na tabela de campeonato. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
+                             A porcentagem é calculada em relação às metas definidas nas partidas já realizadas e salvas. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
                     </div>
 
