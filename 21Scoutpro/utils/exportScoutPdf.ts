@@ -67,7 +67,8 @@ const GAP_FROM_WATERMARK = 62;
 const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
 const COMPACT_CHART_HEIGHT = 32;
 const COMPACT_DONUT_SIZE = 32;
-const COVER_TITLE = 'Relatório Gerencial de estatísticas do clube';
+const HEADER_PHRASE_SIZE = 20;
+const HEADER_HEIGHT = 20;
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -216,6 +217,43 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
   }
 }
 
+function drawHeader(doc: jsPDF, logoBase64: string | null): void {
+  doc.setFillColor(...COLORS.black);
+  doc.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, 'F');
+  const logoW = 14;
+  if (logoBase64) {
+    doc.addImage(logoBase64, 'PNG', 0, 2, logoW, 14);
+  }
+  // Frase: tamanho 20, Calibri (Helvetica normal como fallback), sem negrito, sem itálico
+  doc.setFontSize(HEADER_PHRASE_SIZE);
+  doc.setFont('helvetica', 'normal');
+  const fullPhrase = HEADER_PHRASE_PART1 + HEADER_PHRASE_PART2;
+  const phraseWrapWidth = PAGE_WIDTH - logoW - 20;
+  const phraseLines = doc.splitTextToSize(fullPhrase, phraseWrapWidth);
+  const lineH = HEADER_PHRASE_SIZE * 0.4;
+  const totalH = phraseLines.length * lineH;
+  const phraseStartY = (HEADER_HEIGHT - totalH) / 2 + lineH * 0.85;
+  const phraseCenterX = (logoW + PAGE_WIDTH) / 2;
+  phraseLines.forEach((line, i) => {
+    const y = phraseStartY + i * lineH;
+    if (line.startsWith('SCOUT21')) {
+      const rest = line.replace(/^SCOUT21\s*/, '');
+      const w1 = doc.getTextWidth('SCOUT21');
+      const lineW = doc.getTextWidth(line);
+      const startX = phraseCenterX - lineW / 2;
+      doc.setTextColor(...COLORS.cyan);
+      doc.text('SCOUT21', startX, y);
+      if (rest) {
+        doc.setTextColor(...COLORS.white);
+        doc.text(rest, startX + w1, y);
+      }
+    } else {
+      doc.setTextColor(...COLORS.white);
+      doc.text(line, phraseCenterX, y, { align: 'center' });
+    }
+  });
+}
+
 function newPageWithWatermark(doc: jsPDF): void {
   doc.addPage();
   drawWatermark(doc);
@@ -237,89 +275,17 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-
-      // ========== CAPA (página 1) - sem marca d'água ==========
-      const headerHeight = 38;
-      doc.setFillColor(...COLORS.black);
-      doc.rect(0, 0, PAGE_WIDTH, headerHeight, 'F');
-
       const logoBase64 = await loadLogoBase64();
-      if (logoBase64) {
-        doc.addImage(logoBase64, 'PNG', 0, 5, 18, 18);
-      }
 
-      // Frase no cabeçalho - Arial Black Negrito Itálico (Helvetica bolditalic como fallback), tamanho 22
-      const headerPhraseSize = 22;
-      doc.setFontSize(headerPhraseSize);
-      doc.setFont('helvetica', 'bolditalic');
-      const phraseWrapWidth = PAGE_WIDTH - 50;
-      const fullPhrase = HEADER_PHRASE_PART1 + HEADER_PHRASE_PART2;
-      const phraseLines = doc.splitTextToSize(fullPhrase, phraseWrapWidth);
-      const lineHeight = headerPhraseSize * 0.45;
-      const totalPhraseH = phraseLines.length * lineHeight;
-      const phraseStartY = (headerHeight - totalPhraseH) / 2 + lineHeight * 0.85;
-      phraseLines.forEach((line, i) => {
-        const y = phraseStartY + i * lineHeight;
-        if (line.startsWith('SCOUT21')) {
-          const rest = line.replace(/^SCOUT21\s*/, '');
-          const w1 = doc.getTextWidth('SCOUT21');
-          const startX = (PAGE_WIDTH - doc.getTextWidth(line)) / 2;
-          doc.setTextColor(...COLORS.cyan);
-          doc.text('SCOUT21', startX, y);
-          if (rest) {
-            doc.setTextColor(...COLORS.white);
-            doc.text(rest, startX + w1, y);
-          }
-        } else {
-          doc.setTextColor(...COLORS.white);
-          doc.text(line, PAGE_WIDTH / 2, y, { align: 'center' });
-        }
-      });
+      // Folha 1: cabeçalho + marca d'água + RESUMO DE INDICADORES (superior) + META DE DESARMES (inferior)
+      drawHeader(doc, logoBase64);
+      drawWatermark(doc);
+      drawResumoSection(doc, TOP_CHART_Y, data);
+      drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
-      // Título principal da capa - ocupa praticamente toda a página
-      doc.setTextColor(...COLORS.black);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(36);
-      const titleLines = doc.splitTextToSize(COVER_TITLE.toUpperCase(), PAGE_WIDTH - MARGIN * 4);
-      const titleY = 95;
-      doc.text(titleLines, PAGE_WIDTH / 2, titleY, { align: 'center' });
-
-      // Logo do clube (escudo da equipe das configurações)
-      const clubShieldBase64 = data.teamShieldUrl ? await loadImageBase64(data.teamShieldUrl) : null;
-      if (clubShieldBase64) {
-        const shieldSize = 55;
-        const titleH = titleLines.length * 12;
-        doc.addImage(clubShieldBase64, 'PNG', (PAGE_WIDTH - shieldSize) / 2, titleY + titleH + 15, shieldSize, shieldSize);
-      }
-
-      // Filtros aplicados (pequeno, no rodapé da capa)
-      const filters = data.filters;
-      if (filters && (filters.compFilter || filters.monthFilter || filters.opponentFilter || filters.locationFilter)) {
-        const parts: string[] = [];
-        if (filters.compFilter && filters.compFilter !== 'Todas') parts.push(`Competição: ${filters.compFilter}`);
-        if (filters.monthFilter && filters.monthFilter !== 'Todos') {
-          const monthLabel = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][parseInt(filters.monthFilter, 10)];
-          if (monthLabel) parts.push(`Mês: ${monthLabel}`);
-        }
-        if (filters.opponentFilter && filters.opponentFilter !== 'Todos') parts.push(`Adversário: ${filters.opponentFilter}`);
-        if (filters.locationFilter && filters.locationFilter !== 'Todos') parts.push(`Local: ${filters.locationFilter}`);
-        if (parts.length > 0) {
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(9);
-          doc.setTextColor(...COLORS.gray);
-          doc.text(`Filtros: ${parts.join(' • ')}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 25, { align: 'center' });
-        }
-      }
-
-      // Duas estatísticas por folha conforme especificado
       const compactOpts = { chartHeight: COMPACT_CHART_HEIGHT };
       const topDonutOpts = { donutSize: COMPACT_DONUT_SIZE };
       const bottomDonutOpts = { donutSize: 42 };
-
-      // Folha 1: Resumo de Indicadores (superior) + Meta de Desarmes (inferior)
-      newPageWithWatermark(doc);
-      drawResumoSection(doc, TOP_CHART_Y, data);
-      drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
       // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
       newPageWithWatermark(doc);
