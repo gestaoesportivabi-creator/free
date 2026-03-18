@@ -106,7 +106,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   schedule: ['schedules'],
   championship: ['championshipMatches', 'competitions', 'championships', 'matches'],
   table: ['players', 'competitions', 'matches', 'championshipMatches', 'championships', 'schedules', 'teams'],
-  general: ['matches', 'players'],
+  general: ['matches', 'players', 'championshipMatches'],
   individual: ['matches', 'players', 'timeControls'],
   ranking: [],
   physical: [],
@@ -269,7 +269,7 @@ export default function App() {
     };
   }, [matches, players, championshipMatches]);
 
-  // Enriquecer matches com scoreTarget (meta de desarmes) da tabela de campeonato
+  // Enriquecer matches com scoreTarget (meta de desarmes) do campo "META DE DESARMES" da tabela de campeonato
   const matchesWithScoreTarget = useMemo(() => {
     if (!championshipMatches?.length) return matches;
     const byJogoId = new Map<string, ChampionshipMatch>();

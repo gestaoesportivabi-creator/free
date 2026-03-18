@@ -1,14 +1,53 @@
 /**
  * Exporta o Scout Coletivo para PDF com geração programática (jsPDF).
- * Fundo branco, texto preto, header nas cores da marca, gráficos limpos.
+ * Regras: header preto, marca d'água, um gráfico por página, donuts, ícones.
  */
 
 import { jsPDF } from 'jspdf';
 
 const LOGO_URL = '/public-logo.png.png';
 const BRAND_NAME = 'SCOUT21';
+const WELCOME_PHRASE = 'Gestão esportiva baseada em dados para decisões vencedoras.';
 const WHATSAPP = '(48) 99148-6176';
 const SITE = 'https://gestaoesportiva-free.vercel.app';
+
+// Ícone WhatsApp - converte SVG para PNG via canvas (jsPDF não suporta SVG em addImage)
+function loadWhatsAppIconPng(): Promise<string | null> {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>';
+  const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 24;
+        canvas.height = 24;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } else resolve(null);
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+// Ícones Unicode para títulos (jsPDF suporta UTF-8)
+const ICONS = {
+  resumo: '\u25CF',      // bullet
+  gauge: '\u2691',       // shield
+  passes: '\u21C4',      // left-right arrow
+  chutes: '\u26BD',      // soccer ball
+  desarmes: '\u2694',    // crossed swords
+  transicao: '\u26A0',   // warning
+  golsFeitos: '\u26BD',
+  golsTomados: '\u26BD',
+  metodos: '\u25CF',
+};
 
 // Cores da marca (RGB para jsPDF)
 const COLORS = {
@@ -20,11 +59,19 @@ const COLORS = {
   green: [34, 197, 94] as [number, number, number],
   slate: [113, 113, 122] as [number, number, number],
   black: [0, 0, 0] as [number, number, number],
+  white: [255, 255, 255] as [number, number, number],
   gray: [100, 100, 100] as [number, number, number],
 };
 
+// Cores para donuts (hex -> RGB)
+const PIE_COLORS_SCORED = [[0, 153, 163], [74, 141, 232], [45, 106, 216], [29, 79, 214], [22, 51, 140], [10, 139, 196], [90, 90, 98]] as [number, number, number][];
+const PIE_COLORS_CONCEDED = [[30, 64, 175], [37, 99, 235], [59, 130, 246], [0, 240, 255], [96, 165, 250], [14, 165, 233], [113, 113, 122]] as [number, number, number][];
+const PIE_ORIGIN_BLUE = [0, 240, 255] as [number, number, number];
+const PIE_ORIGIN_SLATE = [113, 113, 122] as [number, number, number];
+
 const MARGIN = 15;
 const PAGE_WIDTH = 210;
+const PAGE_HEIGHT = 297;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 export interface ExportScoutPdfFilters {
@@ -110,14 +157,46 @@ function loadLogoBase64(): Promise<string | null> {
   });
 }
 
-function checkPageBreak(doc: jsPDF, y: number, needed: number): number {
-  const pageHeight = 297;
-  const bottomMargin = 20;
-  if (y + needed > pageHeight - bottomMargin) {
-    doc.addPage();
-    return MARGIN;
+function drawWatermark(doc: jsPDF): void {
+  doc.saveGraphicsState();
+  try {
+    const GState = (doc as any).GState;
+    if (GState) doc.setGState(new GState({ opacity: 0.15 }));
+  } catch {
+    /* fallback: sem transparência nativa */
   }
-  return y;
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(72);
+  doc.setTextColor(180, 180, 180);
+  doc.text(BRAND_NAME, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center' });
+  doc.restoreGraphicsState();
+}
+
+function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...COLORS.gray);
+  const footerY = 288;
+  const iconSize = 4;
+  const text = `WhatsApp: ${WHATSAPP}  |  ${SITE.replace('https://', '')}`;
+  if (whatsAppIconPng) {
+    try {
+      const tw = doc.getTextWidth(text);
+      const totalW = iconSize + 2 + tw;
+      const startX = (PAGE_WIDTH - totalW) / 2;
+      doc.addImage(whatsAppIconPng, 'PNG', startX, footerY - iconSize / 2, iconSize, iconSize);
+      doc.text(text, startX + iconSize + 2, footerY);
+    } catch {
+      doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
+    }
+  } else {
+    doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
+  }
+}
+
+function newPageWithWatermark(doc: jsPDF): void {
+  doc.addPage();
+  drawWatermark(doc);
 }
 
 export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
@@ -138,22 +217,31 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
       let y = MARGIN;
 
-      // Header - barra cyan
-      doc.setFillColor(...COLORS.cyan);
-      doc.rect(0, 0, PAGE_WIDTH, 25, 'F');
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'bold');
+      // Marca d'água na primeira página (atrás de tudo)
+      drawWatermark(doc);
+
+      // Regra 1: Header - fundo preto, SCOUT21 branco negrito itálico canto superior direito
+      doc.setFillColor(...COLORS.black);
+      doc.rect(0, 0, PAGE_WIDTH, 28, 'F');
+      doc.setTextColor(...COLORS.white);
+      doc.setFont('helvetica', 'bolditalic');
       doc.setFontSize(18);
 
       const logoBase64 = await loadLogoBase64();
       if (logoBase64) {
-        doc.addImage(logoBase64, 'PNG', MARGIN, 4, 17, 17);
-        doc.text(BRAND_NAME, MARGIN + 22, 17);
-      } else {
-        doc.text(BRAND_NAME, MARGIN, 17);
+        doc.addImage(logoBase64, 'PNG', MARGIN, 5, 18, 18);
       }
+      const brandW = doc.getTextWidth(BRAND_NAME);
+      doc.text(BRAND_NAME, PAGE_WIDTH - MARGIN - brandW, 20);
 
-      y = 35;
+      y = 38;
+
+      // Regra 2: Frase de boas-vindas (do meio para esquerda)
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(...COLORS.black);
+      doc.text(WELCOME_PHRASE, PAGE_WIDTH / 2, y, { align: 'center' });
+      y += 10;
 
       // Filtros
       const filters = data.filters;
@@ -167,23 +255,19 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         if (filters.opponentFilter && filters.opponentFilter !== 'Todos') parts.push(`Adversário: ${filters.opponentFilter}`);
         if (filters.locationFilter && filters.locationFilter !== 'Todos') parts.push(`Local: ${filters.locationFilter}`);
         if (parts.length > 0) {
-          doc.setFont('helvetica', 'normal');
           doc.setFontSize(10);
-          doc.setTextColor(...COLORS.black);
           doc.text(`Filtros aplicados: ${parts.join(' • ')}`, MARGIN, y);
           y += 8;
         }
       }
 
-      // KPIs
-      y = checkPageBreak(doc, y, 60);
+      // Regra 3 e 10: Resumo de Indicadores - nomes negrito, resultados itálico, ícone
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
       doc.setTextColor(...COLORS.black);
-      doc.text('Resumo de Indicadores', MARGIN, y);
+      doc.text(`${ICONS.resumo} Resumo de Indicadores`, MARGIN, y);
       y += 8;
 
-      doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
       const kpis: [string, string | number][] = [
         ['Total de Jogos', data.stats.totalGames],
@@ -209,7 +293,9 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       let rowY = y;
       kpis.forEach(([label, value], i) => {
         const x = col === 0 ? col1X : col2X;
+        doc.setFont('helvetica', 'bold');
         doc.text(`${label}:`, x, rowY);
+        doc.setFont('helvetica', 'italic');
         doc.text(String(value), x + 55, rowY);
         col++;
         if (col === 2) {
@@ -217,72 +303,77 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
           rowY += 6;
         }
       });
-      y = rowY + (col === 1 ? 6 : 0) + 10;
+      y = rowY + (col === 1 ? 6 : 0) + 12;
 
-      // Meta de Desarmes - card dedicado
-      y = checkPageBreak(doc, y, 45);
+      // Regra 5: Cada seção em página própria - Meta de Desarmes
+      newPageWithWatermark(doc);
+      y = MARGIN;
       y = drawGaugeSection(doc, y, data.gaugeData, data.stats.tacklesTotal);
-      y += 15;
 
-      // Gráfico de barras - Passes
-      y = checkPageBreak(doc, y, 80);
-      drawBarChartSection(doc, y, 'Passes Certos vs Errados', data.chartData, [
+      // Regra 5 e 6: Gráfico Passes - página própria, título direita, total esquerda, centralizado
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawBarChartSection(doc, y, `${ICONS.passes} Passes Certos vs Errados`, data.chartData, [
         { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
       ], data.stats.passesCorrect + data.stats.passesWrong);
-      y += 55;
 
-      // Gráfico de barras - Chutes
-      y = checkPageBreak(doc, y, 80);
-      drawBarChartSection(doc, y, 'Chutes no Gol vs Fora', data.chartData, [
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawBarChartSection(doc, y, `${ICONS.chutes} Chutes no Gol vs Fora`, data.chartData, [
         { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
         { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
       ], data.stats.shotsOn + data.stats.shotsOff);
-      y += 55;
 
-      // Gráfico de barras - Desarmes
-      y = checkPageBreak(doc, y, 80);
-      drawBarChartSection(doc, y, 'Tipos de Desarme', data.chartData, [
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawBarChartSection(doc, y, `${ICONS.desarmes} Tipos de Desarme`, data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
         { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.cyan },
       ], data.stats.tacklesTotal);
-      y += 55;
 
-      // Gráfico de barras - Erros Transição
-      y = checkPageBreak(doc, y, 80);
-      drawBarChartSection(doc, y, 'Erros Críticos (Transição)', data.chartData, [
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawBarChartSection(doc, y, `${ICONS.transicao} Erros Críticos (Transição)`, data.chartData, [
         { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
         { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
       ], data.stats.wrongPassesTransition);
-      y += 55;
 
-      // Gols por Período - linha simplificada (barras)
-      y = checkPageBreak(doc, y, 70);
-      drawTimePeriodChart(doc, y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green);
-      y += 50;
+      // Regra 7: Gols por Período com legendas do scout coletivo
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawTimePeriodChart(doc, y, `${ICONS.golsFeitos} Gols Feitos por Período`, data.timePeriodData.scoredDist, COLORS.green,
+        `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`);
 
-      y = checkPageBreak(doc, y, 70);
-      drawTimePeriodChart(doc, y, 'Gols Tomados por Período', data.timePeriodData.concededDist, COLORS.rose);
-      y += 50;
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawTimePeriodChart(doc, y, `${ICONS.golsTomados} Gols Tomados por Período`, data.timePeriodData.concededDist, COLORS.rose,
+        `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`);
 
-      // Métodos de Gol - tabelas
-      y = checkPageBreak(doc, y, 60);
-      drawGoalMethodsTable(doc, y, 'Métodos de Gol Marcado', data.goalMethodsScoredData, data.goalOriginScoredData);
-      y += 40;
+      // Regra 8: Métodos e Origem - gráficos de rosca (donut), cada um em página própria
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Marcado - Métodos Detalhados`, data.goalMethodsScoredData, PIE_COLORS_SCORED);
 
-      y = checkPageBreak(doc, y, 60);
-      drawGoalMethodsTable(doc, y, 'Métodos de Gol Tomado', data.goalMethodsConcededData, data.goalOriginConcededData);
-      y += 40;
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Marcado - Origem`, data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE]);
 
-      // Footer em todas as páginas
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Tomado - Métodos Detalhados`, data.goalMethodsConcededData, PIE_COLORS_CONCEDED);
+
+      newPageWithWatermark(doc);
+      y = MARGIN;
+      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Tomado - Origem`, data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE]);
+
+      // Regra 9: Footer com ícone WhatsApp em todas as páginas
+      const whatsAppIconPng = await loadWhatsAppIconPng();
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(...COLORS.gray);
-        doc.text(`WhatsApp: ${WHATSAPP}  |  ${SITE.replace('https://', '')}`, PAGE_WIDTH / 2, 290, { align: 'center' });
+        drawFooter(doc, whatsAppIconPng);
       }
 
       const filename = `scout-coletivo-${new Date().toISOString().slice(0, 10)}.pdf`;
@@ -303,10 +394,10 @@ function drawGaugeSection(
   tacklesTotal: number
 ): number {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(12);
   doc.setTextColor(...COLORS.black);
-  doc.text('Meta de Desarmes', MARGIN, startY);
-  startY += 6;
+  doc.text(`${ICONS.gauge} Meta de Desarmes`, MARGIN, startY);
+  startY += 8;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
@@ -341,36 +432,36 @@ function drawBarChartSection(
   series: Array<{ key: keyof ScoutPdfData['chartData'][0]; label: string; color: [number, number, number] }>,
   total: number
 ): void {
+  // Regra 6: Total canto superior esquerdo negrito, título canto superior direito
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  doc.text(title, MARGIN, startY);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Total: ${total}`, MARGIN + CONTENT_WIDTH - 25, startY);
-  startY += 6;
+  doc.text(`Total: ${total}`, MARGIN, startY);
+  const titleW = doc.getTextWidth(title);
+  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  startY += 8;
 
   if (chartData.length === 0) {
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text('Nenhum dado disponível', MARGIN, startY + 10);
+    doc.text('Nenhum dado disponível', PAGE_WIDTH / 2, startY + 25, { align: 'center' });
     return;
   }
 
-  const chartHeight = 35;
+  const chartHeight = 45;
   const chartTop = startY + 5;
   const barAreaWidth = CONTENT_WIDTH - 50;
+  const chartCenterX = MARGIN + 45 + barAreaWidth / 2;
   const maxVal = Math.max(
     ...chartData.map((d) => series.reduce((sum, s) => sum + (Number(d[s.key]) || 0), 0)),
     1
   );
-  const barWidth = Math.max(3, (barAreaWidth / chartData.length - 4) / series.length);
-  const gap = 2;
+  const blockWidth = barAreaWidth / chartData.length;
 
   chartData.forEach((d, i) => {
-    const blockWidth = barAreaWidth / chartData.length;
     const blockLeft = MARGIN + 45 + i * blockWidth + 2;
     let stackX = blockLeft;
-    series.forEach((s, si) => {
+    series.forEach((s) => {
       const val = Number(d[s.key]) || 0;
       const w = (val / maxVal) * (blockWidth - 4) || 0;
       if (w > 0.5) {
@@ -380,28 +471,27 @@ function drawBarChartSection(
         doc.setFontSize(8);
         doc.setTextColor(...COLORS.black);
         if (val > 0) doc.text(String(val), stackX + w / 2 - 2, chartTop + chartHeight - 6, { align: 'center' });
-        stackX += w + gap;
+        stackX += w + 2;
       }
     });
   });
 
-  // Eixo X - nomes (abreviados)
   doc.setFontSize(8);
   doc.setTextColor(...COLORS.black);
   chartData.forEach((d, i) => {
-    const blockWidth = CONTENT_WIDTH / chartData.length;
     const x = MARGIN + 45 + i * blockWidth + blockWidth / 2 - 5;
     const name = d.name.length > 8 ? d.name.slice(0, 7) + '…' : d.name;
-    doc.text(name, x, chartTop + chartHeight + 6);
+    doc.text(name, x, chartTop + chartHeight + 6, { align: 'center' });
   });
 
-  // Legenda
-  let legX = MARGIN + 45;
+  // Legenda centralizada
+  const legendWidth = series.length * 40;
+  let legX = chartCenterX - legendWidth / 2 + 10;
   series.forEach((s) => {
     doc.setFillColor(...s.color);
     doc.rect(legX, chartTop + chartHeight + 12, 4, 3, 'F');
     doc.text(s.label, legX + 6, chartTop + chartHeight + 14);
-    legX += 35;
+    legX += 40;
   });
 }
 
@@ -410,18 +500,24 @@ function drawTimePeriodChart(
   startY: number,
   title: string,
   data: Array<{ period: string; value: number }>,
-  color: [number, number, number]
+  color: [number, number, number],
+  legendText?: string
 ): void {
+  // Regra 6: Total esquerda, título direita
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...COLORS.black);
-  doc.text(title, MARGIN, startY);
-  startY += 6;
+  const total = data.reduce((s, d) => s + d.value, 0);
+  doc.text(`Total: ${total}`, MARGIN, startY);
+  const titleW = doc.getTextWidth(title);
+  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  startY += 8;
 
   if (!data.length) return;
 
-  const chartHeight = 35;
+  const chartHeight = 40;
   const chartWidth = CONTENT_WIDTH - 50;
+  const chartCenterX = MARGIN + 45 + chartWidth / 2;
   const maxVal = Math.max(...data.map((d) => d.value), 1);
   const barW = Math.max(2, chartWidth / data.length - 1);
 
@@ -442,56 +538,96 @@ function drawTimePeriodChart(
   doc.setFontSize(7);
   doc.setTextColor(...COLORS.black);
   data.forEach((d, i) => {
-    if (i % 2 === 0) {
-      const x = MARGIN + 45 + i * (chartWidth / data.length) + barW / 2 - 3;
-      const label = d.period.split('-')[0] || d.period;
-      doc.text(label, x, startY + chartHeight + 5);
-    }
+    const x = MARGIN + 45 + i * (chartWidth / data.length) + barW / 2 - 3;
+    const label = d.period.split('-')[0] || d.period;
+    doc.text(label, x, startY + chartHeight + 5, { align: 'center' });
   });
+
+  // Regra 7: Legenda igual ao scout coletivo
+  if (legendText) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(legendText, chartCenterX, startY + chartHeight + 18, { align: 'center' });
+  }
 }
 
-function drawGoalMethodsTable(
+function createDonutImage(
+  data: Array<{ name: string; value: number; percentage: string }>,
+  colors: [number, number, number][],
+  size: number
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return canvas.toDataURL('image/png');
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerR = size / 2 - 4;
+  const innerR = outerR * 0.6;
+  let startAngle = -Math.PI / 2;
+
+  data.forEach((d, i) => {
+    const slice = (d.value / total) * 2 * Math.PI;
+    const endAngle = startAngle + slice;
+    const c = colors[i % colors.length];
+    ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, startAngle, endAngle);
+    ctx.arc(cx, cy, innerR, endAngle, startAngle, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    startAngle = endAngle;
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+function drawDonutChartPage(
   doc: jsPDF,
   startY: number,
   title: string,
-  methodsData: Array<{ name: string; value: number; percentage: string }>,
-  originData: Array<{ name: string; value: number; percentage: string }>
+  data: Array<{ name: string; value: number; percentage: string }>,
+  colors: [number, number, number][]
 ): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...COLORS.black);
-  doc.text(title, MARGIN, startY);
-  startY += 6;
+  const titleW = doc.getTextWidth(title);
+  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  const total = data.reduce((s, d) => s + d.value, 0);
+  doc.text(`Total: ${total}`, MARGIN, startY);
+  startY += 10;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-
-  if (methodsData.length > 0) {
-    doc.setFont('helvetica', 'bold');
-    doc.text('Método', MARGIN, startY);
-    doc.text('Qtd', MARGIN + 100, startY);
-    doc.text('%', MARGIN + 130, startY);
+  if (data.length === 0 || total === 0) {
     doc.setFont('helvetica', 'normal');
-    startY += 5;
-    methodsData.forEach((r) => {
-      doc.text(r.name.length > 35 ? r.name.slice(0, 34) + '…' : r.name, MARGIN, startY);
-      doc.text(String(r.value), MARGIN + 100, startY);
-      doc.text(`${r.percentage}%`, MARGIN + 130, startY);
-      startY += 5;
-    });
-    startY += 3;
+    doc.text('Nenhum dado disponível', PAGE_WIDTH / 2, startY + 40, { align: 'center' });
+    return;
   }
 
-  doc.setFont('helvetica', 'bold');
-  doc.text('Origem', MARGIN, startY);
-  doc.text('Qtd', MARGIN + 100, startY);
-  doc.text('%', MARGIN + 130, startY);
+  const donutSize = 70;
+  const centerX = PAGE_WIDTH / 2;
+  const donutImg = createDonutImage(data, colors, 300);
+  doc.addImage(donutImg, 'PNG', centerX - donutSize / 2, startY, donutSize, donutSize);
+  startY += donutSize + 12;
+
   doc.setFont('helvetica', 'normal');
-  startY += 5;
-  originData.forEach((r) => {
-    doc.text(r.name, MARGIN, startY);
-    doc.text(String(r.value), MARGIN + 100, startY);
-    doc.text(`${r.percentage}%`, MARGIN + 130, startY);
-    startY += 5;
+  doc.setFontSize(9);
+  const itemsPerRow = Math.min(data.length, 3);
+  const colW = CONTENT_WIDTH / itemsPerRow;
+  data.forEach((r, i) => {
+    const col = i % itemsPerRow;
+    const row = Math.floor(i / itemsPerRow);
+    const legX = MARGIN + col * colW + 5;
+    const legY = startY + row * 8;
+    doc.setFillColor(...colors[i % colors.length]);
+    doc.rect(legX, legY - 1, 3, 3, 'F');
+    const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
+    doc.text(`${name} (${r.percentage}%)`, legX + 5, legY + 2);
   });
 }
