@@ -21,10 +21,10 @@ async function main() {
 
   // 1. Garantir que as roles existem
   const roles = [
-    { name: 'ADMIN', description: 'Administrador do sistema' },
-    { name: 'TECNICO', description: 'Técnico/Treinador' },
-    { name: 'CLUBE', description: 'Clube' },
-    { name: 'ATLETA', description: 'Atleta' },
+    { name: 'ADMINISTRADOR', description: 'Administrador - Acesso total' },
+    { name: 'ESSENCIAL', description: 'Plano Essencial' },
+    { name: 'COMPETICAO', description: 'Plano Competicao' },
+    { name: 'PERFORMANCE', description: 'Plano Performance' },
   ];
 
   for (const role of roles) {
@@ -36,13 +36,13 @@ async function main() {
   }
   console.log('✓ Roles verificadas/criadas');
 
-  // 2. Buscar role TECNICO (admin usa TECNICO para ter acesso ao sistema)
+  // 2. Buscar role ADMINISTRADOR
   const roleTecnico = await prisma.role.findUnique({
-    where: { name: 'TECNICO' },
+    where: { name: 'ADMINISTRADOR' },
   });
 
   if (!roleTecnico) {
-    throw new Error('Role TECNICO não encontrada');
+    throw new Error('Role ADMINISTRADOR não encontrada');
   }
 
   // 3. Criar ou atualizar usuário admin

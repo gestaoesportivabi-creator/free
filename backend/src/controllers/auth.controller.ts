@@ -10,6 +10,16 @@ import prisma from '../config/database';
 import { env } from '../config/env';
 import { UnauthorizedError } from '../utils/errors';
 
+function mapRoleForFrontend(roleName: string): string {
+  const MAP: Record<string, string> = {
+    'ADMINISTRADOR': 'TECNICO',
+    'ESSENCIAL': 'TECNICO',
+    'COMPETICAO': 'TECNICO',
+    'PERFORMANCE': 'TECNICO',
+  };
+  return MAP[roleName] ?? roleName;
+}
+
 export const authController = {
   /**
    * POST /api/auth/login
@@ -85,7 +95,7 @@ export const authController = {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role.name,
+            role: mapRoleForFrontend(user.role.name),
           },
         },
       });
@@ -111,7 +121,7 @@ export const authController = {
    */
   register: async (req: Request, res: Response) => {
     try {
-      const { email, password, name, roleName = 'TECNICO' } = req.body;
+      const { email, password, name, roleName = 'ESSENCIAL' } = req.body;
 
       if (!email || !password || !name) {
         return res.status(400).json({
@@ -159,14 +169,14 @@ export const authController = {
       });
 
       // Criar registro específico baseado no role
-      if (roleName === 'TECNICO') {
+      if (roleName === 'ESSENCIAL') {
         await prisma.tecnico.create({
           data: {
             userId: user.id,
             nome: user.name,
           },
         });
-      } else if (roleName === 'CLUBE') {
+      } else if (roleName === 'COMPETICAO') {
         // Se houver dados do clube no body, usar; senão, usar nome do usuário
         const { razaoSocial, cnpj, cidade, estado } = req.body;
         await prisma.clube.create({
@@ -195,7 +205,7 @@ export const authController = {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role.name,
+            role: mapRoleForFrontend(user.role.name),
           },
         },
       });
@@ -248,7 +258,7 @@ export const authController = {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role.name,
+        role: mapRoleForFrontend(user.role.name),
         photoUrl: user.photoUrl ?? undefined,
       };
       // Incluir team* se as colunas existirem (após migração 018) — busca em segundo passo para não quebrar sem migração
@@ -300,7 +310,7 @@ export const authController = {
           id: u.id,
           name: u.name,
           email: u.email,
-          role: u.role.name,
+          role: mapRoleForFrontend(u.role.name),
           createdAt: u.createdAt,
         })),
       });
@@ -380,7 +390,7 @@ export const authController = {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role.name,
+          role: mapRoleForFrontend(user.role.name),
           photoUrl: user.photoUrl,
           teamDisplayName: user.teamDisplayName ?? undefined,
           teamShieldUrl: user.teamShieldUrl ?? undefined,

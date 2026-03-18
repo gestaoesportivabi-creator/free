@@ -4,10 +4,10 @@
 
 // Roles do sistema
 export const ROLES = {
-  ADMIN: 'ADMIN',
-  TECNICO: 'TECNICO',
-  CLUBE: 'CLUBE',
-  ATLETA: 'ATLETA',
+  ADMINISTRADOR: 'ADMINISTRADOR',
+  ESSENCIAL: 'ESSENCIAL',
+  COMPETICAO: 'COMPETICAO',
+  PERFORMANCE: 'PERFORMANCE',
 } as const;
 
 // Tipos de evento de jogo

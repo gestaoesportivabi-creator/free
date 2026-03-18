@@ -115,7 +115,7 @@ export function tenantMiddleware() {
       if (!tenantInfo.tecnico_id && !tenantInfo.clube_id) {
         // Usuários ADMIN podem não ter tenant (acesso total)
         // Outros roles devem ter tenant
-        const isAdmin = req.user.role_id === 'ADMIN'; // Ajustar conforme sua lógica de roles
+        const isAdmin = req.user.role_id === 'ADMINISTRADOR';
         
         if (!isAdmin) {
           console.error('[TENANT_MIDDLEWARE] ERRO: Usuário não possui técnico ou clube associado:', {
@@ -131,8 +131,8 @@ export function tenantMiddleware() {
       }
 
       // Validação crítica: garantir que tecnico_id não seja undefined ou null se o usuário é técnico
-      if (req.user.role_id === 'TECNICO' && !tenantInfo.tecnico_id) {
-        console.error('[TENANT_MIDDLEWARE] ERRO CRÍTICO: Usuário TECNICO sem tecnico_id:', {
+      if (req.user.role_id === 'ESSENCIAL' && !tenantInfo.tecnico_id) {
+        console.error('[TENANT_MIDDLEWARE] ERRO CRÍTICO: Usuário ESSENCIAL sem tecnico_id:', {
           userId: req.user.id,
           email: req.user.email,
           role_id: req.user.role_id,
@@ -144,8 +144,8 @@ export function tenantMiddleware() {
       }
 
       // Validação crítica: garantir que clube_id não seja undefined ou null se o usuário é clube
-      if (req.user.role_id === 'CLUBE' && !tenantInfo.clube_id) {
-        console.error('[TENANT_MIDDLEWARE] ERRO CRÍTICO: Usuário CLUBE sem clube_id:', {
+      if (req.user.role_id === 'COMPETICAO' && !tenantInfo.clube_id) {
+        console.error('[TENANT_MIDDLEWARE] ERRO CRÍTICO: Usuário COMPETICAO sem clube_id:', {
           userId: req.user.id,
           email: req.user.email,
           role_id: req.user.role_id,

@@ -9,10 +9,10 @@ async function seedRoles() {
     console.log('🌱 Criando roles iniciais...');
     
     const roles = [
-      { name: 'ADMIN', description: 'Administrador do sistema' },
-      { name: 'TECNICO', description: 'Técnico/Treinador' },
-      { name: 'CLUBE', description: 'Clube' },
-      { name: 'ATLETA', description: 'Atleta' },
+      { name: 'ADMINISTRADOR', description: 'Administrador - Acesso total' },
+      { name: 'ESSENCIAL', description: 'Plano Essencial' },
+      { name: 'COMPETICAO', description: 'Plano Competicao' },
+      { name: 'PERFORMANCE', description: 'Plano Performance' },
     ];
 
     for (const role of roles) {
