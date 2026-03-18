@@ -8,7 +8,7 @@ import { jsPDF } from 'jspdf';
 const LOGO_URL = '/public-logo.png.png';
 const BRAND_NAME = 'SCOUT21';
 const HEADER_PHRASE_PART1 = 'SCOUT21';
-const HEADER_PHRASE_PART2 = ' — gestão esportiva baseada em dados para decisões vencedoras.';
+const HEADER_PHRASE_PART2 = ' — Gestão esportiva baseada em dados para decisões vencedoras.';
 const WHATSAPP = '(48) 99148-6176';
 const SITE = 'https://gestaoesportiva-free.vercel.app';
 
@@ -37,19 +37,6 @@ function loadWhatsAppIconPng(): Promise<string | null> {
   });
 }
 
-// Ícones Unicode para títulos (jsPDF suporta UTF-8)
-const ICONS = {
-  resumo: '\u25CF',      // bullet
-  gauge: '\u2691',       // shield
-  passes: '\u21C4',      // left-right arrow
-  chutes: '\u26BD',      // soccer ball
-  desarmes: '\u2694',    // crossed swords
-  transicao: '\u26A0',   // warning
-  golsFeitos: '\u26BD',
-  golsTomados: '\u26BD',
-  metodos: '\u25CF',
-};
-
 // Cores da marca (RGB para jsPDF)
 const COLORS = {
   cyan: [0, 240, 255] as [number, number, number],
@@ -74,10 +61,13 @@ const MARGIN = 15;
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
-const TOP_CHART_Y = 20;
-const BOTTOM_CHART_Y = 155;
+const WATERMARK_CENTER_Y = PAGE_HEIGHT / 2;
+const TOP_CHART_Y = 25;
+const GAP_FROM_WATERMARK = 62;
+const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
 const COMPACT_CHART_HEIGHT = 32;
-const COMPACT_DONUT_SIZE = 45;
+const COMPACT_DONUT_SIZE = 32;
+const COVER_TITLE = 'Relatório Gerencial de estatísticas do clube';
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -136,6 +126,8 @@ export interface ScoutPdfData {
   goalOriginScoredData: Array<{ name: string; value: number; percentage: string }>;
   goalOriginConcededData: Array<{ name: string; value: number; percentage: string }>;
   gaugeData?: { percentageDisplay: number | string; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
+  teamShieldUrl?: string;
+  teamName?: string;
 }
 
 function loadLogoBase64(): Promise<string | null> {
@@ -159,6 +151,31 @@ function loadLogoBase64(): Promise<string | null> {
     };
     img.onerror = () => resolve(null);
     img.src = url;
+  });
+}
+
+function loadImageBase64(src: string): Promise<string | null> {
+  if (!src) return Promise.resolve(null);
+  if (src.startsWith('data:')) return Promise.resolve(src);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } else resolve(null);
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
   });
 }
 
@@ -220,39 +237,62 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-      let y = MARGIN;
 
-      // Marca d'água na primeira página (atrás de tudo)
-      drawWatermark(doc);
-
-      // Header - fundo preto; logo sem margem à esquerda; frase centralizada APENAS na seção da logo (não repetir abaixo)
+      // ========== CAPA (página 1) - sem marca d'água ==========
+      const headerHeight = 38;
       doc.setFillColor(...COLORS.black);
-      doc.rect(0, 0, PAGE_WIDTH, 28, 'F');
+      doc.rect(0, 0, PAGE_WIDTH, headerHeight, 'F');
 
       const logoBase64 = await loadLogoBase64();
       if (logoBase64) {
         doc.addImage(logoBase64, 'PNG', 0, 5, 18, 18);
       }
 
-      // Frase única: SCOUT21 ciano bold + resto branco — somente dentro do retângulo preto
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      const w1 = doc.getTextWidth(HEADER_PHRASE_PART1);
-      doc.setFont('helvetica', 'normal');
-      const w2 = doc.getTextWidth(HEADER_PHRASE_PART2);
-      const totalW = w1 + w2;
-      const startX = (PAGE_WIDTH - totalW) / 2;
-      doc.setTextColor(...COLORS.cyan);
-      doc.setFont('helvetica', 'bold');
-      doc.text(HEADER_PHRASE_PART1, startX, 20);
-      doc.setTextColor(...COLORS.white);
-      doc.setFont('helvetica', 'normal');
-      doc.text(HEADER_PHRASE_PART2, startX + w1, 20);
+      // Frase no cabeçalho - Arial Black Negrito Itálico (Helvetica bolditalic como fallback), tamanho 22
+      const headerPhraseSize = 22;
+      doc.setFontSize(headerPhraseSize);
+      doc.setFont('helvetica', 'bolditalic');
+      const phraseWrapWidth = PAGE_WIDTH - 50;
+      const fullPhrase = HEADER_PHRASE_PART1 + HEADER_PHRASE_PART2;
+      const phraseLines = doc.splitTextToSize(fullPhrase, phraseWrapWidth);
+      const lineHeight = headerPhraseSize * 0.45;
+      const totalPhraseH = phraseLines.length * lineHeight;
+      const phraseStartY = (headerHeight - totalPhraseH) / 2 + lineHeight * 0.85;
+      phraseLines.forEach((line, i) => {
+        const y = phraseStartY + i * lineHeight;
+        if (line.startsWith('SCOUT21')) {
+          const rest = line.replace(/^SCOUT21\s*/, '');
+          const w1 = doc.getTextWidth('SCOUT21');
+          const startX = (PAGE_WIDTH - doc.getTextWidth(line)) / 2;
+          doc.setTextColor(...COLORS.cyan);
+          doc.text('SCOUT21', startX, y);
+          if (rest) {
+            doc.setTextColor(...COLORS.white);
+            doc.text(rest, startX + w1, y);
+          }
+        } else {
+          doc.setTextColor(...COLORS.white);
+          doc.text(line, PAGE_WIDTH / 2, y, { align: 'center' });
+        }
+      });
 
+      // Título principal da capa - ocupa praticamente toda a página
       doc.setTextColor(...COLORS.black);
-      y = 38;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(36);
+      const titleLines = doc.splitTextToSize(COVER_TITLE.toUpperCase(), PAGE_WIDTH - MARGIN * 4);
+      const titleY = 95;
+      doc.text(titleLines, PAGE_WIDTH / 2, titleY, { align: 'center' });
 
-      // Filtros
+      // Logo do clube (escudo da equipe das configurações)
+      const clubShieldBase64 = data.teamShieldUrl ? await loadImageBase64(data.teamShieldUrl) : null;
+      if (clubShieldBase64) {
+        const shieldSize = 55;
+        const titleH = titleLines.length * 12;
+        doc.addImage(clubShieldBase64, 'PNG', (PAGE_WIDTH - shieldSize) / 2, titleY + titleH + 15, shieldSize, shieldSize);
+      }
+
+      // Filtros aplicados (pequeno, no rodapé da capa)
       const filters = data.filters;
       if (filters && (filters.compFilter || filters.monthFilter || filters.opponentFilter || filters.locationFilter)) {
         const parts: string[] = [];
@@ -264,15 +304,17 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         if (filters.opponentFilter && filters.opponentFilter !== 'Todos') parts.push(`Adversário: ${filters.opponentFilter}`);
         if (filters.locationFilter && filters.locationFilter !== 'Todos') parts.push(`Local: ${filters.locationFilter}`);
         if (parts.length > 0) {
-          doc.setFontSize(10);
-          doc.text(`Filtros aplicados: ${parts.join(' • ')}`, MARGIN, y);
-          y += 8;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(...COLORS.gray);
+          doc.text(`Filtros: ${parts.join(' • ')}`, PAGE_WIDTH / 2, PAGE_HEIGHT - 25, { align: 'center' });
         }
       }
 
       // Duas estatísticas por folha conforme especificado
       const compactOpts = { chartHeight: COMPACT_CHART_HEIGHT };
-      const compactDonutOpts = { donutSize: COMPACT_DONUT_SIZE };
+      const topDonutOpts = { donutSize: COMPACT_DONUT_SIZE };
+      const bottomDonutOpts = { donutSize: 42 };
 
       // Folha 1: Resumo de Indicadores (superior) + Meta de Desarmes (inferior)
       newPageWithWatermark(doc);
@@ -281,45 +323,45 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
       // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
       newPageWithWatermark(doc);
-      drawBarChartSection(doc, TOP_CHART_Y, `${ICONS.passes} Passes Certos vs Errados`, data.chartData, [
+      drawBarChartSection(doc, TOP_CHART_Y, 'Passes Certos vs Errados', data.chartData, [
         { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
       ], data.stats.passesCorrect + data.stats.passesWrong, compactOpts);
-      drawBarChartSection(doc, BOTTOM_CHART_Y, `${ICONS.chutes} Chutes no Gol vs Chutes pra Fora`, data.chartData, [
+      drawBarChartSection(doc, BOTTOM_CHART_Y, 'Chutes no Gol vs Chutes pra Fora', data.chartData, [
         { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
         { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
       ], data.stats.shotsOn + data.stats.shotsOff, compactOpts);
 
       // Folha 3: Tipos de Desarmes (superior) + Erros Críticos Transição (inferior)
       newPageWithWatermark(doc);
-      drawBarChartSection(doc, TOP_CHART_Y, `${ICONS.desarmes} Tipos de Desarmes`, data.chartData, [
+      drawBarChartSection(doc, TOP_CHART_Y, 'Tipos de Desarmes', data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
         { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.cyan },
       ], data.stats.tacklesTotal, compactOpts);
-      drawBarChartSection(doc, BOTTOM_CHART_Y, `${ICONS.transicao} Erros Críticos (Transição)`, data.chartData, [
+      drawBarChartSection(doc, BOTTOM_CHART_Y, 'Erros Críticos (Transição)', data.chartData, [
         { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
         { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
       ], data.stats.wrongPassesTransition, compactOpts);
 
       // Folha 4: Gols Feitos por período (superior) + Gols Tomados por Período (inferior)
       newPageWithWatermark(doc);
-      drawTimePeriodChart(doc, TOP_CHART_Y, `${ICONS.golsFeitos} Gols Feitos por Período`, data.timePeriodData.scoredDist, COLORS.green,
+      drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green,
         `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,
         compactOpts);
-      drawTimePeriodChart(doc, BOTTOM_CHART_Y, `${ICONS.golsTomados} Gols Tomados por Período`, data.timePeriodData.concededDist, COLORS.rose,
+      drawTimePeriodChart(doc, BOTTOM_CHART_Y, 'Gols Tomados por Período', data.timePeriodData.concededDist, COLORS.rose,
         `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`,
         compactOpts);
 
       // Folha 5: Métodos de Gols Marcado - Métodos Detalhados (superior) + Origem do Gol (inferior)
       newPageWithWatermark(doc);
-      drawDonutChartPage(doc, TOP_CHART_Y, `${ICONS.metodos} Métodos de Gols Marcado - Métodos Detalhados`, data.goalMethodsScoredData, PIE_COLORS_SCORED, compactDonutOpts);
-      drawDonutChartPage(doc, BOTTOM_CHART_Y, `${ICONS.metodos} Métodos de Gols Marcado - Origem do Gol`, data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], compactDonutOpts);
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, topDonutOpts);
+      drawDonutChartPage(doc, BOTTOM_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], bottomDonutOpts);
 
       // Folha 6: Métodos de Gols Tomado - Métodos Detalhados (superior) + Origem do Gol (inferior)
       newPageWithWatermark(doc);
-      drawDonutChartPage(doc, TOP_CHART_Y, `${ICONS.metodos} Métodos de Gols Tomado - Métodos Detalhados`, data.goalMethodsConcededData, PIE_COLORS_CONCEDED, compactDonutOpts);
-      drawDonutChartPage(doc, BOTTOM_CHART_Y, `${ICONS.metodos} Métodos de Gols Tomado - Origem do Gol`, data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], compactDonutOpts);
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, topDonutOpts);
+      drawDonutChartPage(doc, BOTTOM_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], bottomDonutOpts);
 
       // Regra 9: Footer com ícone WhatsApp em todas as páginas
       const whatsAppIconPng = await loadWhatsAppIconPng();
@@ -344,7 +386,7 @@ function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  doc.text(`${ICONS.resumo} RESUMO DE INDICADORES`, MARGIN, startY, { charSpace: -0.2 });
+  doc.text('RESUMO DE INDICADORES', MARGIN, startY, { charSpace: -0.2 });
   startY += 8;
 
   doc.setFontSize(10);
@@ -393,7 +435,7 @@ function drawGaugeSection(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  doc.text(`${ICONS.gauge} META DE DESARMES`, MARGIN, startY, { charSpace: -0.2 });
+  doc.text('META DE DESARMES', MARGIN, startY, { charSpace: -0.2 });
   startY += 8;
 
   doc.setFont('helvetica', 'normal');
@@ -619,17 +661,18 @@ function drawDonutChartPage(
   const centerX = PAGE_WIDTH / 2;
   const donutImg = createDonutImage(data, colors, 300);
   doc.addImage(donutImg, 'PNG', centerX - donutSize / 2, startY, donutSize, donutSize);
-  startY += donutSize + 12;
+  const legendRowH = donutSize <= 40 ? 5 : 8;
+  startY += donutSize + (donutSize <= 40 ? 6 : 12);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(donutSize <= 40 ? 8 : 9);
   const itemsPerRow = Math.min(data.length, 3);
   const colW = CONTENT_WIDTH / itemsPerRow;
   data.forEach((r, i) => {
     const col = i % itemsPerRow;
     const row = Math.floor(i / itemsPerRow);
     const legX = MARGIN + col * colW + 5;
-    const legY = startY + row * 8;
+    const legY = startY + row * legendRowH;
     doc.setFillColor(...colors[i % colors.length]);
     doc.rect(legX, legY - 1, 3, 3, 'F');
     const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;

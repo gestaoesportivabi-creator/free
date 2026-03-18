@@ -532,6 +532,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           onClick={async () => {
             setPdfExporting(true);
             try {
+              const teamSettings = (() => {
+                try {
+                  const raw = localStorage.getItem('scout21_settings_current_team');
+                  if (!raw) return {};
+                  const d = JSON.parse(raw);
+                  return { teamShieldUrl: d.shieldUrl || '', teamName: d.teamName || '' };
+                } catch {
+                  return {};
+                }
+              })();
               await exportScoutToPdf({
                 filters: {
                   compFilter,
@@ -539,6 +549,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   opponentFilter,
                   locationFilter,
                 },
+                teamShieldUrl: teamSettings.teamShieldUrl || undefined,
+                teamName: teamSettings.teamName || undefined,
                 stats,
                 timePeriodData: {
                   maxScoredPeriod: timePeriodData.maxScoredPeriod,
