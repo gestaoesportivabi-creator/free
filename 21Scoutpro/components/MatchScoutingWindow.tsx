@@ -340,7 +340,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Tela de logs (eventos em tabela editável)
   const [showLogsView, setShowLogsView] = useState<boolean>(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ time: number; period: '1T' | '2T'; type: MatchEvent['type']; result?: MatchEvent['result']; cardType?: MatchEvent['cardType']; foulTeam?: 'for' | 'against'; assistPlayerId?: string | null; assistPlayerName?: string | null } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ time: number; period: '1T' | '2T'; type: MatchEvent['type']; result?: MatchEvent['result']; cardType?: MatchEvent['cardType']; foulTeam?: 'for' | 'against'; playerId?: string | null; playerName?: string | null; assistPlayerId?: string | null; assistPlayerName?: string | null } | null>(null);
   const [editTimeInput, setEditTimeInput] = useState<string>('');
   
   // Estados para tiro livre e pênalti (fluxo inline)
@@ -2167,7 +2167,34 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             )}
                           </td>
                           <td className="p-2">
-                            <span className="text-white text-sm">{event.playerName ?? '—'}</span>
+                            {isEditing && draft ? (
+                              event.isOpponentGoal || event.playerId === OPPONENT_FAKE_PLAYER_ID ? (
+                                <span className="text-zinc-400 text-sm">{OPPONENT_FAKE_PLAYER_NAME}</span>
+                              ) : (
+                                <select
+                                  value={draft.playerId ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                      setEditDraft(prev => prev ? { ...prev, playerId: null, playerName: null } : null);
+                                    } else {
+                                      const p = players.find(x => String(x.id).trim() === val);
+                                      setEditDraft(prev => prev ? { ...prev, playerId: val, playerName: p?.name ?? null } : null);
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm min-w-[120px]"
+                                >
+                                  <option value="">—</option>
+                                  {players.map((p) => (
+                                    <option key={p.id} value={String(p.id).trim()}>
+                                      #{p.jerseyNumber ?? '?'} {p.nickname || p.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )
+                            ) : (
+                              <span className="text-white text-sm">{event.playerName ?? '—'}</span>
+                            )}
                           </td>
                           <td className="p-2">
                             {isEditing && draft ? (
@@ -2275,6 +2302,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     if (sec === null || !editDraft) return;
                                     const tipo = editDraft.type === 'foul' ? 'Falta' : getTipoSubtipo(editDraft.type, editDraft.result, editDraft.cardType).tipo;
                                     const subtipo = editDraft.type === 'foul' ? (editDraft.foulTeam === 'against' ? 'Adversário' : 'Nosso') : getTipoSubtipo(editDraft.type, editDraft.result, editDraft.cardType).subtipo;
+                                    const isOpponentGoal = editDraft.type === 'goal' && editDraft.result === 'contra';
                                     const updatedEvents = matchEvents.map(e => e.id === editingEventId ? {
                                       ...e,
                                       time: sec,
@@ -2285,7 +2313,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                       foulTeam: editDraft.foulTeam,
                                       tipo,
                                       subtipo,
-                                      isOpponentGoal: editDraft.type === 'goal' && editDraft.result === 'contra',
+                                      isOpponentGoal,
+                                      playerId: isOpponentGoal ? OPPONENT_FAKE_PLAYER_ID : (editDraft.playerId || undefined),
+                                      playerName: isOpponentGoal ? OPPONENT_FAKE_PLAYER_NAME : (editDraft.playerName ?? undefined),
                                       ...(editDraft.type === 'goal' && {
                                         assistPlayerId: editDraft.assistPlayerId ?? undefined,
                                         assistPlayerName: editDraft.assistPlayerName ?? undefined,
@@ -2321,6 +2351,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                       result: event.result,
                                       cardType: event.cardType,
                                       foulTeam: event.type === 'foul' ? (event.foulTeam ?? 'for') : undefined,
+                                      playerId: event.playerId ?? null,
+                                      playerName: event.playerName ?? null,
                                       assistPlayerId: event.type === 'goal' ? (event.assistPlayerId ?? null) : undefined,
                                       assistPlayerName: event.type === 'goal' ? (event.assistPlayerName ?? null) : undefined,
                                     });
