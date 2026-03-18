@@ -7,7 +7,8 @@ import { jsPDF } from 'jspdf';
 
 const LOGO_URL = '/public-logo.png.png';
 const BRAND_NAME = 'SCOUT21';
-const WELCOME_PHRASE = 'Gestão esportiva baseada em dados para decisões vencedoras.';
+const HEADER_PHRASE_PART1 = 'SCOUT21';
+const HEADER_PHRASE_PART2 = ' — gestão esportiva baseada em dados para decisões vencedoras.';
 const WHATSAPP = '(48) 99148-6176';
 const SITE = 'https://gestaoesportiva-free.vercel.app';
 
@@ -73,6 +74,10 @@ const MARGIN = 15;
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+const TOP_CHART_Y = 20;
+const BOTTOM_CHART_Y = 155;
+const COMPACT_CHART_HEIGHT = 32;
+const COMPACT_DONUT_SIZE = 45;
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -220,28 +225,32 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       // Marca d'água na primeira página (atrás de tudo)
       drawWatermark(doc);
 
-      // Regra 1: Header - fundo preto, SCOUT21 branco negrito itálico canto superior direito
+      // Header - fundo preto; logo sem margem à esquerda; frase centralizada APENAS na seção da logo (não repetir abaixo)
       doc.setFillColor(...COLORS.black);
       doc.rect(0, 0, PAGE_WIDTH, 28, 'F');
-      doc.setTextColor(...COLORS.white);
-      doc.setFont('helvetica', 'bolditalic');
-      doc.setFontSize(18);
 
       const logoBase64 = await loadLogoBase64();
       if (logoBase64) {
-        doc.addImage(logoBase64, 'PNG', MARGIN, 5, 18, 18);
+        doc.addImage(logoBase64, 'PNG', 0, 5, 18, 18);
       }
-      const brandW = doc.getTextWidth(BRAND_NAME);
-      doc.text(BRAND_NAME, PAGE_WIDTH - MARGIN - brandW, 20);
 
-      y = 38;
-
-      // Regra 2: Frase de boas-vindas (do meio para esquerda)
+      // Frase única: SCOUT21 ciano bold + resto branco — somente dentro do retângulo preto
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      const w1 = doc.getTextWidth(HEADER_PHRASE_PART1);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
+      const w2 = doc.getTextWidth(HEADER_PHRASE_PART2);
+      const totalW = w1 + w2;
+      const startX = (PAGE_WIDTH - totalW) / 2;
+      doc.setTextColor(...COLORS.cyan);
+      doc.setFont('helvetica', 'bold');
+      doc.text(HEADER_PHRASE_PART1, startX, 20);
+      doc.setTextColor(...COLORS.white);
+      doc.setFont('helvetica', 'normal');
+      doc.text(HEADER_PHRASE_PART2, startX + w1, 20);
+
       doc.setTextColor(...COLORS.black);
-      doc.text(WELCOME_PHRASE, PAGE_WIDTH / 2, y, { align: 'center' });
-      y += 10;
+      y = 38;
 
       // Filtros
       const filters = data.filters;
@@ -261,112 +270,56 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         }
       }
 
-      // Regra 3 e 10: Resumo de Indicadores - nomes negrito, resultados itálico, ícone
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(...COLORS.black);
-      doc.text(`${ICONS.resumo} Resumo de Indicadores`, MARGIN, y);
-      y += 8;
+      // Duas estatísticas por folha conforme especificado
+      const compactOpts = { chartHeight: COMPACT_CHART_HEIGHT };
+      const compactDonutOpts = { donutSize: COMPACT_DONUT_SIZE };
 
-      doc.setFontSize(11);
-      const kpis: [string, string | number][] = [
-        ['Total de Jogos', data.stats.totalGames],
-        ['Vitórias', data.stats.wins],
-        ['Derrotas', data.stats.losses],
-        ['Empates', data.stats.draws],
-        ['Gols Feitos (média)', data.stats.avgGoalsScored],
-        ['Gols Sofridos (média)', data.stats.avgGoalsConceded],
-        ['Período Mais Produtivo', `${data.timePeriodData.maxScoredPeriod.percentage}% - ${data.timePeriodData.maxScoredPeriod.period}`],
-        ['Período Mais Vulnerável', `${data.timePeriodData.maxConcededPeriod.percentage}% - ${data.timePeriodData.maxConcededPeriod.period}`],
-        ['Desarmes Realizados', data.gaugeData?.totalTackles ?? data.stats.tacklesTotal],
-        ['Passes Certos', data.stats.passesCorrect],
-        ['Passes Errados', data.stats.passesWrong],
-        ['Chutes no Gol', data.stats.shotsOn],
-        ['Chutes pra Fora', data.stats.shotsOff],
-        ['Erros de Transição', data.stats.wrongPassesTransition],
-        ['Cartões Amarelos', data.stats.yellowCards],
-        ['Cartões Vermelhos', data.stats.redCards],
-      ];
-      const col1X = MARGIN;
-      const col2X = MARGIN + 100;
-      let col = 0;
-      let rowY = y;
-      kpis.forEach(([label, value], i) => {
-        const x = col === 0 ? col1X : col2X;
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${label}:`, x, rowY);
-        doc.setFont('helvetica', 'italic');
-        doc.text(String(value), x + 55, rowY);
-        col++;
-        if (col === 2) {
-          col = 0;
-          rowY += 6;
-        }
-      });
-      y = rowY + (col === 1 ? 6 : 0) + 12;
-
-      // Regra 5: Cada seção em página própria - Meta de Desarmes
+      // Folha 1: Resumo de Indicadores (superior) + Meta de Desarmes (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      y = drawGaugeSection(doc, y, data.gaugeData, data.stats.tacklesTotal);
+      drawResumoSection(doc, TOP_CHART_Y, data);
+      drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
-      // Regra 5 e 6: Gráfico Passes - página própria, título direita, total esquerda, centralizado
+      // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      drawBarChartSection(doc, y, `${ICONS.passes} Passes Certos vs Errados`, data.chartData, [
+      drawBarChartSection(doc, TOP_CHART_Y, `${ICONS.passes} Passes Certos vs Errados`, data.chartData, [
         { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
-      ], data.stats.passesCorrect + data.stats.passesWrong);
-
-      newPageWithWatermark(doc);
-      y = MARGIN;
-      drawBarChartSection(doc, y, `${ICONS.chutes} Chutes no Gol vs Fora`, data.chartData, [
+      ], data.stats.passesCorrect + data.stats.passesWrong, compactOpts);
+      drawBarChartSection(doc, BOTTOM_CHART_Y, `${ICONS.chutes} Chutes no Gol vs Chutes pra Fora`, data.chartData, [
         { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
         { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
-      ], data.stats.shotsOn + data.stats.shotsOff);
+      ], data.stats.shotsOn + data.stats.shotsOff, compactOpts);
 
+      // Folha 3: Tipos de Desarmes (superior) + Erros Críticos Transição (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      drawBarChartSection(doc, y, `${ICONS.desarmes} Tipos de Desarme`, data.chartData, [
+      drawBarChartSection(doc, TOP_CHART_Y, `${ICONS.desarmes} Tipos de Desarmes`, data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
         { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.cyan },
-      ], data.stats.tacklesTotal);
-
-      newPageWithWatermark(doc);
-      y = MARGIN;
-      drawBarChartSection(doc, y, `${ICONS.transicao} Erros Críticos (Transição)`, data.chartData, [
+      ], data.stats.tacklesTotal, compactOpts);
+      drawBarChartSection(doc, BOTTOM_CHART_Y, `${ICONS.transicao} Erros Críticos (Transição)`, data.chartData, [
         { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
         { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
-      ], data.stats.wrongPassesTransition);
+      ], data.stats.wrongPassesTransition, compactOpts);
 
-      // Regra 7: Gols por Período com legendas do scout coletivo
+      // Folha 4: Gols Feitos por período (superior) + Gols Tomados por Período (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      drawTimePeriodChart(doc, y, `${ICONS.golsFeitos} Gols Feitos por Período`, data.timePeriodData.scoredDist, COLORS.green,
-        `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`);
+      drawTimePeriodChart(doc, TOP_CHART_Y, `${ICONS.golsFeitos} Gols Feitos por Período`, data.timePeriodData.scoredDist, COLORS.green,
+        `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,
+        compactOpts);
+      drawTimePeriodChart(doc, BOTTOM_CHART_Y, `${ICONS.golsTomados} Gols Tomados por Período`, data.timePeriodData.concededDist, COLORS.rose,
+        `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`,
+        compactOpts);
 
+      // Folha 5: Métodos de Gols Marcado - Métodos Detalhados (superior) + Origem do Gol (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      drawTimePeriodChart(doc, y, `${ICONS.golsTomados} Gols Tomados por Período`, data.timePeriodData.concededDist, COLORS.rose,
-        `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`);
+      drawDonutChartPage(doc, TOP_CHART_Y, `${ICONS.metodos} Métodos de Gols Marcado - Métodos Detalhados`, data.goalMethodsScoredData, PIE_COLORS_SCORED, compactDonutOpts);
+      drawDonutChartPage(doc, BOTTOM_CHART_Y, `${ICONS.metodos} Métodos de Gols Marcado - Origem do Gol`, data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], compactDonutOpts);
 
-      // Regra 8: Métodos e Origem - gráficos de rosca (donut), cada um em página própria
+      // Folha 6: Métodos de Gols Tomado - Métodos Detalhados (superior) + Origem do Gol (inferior)
       newPageWithWatermark(doc);
-      y = MARGIN;
-      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Marcado - Métodos Detalhados`, data.goalMethodsScoredData, PIE_COLORS_SCORED);
-
-      newPageWithWatermark(doc);
-      y = MARGIN;
-      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Marcado - Origem`, data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE]);
-
-      newPageWithWatermark(doc);
-      y = MARGIN;
-      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Tomado - Métodos Detalhados`, data.goalMethodsConcededData, PIE_COLORS_CONCEDED);
-
-      newPageWithWatermark(doc);
-      y = MARGIN;
-      drawDonutChartPage(doc, y, `${ICONS.metodos} Métodos de Gol Tomado - Origem`, data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE]);
+      drawDonutChartPage(doc, TOP_CHART_Y, `${ICONS.metodos} Métodos de Gols Tomado - Métodos Detalhados`, data.goalMethodsConcededData, PIE_COLORS_CONCEDED, compactDonutOpts);
+      drawDonutChartPage(doc, BOTTOM_CHART_Y, `${ICONS.metodos} Métodos de Gols Tomado - Origem do Gol`, data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], compactDonutOpts);
 
       // Regra 9: Footer com ícone WhatsApp em todas as páginas
       const whatsAppIconPng = await loadWhatsAppIconPng();
@@ -387,6 +340,50 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
   });
 }
 
+function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...COLORS.black);
+  doc.text(`${ICONS.resumo} RESUMO DE INDICADORES`, MARGIN, startY, { charSpace: -0.2 });
+  startY += 8;
+
+  doc.setFontSize(10);
+  const kpis: [string, string | number][] = [
+    ['Total de Jogos', data.stats.totalGames],
+    ['Vitórias', data.stats.wins],
+    ['Derrotas', data.stats.losses],
+    ['Empates', data.stats.draws],
+    ['Gols Feitos (média)', data.stats.avgGoalsScored],
+    ['Gols Sofridos (média)', data.stats.avgGoalsConceded],
+    ['Período Mais Produtivo', `${data.timePeriodData.maxScoredPeriod.percentage}% - ${data.timePeriodData.maxScoredPeriod.period}`],
+    ['Período Mais Vulnerável', `${data.timePeriodData.maxConcededPeriod.percentage}% - ${data.timePeriodData.maxConcededPeriod.period}`],
+    ['Desarmes Realizados', data.gaugeData?.totalTackles ?? data.stats.tacklesTotal],
+    ['Passes Certos', data.stats.passesCorrect],
+    ['Passes Errados', data.stats.passesWrong],
+    ['Chutes no Gol', data.stats.shotsOn],
+    ['Chutes pra Fora', data.stats.shotsOff],
+    ['Erros de Transição', data.stats.wrongPassesTransition],
+    ['Cartões Amarelos', data.stats.yellowCards],
+    ['Cartões Vermelhos', data.stats.redCards],
+  ];
+  const col1X = MARGIN;
+  const col2X = MARGIN + 100;
+  let col = 0;
+  let rowY = startY;
+  kpis.forEach(([label, value], i) => {
+    const x = col === 0 ? col1X : col2X;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${label}:`, x, rowY);
+    doc.setFont('helvetica', 'italic');
+    doc.text(String(value), x + 55, rowY);
+    col++;
+    if (col === 2) {
+      col = 0;
+      rowY += 6;
+    }
+  });
+}
+
 function drawGaugeSection(
   doc: jsPDF,
   startY: number,
@@ -394,9 +391,9 @@ function drawGaugeSection(
   tacklesTotal: number
 ): number {
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  doc.text(`${ICONS.gauge} Meta de Desarmes`, MARGIN, startY);
+  doc.text(`${ICONS.gauge} META DE DESARMES`, MARGIN, startY, { charSpace: -0.2 });
   startY += 8;
 
   doc.setFont('helvetica', 'normal');
@@ -424,21 +421,26 @@ function drawGaugeSection(
   return startY;
 }
 
+function chartTitleStyle(doc: jsPDF, title: string): string {
+  return title.toUpperCase();
+}
+
 function drawBarChartSection(
   doc: jsPDF,
   startY: number,
   title: string,
   chartData: ScoutPdfData['chartData'],
   series: Array<{ key: keyof ScoutPdfData['chartData'][0]; label: string; color: [number, number, number] }>,
-  total: number
+  total: number,
+  opts?: { chartHeight?: number }
 ): void {
-  // Regra 6: Total canto superior esquerdo negrito, título canto superior direito
+  const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  doc.text(`Total: ${total}`, MARGIN, startY);
-  const titleW = doc.getTextWidth(title);
-  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
+  const totalW = doc.getTextWidth(`Total: ${total}`);
+  doc.text(`Total: ${total}`, PAGE_WIDTH - MARGIN - totalW, startY);
   startY += 8;
 
   if (chartData.length === 0) {
@@ -448,7 +450,7 @@ function drawBarChartSection(
     return;
   }
 
-  const chartHeight = 45;
+  const chartHeight = opts?.chartHeight ?? 45;
   const chartTop = startY + 5;
   const barAreaWidth = CONTENT_WIDTH - 50;
   const chartCenterX = MARGIN + 45 + barAreaWidth / 2;
@@ -501,21 +503,22 @@ function drawTimePeriodChart(
   title: string,
   data: Array<{ period: string; value: number }>,
   color: [number, number, number],
-  legendText?: string
+  legendText?: string,
+  opts?: { chartHeight?: number }
 ): void {
-  // Regra 6: Total esquerda, título direita
+  const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
+  doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
   const total = data.reduce((s, d) => s + d.value, 0);
-  doc.text(`Total: ${total}`, MARGIN, startY);
-  const titleW = doc.getTextWidth(title);
-  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  const totalW = doc.getTextWidth(`Total: ${total}`);
+  doc.text(`Total: ${total}`, PAGE_WIDTH - MARGIN - totalW, startY);
   startY += 8;
 
   if (!data.length) return;
 
-  const chartHeight = 40;
+  const chartHeight = opts?.chartHeight ?? 40;
   const chartWidth = CONTENT_WIDTH - 50;
   const chartCenterX = MARGIN + 45 + chartWidth / 2;
   const maxVal = Math.max(...data.map((d) => d.value), 1);
@@ -593,16 +596,18 @@ function drawDonutChartPage(
   startY: number,
   title: string,
   data: Array<{ name: string; value: number; percentage: string }>,
-  colors: [number, number, number][]
+  colors: [number, number, number][],
+  opts?: { donutSize?: number }
 ): void {
+  const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10);
   doc.setTextColor(...COLORS.black);
-  const titleW = doc.getTextWidth(title);
-  doc.text(title, PAGE_WIDTH - MARGIN - titleW, startY);
+  doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
   const total = data.reduce((s, d) => s + d.value, 0);
-  doc.text(`Total: ${total}`, MARGIN, startY);
-  startY += 10;
+  const totalW = doc.getTextWidth(`Total: ${total}`);
+  doc.text(`Total: ${total}`, PAGE_WIDTH - MARGIN - totalW, startY);
+  startY += 8;
 
   if (data.length === 0 || total === 0) {
     doc.setFont('helvetica', 'normal');
@@ -610,7 +615,7 @@ function drawDonutChartPage(
     return;
   }
 
-  const donutSize = 70;
+  const donutSize = opts?.donutSize ?? 70;
   const centerX = PAGE_WIDTH / 2;
   const donutImg = createDonutImage(data, colors, 300);
   doc.addImage(donutImg, 'PNG', centerX - donutSize / 2, startY, donutSize, donutSize);
