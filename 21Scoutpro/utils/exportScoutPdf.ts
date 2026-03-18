@@ -62,13 +62,14 @@ const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const WATERMARK_CENTER_Y = PAGE_HEIGHT / 2;
+const FOOTER_Y = WATERMARK_CENTER_Y + 18;
 const TOP_CHART_Y = 25;
 const GAP_FROM_WATERMARK = 62;
 const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
 const COMPACT_CHART_HEIGHT = 32;
 const COMPACT_DONUT_SIZE = 32;
-const HEADER_PHRASE_SIZE = 20;
-const HEADER_HEIGHT = 20;
+const HEADER_PHRASE_SIZE = 16;
+const HEADER_HEIGHT = 18;
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -199,7 +200,6 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...COLORS.gray);
-  const footerY = 288;
   const iconSize = 4;
   const text = `WhatsApp: ${WHATSAPP}  |  ${SITE.replace('https://', '')}`;
   if (whatsAppIconPng) {
@@ -207,13 +207,13 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
       const tw = doc.getTextWidth(text);
       const totalW = iconSize + 2 + tw;
       const startX = (PAGE_WIDTH - totalW) / 2;
-      doc.addImage(whatsAppIconPng, 'PNG', startX, footerY - iconSize / 2, iconSize, iconSize);
-      doc.text(text, startX + iconSize + 2, footerY);
+      doc.addImage(whatsAppIconPng, 'PNG', startX, FOOTER_Y - iconSize / 2, iconSize, iconSize);
+      doc.text(text, startX + iconSize + 2, FOOTER_Y);
     } catch {
-      doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
+      doc.text(text, PAGE_WIDTH / 2, FOOTER_Y, { align: 'center' });
     }
   } else {
-    doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
+    doc.text(text, PAGE_WIDTH / 2, FOOTER_Y, { align: 'center' });
   }
 }
 
@@ -224,13 +224,13 @@ function drawHeader(doc: jsPDF, logoBase64: string | null): void {
   if (logoBase64) {
     doc.addImage(logoBase64, 'PNG', 0, 2, logoW, 14);
   }
-  // Frase: tamanho 20, Calibri (Helvetica normal como fallback), sem negrito, sem itálico
+  // Frase: Calibri tamanho 16 (Helvetica como fallback). Apenas SCOUT21 em negrito itálico.
   doc.setFontSize(HEADER_PHRASE_SIZE);
   doc.setFont('helvetica', 'normal');
   const fullPhrase = HEADER_PHRASE_PART1 + HEADER_PHRASE_PART2;
   const phraseWrapWidth = PAGE_WIDTH - logoW - 20;
   const phraseLines = doc.splitTextToSize(fullPhrase, phraseWrapWidth);
-  const lineH = HEADER_PHRASE_SIZE * 0.4;
+  const lineH = HEADER_PHRASE_SIZE * 0.42;
   const totalH = phraseLines.length * lineH;
   const phraseStartY = (HEADER_HEIGHT - totalH) / 2 + lineH * 0.85;
   const phraseCenterX = (logoW + PAGE_WIDTH) / 2;
@@ -238,16 +238,22 @@ function drawHeader(doc: jsPDF, logoBase64: string | null): void {
     const y = phraseStartY + i * lineH;
     if (line.startsWith('SCOUT21')) {
       const rest = line.replace(/^SCOUT21\s*/, '');
+      doc.setFont('helvetica', 'bolditalic');
       const w1 = doc.getTextWidth('SCOUT21');
-      const lineW = doc.getTextWidth(line);
+      doc.setFont('helvetica', 'normal');
+      const w2 = rest ? doc.getTextWidth(rest) : 0;
+      const lineW = w1 + w2;
       const startX = phraseCenterX - lineW / 2;
+      doc.setFont('helvetica', 'bolditalic');
       doc.setTextColor(...COLORS.cyan);
       doc.text('SCOUT21', startX, y);
       if (rest) {
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(...COLORS.white);
         doc.text(rest, startX + w1, y);
       }
     } else {
+      doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.white);
       doc.text(line, phraseCenterX, y, { align: 'center' });
     }
