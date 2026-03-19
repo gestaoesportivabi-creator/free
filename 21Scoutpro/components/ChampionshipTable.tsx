@@ -101,6 +101,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     });
     const [showChampionshipMatchesForm, setShowChampionshipMatchesForm] = useState(false);
     const [currentChampionshipId, setCurrentChampionshipId] = useState<string | null>(null);
+    const [currentChampionshipName, setCurrentChampionshipName] = useState<string>('');
     const [championshipMatchesForm, setChampionshipMatchesForm] = useState<ChampionshipMatch[]>([]);
     
     // Estados para importação
@@ -216,9 +217,10 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             onSaveChampionship(championshipToSave);
         }
         
-        // Fechar modal e abrir formulário de partidas
+        // Fechar modal e abrir formulário de partidas (nome do campeonato preenchido em todas)
         setShowChampionshipModal(false);
         setCurrentChampionshipId(championshipToSave.id);
+        setCurrentChampionshipName(championshipToSave.name);
         setChampionshipMatchesForm([{
             id: '',
             date: new Date().toISOString().split('T')[0],
@@ -233,12 +235,13 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     
     const handleAddChampionshipMatch = () => {
         const championship = championships.find(c => c.id === currentChampionshipId);
+        const competitionName = currentChampionshipName || championship?.name || '';
         setChampionshipMatchesForm([...championshipMatchesForm, {
             id: '',
             date: new Date().toISOString().split('T')[0],
             time: '20:00',
             opponent: '',
-            competition: championship?.name || '',
+            competition: competitionName,
             location: 'Mandante',
             scoreTarget: ''
         }]);
@@ -274,6 +277,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         setShowChampionshipMatchesForm(false);
         setChampionshipMatchesForm([]);
         setCurrentChampionshipId(null);
+        setCurrentChampionshipName('');
     };
     
     // Funções para importação
@@ -1164,6 +1168,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     setShowChampionshipMatchesForm(false);
                                     setChampionshipMatchesForm([]);
                                     setCurrentChampionshipId(null);
+                                    setCurrentChampionshipName('');
                                 }}
                                 className="text-zinc-400 hover:text-white transition-colors"
                             >
@@ -1288,6 +1293,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     setShowChampionshipMatchesForm(false);
                                     setChampionshipMatchesForm([]);
                                     setCurrentChampionshipId(null);
+                                    setCurrentChampionshipName('');
                                 }}
                                 className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 font-bold uppercase text-xs rounded-xl transition-colors"
                             >
