@@ -1616,6 +1616,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingAssistPlayerId(null);
     setPendingGoalTime(null);
     setPendingGoalPeriod(null);
+    setPendingGoalMethod(null);
     setGoalConfirmEditingTime(false);
     setGoalStep(null);
     // Em postmatch: resetar tempo manual para que o próximo evento peça o tempo novamente
@@ -2870,6 +2871,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         onClick={() => {
                           setPendingGoalIsOpponent(false);
                           setPendingGoalType('normal');
+                          setPendingGoalMethod(null);
+                          setPendingGoalPlayerId(null);
+                          setPendingAssistPlayerId(null);
                           setGoalStep('author');
                         }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
@@ -2900,7 +2904,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         Gol Adversário
                       </button>
                       <button
-                        onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setGoalConfirmEditingTime(false); }}
+                        onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setPendingGoalMethod(null); setPendingGoalType(null); setPendingGoalIsOpponent(false); setPendingGoalPlayerId(null); setPendingAssistPlayerId(null); setGoalConfirmEditingTime(false); }}
                         className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors"
                       >
                         Cancelar
@@ -3003,6 +3007,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       setPendingAssistPlayerId(null);
                       setPendingGoalTime(null);
                       setPendingGoalPeriod(null);
+                      setPendingGoalMethod(null);
                       setGoalConfirmEditingTime(false);
                     }}
                     aria-hidden="true"
