@@ -58,19 +58,23 @@ const PIE_ORIGIN_BLUE = [0, 240, 255] as [number, number, number];
 const PIE_ORIGIN_SLATE = [113, 113, 122] as [number, number, number];
 
 const MARGIN = 15;
-const PAGE_WIDTH = 210;
-const PAGE_HEIGHT = 297;
+// A4 paisagem: 297mm x 210mm
+const PAGE_WIDTH = 297;
+const PAGE_HEIGHT = 210;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const WATERMARK_CENTER_Y = PAGE_HEIGHT / 2;
+// Footer das páginas de gráficos (para não invadir a área dos donuts/legendas)
 const FOOTER_Y = WATERMARK_CENTER_Y + 10;
-const TOP_CHART_Y = 25;
-const GAP_FROM_WATERMARK = 62;
+// Ajuste de espaçamento para paisagem (mantém proporção do layout em retrato)
+const TOP_CHART_Y = 18;
+const GAP_FROM_WATERMARK = 44;
 const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
 const COMPACT_CHART_HEIGHT = 32;
 const COMPACT_DONUT_SIZE = 32;
 const HEADER_PHRASE_SIZE = 16;
 const HEADER_HEIGHT = 18;
 const COVER_TITLE = 'ANÁLISE DE ESTATÍSTICAS DO CLUBE';
+const COVER_FOOTER_Y = PAGE_HEIGHT - 12;
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -203,7 +207,7 @@ function fillBackground(doc: jsPDF): void {
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
 }
 
-function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
+function drawFooter(doc: jsPDF, whatsAppIconPng: string | null, footerY: number): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(170, 170, 170);
@@ -214,13 +218,13 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
       const tw = doc.getTextWidth(text);
       const totalW = iconSize + 2 + tw;
       const startX = (PAGE_WIDTH - totalW) / 2;
-      doc.addImage(whatsAppIconPng, 'PNG', startX, FOOTER_Y - iconSize / 2, iconSize, iconSize);
-      doc.text(text, startX + iconSize + 2, FOOTER_Y);
+      doc.addImage(whatsAppIconPng, 'PNG', startX, footerY - iconSize / 2, iconSize, iconSize);
+      doc.text(text, startX + iconSize + 2, footerY);
     } catch {
-      doc.text(text, PAGE_WIDTH / 2, FOOTER_Y, { align: 'center' });
+      doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
     }
   } else {
-    doc.text(text, PAGE_WIDTH / 2, FOOTER_Y, { align: 'center' });
+    doc.text(text, PAGE_WIDTH / 2, footerY, { align: 'center' });
   }
 }
 
@@ -232,40 +236,7 @@ function drawHeader(doc: jsPDF, logoBase64: string | null): void {
   if (logoBase64) {
     doc.addImage(logoBase64, 'PNG', 0, 2, logoW, 14);
   }
-  // Frase: Calibri tamanho 16 (Helvetica como fallback). Apenas SCOUT21 em negrito itálico.
-  doc.setFontSize(HEADER_PHRASE_SIZE);
-  doc.setFont('helvetica', 'normal');
-  const fullPhrase = HEADER_PHRASE_PART1 + HEADER_PHRASE_PART2;
-  const phraseWrapWidth = PAGE_WIDTH - logoW - 20;
-  const phraseLines = doc.splitTextToSize(fullPhrase, phraseWrapWidth);
-  const lineH = HEADER_PHRASE_SIZE * 0.42;
-  const totalH = phraseLines.length * lineH;
-  const phraseStartY = (HEADER_HEIGHT - totalH) / 2 + lineH * 0.85;
-  const phraseCenterX = (logoW + PAGE_WIDTH) / 2;
-  phraseLines.forEach((line, i) => {
-    const y = phraseStartY + i * lineH;
-    if (line.startsWith('SCOUT21')) {
-      const rest = line.replace(/^SCOUT21\s*/, '');
-      doc.setFont('helvetica', 'bolditalic');
-      const w1 = doc.getTextWidth('SCOUT21');
-      doc.setFont('helvetica', 'normal');
-      const w2 = rest ? doc.getTextWidth(rest) : 0;
-      const lineW = w1 + w2;
-      const startX = phraseCenterX - lineW / 2;
-      doc.setFont('helvetica', 'bolditalic');
-      doc.setTextColor(...COLORS.cyan);
-      doc.text('SCOUT21', startX, y);
-      if (rest) {
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...COLORS.white);
-        doc.text(rest, startX + w1, y);
-      }
-    } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...COLORS.white);
-      doc.text(line, phraseCenterX, y, { align: 'center' });
-    }
-  });
+  // Na página do resumo, manter apenas o logo (a frase vai para a capa).
 }
 
 function newPageWithWatermark(doc: jsPDF): void {
@@ -289,22 +260,44 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
     const cleanup = () => overlay.remove();
 
     try {
-      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
       const logoBase64 = await loadLogoBase64();
 
-      // CAPA: fundo preto + título + nome do clube (Configurações)
+      // CAPA (página 1): fundo preto + título superior (quebra de linha) + nome do clube
+      // + logo central SCOUT21 (ciano, negrito itálico) e tagline (branco, fonte 20)
       fillBackground(doc);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...COLORS.white);
-      doc.setFontSize(40);
-      doc.text(COVER_TITLE, PAGE_WIDTH / 2, 120, { align: 'center' });
 
+      // Título superior com quebra de linha
+      const titleLines = doc.splitTextToSize(COVER_TITLE, PAGE_WIDTH - MARGIN * 2);
+      const titleStartY = 18;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(32);
+      doc.setTextColor(...COLORS.white);
+      doc.text(titleLines as string[], PAGE_WIDTH / 2, titleStartY, { align: 'center' });
+
+      // Nome do clube (Configurações) logo abaixo do título
       const teamNameUpper = (data.teamName || '').trim().toUpperCase();
       if (teamNameUpper) {
+        const clubNameY = titleStartY + titleLines.length * 8 + 6;
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(22);
-        doc.text(teamNameUpper, PAGE_WIDTH / 2, 145, { align: 'center' });
+        doc.setTextColor(...COLORS.white);
+        doc.text(teamNameUpper, PAGE_WIDTH / 2, clubNameY, { align: 'center' });
       }
+
+      // Centro da capa: "SCOUT21" como logo
+      const scoutLogoY = 98;
+      doc.setFont('helvetica', 'bolditalic');
+      doc.setFontSize(38);
+      doc.setTextColor(...COLORS.cyan);
+      doc.text(BRAND_NAME, PAGE_WIDTH / 2, scoutLogoY, { align: 'center' });
+
+      // Tagline abaixo do logo
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(20);
+      doc.setTextColor(...COLORS.white);
+      doc.text('Gestão esportiva baseada em dados para decisões', PAGE_WIDTH / 2, scoutLogoY + 22, { align: 'center' });
+      doc.text('vencedoras.', PAGE_WIDTH / 2, scoutLogoY + 32, { align: 'center' });
 
       // Folha 1 (conteúdo): cabeçalho + marca d'água + RESUMO (sup) + META (inf)
       doc.addPage();
@@ -370,7 +363,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
-        drawFooter(doc, whatsAppIconPng);
+        drawFooter(doc, whatsAppIconPng, p === 1 ? COVER_FOOTER_Y : FOOTER_Y);
       }
 
       const filename = `scout-coletivo-${new Date().toISOString().slice(0, 10)}.pdf`;
