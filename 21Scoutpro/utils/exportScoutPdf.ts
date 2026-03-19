@@ -70,6 +70,7 @@ const COMPACT_CHART_HEIGHT = 32;
 const COMPACT_DONUT_SIZE = 32;
 const HEADER_PHRASE_SIZE = 16;
 const HEADER_HEIGHT = 18;
+const COVER_TITLE = 'ANÁLISE DE ESTATÍSTICAS DO CLUBE';
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -191,15 +192,21 @@ function drawWatermark(doc: jsPDF): void {
   }
   doc.setFont('helvetica', 'bolditalic');
   doc.setFontSize(72);
-  doc.setTextColor(180, 180, 180);
+  // Marca d'água em fundo preto: cinza mais sutil
+  doc.setTextColor(120, 120, 120);
   doc.text(BRAND_NAME, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center' });
   doc.restoreGraphicsState();
+}
+
+function fillBackground(doc: jsPDF): void {
+  doc.setFillColor(...COLORS.black);
+  doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
 }
 
 function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...COLORS.gray);
+  doc.setTextColor(170, 170, 170);
   const iconSize = 4;
   const text = `WhatsApp: ${WHATSAPP}  |  ${SITE.replace('https://', '')}`;
   if (whatsAppIconPng) {
@@ -218,6 +225,7 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null): void {
 }
 
 function drawHeader(doc: jsPDF, logoBase64: string | null): void {
+  // Header em preto (sobre fundo preto) para manter layout do sistema
   doc.setFillColor(...COLORS.black);
   doc.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, 'F');
   const logoW = 14;
@@ -262,6 +270,7 @@ function drawHeader(doc: jsPDF, logoBase64: string | null): void {
 
 function newPageWithWatermark(doc: jsPDF): void {
   doc.addPage();
+  fillBackground(doc);
   drawWatermark(doc);
 }
 
@@ -283,15 +292,32 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
       const logoBase64 = await loadLogoBase64();
 
-      // Folha 1: cabeçalho + marca d'água + RESUMO DE INDICADORES (superior) + META DE DESARMES (inferior)
+      // CAPA: fundo preto + título + nome do clube (Configurações)
+      fillBackground(doc);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.white);
+      doc.setFontSize(40);
+      doc.text(COVER_TITLE, PAGE_WIDTH / 2, 120, { align: 'center' });
+
+      const teamNameUpper = (data.teamName || '').trim().toUpperCase();
+      if (teamNameUpper) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(22);
+        doc.text(teamNameUpper, PAGE_WIDTH / 2, 145, { align: 'center' });
+      }
+
+      // Folha 1 (conteúdo): cabeçalho + marca d'água + RESUMO (sup) + META (inf)
+      doc.addPage();
+      fillBackground(doc);
       drawHeader(doc, logoBase64);
       drawWatermark(doc);
       drawResumoSection(doc, TOP_CHART_Y, data);
       drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
       const compactOpts = { chartHeight: COMPACT_CHART_HEIGHT };
-      const topDonutOpts = { donutSize: COMPACT_DONUT_SIZE };
-      const bottomDonutOpts = { donutSize: 42 };
+      // Donuts: "detalhados" precisam de mais área para legenda (página cheia)
+      const detailedDonutOpts = { donutSize: 58 };
+      const originDonutOpts = { donutSize: 62 };
 
       // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
       newPageWithWatermark(doc);
@@ -325,15 +351,19 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`,
         compactOpts);
 
-      // Folha 5: Métodos de Gols Marcado - Métodos Detalhados (superior) + Origem do Gol (inferior)
+      // Métodos de gols — dar mais espaço para os donuts apresentarem todos os dados
+      // Página: Marcados (detalhados)
       newPageWithWatermark(doc);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, topDonutOpts);
-      drawDonutChartPage(doc, BOTTOM_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], bottomDonutOpts);
-
-      // Folha 6: Métodos de Gols Tomado - Métodos Detalhados (superior) + Origem do Gol (inferior)
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, detailedDonutOpts);
+      // Página: Marcados (origem)
       newPageWithWatermark(doc);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, topDonutOpts);
-      drawDonutChartPage(doc, BOTTOM_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], bottomDonutOpts);
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], originDonutOpts);
+      // Página: Tomados (detalhados)
+      newPageWithWatermark(doc);
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, detailedDonutOpts);
+      // Página: Tomados (origem)
+      newPageWithWatermark(doc);
+      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], originDonutOpts);
 
       // Regra 9: Footer com ícone WhatsApp em todas as páginas
       const whatsAppIconPng = await loadWhatsAppIconPng();
@@ -357,7 +387,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   doc.text('RESUMO DE INDICADORES', MARGIN, startY, { charSpace: -0.2 });
   startY += 8;
 
@@ -387,8 +417,10 @@ function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void
   kpis.forEach(([label, value], i) => {
     const x = col === 0 ? col1X : col2X;
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.white);
     doc.text(`${label}:`, x, rowY);
     doc.setFont('helvetica', 'italic');
+    doc.setTextColor(...COLORS.white);
     doc.text(String(value), x + 55, rowY);
     col++;
     if (col === 2) {
@@ -406,13 +438,13 @@ function drawGaugeSection(
 ): number {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   doc.text('META DE DESARMES', MARGIN, startY, { charSpace: -0.2 });
   startY += 8;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
 
   const totalTackles = gaugeData?.totalTackles ?? tacklesTotal;
 
@@ -422,6 +454,7 @@ function drawGaugeSection(
     doc.text(`Meta total (soma das metas por partida): ${Math.round(gaugeData.tackleTarget)}`, MARGIN, startY);
     startY += 6;
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.white);
     doc.text(`Percentual (em relação às metas das partidas realizadas e salvas): ${gaugeData.percentageDisplay}%`, MARGIN, startY);
     doc.setFont('helvetica', 'normal');
     startY += 8;
@@ -451,7 +484,7 @@ function drawBarChartSection(
   const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
   const totalW = doc.getTextWidth(`Total: ${total}`);
   doc.text(`Total: ${total}`, PAGE_WIDTH - MARGIN - totalW, startY);
@@ -485,7 +518,7 @@ function drawBarChartSection(
         const barH = chartHeight - 8;
         doc.rect(stackX, chartTop + chartHeight - 4 - barH, w, barH, 'F');
         doc.setFontSize(8);
-        doc.setTextColor(...COLORS.black);
+        doc.setTextColor(...COLORS.white);
         if (val > 0) doc.text(String(val), stackX + w / 2 - 2, chartTop + chartHeight - 6, { align: 'center' });
         stackX += w + 2;
       }
@@ -493,7 +526,7 @@ function drawBarChartSection(
   });
 
   doc.setFontSize(8);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   chartData.forEach((d, i) => {
     const x = MARGIN + 45 + i * blockWidth + blockWidth / 2 - 5;
     const name = d.name.length > 8 ? d.name.slice(0, 7) + '…' : d.name;
@@ -506,6 +539,7 @@ function drawBarChartSection(
   series.forEach((s) => {
     doc.setFillColor(...s.color);
     doc.rect(legX, chartTop + chartHeight + 12, 4, 3, 'F');
+    doc.setTextColor(...COLORS.white);
     doc.text(s.label, legX + 6, chartTop + chartHeight + 14);
     legX += 40;
   });
@@ -523,7 +557,7 @@ function drawTimePeriodChart(
   const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
   const total = data.reduce((s, d) => s + d.value, 0);
   const totalW = doc.getTextWidth(`Total: ${total}`);
@@ -547,13 +581,13 @@ function drawTimePeriodChart(
     }
     if (d.value > 0) {
       doc.setFontSize(7);
-      doc.setTextColor(...COLORS.black);
+      doc.setTextColor(...COLORS.white);
       doc.text(String(d.value), x + barW / 2 - 1, startY + chartHeight - h - 2, { align: 'center' });
     }
   });
 
   doc.setFontSize(7);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   data.forEach((d, i) => {
     const x = MARGIN + 45 + i * (chartWidth / data.length) + barW / 2 - 3;
     const label = d.period.split('-')[0] || d.period;
@@ -564,6 +598,7 @@ function drawTimePeriodChart(
   if (legendText) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
+    doc.setTextColor(...COLORS.white);
     doc.text(legendText, chartCenterX, startY + chartHeight + 18, { align: 'center' });
   }
 }
@@ -616,7 +651,7 @@ function drawDonutChartPage(
   const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(...COLORS.black);
+  doc.setTextColor(...COLORS.white);
   doc.text(titleUpper, MARGIN, startY, { charSpace: -0.2 });
   const total = data.reduce((s, d) => s + d.value, 0);
   const totalW = doc.getTextWidth(`Total: ${total}`);
@@ -633,12 +668,15 @@ function drawDonutChartPage(
   const centerX = PAGE_WIDTH / 2;
   const donutImg = createDonutImage(data, colors, 300);
   doc.addImage(donutImg, 'PNG', centerX - donutSize / 2, startY, donutSize, donutSize);
-  const legendRowH = donutSize <= 40 ? 5 : 8;
-  startY += donutSize + (donutSize <= 40 ? 6 : 12);
+  // Mais respiro entre donut e legenda (especialmente em "detalhados")
+  const legendRowH = donutSize <= 40 ? 6 : 9;
+  const legendGap = donutSize <= 40 ? 10 : 16;
+  startY += donutSize + legendGap;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(donutSize <= 40 ? 8 : 9);
-  const itemsPerRow = Math.min(data.length, 3);
+  // Em listas maiores, usar 2 colunas para caber todos os itens com melhor leitura
+  const itemsPerRow = data.length > 8 ? 2 : Math.min(data.length, 3);
   const colW = CONTENT_WIDTH / itemsPerRow;
   data.forEach((r, i) => {
     const col = i % itemsPerRow;
@@ -647,7 +685,8 @@ function drawDonutChartPage(
     const legY = startY + row * legendRowH;
     doc.setFillColor(...colors[i % colors.length]);
     doc.rect(legX, legY - 1, 3, 3, 'F');
-    const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
+    const nameLimit = itemsPerRow === 2 ? 30 : 22;
+    const name = r.name.length > nameLimit ? r.name.slice(0, nameLimit - 1) + '…' : r.name;
     doc.text(`${name} (${r.percentage}%)`, legX + 5, legY + 2);
   });
 }
