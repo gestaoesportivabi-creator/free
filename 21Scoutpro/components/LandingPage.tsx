@@ -174,7 +174,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
         <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-12 py-3 md:py-4">
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center shrink-0">
-              <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-12 md:h-14 w-auto" />
+              <div className="h-12 w-12 md:h-14 md:w-14 rounded-full bg-zinc-900/90 ring-2 ring-zinc-800 flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(0,240,255,0.15)]">
+                <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-[88%] w-[88%] object-contain object-center" />
+              </div>
             </div>
             <div className="hidden md:flex items-center gap-8">
               {NAV_LINKS.map(({ href, label }) => (
@@ -606,7 +608,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
       <footer className="py-12 px-4 sm:px-6 bg-black border-t border-zinc-800">
         <div className="max-w-5xl mx-auto text-center space-y-4">
           <div className="inline-flex items-center justify-center">
-            <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-12 w-auto" />
+            <div className="h-14 w-14 rounded-full bg-zinc-900/90 ring-2 ring-zinc-800 flex items-center justify-center overflow-hidden mx-auto">
+              <img src="/public-logo.png.png" alt="SCOUT21 Logo" className="h-[88%] w-[88%] object-contain object-center" />
+            </div>
           </div>
           <p className="landing-body text-zinc-500">
             Plataforma brasileira de gestão e performance para futsal

@@ -137,7 +137,8 @@ export interface ScoutPdfData {
   teamName?: string;
 }
 
-function loadLogoBase64(): Promise<string | null> {
+/** Logo PNG (fundo transparente) para cabeçalho e capa do PDF */
+function loadLogoForPdf(): Promise<{ dataUrl: string; width: number; height: number } | null> {
   return new Promise((resolve) => {
     const url = window.location.origin + LOGO_URL;
     const img = new Image();
@@ -150,7 +151,11 @@ function loadLogoBase64(): Promise<string | null> {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/png'));
+          resolve({
+            dataUrl: canvas.toDataURL('image/png'),
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+          });
         } else resolve(null);
       } catch {
         resolve(null);
@@ -261,7 +266,8 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
-      const logoBase64 = await loadLogoBase64();
+      const logoPdf = await loadLogoForPdf();
+      const logoBase64 = logoPdf?.dataUrl ?? null;
 
       // CAPA (página 1): fundo preto + título superior (quebra de linha) + nome do clube
       // + logo central SCOUT21 (ciano, negrito itálico) e tagline (branco, fonte 20)
@@ -285,19 +291,38 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         doc.text(teamNameUpper, PAGE_WIDTH / 2, clubNameY, { align: 'center' });
       }
 
-      // Centro da capa: "SCOUT21" como logo
-      const scoutLogoY = 98;
-      doc.setFont('helvetica', 'bolditalic');
-      doc.setFontSize(38);
-      doc.setTextColor(...COLORS.cyan);
-      doc.text(BRAND_NAME, PAGE_WIDTH / 2, scoutLogoY, { align: 'center' });
+      // Centro da capa: logo PNG (transparente) ou texto fallback
+      const scoutLogoCenterY = 98;
+      let taglineStartY = scoutLogoCenterY + 22;
+      if (logoPdf && logoBase64) {
+        const maxLogoW = 78;
+        const aspect = logoPdf.width / Math.max(logoPdf.height, 1);
+        const imgW = maxLogoW;
+        const imgH = maxLogoW / aspect;
+        const x = PAGE_WIDTH / 2 - imgW / 2;
+        const yTop = scoutLogoCenterY - imgH / 2;
+        try {
+          doc.addImage(logoBase64, 'PNG', x, yTop, imgW, imgH);
+        } catch {
+          doc.setFont('helvetica', 'bolditalic');
+          doc.setFontSize(38);
+          doc.setTextColor(...COLORS.cyan);
+          doc.text(BRAND_NAME, PAGE_WIDTH / 2, scoutLogoCenterY, { align: 'center' });
+        }
+        taglineStartY = yTop + imgH + 10;
+      } else {
+        doc.setFont('helvetica', 'bolditalic');
+        doc.setFontSize(38);
+        doc.setTextColor(...COLORS.cyan);
+        doc.text(BRAND_NAME, PAGE_WIDTH / 2, scoutLogoCenterY, { align: 'center' });
+      }
 
       // Tagline abaixo do logo
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(20);
       doc.setTextColor(...COLORS.white);
-      doc.text('Gestão esportiva baseada em dados para decisões', PAGE_WIDTH / 2, scoutLogoY + 22, { align: 'center' });
-      doc.text('vencedoras.', PAGE_WIDTH / 2, scoutLogoY + 32, { align: 'center' });
+      doc.text('Gestão esportiva baseada em dados para decisões', PAGE_WIDTH / 2, taglineStartY, { align: 'center' });
+      doc.text('vencedoras.', PAGE_WIDTH / 2, taglineStartY + 10, { align: 'center' });
 
       // Folha 1 (conteúdo): cabeçalho + marca d'água + RESUMO (sup) + META (inf)
       doc.addPage();

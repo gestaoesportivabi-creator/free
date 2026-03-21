@@ -64,11 +64,11 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
                 <div className="mb-10 text-center">
                     {/* Logo Oficial */}
                     <div className="flex justify-center mb-8">
-                        <div className="relative w-40 h-40 flex items-center justify-center border-[3px] border-[#00f0ff] bg-black/60 shadow-[0_0_40px_rgba(0,240,255,0.3)] rounded-2xl transform rotate-3 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_50px_rgba(0,240,255,0.5)] overflow-hidden">
+                        <div className="relative w-32 h-32 sm:w-36 sm:h-36 flex items-center justify-center rounded-full border-[3px] border-[#00f0ff] bg-zinc-900/90 shadow-[0_0_40px_rgba(0,240,255,0.35)] ring-2 ring-cyan-500/30 overflow-hidden shrink-0 transition-transform duration-300 hover:scale-105 hover:shadow-[0_0_50px_rgba(0,240,255,0.5)]">
                             <img
                                 src={LOGO_IMAGE}
                                 alt="SCOUT21"
-                                className="w-full h-full object-contain p-4"
+                                className="w-[92%] h-[92%] object-contain object-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
                             />
                         </div>
                     </div>
@@ -157,11 +157,11 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
                         <span className="text-zinc-300 font-light text-xs md:text-sm tracking-wide">
                             Junte-se ao <span className="text-[#00f0ff] font-bold italic">SCOUT21</span>
                         </span>
-                        <div className="w-5 h-5 border border-zinc-600/50 rounded flex items-center justify-center bg-black/90 shrink-0 ml-1 overflow-hidden">
+                        <div className="w-6 h-6 border border-zinc-600/50 rounded-full flex items-center justify-center bg-zinc-900/90 shrink-0 ml-1 overflow-hidden">
                             <img
                                 src={LOGO_IMAGE}
                                 alt="SCOUT21"
-                                className="w-full h-full object-contain p-0.5"
+                                className="w-[90%] h-[90%] object-contain"
                             />
                         </div>
                     </div>

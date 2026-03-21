@@ -99,11 +99,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
           <div className="flex items-center justify-between gap-6">
             <div className="flex items-center shrink-0">
               {onBackToHome ? (
-                <button type="button" onClick={onBackToHome} className="hover:opacity-80 transition-opacity cursor-pointer">
-                  <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-12 md:h-14 lg:h-16 w-auto" />
+                <button type="button" onClick={onBackToHome} className="hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center rounded-full bg-zinc-900/90 ring-2 ring-zinc-800 h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.2)]">
+                  <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-[88%] w-[88%] object-contain object-center" />
                 </button>
               ) : (
-                <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-12 md:h-14 lg:h-16 w-auto" />
+                <div className="flex items-center justify-center rounded-full bg-zinc-900/90 ring-2 ring-zinc-800 h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16 overflow-hidden shadow-[0_0_18px_rgba(0,240,255,0.2)]">
+                  <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-[88%] w-[88%] object-contain object-center" />
+                </div>
               )}
             </div>
             <div className="flex items-center gap-3 md:gap-4">
@@ -139,11 +141,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
         <div className="mb-4 text-center">
             {/* Logo Oficial */}
             <div className="flex justify-center mb-3">
-                <div className="relative w-[7.5rem] h-[7.5rem] sm:w-36 sm:h-36 flex items-center justify-center border-2 border-white bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden">
+                <div className="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center rounded-full border-[3px] border-white bg-zinc-900/90 shadow-[0_0_28px_rgba(0,240,255,0.35)] ring-2 ring-zinc-700/80 overflow-hidden shrink-0">
                     <img 
                         src={LOGO_IMAGE} 
                         alt="SCOUT21" 
-                        className="w-full h-full object-contain p-2 sm:p-2.5"
+                        className="w-[92%] h-[92%] object-contain object-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
                     />
                 </div>
             </div>
@@ -272,8 +274,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
           <p className="text-zinc-300 font-light text-xs sm:text-sm tracking-wide whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
             Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21</span> — gestão esportiva baseada em dados para decisões vencedoras.
           </p>
-          <div className="w-8 h-8 sm:w-9 sm:h-9 border border-zinc-600/50 rounded-md flex items-center justify-center bg-black/80 shrink-0 overflow-hidden flex-shrink-0">
-            <img src={LOGO_IMAGE} alt="" className="w-full h-full object-contain p-0.5" />
+          <div className="w-8 h-8 sm:w-9 sm:h-9 border border-zinc-600/50 rounded-full flex items-center justify-center bg-zinc-900/90 shrink-0 overflow-hidden flex-shrink-0">
+            <img src={LOGO_IMAGE} alt="" className="w-[90%] h-[90%] object-contain object-center" />
           </div>
         </div>
       </footer>
