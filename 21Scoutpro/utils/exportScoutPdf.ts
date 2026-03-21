@@ -75,8 +75,10 @@ const WATERMARK_CENTER_Y = PAGE_HEIGHT / 2;
 const PAGE_NUM_Y = PAGE_HEIGHT - 8;
 // Ajuste de espaçamento para paisagem (mantém proporção do layout em retrato)
 const TOP_CHART_Y = 18;
-const GAP_FROM_WATERMARK = 44;
-const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
+/** Espaço entre o bloco de filtros e o título «RESUMO DE INDICADORES» (pág. 2) */
+const GAP_FILTERS_TO_RESUMO_MM = 11;
+/** Espaço entre o fim do resumo de KPIs e «META DE DESARMES» */
+const GAP_RESUMO_TO_GAUGE_MM = 10;
 /** Rosca acima da marca d'água (centro ~105 mm) */
 const DONUT_PAIR_UPPER_Y = 18;
 /** Rosca abaixo da marca d'água (par na mesma página) */
@@ -386,8 +388,11 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       doc.addPage();
       fillBackground(doc);
       drawWatermark(doc, logoBase64, logoDims);
-      drawResumoSection(doc, TOP_CHART_Y, data);
-      drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
+      const yAfterFilters = drawFiltersSummary(doc, TOP_CHART_Y, data.filters);
+      const resumoStartY =
+        yAfterFilters > TOP_CHART_Y ? yAfterFilters + GAP_FILTERS_TO_RESUMO_MM : yAfterFilters;
+      const resumoEndY = drawResumoSection(doc, resumoStartY, data);
+      drawGaugeSection(doc, resumoEndY + GAP_RESUMO_TO_GAUGE_MM, data.gaugeData, data.stats.tacklesTotal);
 
       const barH = 28;
       const compactOpts = { chartHeight: barH };
@@ -510,7 +515,69 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
   });
 }
 
-function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void {
+const MONTH_NAMES_PT = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
+
+function formatMonthFilterForPdf(m: string | undefined): string {
+  if (!m || m === 'Todos') return 'Todos os meses';
+  const idx = parseInt(m, 10);
+  if (!Number.isNaN(idx) && idx >= 0 && idx <= 11) return MONTH_NAMES_PT[idx];
+  return m;
+}
+
+function formatLocationFilterForPdf(loc: string | undefined): string {
+  if (!loc || loc === 'Todos') return 'Todos os locais';
+  if (loc === 'Mandante' || loc === 'Visitante') return loc;
+  return loc;
+}
+
+/** Bloco «FILTROS APLICADOS» no topo da pág. 2; retorna Y após o bloco (ou startY se não houver filtros). */
+function drawFiltersSummary(doc: jsPDF, startY: number, filters?: ExportScoutPdfFilters): number {
+  if (!filters) return startY;
+
+  const comp = filters.compFilter?.trim() || 'Todas';
+  const month = formatMonthFilterForPdf(filters.monthFilter);
+  const opp = filters.opponentFilter?.trim() || 'Todos';
+  const loc = formatLocationFilterForPdf(filters.locationFilter);
+
+  const lines = [
+    `Competição: ${comp === 'Todas' ? 'Todas as competições' : comp}`,
+    `Mês: ${month}`,
+    `Adversário: ${opp === 'Todos' ? 'Todos os adversários' : opp}`,
+    `Local: ${loc}`,
+  ];
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...COLORS.cyan);
+  doc.text('FILTROS APLICADOS', MARGIN, startY, { charSpace: -0.2 });
+  let y = startY + 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...COLORS.white);
+  lines.forEach((line) => {
+    const wrapped = doc.splitTextToSize(line, CONTENT_WIDTH);
+    wrapped.forEach((w) => {
+      doc.text(w, MARGIN, y);
+      y += 4;
+    });
+  });
+  return y + 2;
+}
+
+function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): number {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...COLORS.white);
@@ -554,6 +621,7 @@ function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): void
       rowY += 6;
     }
   });
+  return rowY + 6;
 }
 
 function drawGaugeSection(
