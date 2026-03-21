@@ -77,6 +77,10 @@ const PAGE_NUM_Y = PAGE_HEIGHT - 8;
 const TOP_CHART_Y = 18;
 const GAP_FROM_WATERMARK = 44;
 const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
+/** Rosca acima da marca d'água (centro ~105 mm) */
+const DONUT_PAIR_UPPER_Y = 18;
+/** Rosca abaixo da marca d'água (par na mesma página) */
+const DONUT_PAIR_LOWER_Y = 116;
 const HEADER_PHRASE_SIZE = 16;
 const COVER_TITLE = 'ANÁLISE DE ESTATÍSTICAS DO CLUBE';
 /** Logo no canto inferior esquerdo (páginas internas; não na capa) */
@@ -444,17 +448,43 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`,
         compactOpts);
 
-      const detailedDonutOpts = { donutSize: 38 };
-      const originDonutOpts = { donutSize: 40 };
+      const detailedDonutOpts = { donutSize: 36 };
+      const originDonutOpts = { donutSize: 36 };
 
+      /* Pág. única: Marcado — detalhados (acima da marca d'água) + origem (abaixo) */
       newPageWithWatermark(doc, logoBase64, logoDims);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, detailedDonutOpts);
+      drawDonutPairPage(
+        doc,
+        {
+          title: 'Métodos de Gols Marcado - Métodos Detalhados',
+          data: data.goalMethodsScoredData,
+          colors: PIE_COLORS_SCORED,
+          opts: detailedDonutOpts,
+        },
+        {
+          title: 'Métodos de Gols Marcado - Origem do Gol',
+          data: data.goalOriginScoredData,
+          colors: [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE],
+          opts: originDonutOpts,
+        }
+      );
+      /* Pág. única: Tomado — detalhados + origem */
       newPageWithWatermark(doc, logoBase64, logoDims);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], originDonutOpts);
-      newPageWithWatermark(doc, logoBase64, logoDims);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, detailedDonutOpts);
-      newPageWithWatermark(doc, logoBase64, logoDims);
-      drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], originDonutOpts);
+      drawDonutPairPage(
+        doc,
+        {
+          title: 'Métodos de Gols Tomado - Métodos Detalhados',
+          data: data.goalMethodsConcededData,
+          colors: PIE_COLORS_CONCEDED,
+          opts: detailedDonutOpts,
+        },
+        {
+          title: 'Métodos de Gols Tomado - Origem do Gol',
+          data: data.goalOriginConcededData,
+          colors: [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE],
+          opts: originDonutOpts,
+        }
+      );
 
       // Capa: contato centralizado na base. Demais páginas: número inferior direito + logo canto esquerdo (sem contato)
       const whatsAppIconPng = await loadWhatsAppIconPng();
@@ -786,14 +816,17 @@ function createDonutImage(
   return canvas.toDataURL('image/png');
 }
 
-function drawDonutChartPage(
+type DonutSlice = { name: string; value: number; percentage: string };
+
+/** Um bloco de rosca + legenda; retorna a coordenada Y inferior aproximada do bloco */
+function drawDonutBlock(
   doc: jsPDF,
   startY: number,
   title: string,
-  data: Array<{ name: string; value: number; percentage: string }>,
+  data: DonutSlice[],
   colors: [number, number, number][],
   opts?: { donutSize?: number }
-): void {
+): number {
   const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -806,8 +839,9 @@ function drawDonutChartPage(
 
   if (data.length === 0 || total === 0) {
     doc.setFont('helvetica', 'normal');
-    doc.text('Nenhum dado disponível', PAGE_WIDTH / 2, contentTop + 40, { align: 'center' });
-    return;
+    doc.setFontSize(9);
+    doc.text('Nenhum dado disponível', MARGIN, contentTop + 8);
+    return contentTop + 14;
   }
 
   const donutSize = opts?.donutSize ?? 40;
@@ -816,7 +850,6 @@ function drawDonutChartPage(
   const donutImg = createDonutImage(data, colors, 300);
   doc.addImage(donutImg, 'PNG', donutX, donutY, donutSize, donutSize);
 
-  /* Legenda à direita da rosca (evita o centro da página / marca d'água) */
   const legX0 = donutX + donutSize + 6;
   const legW = PAGE_WIDTH - MARGIN - legX0 - 2;
   const cols = data.length > 14 ? 3 : 2;
@@ -824,6 +857,7 @@ function drawDonutChartPage(
   const legendRowH = 4.5;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
+  const rowCount = Math.ceil(data.length / cols);
   data.forEach((r, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
@@ -836,4 +870,29 @@ function drawDonutChartPage(
     doc.setTextColor(...COLORS.white);
     doc.text(`${name} (${r.percentage}%)`, legX + 3.5, legY + 1.5);
   });
+
+  const legendBottom = donutY + rowCount * legendRowH;
+  const blockBottom = Math.max(donutY + donutSize, legendBottom);
+  return blockBottom + 2;
+}
+
+/** Página única: duas roscas — uma acima e uma abaixo da marca d'água central */
+function drawDonutPairPage(
+  doc: jsPDF,
+  upper: { title: string; data: DonutSlice[]; colors: [number, number, number][]; opts?: { donutSize?: number } },
+  lower: { title: string; data: DonutSlice[]; colors: [number, number, number][]; opts?: { donutSize?: number } }
+): void {
+  drawDonutBlock(doc, DONUT_PAIR_UPPER_Y, upper.title, upper.data, upper.colors, upper.opts);
+  drawDonutBlock(doc, DONUT_PAIR_LOWER_Y, lower.title, lower.data, lower.colors, lower.opts);
+}
+
+function drawDonutChartPage(
+  doc: jsPDF,
+  startY: number,
+  title: string,
+  data: DonutSlice[],
+  colors: [number, number, number][],
+  opts?: { donutSize?: number }
+): void {
+  drawDonutBlock(doc, startY, title, data, colors, opts);
 }
