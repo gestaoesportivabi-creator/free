@@ -100,10 +100,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
             <div className="flex items-center shrink-0">
               {onBackToHome ? (
                 <button type="button" onClick={onBackToHome} className="hover:opacity-80 transition-opacity cursor-pointer">
-                  <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-10 md:h-12 w-auto" />
+                  <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-12 md:h-14 lg:h-16 w-auto" />
                 </button>
               ) : (
-                <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-10 md:h-12 w-auto" />
+                <img src={LOGO_IMAGE} alt="SCOUT21 Logo" className="h-12 md:h-14 lg:h-16 w-auto" />
               )}
             </div>
             <div className="flex items-center gap-3 md:gap-4">
@@ -139,11 +139,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
         <div className="mb-4 text-center">
             {/* Logo Oficial */}
             <div className="flex justify-center mb-3">
-                <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border-2 border-white bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden">
+                <div className="relative w-[7.5rem] h-[7.5rem] sm:w-36 sm:h-36 flex items-center justify-center border-2 border-white bg-black/60 shadow-[0_0_30px_rgba(0,240,255,0.25)] rounded-xl transform rotate-3 transition-all duration-300 overflow-hidden">
                     <img 
                         src={LOGO_IMAGE} 
                         alt="SCOUT21" 
-                        className="w-full h-full object-contain p-4"
+                        className="w-full h-full object-contain p-2 sm:p-2.5"
                     />
                 </div>
             </div>
@@ -272,7 +272,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
           <p className="text-zinc-300 font-light text-xs sm:text-sm tracking-wide whitespace-nowrap overflow-hidden text-ellipsis min-w-0">
             Bem-vindo ao <span className="text-[#00f0ff] font-bold italic">SCOUT21</span> — gestão esportiva baseada em dados para decisões vencedoras.
           </p>
-          <div className="w-6 h-6 border border-zinc-600/50 rounded flex items-center justify-center bg-black/80 shrink-0 overflow-hidden flex-shrink-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 border border-zinc-600/50 rounded-md flex items-center justify-center bg-black/80 shrink-0 overflow-hidden flex-shrink-0">
             <img src={LOGO_IMAGE} alt="" className="w-full h-full object-contain p-0.5" />
           </div>
         </div>
