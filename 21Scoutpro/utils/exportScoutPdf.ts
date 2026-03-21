@@ -63,8 +63,8 @@ const PAGE_WIDTH = 297;
 const PAGE_HEIGHT = 210;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 const WATERMARK_CENTER_Y = PAGE_HEIGHT / 2;
-// Footer das páginas de gráficos (para não invadir a área dos donuts/legendas)
-const FOOTER_Y = WATERMARK_CENTER_Y + 10;
+/** Número da página (canto inferior direito; páginas após a capa) */
+const PAGE_NUM_Y = PAGE_HEIGHT - 8;
 // Ajuste de espaçamento para paisagem (mantém proporção do layout em retrato)
 const TOP_CHART_Y = 18;
 const GAP_FROM_WATERMARK = 44;
@@ -72,8 +72,11 @@ const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
 const COMPACT_CHART_HEIGHT = 32;
 const COMPACT_DONUT_SIZE = 32;
 const HEADER_PHRASE_SIZE = 16;
-const HEADER_HEIGHT = 18;
 const COVER_TITLE = 'ANÁLISE DE ESTATÍSTICAS DO CLUBE';
+/** Logo no canto inferior esquerdo (páginas internas; não na capa) */
+const LOGO_CORNER_MAX_W_MM = 24;
+/** Marca d'água central = logo (largura máx. em mm) */
+const WATERMARK_LOGO_MAX_W_MM = 115;
 const COVER_FOOTER_Y = PAGE_HEIGHT - 12;
 
 export interface ExportScoutPdfFilters {
@@ -191,19 +194,39 @@ function loadImageBase64(src: string): Promise<string | null> {
   });
 }
 
-function drawWatermark(doc: jsPDF): void {
+/** Marca d'água: logo central semitransparente (fallback: texto cinza) */
+function drawWatermark(
+  doc: jsPDF,
+  logoBase64: string | null,
+  logoPdf: { width: number; height: number } | null
+): void {
   doc.saveGraphicsState();
   try {
     const GState = (doc as any).GState;
-    if (GState) doc.setGState(new GState({ opacity: 0.15 }));
+    if (GState) doc.setGState(new GState({ opacity: 0.14 }));
   } catch {
     /* fallback: sem transparência nativa */
   }
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(72);
-  // Marca d'água em fundo preto: cinza mais sutil
-  doc.setTextColor(120, 120, 120);
-  doc.text(BRAND_NAME, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center' });
+  if (logoBase64) {
+    const aspect = logoPdf ? logoPdf.width / Math.max(logoPdf.height, 1) : 2.2;
+    const w = WATERMARK_LOGO_MAX_W_MM;
+    const h = w / aspect;
+    const x = PAGE_WIDTH / 2 - w / 2;
+    const y = PAGE_HEIGHT / 2 - h / 2;
+    try {
+      doc.addImage(logoBase64, 'PNG', x, y, w, h);
+    } catch {
+      doc.setFont('helvetica', 'bolditalic');
+      doc.setFontSize(72);
+      doc.setTextColor(120, 120, 120);
+      doc.text(BRAND_NAME, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center' });
+    }
+  } else {
+    doc.setFont('helvetica', 'bolditalic');
+    doc.setFontSize(72);
+    doc.setTextColor(120, 120, 120);
+    doc.text(BRAND_NAME, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center' });
+  }
   doc.restoreGraphicsState();
 }
 
@@ -212,7 +235,8 @@ function fillBackground(doc: jsPDF): void {
   doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
 }
 
-function drawFooter(doc: jsPDF, whatsAppIconPng: string | null, footerY: number): void {
+/** Contato (WhatsApp + site) — apenas na capa, centralizado na base */
+function drawCoverContactFooter(doc: jsPDF, whatsAppIconPng: string | null, footerY: number): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(170, 170, 170);
@@ -233,21 +257,42 @@ function drawFooter(doc: jsPDF, whatsAppIconPng: string | null, footerY: number)
   }
 }
 
-function drawHeader(doc: jsPDF, logoBase64: string | null): void {
-  // Header em preto (sobre fundo preto) para manter layout do sistema
-  doc.setFillColor(...COLORS.black);
-  doc.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, 'F');
-  const logoW = 14;
-  if (logoBase64) {
-    doc.addImage(logoBase64, 'PNG', 0, 2, logoW, 14);
-  }
-  // Na página do resumo, manter apenas o logo (a frase vai para a capa).
+/** Número da página no canto inferior direito (páginas após a capa) */
+function drawPageNumberBottomRight(doc: jsPDF, pageNum: number, totalPages: number): void {
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(170, 170, 170);
+  const text = `${pageNum} / ${totalPages}`;
+  doc.text(text, PAGE_WIDTH - MARGIN, PAGE_NUM_Y, { align: 'right' });
 }
 
-function newPageWithWatermark(doc: jsPDF): void {
+/** Logo no canto inferior esquerdo (todas as páginas de conteúdo; capa não chama isto) */
+function drawLogoBottomLeft(
+  doc: jsPDF,
+  logoBase64: string | null,
+  logoPdf: { width: number; height: number } | null
+): void {
+  if (!logoBase64) return;
+  const aspect = logoPdf ? logoPdf.width / Math.max(logoPdf.height, 1) : 2.2;
+  const w = LOGO_CORNER_MAX_W_MM;
+  const h = w / aspect;
+  const x = MARGIN;
+  const y = PAGE_HEIGHT - MARGIN - h;
+  try {
+    doc.addImage(logoBase64, 'PNG', x, y, w, h);
+  } catch {
+    /* ignora se addImage falhar */
+  }
+}
+
+function newPageWithWatermark(
+  doc: jsPDF,
+  logoBase64: string | null,
+  logoPdf: { width: number; height: number } | null
+): void {
   doc.addPage();
   fillBackground(doc);
-  drawWatermark(doc);
+  drawWatermark(doc, logoBase64, logoPdf);
 }
 
 export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
@@ -268,6 +313,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
       const logoPdf = await loadLogoForPdf();
       const logoBase64 = logoPdf?.dataUrl ?? null;
+      const logoDims = logoPdf ? { width: logoPdf.width, height: logoPdf.height } : null;
 
       // CAPA (página 1): fundo preto + título superior (quebra de linha) + nome do clube
       // + logo central SCOUT21 (ciano, negrito itálico) e tagline (branco, fonte 20)
@@ -324,11 +370,10 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       doc.text('Gestão esportiva baseada em dados para decisões', PAGE_WIDTH / 2, taglineStartY, { align: 'center' });
       doc.text('vencedoras.', PAGE_WIDTH / 2, taglineStartY + 10, { align: 'center' });
 
-      // Folha 1 (conteúdo): cabeçalho + marca d'água + RESUMO (sup) + META (inf)
+      // Folha 1 (conteúdo): marca d'água (logo) + RESUMO (sup) + META (inf) — logo canto no loop final
       doc.addPage();
       fillBackground(doc);
-      drawHeader(doc, logoBase64);
-      drawWatermark(doc);
+      drawWatermark(doc, logoBase64, logoDims);
       drawResumoSection(doc, TOP_CHART_Y, data);
       drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
@@ -338,7 +383,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const originDonutOpts = { donutSize: 62 };
 
       // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawBarChartSection(doc, TOP_CHART_Y, 'Passes Certos vs Errados', data.chartData, [
         { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
@@ -349,7 +394,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       ], data.stats.shotsOn + data.stats.shotsOff, compactOpts);
 
       // Folha 3: Tipos de Desarmes (superior) + Erros Críticos Transição (inferior)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawBarChartSection(doc, TOP_CHART_Y, 'Tipos de Desarmes', data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
@@ -361,7 +406,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       ], data.stats.wrongPassesTransition, compactOpts);
 
       // Folha 4: Gols Feitos por período (superior) + Gols Tomados por Período (inferior)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green,
         `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,
         compactOpts);
@@ -371,24 +416,29 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
       // Métodos de gols — dar mais espaço para os donuts apresentarem todos os dados
       // Página: Marcados (detalhados)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, detailedDonutOpts);
       // Página: Marcados (origem)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], originDonutOpts);
       // Página: Tomados (detalhados)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, detailedDonutOpts);
       // Página: Tomados (origem)
-      newPageWithWatermark(doc);
+      newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], originDonutOpts);
 
-      // Regra 9: Footer com ícone WhatsApp em todas as páginas
+      // Capa: contato centralizado na base. Demais páginas: número inferior direito + logo canto esquerdo (sem contato)
       const whatsAppIconPng = await loadWhatsAppIconPng();
       const pageCount = doc.getNumberOfPages();
       for (let p = 1; p <= pageCount; p++) {
         doc.setPage(p);
-        drawFooter(doc, whatsAppIconPng, p === 1 ? COVER_FOOTER_Y : FOOTER_Y);
+        if (p === 1) {
+          drawCoverContactFooter(doc, whatsAppIconPng, COVER_FOOTER_Y);
+        } else {
+          drawPageNumberBottomRight(doc, p, pageCount);
+          drawLogoBottomLeft(doc, logoBase64, logoDims);
+        }
       }
 
       const filename = `scout-coletivo-${new Date().toISOString().slice(0, 10)}.pdf`;
