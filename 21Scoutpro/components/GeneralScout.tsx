@@ -5,6 +5,7 @@ import { SportConfig, MatchRecord, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { IS_FREE_PLAN } from '../config';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
+import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -542,6 +543,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   return {};
                 }
               })();
+              const pl = players || [];
               await exportScoutToPdf({
                 filters: {
                   compFilter,
@@ -551,6 +553,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 },
                 teamShieldUrl: teamSettings.teamShieldUrl || undefined,
                 teamName: teamSettings.teamName || undefined,
+                playerTables: {
+                  passes: buildPlayerTop10ForPdf(filteredMatches, pl, 'passes'),
+                  shots: buildPlayerTop10ForPdf(filteredMatches, pl, 'shots'),
+                  tackles: buildPlayerTop10ForPdf(filteredMatches, pl, 'tackles'),
+                  criticalErrors: buildPlayerTop10ForPdf(filteredMatches, pl, 'criticalErrors'),
+                },
                 stats,
                 timePeriodData: {
                   maxScoredPeriod: timePeriodData.maxScoredPeriod,

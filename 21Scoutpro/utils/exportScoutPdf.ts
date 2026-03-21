@@ -4,6 +4,14 @@
  */
 
 import { jsPDF } from 'jspdf';
+import type { PlayerTop10RowPdf } from './scoutPlayerStatsHelpers';
+
+export interface PlayerTablesPdf {
+  passes: PlayerTop10RowPdf[];
+  shots: PlayerTop10RowPdf[];
+  tackles: PlayerTop10RowPdf[];
+  criticalErrors: PlayerTop10RowPdf[];
+}
 
 const LOGO_URL = '/public-logo.png.png';
 const BRAND_NAME = 'SCOUT21';
@@ -69,8 +77,6 @@ const PAGE_NUM_Y = PAGE_HEIGHT - 8;
 const TOP_CHART_Y = 18;
 const GAP_FROM_WATERMARK = 44;
 const BOTTOM_CHART_Y = WATERMARK_CENTER_Y + GAP_FROM_WATERMARK;
-const COMPACT_CHART_HEIGHT = 32;
-const COMPACT_DONUT_SIZE = 32;
 const HEADER_PHRASE_SIZE = 16;
 const COVER_TITLE = 'ANÁLISE DE ESTATÍSTICAS DO CLUBE';
 /** Logo no canto inferior esquerdo (páginas internas; não na capa) */
@@ -138,6 +144,8 @@ export interface ScoutPdfData {
   gaugeData?: { percentageDisplay: number | string; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
   teamShieldUrl?: string;
   teamName?: string;
+  /** Top 10 jogadores por gráfico (mesma lógica da tabela na tela) */
+  playerTables?: PlayerTablesPdf;
 }
 
 /** Logo PNG (fundo transparente) para cabeçalho e capa do PDF */
@@ -266,7 +274,7 @@ function drawPageNumberBottomRight(doc: jsPDF, pageNum: number, totalPages: numb
   doc.text(text, PAGE_WIDTH - MARGIN, PAGE_NUM_Y, { align: 'right' });
 }
 
-/** Logo no canto inferior esquerdo (todas as páginas de conteúdo; capa não chama isto) */
+/** Logo no canto inferior esquerdo: encostada à borda esquerda e à base (sem margem lateral/inferior) */
 function drawLogoBottomLeft(
   doc: jsPDF,
   logoBase64: string | null,
@@ -276,8 +284,8 @@ function drawLogoBottomLeft(
   const aspect = logoPdf ? logoPdf.width / Math.max(logoPdf.height, 1) : 2.2;
   const w = LOGO_CORNER_MAX_W_MM;
   const h = w / aspect;
-  const x = MARGIN;
-  const y = PAGE_HEIGHT - MARGIN - h;
+  const x = 0;
+  const y = PAGE_HEIGHT - h;
   try {
     doc.addImage(logoBase64, 'PNG', x, y, w, h);
   } catch {
@@ -377,54 +385,74 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       drawResumoSection(doc, TOP_CHART_Y, data);
       drawGaugeSection(doc, BOTTOM_CHART_Y, data.gaugeData, data.stats.tacklesTotal);
 
-      const compactOpts = { chartHeight: COMPACT_CHART_HEIGHT };
-      // Donuts: "detalhados" precisam de mais área para legenda (página cheia)
-      const detailedDonutOpts = { donutSize: 58 };
-      const originDonutOpts = { donutSize: 62 };
+      const barH = 28;
+      const compactOpts = { chartHeight: barH };
+      const pt = data.playerTables;
+      const hdrPasses = ['JOGADOR', 'CERTOS', 'ERRADOS', 'TOTAL'] as [string, string, string, string];
+      const hdrShots = ['JOGADOR', 'NO GOL', 'FORA', 'TOTAL'] as [string, string, string, string];
+      const hdrTackles = ['JOGADOR', 'C/SEM POSSE', 'C.-ATQ.', 'TOTAL'] as [string, string, string, string];
+      const hdrCrit = ['JOGADOR', 'P. ERRADOS', 'GER. TRANS.', 'TOTAL'] as [string, string, string, string];
 
-      // Folha 2: Passes certos vs errados (superior) + Chutes no Gol vs pra fora (inferior)
+      // Pág 3: Passes certos vs errados
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawBarChartSection(doc, TOP_CHART_Y, 'Passes Certos vs Errados', data.chartData, [
         { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
-      ], data.stats.passesCorrect + data.stats.passesWrong, compactOpts);
-      drawBarChartSection(doc, BOTTOM_CHART_Y, 'Chutes no Gol vs Chutes pra Fora', data.chartData, [
+      ], data.stats.passesCorrect + data.stats.passesWrong, {
+        ...compactOpts,
+        playerTable: pt?.passes?.length ? { headers: hdrPasses, rows: pt.passes } : undefined,
+      });
+
+      // Pág 4: Chutes no Gol vs pra fora
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Chutes no Gol vs Chutes pra Fora', data.chartData, [
         { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
         { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
-      ], data.stats.shotsOn + data.stats.shotsOff, compactOpts);
+      ], data.stats.shotsOn + data.stats.shotsOff, {
+        ...compactOpts,
+        playerTable: pt?.shots?.length ? { headers: hdrShots, rows: pt.shots } : undefined,
+      });
 
-      // Folha 3: Tipos de Desarmes (superior) + Erros Críticos Transição (inferior)
+      // Pág 5: Tipos de Desarmes
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawBarChartSection(doc, TOP_CHART_Y, 'Tipos de Desarmes', data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
         { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.cyan },
-      ], data.stats.tacklesTotal, compactOpts);
-      drawBarChartSection(doc, BOTTOM_CHART_Y, 'Erros Críticos (Transição)', data.chartData, [
+      ], data.stats.tacklesTotal, {
+        ...compactOpts,
+        playerTable: pt?.tackles?.length ? { headers: hdrTackles, rows: pt.tackles } : undefined,
+      });
+
+      // Pág 6: Erros Críticos (Transição)
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Erros Críticos (Transição)', data.chartData, [
         { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
         { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
-      ], data.stats.wrongPassesTransition, compactOpts);
+      ], data.stats.wrongPassesTransition, {
+        ...compactOpts,
+        playerTable: pt?.criticalErrors?.length ? { headers: hdrCrit, rows: pt.criticalErrors } : undefined,
+      });
 
-      // Folha 4: Gols Feitos por período (superior) + Gols Tomados por Período (inferior)
+      // Pág 7–8: Gols por período (uma página cada)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green,
         `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,
         compactOpts);
-      drawTimePeriodChart(doc, BOTTOM_CHART_Y, 'Gols Tomados por Período', data.timePeriodData.concededDist, COLORS.rose,
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Tomados por Período', data.timePeriodData.concededDist, COLORS.rose,
         `${data.timePeriodData.maxConcededPeriod.percentage}% dos gols tomados saíram no período de ${data.timePeriodData.maxConcededPeriod.period}`,
         compactOpts);
 
-      // Métodos de gols — dar mais espaço para os donuts apresentarem todos os dados
-      // Página: Marcados (detalhados)
+      const detailedDonutOpts = { donutSize: 38 };
+      const originDonutOpts = { donutSize: 40 };
+
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Métodos Detalhados', data.goalMethodsScoredData, PIE_COLORS_SCORED, detailedDonutOpts);
-      // Página: Marcados (origem)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Marcado - Origem do Gol', data.goalOriginScoredData, [PIE_ORIGIN_BLUE, PIE_ORIGIN_SLATE], originDonutOpts);
-      // Página: Tomados (detalhados)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Métodos Detalhados', data.goalMethodsConcededData, PIE_COLORS_CONCEDED, detailedDonutOpts);
-      // Página: Tomados (origem)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawDonutChartPage(doc, TOP_CHART_Y, 'Métodos de Gols Tomado - Origem do Gol', data.goalOriginConcededData, [[30, 64, 175] as [number, number, number], PIE_ORIGIN_SLATE], originDonutOpts);
 
@@ -540,6 +568,44 @@ function chartTitleStyle(doc: jsPDF, title: string): string {
   return title.toUpperCase();
 }
 
+/** Tabela Top 10 jogadores abaixo do gráfico */
+function drawPlayerTableBlock(
+  doc: jsPDF,
+  startY: number,
+  headers: [string, string, string, string],
+  rows: PlayerTop10RowPdf[]
+): void {
+  if (!rows.length) return;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...COLORS.cyan);
+  doc.text('TOP 10 JOGADORES', MARGIN, startY);
+  startY += 5;
+  const colW = [72, 22, 22, 18];
+  let x = MARGIN;
+  doc.setTextColor(...COLORS.white);
+  headers.forEach((h, i) => {
+    doc.text(h, x, startY, { maxWidth: colW[i] });
+    x += colW[i];
+  });
+  startY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  rows.forEach((r) => {
+    x = MARGIN;
+    const name = r.name.length > 22 ? `${r.name.slice(0, 21)}…` : r.name;
+    doc.setTextColor(...COLORS.white);
+    doc.text(name, x, startY, { maxWidth: colW[0] });
+    x += colW[0];
+    doc.text(String(r.col1), x, startY);
+    x += colW[1];
+    doc.text(String(r.col2), x, startY);
+    x += colW[2];
+    doc.text(String(r.total), x, startY);
+    startY += 3.6;
+  });
+}
+
 function drawBarChartSection(
   doc: jsPDF,
   startY: number,
@@ -547,7 +613,10 @@ function drawBarChartSection(
   chartData: ScoutPdfData['chartData'],
   series: Array<{ key: keyof ScoutPdfData['chartData'][0]; label: string; color: [number, number, number] }>,
   total: number,
-  opts?: { chartHeight?: number }
+  opts?: {
+    chartHeight?: number;
+    playerTable?: { headers: [string, string, string, string]; rows: PlayerTop10RowPdf[] };
+  }
 ): void {
   const titleUpper = chartTitleStyle(doc, title);
   doc.setFont('helvetica', 'bold');
@@ -565,7 +634,7 @@ function drawBarChartSection(
     return;
   }
 
-  const chartHeight = opts?.chartHeight ?? 45;
+  const chartHeight = opts?.chartHeight ?? (opts?.playerTable ? 28 : 45);
   const chartTop = startY + 5;
   const barAreaWidth = CONTENT_WIDTH - 50;
   const chartCenterX = MARGIN + 45 + barAreaWidth / 2;
@@ -611,6 +680,15 @@ function drawBarChartSection(
     doc.text(s.label, legX + 6, chartTop + chartHeight + 14);
     legX += 40;
   });
+
+  if (opts?.playerTable?.rows?.length) {
+    drawPlayerTableBlock(
+      doc,
+      chartTop + chartHeight + 20,
+      opts.playerTable.headers,
+      opts.playerTable.rows
+    );
+  }
 }
 
 function drawTimePeriodChart(
@@ -724,37 +802,38 @@ function drawDonutChartPage(
   const total = data.reduce((s, d) => s + d.value, 0);
   const totalW = doc.getTextWidth(`Total: ${total}`);
   doc.text(`Total: ${total}`, PAGE_WIDTH - MARGIN - totalW, startY);
-  startY += 8;
+  const contentTop = startY + 8;
 
   if (data.length === 0 || total === 0) {
     doc.setFont('helvetica', 'normal');
-    doc.text('Nenhum dado disponível', PAGE_WIDTH / 2, startY + 40, { align: 'center' });
+    doc.text('Nenhum dado disponível', PAGE_WIDTH / 2, contentTop + 40, { align: 'center' });
     return;
   }
 
-  const donutSize = opts?.donutSize ?? 70;
-  const centerX = PAGE_WIDTH / 2;
+  const donutSize = opts?.donutSize ?? 40;
+  const donutX = MARGIN + 2;
+  const donutY = contentTop + 2;
   const donutImg = createDonutImage(data, colors, 300);
-  doc.addImage(donutImg, 'PNG', centerX - donutSize / 2, startY, donutSize, donutSize);
-  // Mais respiro entre donut e legenda (especialmente em "detalhados")
-  const legendRowH = donutSize <= 40 ? 6 : 9;
-  const legendGap = donutSize <= 40 ? 10 : 16;
-  startY += donutSize + legendGap;
+  doc.addImage(donutImg, 'PNG', donutX, donutY, donutSize, donutSize);
 
+  /* Legenda à direita da rosca (evita o centro da página / marca d'água) */
+  const legX0 = donutX + donutSize + 6;
+  const legW = PAGE_WIDTH - MARGIN - legX0 - 2;
+  const cols = data.length > 14 ? 3 : 2;
+  const colW = legW / cols;
+  const legendRowH = 4.5;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(donutSize <= 40 ? 8 : 9);
-  // Em listas maiores, usar 2 colunas para caber todos os itens com melhor leitura
-  const itemsPerRow = data.length > 8 ? 2 : Math.min(data.length, 3);
-  const colW = CONTENT_WIDTH / itemsPerRow;
+  doc.setFontSize(6.5);
   data.forEach((r, i) => {
-    const col = i % itemsPerRow;
-    const row = Math.floor(i / itemsPerRow);
-    const legX = MARGIN + col * colW + 5;
-    const legY = startY + row * legendRowH;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const legX = legX0 + col * colW;
+    const legY = donutY + row * legendRowH;
     doc.setFillColor(...colors[i % colors.length]);
-    doc.rect(legX, legY - 1, 3, 3, 'F');
-    const nameLimit = itemsPerRow === 2 ? 30 : 22;
-    const name = r.name.length > nameLimit ? r.name.slice(0, nameLimit - 1) + '…' : r.name;
-    doc.text(`${name} (${r.percentage}%)`, legX + 5, legY + 2);
+    doc.rect(legX, legY - 0.8, 2.5, 2.5, 'F');
+    const nameLimit = cols >= 3 ? 16 : 26;
+    const name = r.name.length > nameLimit ? `${r.name.slice(0, nameLimit - 1)}…` : r.name;
+    doc.setTextColor(...COLORS.white);
+    doc.text(`${name} (${r.percentage}%)`, legX + 3.5, legY + 1.5);
   });
 }
