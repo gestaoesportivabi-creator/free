@@ -122,17 +122,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       {/* Brand Header com Logo Oficial + botão fechar (mobile) + toggle retrátil (desktop) */}
       <div className={`h-24 flex items-center justify-between gap-4 border-b border-zinc-900 bg-black shrink-0 ${retracted ? 'px-2 md:flex-col md:justify-center md:gap-1' : 'px-4 pr-2'}`}>
         <div className={`flex items-center gap-4 min-w-0 ${retracted ? 'md:flex-col md:gap-1' : ''}`}>
-        <div
-          className={`border-2 border-white rounded-full flex items-center justify-center bg-zinc-900/90 shrink-0 shadow-[0_0_15px_rgba(255,255,255,0.12)] overflow-hidden ${
-            retracted ? 'w-12 h-12' : 'w-14 h-14 md:w-16 md:h-16'
-          }`}
-        >
-             <img 
-                src={LOGO_IMAGE} 
-                alt="SCOUT21" 
-                className={`w-[92%] h-[92%] object-contain object-center drop-shadow-sm ${retracted ? '' : ''}`}
-             />
-        </div>
+        <img
+          src={LOGO_IMAGE}
+          alt="SCOUT21"
+          className={`shrink-0 object-contain object-left ${retracted ? 'h-9 w-auto max-w-[2.75rem]' : 'h-11 md:h-12 w-auto'}`}
+        />
         {!retracted && (
         <div className="flex flex-col min-w-0">
             <h2 className="text-lg font-black text-white tracking-tighter italic leading-none whitespace-nowrap">SCOUT 21</h2>
