@@ -84,7 +84,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     blueCyan: '#0ea5e9', // Cyan Blue
     slate: '#71717a',   // Zinc
     rose: '#ff0055',    // Erros / transição
-    green: '#22c55e',   // Gols feitos por período
+    green: '#22c55e',   // Gols por período + passes certos (barras)
+    /** Contra-ataque em Tipos de Desarme — mais escuro que Sem Posse */
+    tackleCounterDark: '#1e3a8a',
   };
 
   const filteredMatches = useMemo(() => {
@@ -764,7 +766,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard
           title="Passes Certos vs Errados"
           icon={BarChart3}
-          headerColor="text-blue-400"
+          headerColor="text-green-400"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
@@ -791,7 +793,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
-                    <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.blue} stackId="a">
+                    <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.green} stackId="a">
                         <LabelList dataKey="passesCorrect" position="inside" {...labelStyle} />
                     </Bar>
                     <Bar dataKey="passesWrong" name="Passes Errados" fill="#ef4444" stackId="a">
@@ -889,7 +891,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     <Bar dataKey="tacklesWithoutBall" name="Sem Posse" fill={COLORS.blueDark}>
                         <LabelList dataKey="tacklesWithoutBall" position="inside" {...labelStyle} />
                     </Bar>
-                    <Bar dataKey="tacklesCounterAttack" name="Contra-Ataque" fill={COLORS.blue}>
+                    <Bar dataKey="tacklesCounterAttack" name="Contra-Ataque" fill={COLORS.tackleCounterDark}>
                         <LabelList dataKey="tacklesCounterAttack" position="inside" {...labelStyle} />
                     </Bar>
                 </BarChart>

@@ -53,6 +53,8 @@ const COLORS = {
   blueLight: [96, 165, 250] as [number, number, number],
   rose: [255, 0, 85] as [number, number, number],
   green: [34, 197, 94] as [number, number, number],
+  /** Contra-ataque (Tipos de Desarmes) — azul bem mais escuro que blueDark */
+  counterAttackDark: [30, 58, 138] as [number, number, number],
   slate: [113, 113, 122] as [number, number, number],
   black: [0, 0, 0] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
@@ -90,6 +92,12 @@ const LOGO_CORNER_MAX_W_MM = 24;
 /** Marca d'água central = logo (largura máx. em mm) */
 const WATERMARK_LOGO_MAX_W_MM = 115;
 const COVER_FOOTER_Y = PAGE_HEIGHT - 12;
+/** Espaço entre o fim do título «ANÁLISE DE ESTATÍSTICAS…» e a linha nome + escudo */
+const COVER_TITLE_TO_CLUB_GAP_MM = 16;
+/** Altura máx. do escudo do clube na capa (mm) */
+const COVER_SHIELD_MAX_H_MM = 14;
+/** Espaço entre escudo e nome do clube */
+const COVER_SHIELD_NAME_GAP_MM = 4;
 
 export interface ExportScoutPdfFilters {
   compFilter?: string;
@@ -158,6 +166,38 @@ export interface ScoutPdfData {
 function loadLogoForPdf(): Promise<{ dataUrl: string; width: number; height: number } | null> {
   return new Promise((resolve) => {
     const url = window.location.origin + LOGO_URL;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve({
+            dataUrl: canvas.toDataURL('image/png'),
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+          });
+        } else resolve(null);
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+/** Escudo do clube (URL ou data URL) para a capa do PDF — retorna PNG + dimensões */
+function loadTeamShieldForPdf(
+  src: string | undefined
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  if (!src || !String(src).trim()) return Promise.resolve(null);
+  const url = String(src).trim();
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -325,12 +365,15 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
-      const logoPdf = await loadLogoForPdf();
+      const [logoPdf, teamShieldPdf] = await Promise.all([
+        loadLogoForPdf(),
+        loadTeamShieldForPdf(data.teamShieldUrl),
+      ]);
       const logoBase64 = logoPdf?.dataUrl ?? null;
       const logoDims = logoPdf ? { width: logoPdf.width, height: logoPdf.height } : null;
 
       // CAPA (página 1): fundo preto + título superior (quebra de linha) + nome do clube
-      // + logo central SCOUT21 (ciano, negrito itálico) e tagline (branco, fonte 20)
+      // + escudo (Configurações) ao lado do nome + logo central SCOUT21 e tagline
       fillBackground(doc);
 
       // Título superior com quebra de linha
@@ -341,14 +384,60 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       doc.setTextColor(...COLORS.white);
       doc.text(titleLines as string[], PAGE_WIDTH / 2, titleStartY, { align: 'center' });
 
-      // Nome do clube (Configurações) logo abaixo do título
+      // Nome do clube + escudo (Configurações), com mais espaço abaixo do título
       const teamNameUpper = (data.teamName || '').trim().toUpperCase();
-      if (teamNameUpper) {
-        const clubNameY = titleStartY + titleLines.length * 8 + 6;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(22);
-        doc.setTextColor(...COLORS.white);
+      const clubNameY = titleStartY + titleLines.length * 8 + COVER_TITLE_TO_CLUB_GAP_MM;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(22);
+      doc.setTextColor(...COLORS.white);
+      if (teamNameUpper && teamShieldPdf) {
+        const aspect = teamShieldPdf.width / Math.max(teamShieldPdf.height, 1);
+        let shH = COVER_SHIELD_MAX_H_MM;
+        let shW = shH * aspect;
+        const maxShieldW = 32;
+        if (shW > maxShieldW) {
+          shW = maxShieldW;
+          shH = shW / aspect;
+        }
+        const textW = doc.getTextWidth(teamNameUpper);
+        const blockW = shW + COVER_SHIELD_NAME_GAP_MM + textW;
+        const startX = PAGE_WIDTH / 2 - blockW / 2;
+        const textCenterY = clubNameY - 2.4;
+        const imgY = textCenterY - shH / 2;
+        let shieldOk = false;
+        try {
+          doc.addImage(teamShieldPdf.dataUrl, 'PNG', startX, imgY, shW, shH);
+          shieldOk = true;
+        } catch {
+          shieldOk = false;
+        }
+        if (shieldOk) {
+          doc.text(teamNameUpper, startX + shW + COVER_SHIELD_NAME_GAP_MM, clubNameY);
+        } else {
+          doc.text(teamNameUpper, PAGE_WIDTH / 2, clubNameY, { align: 'center' });
+        }
+      } else if (teamNameUpper) {
         doc.text(teamNameUpper, PAGE_WIDTH / 2, clubNameY, { align: 'center' });
+      } else if (teamShieldPdf) {
+        const aspect = teamShieldPdf.width / Math.max(teamShieldPdf.height, 1);
+        let shH = COVER_SHIELD_MAX_H_MM;
+        let shW = shH * aspect;
+        if (shW > 40) {
+          shW = 40;
+          shH = shW / aspect;
+        }
+        try {
+          doc.addImage(
+            teamShieldPdf.dataUrl,
+            'PNG',
+            PAGE_WIDTH / 2 - shW / 2,
+            clubNameY - shH / 2 - 2,
+            shW,
+            shH
+          );
+        } catch {
+          /* ignora */
+        }
       }
 
       // Centro da capa: logo PNG (transparente) ou texto fallback
@@ -405,7 +494,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       // Pág 3: Passes certos vs errados
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawBarChartSection(doc, TOP_CHART_Y, 'Passes Certos vs Errados', data.chartData, [
-        { key: 'passesCorrect', label: 'Certos', color: COLORS.cyan },
+        { key: 'passesCorrect', label: 'Certos', color: COLORS.green },
         { key: 'passesWrong', label: 'Errados', color: COLORS.rose },
       ], data.stats.passesCorrect + data.stats.passesWrong, {
         ...compactOpts,
@@ -427,7 +516,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       drawBarChartSection(doc, TOP_CHART_Y, 'Tipos de Desarmes', data.chartData, [
         { key: 'tacklesWithBall', label: 'Com Posse', color: COLORS.blueLight },
         { key: 'tacklesWithoutBall', label: 'Sem Posse', color: COLORS.blueDark },
-        { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.cyan },
+        { key: 'tacklesCounterAttack', label: 'Contra-Ataque', color: COLORS.counterAttackDark },
       ], data.stats.tacklesTotal, {
         ...compactOpts,
         playerTable: pt?.tackles?.length ? { headers: hdrTackles, rows: pt.tackles } : undefined,
