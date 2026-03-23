@@ -36,6 +36,7 @@ import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTarg
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
+import { upsertMatchRecord } from './utils/matchUpsert';
 import { IS_FREE_PLAN } from './config';
 
 const SLIDES = [
@@ -857,12 +858,16 @@ export default function App() {
       }
   };
 
-  const handleSaveMatch = async (newMatch: MatchRecord) => {
+  const handleSaveMatch = async (
+    newMatch: MatchRecord,
+    options?: { source?: 'manual' | 'autosave' }
+  ) => {
+      const isAutosave = options?.source === 'autosave';
       try {
         // Validar match antes de salvar
         if (!newMatch || !newMatch.teamStats) {
           console.error('❌ Erro: Match inválido ao salvar:', newMatch);
-          alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
+          if (!isAutosave) alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
           return;
         }
 
@@ -875,36 +880,8 @@ export default function App() {
           playerStatsCount: Object.keys(newMatch.playerStats || {}).length
         });
 
-        // Partida existente: id presente e não é sched-* (permite re-salvar ao editar log sem depender da lista em memória)
-        const idStr = newMatch.id != null ? String(newMatch.id).trim() : '';
-        const isExistingMatch = idStr.length > 0 && !idStr.startsWith('sched-');
-
-        let saved: MatchRecord | null;
-        if (isExistingMatch) {
-          console.log('📝 Atualizando partida existente:', idStr);
-          try {
-            saved = await matchesApi.update(idStr, newMatch);
-          } catch (err: unknown) {
-            const is404 = err instanceof Error && (err.message.includes('404') || err.message.toLowerCase().includes('não encontrado') || err.message.toLowerCase().includes('not found'));
-            if (is404) {
-              console.warn('Partida não encontrada no servidor (404), criando nova.');
-              const matchToCreate = { ...newMatch };
-              delete (matchToCreate as any).id;
-              saved = await matchesApi.create(matchToCreate);
-            } else {
-              throw err;
-            }
-          }
-        } else {
-          const matchToCreate = { ...newMatch };
-          if (matchToCreate.id?.startsWith('sched-')) {
-            delete (matchToCreate as any).id;
-          } else if (matchToCreate.id) {
-            delete (matchToCreate as any).id;
-          }
-          console.log('➕ Criando nova partida');
-          saved = await matchesApi.create(matchToCreate);
-        }
+        const { saved, operation } = await upsertMatchRecord(newMatch);
+        const isCreated = operation === 'created';
         console.log('💾 Resposta do salvamento:', saved);
         
         if (saved) {
@@ -955,20 +932,22 @@ export default function App() {
                 return [saved, ...prev];
               });
             }
-            alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
-            if (!isExistingMatch) setActiveTab('general');
+            if (!isAutosave) {
+              alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
+              if (isCreated) setActiveTab('general');
+            }
           } else {
             console.error('❌ Erro: Match salvo sem teamStats:', saved);
-            alert("Partida salva, mas com dados incompletos. Verifique o console.");
+            if (!isAutosave) alert("Partida salva, mas com dados incompletos. Verifique o console.");
           }
         } else {
           console.error('❌ Erro: Resposta do salvamento foi null/undefined');
-          alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
+          if (!isAutosave) alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
         }
       } catch (error) {
         console.error('❌ Erro ao salvar partida:', error);
         const msg = error instanceof Error ? error.message : 'Erro desconhecido';
-        alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
+        if (!isAutosave) alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
       }
   };
 

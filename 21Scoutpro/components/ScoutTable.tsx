@@ -73,7 +73,7 @@ interface ChampionshipMatch {
 type CalendarMatchItem = (MatchRecord & { type: 'saved' }) | (ChampionshipMatch & { type: 'scheduled' });
 
 interface ScoutTableProps {
-    onSave?: (match: MatchRecord) => void;
+    onSave?: (match: MatchRecord, options?: { source?: 'manual' | 'autosave' }) => void | Promise<void>;
     players: Player[];
     competitions: string[];
     matches?: MatchRecord[];
@@ -2569,8 +2569,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 extraTimeMinutes={selectedExtraTimeMinutes}
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
-                                onSave={async (saved) => {
-                                    await onSave?.(saved);
+                                onSave={async (saved, options) => {
+                                    await onSave?.(saved, options);
+                                    if (options?.source === 'autosave') return;
                                     setShowPostMatchSheet(false);
                                     const isExistingMatch = saved?.id && !String(saved.id).startsWith('sched-');
                                     if (isExistingMatch) {
@@ -3485,8 +3486,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     extraTimeMinutes={selectedExtraTimeMinutes}
                     selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
                     mode="realtime"
-                    onSave={async (saved) => {
-                        await onSave?.(saved);
+                    onSave={async (saved, options) => {
+                        await onSave?.(saved, options);
+                        if (options?.source === 'autosave') return;
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');
                         setSelectedExtraTimeMinutes(5);

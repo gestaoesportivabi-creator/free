@@ -48,7 +48,7 @@ interface MatchScoutingWindowProps {
   extraTimeMinutes?: number;
   selectedPlayerIds?: string[]; // IDs dos jogadores selecionados
   mode?: 'realtime' | 'postmatch'; // postmatch = tempo manual, sem cronômetro
-  onSave?: (match: MatchRecord) => void; // Chamado em postmatch ao encerrar coleta
+  onSave?: (match: MatchRecord, options?: { source?: 'manual' | 'autosave' }) => void | Promise<void>;
   /** Usuário que está registrando as ações (para auditoria: quem fez/registrou cada ação) */
   recordedByUser?: { id?: string; name: string };
   /** Quando true, ocupa todo o viewport (ex.: sidebar foi escondida pelo app) */
@@ -332,6 +332,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     period: '1T' | '2T';
   } | null>(null);
   const [showExpulsionReplacementSelection, setShowExpulsionReplacementSelection] = useState<boolean>(false);
+  const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autosaveInFlightRef = useRef<boolean>(false);
+  const autosaveQueuedRef = useRef<boolean>(false);
+  const autosaveSkipRef = useRef<boolean>(true);
+  const lastAutosaveSignatureRef = useRef<string>('');
   
   // Estados para confirmação de falta com zona
   const [showFoulConfirmation, setShowFoulConfirmation] = useState<boolean>(false);
@@ -790,13 +796,29 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const foulsForCurrentPeriod = currentPeriod === '1T' ? foulsFor1T : foulsFor2T;
   const foulsAgainstCurrentPeriod = currentPeriod === '1T' ? foulsAgainst1T : foulsAgainst2T;
 
-  // Carregar eventos da partida ao abrir "Editar Dados" (postmatch com postMatchEventLog)
+  // Carregar eventos da partida ao abrir (postmatch ou partida incompleta com log salvo)
   useEffect(() => {
-    if (!isOpen || mode !== 'postmatch' || !match.postMatchEventLog?.length) return;
+    if (!isOpen || !match.postMatchEventLog?.length) return;
     const converted = postMatchEventLogToMatchEvents(match.postMatchEventLog, players);
     setMatchEvents(converted);
     recalcGoalsAndFoulsFromEvents(converted);
-  }, [isOpen, mode, match?.id, match?.postMatchEventLog]);
+    if (!isPostmatch) {
+      setLineupPlayers(match.lineup?.players ?? []);
+      setBenchPlayers(match.lineup?.bench ?? []);
+      if (match.lineup?.ballPossessionStart) {
+        setBallPossessionStart(match.lineup.ballPossessionStart);
+      }
+      setSubstitutionHistory(match.substitutionHistory ?? []);
+    }
+    autosaveSkipRef.current = true;
+    queueMicrotask(() => {
+      autosaveSkipRef.current = false;
+      try {
+        const initialSnapshot = JSON.stringify(buildMatchSnapshot('em_andamento'));
+        lastAutosaveSignatureRef.current = initialSnapshot;
+      } catch (_) {}
+    });
+  }, [isOpen, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, players]);
 
   // Toggle cronômetro
   const handleToggleTimer = () => {
@@ -1116,15 +1138,57 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
   };
 
+  const buildMatchSnapshot = (status: 'em_andamento' | 'encerrado'): MatchRecord => {
+    const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
+    savedMatch.status = status;
+    if (!isPostmatch) {
+      savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
+        ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
+        : undefined;
+      savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
+      savedMatch.possessionSecondsWith = possessionSecondsWith;
+      savedMatch.possessionSecondsWithout = possessionSecondsWithout;
+    }
+    return savedMatch;
+  };
+
+  const saveSilently = async () => {
+    if (!onSave || !isOpen || autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    if (matchEvents.length === 0) return;
+
+    const snapshot = buildMatchSnapshot('em_andamento');
+    const signature = JSON.stringify(snapshot);
+    if (signature === lastAutosaveSignatureRef.current) return;
+
+    if (autosaveInFlightRef.current) {
+      autosaveQueuedRef.current = true;
+      return;
+    }
+
+    autosaveInFlightRef.current = true;
+    try {
+      await onSave(snapshot, { source: 'autosave' });
+      lastAutosaveSignatureRef.current = signature;
+    } catch (error) {
+      console.warn('[autosave] falhou ao salvar partida em andamento:', error);
+    } finally {
+      autosaveInFlightRef.current = false;
+      if (autosaveQueuedRef.current) {
+        autosaveQueuedRef.current = false;
+        void saveSilently();
+      }
+    }
+  };
+
   // Finalizar coleta (status = encerrado, mas editável depois)
-  const handleEndCollection = () => {
+  const handleEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
 
     if (isPostmatch && onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'encerrado';
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('encerrado');
+      await onSave(savedMatch, { source: 'manual' });
       onClose();
       return;
     }
@@ -1133,35 +1197,65 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       updateSubstitutionFrequency(substitutionHistory);
     }
     if (onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'encerrado';
-      savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
-        ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
-        : undefined;
-      savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('encerrado');
+      await onSave(savedMatch, { source: 'manual' });
     }
     onClose();
   };
 
   // Salvar rascunho para finalizar depois (status = em_andamento)
-  const handleSaveLater = () => {
+  const handleSaveLater = async () => {
     if (matchEvents.length === 0 && !isPostmatch) {
       onClose();
       return;
     }
 
     if (onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'em_andamento';
-      if (!isPostmatch) {
-        savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
-          ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
-          : undefined;
-        savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
-      }
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('em_andamento');
+      await onSave(savedMatch, { source: 'manual' });
     }
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    if (matchEvents.length === 0) return;
+
+    if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+    autosaveDebounceRef.current = setTimeout(() => {
+      void saveSilently();
+    }, 8000);
+
+    return () => {
+      if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+    };
+  }, [isOpen, isPostmatch, isMatchStarted, matchEvents, lineupPlayers, benchPlayers, substitutionHistory, possessionSecondsWith, possessionSecondsWithout, currentPeriod]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    autosaveIntervalRef.current = setInterval(() => {
+      void saveSilently();
+    }, 30000);
+    return () => {
+      if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
+    };
+  }, [isOpen, isPostmatch, isMatchStarted, saveSilently]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onBeforeUnload = () => {
+      void saveSilently();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isOpen, saveSilently]);
+
+  const handleCloseWithSilentSave = async () => {
+    await saveSilently();
     onClose();
   };
 
@@ -2013,7 +2107,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           <div className="flex items-center justify-between mb-1">
             <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
             <button
-              onClick={onClose}
+              onClick={handleCloseWithSilentSave}
               className="bg-zinc-900 hover:bg-zinc-800 text-white p-1.5 rounded-full transition-colors border border-zinc-700"
               title="Fechar"
             >
