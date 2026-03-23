@@ -861,14 +861,14 @@ export default function App() {
   const handleSaveMatch = async (
     newMatch: MatchRecord,
     options?: { source?: 'manual' | 'autosave' }
-  ): Promise<MatchRecord | null> => {
+  ) => {
       const isAutosave = options?.source === 'autosave';
       try {
         // Validar match antes de salvar
         if (!newMatch || !newMatch.teamStats) {
           console.error('❌ Erro: Match inválido ao salvar:', newMatch);
           if (!isAutosave) alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
-          return null;
+          return;
         }
 
         console.log('💾 Iniciando salvamento da partida:', {
@@ -936,22 +936,18 @@ export default function App() {
               alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
               if (isCreated) setActiveTab('general');
             }
-            return saved;
           } else {
             console.error('❌ Erro: Match salvo sem teamStats:', saved);
             if (!isAutosave) alert("Partida salva, mas com dados incompletos. Verifique o console.");
-            return saved;
           }
         } else {
           console.error('❌ Erro: Resposta do salvamento foi null/undefined');
           if (!isAutosave) alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
-          return null;
         }
       } catch (error) {
         console.error('❌ Erro ao salvar partida:', error);
         const msg = error instanceof Error ? error.message : 'Erro desconhecido';
         if (!isAutosave) alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
-        return null;
       }
   };
 
