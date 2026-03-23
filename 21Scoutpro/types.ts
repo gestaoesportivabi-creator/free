@@ -193,6 +193,10 @@ export interface PostMatchEvent {
   assistPlayerId?: string;
   /** Nome do jogador que deu a assistência */
   assistPlayerName?: string;
+  /** ID do goleiro selecionado no método "Defesa de goleiro linha" */
+  goalkeeperId?: string;
+  /** Nome do goleiro selecionado no método "Defesa de goleiro linha" */
+  goalkeeperName?: string;
   /** Falta cometida por nossa equipe ('for') ou pelo adversário ('against') */
   foulTeam?: 'for' | 'against';
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */

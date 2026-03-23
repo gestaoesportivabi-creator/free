@@ -73,7 +73,7 @@ interface ChampionshipMatch {
 type CalendarMatchItem = (MatchRecord & { type: 'saved' }) | (ChampionshipMatch & { type: 'scheduled' });
 
 interface ScoutTableProps {
-    onSave?: (match: MatchRecord, options?: { source?: 'manual' | 'autosave' }) => void | Promise<void>;
+    onSave?: (match: MatchRecord, options?: { source?: 'manual' | 'autosave' }) => MatchRecord | null | void | Promise<MatchRecord | null | void>;
     players: Player[];
     competitions: string[];
     matches?: MatchRecord[];
@@ -2570,12 +2570,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
                                 onSave={async (saved, options) => {
-                                    await onSave?.(saved, options);
+                                    const persisted = await onSave?.(saved, options);
+                                    const effectiveSaved = (persisted && typeof persisted === 'object' ? persisted : saved) as MatchRecord;
+                                    setSelectedMatch(effectiveSaved);
+                                    setSelectedScheduledMatch(null);
                                     if (options?.source === 'autosave') return;
                                     setShowPostMatchSheet(false);
-                                    const isExistingMatch = saved?.id && !String(saved.id).startsWith('sched-');
+                                    const isExistingMatch = effectiveSaved?.id && !String(effectiveSaved.id).startsWith('sched-');
                                     if (isExistingMatch) {
-                                        setSelectedMatch(saved);
+                                        setSelectedMatch(effectiveSaved);
                                     } else {
                                         handleBackToCalendar();
                                     }
@@ -3487,7 +3490,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
                     mode="realtime"
                     onSave={async (saved, options) => {
-                        await onSave?.(saved, options);
+                        const persisted = await onSave?.(saved, options);
+                        const effectiveSaved = (persisted && typeof persisted === 'object' ? persisted : saved) as MatchRecord;
+                        setSelectedMatch(effectiveSaved);
+                        setSelectedScheduledMatch(null);
                         if (options?.source === 'autosave') return;
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');
