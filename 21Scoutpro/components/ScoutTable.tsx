@@ -90,6 +90,30 @@ interface ScoutTableProps {
 }
 
 export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange, onDeleteMatch }) => {
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const matchId = params.get('matchId');
+        if (!matchId || !matches.length) return;
+        const persisted = matches.find((m) => String(m.id).trim() === String(matchId).trim());
+        if (!persisted) return;
+        setSelectedMatch(persisted);
+        setSelectedScheduledMatch(null);
+        setViewMode('analysis');
+    }, [matches]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (selectedMatch?.id) {
+            params.set('matchId', String(selectedMatch.id));
+            params.set('tab', 'table');
+        } else {
+            params.delete('matchId');
+        }
+        const q = params.toString();
+        const nextUrl = q ? `${window.location.pathname}?${q}` : window.location.pathname;
+        window.history.replaceState({}, '', nextUrl);
+    }, [selectedMatch?.id]);
+
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -137,30 +161,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     });
     const [viewMode, setViewMode] = useState<'calendar' | 'form' | 'analysis'>('calendar');
     const [selectedMatch, setSelectedMatch] = useState<MatchRecord | null>(null);
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const matchId = params.get('matchId');
-        if (!matchId || !matches.length) return;
-        const persisted = matches.find((m) => String(m.id).trim() === String(matchId).trim());
-        if (!persisted) return;
-        setSelectedMatch(persisted);
-        setSelectedScheduledMatch(null);
-        setViewMode('analysis');
-    }, [matches]);
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (selectedMatch?.id) {
-            params.set('matchId', String(selectedMatch.id));
-            params.set('tab', 'table');
-        } else {
-            params.delete('matchId');
-        }
-        const q = params.toString();
-        const nextUrl = q ? `${window.location.pathname}?${q}` : window.location.pathname;
-        window.history.replaceState({}, '', nextUrl);
-    }, [selectedMatch?.id]);
     
     // Header state for the Match Record - tudo neutro por padrão
     const [opponent, setOpponent] = useState('');
