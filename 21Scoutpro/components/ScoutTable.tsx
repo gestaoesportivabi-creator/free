@@ -90,6 +90,30 @@ interface ScoutTableProps {
 }
 
 export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange, onDeleteMatch }) => {
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const matchId = params.get('matchId');
+        if (!matchId || !matches.length) return;
+        const persisted = matches.find((m) => String(m.id).trim() === String(matchId).trim());
+        if (!persisted) return;
+        setSelectedMatch(persisted);
+        setSelectedScheduledMatch(null);
+        setViewMode('analysis');
+    }, [matches]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (selectedMatch?.id) {
+            params.set('matchId', String(selectedMatch.id));
+            params.set('tab', 'table');
+        } else {
+            params.delete('matchId');
+        }
+        const q = params.toString();
+        const nextUrl = q ? `${window.location.pathname}?${q}` : window.location.pathname;
+        window.history.replaceState({}, '', nextUrl);
+    }, [selectedMatch?.id]);
+
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -2211,7 +2235,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                         };
                                         localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                        window.open('/scout-realtime', '_blank');
+                                        window.open(`/scout-realtime?matchId=${encodeURIComponent(String(selectedMatch.id))}`, '_blank');
                                         setShowRealtimePrepForSavedMatch(false);
                                     }}
                                     disabled={selectedPlayersForMatch.size === 0}
@@ -2820,7 +2844,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                                 };
                                                 localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                                window.open('/scout-realtime', '_blank');
+                                                window.open(`/scout-realtime?matchId=${encodeURIComponent(String(selectedScheduledMatch.id))}`, '_blank');
                                                 setShowStartScoutConfirmation(false);
                                             }}
                                             disabled={selectedPlayersForMatch.size === 0}
