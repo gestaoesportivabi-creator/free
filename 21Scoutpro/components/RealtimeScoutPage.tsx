@@ -26,29 +26,14 @@ export const RealtimeScoutPage: React.FC = () => {
   useEffect(() => {
     const loadRealtimeMatch = async () => {
       try {
-        const url = new URL(window.location.href);
-        const urlMatchId = url.searchParams.get('matchId') || undefined;
         const storedData = localStorage.getItem('realtimeScoutData');
         if (!storedData) {
-          if (!urlMatchId) {
-            setError('Nenhum dado de partida encontrado. Por favor, selecione uma partida novamente.');
-            setIsLoading(false);
-            return;
-          }
+          setError('Nenhum dado de partida encontrado. Por favor, selecione uma partida novamente.');
+          setIsLoading(false);
+          return;
         }
-        const data: RealtimeScoutData = storedData
-          ? JSON.parse(storedData)
-          : {
-              matchId: urlMatchId,
-              date: new Date().toISOString().split('T')[0],
-              opponent: '',
-              competition: '',
-              players: [],
-              teams: [],
-              matchType: 'normal',
-              extraTimeMinutes: 5,
-            };
-        if (urlMatchId && data.matchId !== urlMatchId) data.matchId = urlMatchId;
+
+        const data: RealtimeScoutData = JSON.parse(storedData);
         setScoutData(data);
 
         // Base local (fallback)
@@ -76,14 +61,11 @@ export const RealtimeScoutPage: React.FC = () => {
           playerStats: {},
         };
 
-        if (data.matchId || urlMatchId) {
+        if (data.matchId) {
           try {
-            const dbMatch = await matchesApi.getById((urlMatchId || data.matchId)!);
+            const dbMatch = await matchesApi.getById(data.matchId);
             if (dbMatch?.id && (dbMatch.status === 'em_andamento' || (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))) {
               matchRecord = dbMatch;
-              const nextData = { ...data, matchId: dbMatch.id };
-              localStorage.setItem('realtimeScoutData', JSON.stringify(nextData));
-              setScoutData(nextData);
             }
           } catch (fetchErr) {
             console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
@@ -104,22 +86,17 @@ export const RealtimeScoutPage: React.FC = () => {
 
   // Manter URL sempre em /scout-realtime: não permitir voltar para /dashboard nesta aba
   useEffect(() => {
-    const buildRealtimeUrl = () => {
-      const base = '/scout-realtime';
-      const matchId = match?.id || scoutData?.matchId;
-      return matchId ? `${base}?matchId=${encodeURIComponent(matchId)}` : base;
-    };
-    if (window.location.pathname !== '/scout-realtime' || (match?.id && !new URL(window.location.href).searchParams.get('matchId'))) {
-      window.history.replaceState({}, '', buildRealtimeUrl());
+    if (window.location.pathname !== '/scout-realtime') {
+      window.history.replaceState({}, '', '/scout-realtime');
     }
     const handlePopState = () => {
       if (window.location.pathname !== '/scout-realtime') {
-        window.history.replaceState({}, '', buildRealtimeUrl());
+        window.history.replaceState({}, '', '/scout-realtime');
       }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [match?.id, scoutData?.matchId]);
+  }, []);
 
   const handleSave = async (
     savedMatch: MatchRecord,
@@ -138,7 +115,6 @@ export const RealtimeScoutPage: React.FC = () => {
           if (!prev) return prev;
           const next = { ...prev, matchId: saved.id };
           localStorage.setItem('realtimeScoutData', JSON.stringify(next));
-          window.history.replaceState({}, '', `/scout-realtime?matchId=${encodeURIComponent(saved.id)}`);
           return next;
         });
       }
