@@ -20,6 +20,18 @@ function mapRoleForFrontend(roleName: string): string {
   return MAP[roleName] ?? roleName;
 }
 
+/** Erros de conexão Prisma/Postgres (ex.: Supabase pausado ou URL errada). */
+function isDatabaseUnavailable(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('Tenant or user not found') ||
+    msg.includes("Can't reach database server") ||
+    msg.includes('P1001') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ENOTFOUND')
+  );
+}
+
 export const authController = {
   /**
    * POST /api/auth/login
@@ -104,6 +116,16 @@ export const authController = {
         return res.status(401).json({
           success: false,
           error: error.message,
+        });
+      }
+      if (isDatabaseUnavailable(error)) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[auth/login] Banco indisponível:', error);
+        }
+        return res.status(503).json({
+          success: false,
+          error:
+            'Banco de dados indisponível. Verifique no Supabase se o projeto está ativo (não pausado) e se DATABASE_URL / DIRECT_URL no arquivo backend/.env estão corretas (Settings → Database).',
         });
       }
       if (process.env.NODE_ENV === 'development') {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
@@ -125,6 +125,37 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     }, [showPostMatchSheet, onPostMatchOpenChange]);
     const [preparationAthleteFilter, setPreparationAthleteFilter] = useState<'goleiros' | 'linha'>('goleiros'); // Goleiros | Atletas de linha na preparação
+    const [preparationFutsalHint, setPreparationFutsalHint] = useState<string | null>(null);
+
+    const selectPrepAthleteFilter = useCallback((t: 'goleiros' | 'linha') => {
+        setPreparationFutsalHint(null);
+        setPreparationAthleteFilter(t);
+    }, []);
+
+    /** Futsal: mínimo 1 goleiro e 4 jogadores de linha. Ajusta aba e mensagem se faltar algo. */
+    const validateFutsalLineupSelection = useCallback((): boolean => {
+        const list = players || [];
+        const gkIds = new Set(list.filter((p) => p.position === 'Goleiro').map((p) => String(p.id).trim()));
+        const lineIds = new Set(list.filter((p) => p.position !== 'Goleiro').map((p) => String(p.id).trim()));
+        let gkCount = 0;
+        let lineCount = 0;
+        selectedPlayersForMatch.forEach((id) => {
+            if (gkIds.has(id)) gkCount += 1;
+            else if (lineIds.has(id)) lineCount += 1;
+        });
+        if (gkCount < 1) {
+            setPreparationAthleteFilter('goleiros');
+            setPreparationFutsalHint('No futsal são 5 jogadores em quadra: selecione pelo menos 1 goleiro.');
+            return false;
+        }
+        if (lineCount < 4) {
+            setPreparationAthleteFilter('linha');
+            setPreparationFutsalHint('Complete a equipe: selecione pelo menos 4 atletas de linha (1 goleiro + 4 de linha).');
+            return false;
+        }
+        setPreparationFutsalHint(null);
+        return true;
+    }, [players, selectedPlayersForMatch]);
 
     // Calendário: filtro de datas (default: mês atual) e modo de visualização
     const [startDate, setStartDate] = useState<string>(() => {
@@ -664,40 +695,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     }, [entries, championshipMatches, initialData, opponent, competition, location]);
 
-    // Função para determinar o período do gol (1T ou 2T) baseado no minuto
-    const getGoalPeriod = (timeString: string): string => {
+    /** Exibe o horário do gol; remove sufixo legado "(1T)"/"(2T)" sem acrescentar novo sufixo. */
+    const formatGoalTimeForSave = (timeString: string): string => {
         if (!timeString || timeString.trim() === '') return '-';
-        
-        const trimmedTime = timeString.trim();
-        
-        // Remover parênteses e período se já existir (ex: "12:43 (1T)" -> "12:43")
-        const cleanTime = trimmedTime.replace(/\s*\([12]T\)/gi, '').trim();
-        
-        // Formato esperado: "MM:SS" ou "M:SS" ou apenas número "MM"
-        const timeParts = cleanTime.split(':');
-        let minutes = 0;
-        
-        if (timeParts.length === 2) {
-            // Formato "MM:SS" ou "M:SS"
-            minutes = parseInt(timeParts[0]) || 0;
-        } else if (timeParts.length === 1) {
-            // Formato apenas número (minutos)
-            minutes = parseInt(timeParts[0]) || 0;
-        }
-        
-        // Em futsal: 1T = 0-20min, 2T = 21-40min
-        // Se o minuto for > 0 e <= 20, é 1T; se for > 20 e <= 40, é 2T
-        if (minutes > 0 && minutes <= 20) {
-            return `${cleanTime} (1T)`;
-        } else if (minutes > 20 && minutes <= 40) {
-            return `${cleanTime} (2T)`;
-        } else if (minutes === 0) {
-            // Se for 0, não sabemos o período ainda
-            return cleanTime;
-        } else {
-            // Se passar de 40min, pode ser prorrogação ou erro de digitação
-            return `${cleanTime} (ET)`;
-        }
+        return timeString.trim().replace(/\s*\([12]T\)/gi, '').trim();
     };
 
     const handlePlayerSelect = (index: number, playerId: string) => {
@@ -1466,7 +1467,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             entry.goalTimes.forEach(goalTime => {
                 if (goalTime.time && goalTime.time.trim() !== '') {
                     // Formatar o tempo com período antes de salvar
-                    const formattedTime = getGoalPeriod(goalTime.time);
+                    const formattedTime = formatGoalTimeForSave(goalTime.time);
                     allGoalTimes.push({
                         time: formattedTime,
                         method: goalTime.method && goalTime.method.trim() !== '' ? goalTime.method.trim() : undefined
@@ -1481,7 +1482,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         goalsConceded.forEach(goalConceded => {
             if (goalConceded.time && goalConceded.time.trim() !== '') {
                 // Formatar o tempo com período antes de salvar
-                const formattedTime = getGoalPeriod(goalConceded.time);
+                const formattedTime = formatGoalTimeForSave(goalConceded.time);
                 allGoalsConcededTimes.push({
                     time: formattedTime,
                     method: goalConceded.method && goalConceded.method.trim() !== '' ? goalConceded.method.trim() : undefined
@@ -2127,8 +2128,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2199,6 +2200,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     type="button"
                                     onClick={() => {
                                         if (selectedPlayersForMatch.size === 0) return;
+                                        if (!validateFutsalLineupSelection()) return;
                                         const realtimeScoutData = {
                                             matchId: selectedMatch.id,
                                             date: selectedMatch.date,
@@ -2220,6 +2222,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <Target size={20} /> Iniciar Scout da Partida (abre em nova aba)
                                 </button>
                             </div>
+                            {preparationFutsalHint && (
+                                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                    {preparationFutsalHint}
+                                </div>
+                            )}
                             {selectedPlayersForMatch.size === 0 && (
                                 <p className="text-amber-400 text-xs text-center">Selecione pelo menos um atleta para abrir o scout em nova aba.</p>
                             )}
@@ -2273,8 +2280,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2383,10 +2390,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 )}
                             </div>
 
-                            <div className="flex justify-center">
+                            <div className="flex flex-col items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setShowStartScoutConfirmation(true)}
+                                    onClick={() => {
+                                        if (!validateFutsalLineupSelection()) return;
+                                        setShowStartScoutConfirmation(true);
+                                    }}
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] ${
                                         selectedPlayersForMatch.size === 0
@@ -2396,6 +2406,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 >
                                     <Play size={18} /> Iniciar Scout da Partida
                                 </button>
+                                {preparationFutsalHint && (
+                                    <div className="w-full max-w-lg rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                        {preparationFutsalHint}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2441,8 +2456,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2514,10 +2529,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).length === 0 && <p className="text-zinc-500 text-sm text-center py-6">Nenhum jogador nesta categoria</p>}
                             </div>
 
-                            <div className="flex justify-center">
+                            <div className="flex flex-col items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setShowPostMatchSheet(true)}
+                                    onClick={() => {
+                                        if (!validateFutsalLineupSelection()) return;
+                                        setShowPostMatchSheet(true);
+                                    }}
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors ${
                                         selectedPlayersForMatch.size === 0
@@ -2525,8 +2543,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             : 'bg-[#00f0ff] hover:bg-[#00d9e6] text-black shadow-[0_0_15px_rgba(0,240,255,0.3)]'
                                     }`}
                                 >
-                                    Continuar para planilha
+                                    Continuar para coleta de dados
                                 </button>
+                                {preparationFutsalHint && (
+                                    <div className="w-full max-w-lg rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                        {preparationFutsalHint}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

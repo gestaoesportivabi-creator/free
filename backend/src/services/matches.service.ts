@@ -167,11 +167,12 @@ export const matchesService = {
 
     // Extrair métodos de gol do postMatchEventLog
     let metodoGol: string | null = null;
-    const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+    const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean; subtipo?: string }> | undefined;
     if (eventLog && Array.isArray(eventLog)) {
       const methodCounts: Record<string, number> = {};
       for (const ev of eventLog) {
-        if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+        const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+        if (ev.action === 'goal' && ev.goalMethod && !isConceded) {
           methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
         }
       }
@@ -188,7 +189,8 @@ export const matchesService = {
     if (eventLog && Array.isArray(eventLog)) {
       const concededCounts: Record<string, number> = {};
       for (const ev of eventLog) {
-        if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+        const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+        if (ev.action === 'goal' && ev.goalMethod && isConceded) {
           concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
         }
       }
@@ -310,11 +312,12 @@ export const matchesService = {
     const teamStats = data.teamStats;
     if (teamStats) {
       let metodoGol: string | null = null;
-      const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+      const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean; subtipo?: string }> | undefined;
       if (eventLog && Array.isArray(eventLog)) {
         const methodCounts: Record<string, number> = {};
         for (const ev of eventLog) {
-          if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+          const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+          if (ev.action === 'goal' && ev.goalMethod && !isConceded) {
             methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
           }
         }
@@ -331,7 +334,8 @@ export const matchesService = {
       if (eventLog && Array.isArray(eventLog)) {
         const concededCounts: Record<string, number> = {};
         for (const ev of eventLog) {
-          if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+          const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+          if (ev.action === 'goal' && ev.goalMethod && isConceded) {
             concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
           }
         }

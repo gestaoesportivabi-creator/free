@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Trophy, AlertCircle, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { MatchRecord, Player } from '../types';
+import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds } from '../utils/matchPeriod';
 import { ExpandableCard } from './ExpandableCard';
 import { IS_FREE_PLAN } from '../config';
 
@@ -34,16 +35,7 @@ export interface QuartetDisplay {
 }
 
 const QUARTET_MATCH_DURATION_SEC = 40 * 60; // 40 min
-const QUARTET_PERIOD_SEC = 20 * 60; // 20 min
 const MIN_QUARTET_MINUTES = 3; // Regra mínima: >= 3 min juntos
-
-const parseEventTimeToSeconds = (timeStr: string, period: '1T' | '2T'): number => {
-  const parts = timeStr.trim().split(':');
-  const mm = parseInt(parts[0], 10) || 0;
-  const ss = parseInt(parts[1], 10) || 0;
-  const sec = mm * 60 + ss;
-  return period === '1T' ? sec : QUARTET_PERIOD_SEC + sec;
-};
 
 const getQuartetKey = (ids: string[]): string => [...ids].map(id => String(id).trim()).sort().join(',');
 
@@ -203,15 +195,15 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, playe
       const gkId = lineup[0];
       let currentQuartet = lineup.slice(1).sort();
       const subs = (match.substitutionHistory || []).slice().sort((a, b) => {
-        const ta = a.period === '1T' ? a.time : QUARTET_PERIOD_SEC + a.time;
-        const tb = b.period === '1T' ? b.time : QUARTET_PERIOD_SEC + b.time;
+        const ta = storedToAbsoluteSeconds(a.period, a.time);
+        const tb = storedToAbsoluteSeconds(b.period, b.time);
         return ta - tb;
       });
 
       const segments: { start: number; end: number; quartet: string[] }[] = [];
       let lastT = 0;
       for (const sub of subs) {
-        const t = sub.period === '1T' ? sub.time : QUARTET_PERIOD_SEC + sub.time;
+        const t = storedToAbsoluteSeconds(sub.period, sub.time);
         if (t <= lastT) continue;
         const outId = String(sub.playerOutId).trim();
         if (outId === gkId) continue;
@@ -237,7 +229,7 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, playe
 
       const log = match.postMatchEventLog || [];
       log.forEach(ev => {
-        const eventSec = parseEventTimeToSeconds(ev.time, ev.period);
+        const eventSec = postMatchEventClockToAbsoluteSeconds(ev.time, ev.period);
         const seg = segments.find(s => eventSec >= s.start && eventSec < s.end);
         if (!seg) return;
         const key = getQuartetKey(seg.quartet);

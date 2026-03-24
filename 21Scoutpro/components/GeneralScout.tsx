@@ -6,6 +6,7 @@ import { ExpandableCard } from './ExpandableCard';
 import { IS_FREE_PLAN } from '../config';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
+import { postMatchEventClockToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -208,10 +209,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     };
   }, [filteredMatches]);
 
-  // Para o gráfico de gols por período: usar apenas o valor de minutos (e segundos) informado.
-  // Não somar 20 para 2T — o eixo do gráfico é só 00:00–50:00 pelo minuto cadastrado.
-  const parseTimeToMinutes = (timeStr: string): number | null => {
+  /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
+  const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
     if (!timeStr || typeof timeStr !== 'string') return null;
+    const paren = timeStr.match(/\(([12])T\)\s*$/i);
+    if (paren) {
+      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
+      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
+      const absSec = postMatchEventClockToAbsoluteSeconds(clockPart, period);
+      return Math.floor(absSec / 60);
+    }
     const cleanTime = timeStr.split('(')[0].trim();
     const parts = cleanTime.split(':');
     if (parts.length === 2) {
@@ -241,7 +248,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       if (!match.teamStats || !match.teamStats.goalTimes) return;
       
       match.teamStats.goalTimes.forEach(goalTime => {
-        const minutes = parseTimeToMinutes(goalTime.time);
+        const minutes = parseGoalTimeToAbsoluteMinutes(goalTime.time);
         if (minutes !== null && minutes >= 0 && minutes <= 50) {
           // Encontrar em qual período de 5 minutos o gol cai
           // Períodos: 0-5 (índice 0), 5-10 (índice 1), 10-15 (índice 2), etc.
@@ -263,7 +270,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
       
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
-        const minutes = parseTimeToMinutes(goalConceded.time);
+        const minutes = parseGoalTimeToAbsoluteMinutes(goalConceded.time);
         if (minutes !== null && minutes >= 0 && minutes <= 50) {
           // Encontrar em qual período de 5 minutos o gol cai
           const periodIndex = Math.floor(minutes / 5);

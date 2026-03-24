@@ -238,6 +238,8 @@ export interface MatchRecord {
   possessionSecondsWith?: number;
   /** Segundos sem posse de bola – evolução campeonato */
   possessionSecondsWithout?: number;
+  /** Link do vídeo (ex.: YouTube) para análise na cabine de vídeo */
+  videoUrl?: string;
   /** Status da partida para exibição e filtros */
   status?: 'encerrado' | 'em_andamento' | 'nao_executado';
 }

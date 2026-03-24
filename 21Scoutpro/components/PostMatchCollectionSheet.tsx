@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Save, ArrowLeft, Calendar, Plus, Trash2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PostMatchAction, PostMatchEvent } from '../types';
+import { absoluteSecondsToStored, postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
 
 export interface PostMatchMatchContext {
   id: string;
@@ -15,7 +16,6 @@ export interface PostMatchMatchContext {
 
 interface FormData {
   time: string;
-  period: '1T' | '2T';
   playerId: string;
   action: PostMatchAction | '';
 }
@@ -126,10 +126,24 @@ const formatDate = (dateStr: string) => {
 
 const defaultFormData: FormData = {
   time: '',
-  period: '1T',
   playerId: '',
   action: '',
 };
+
+function parseMMSSClockToSeconds(mmss: string): number {
+  const parts = mmss.split(':');
+  if (parts.length < 2) return 0;
+  const m = parseInt(parts[0], 10);
+  const sec = parseInt(parts[1], 10);
+  if (Number.isNaN(m) || Number.isNaN(sec) || m < 0 || sec < 0 || sec > 59) return 0;
+  return m * 60 + sec;
+}
+
+function formatSecondsToMMSS(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
 
 /**
  * Formata apenas dígitos para MM:SS (ex.: "0100" → "01:00").
@@ -183,7 +197,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [events, setEvents] = useState<PostMatchEvent[]>([]);
 
-  const updateForm = (field: keyof FormData, value: string | '1T' | '2T') => {
+  const updateForm = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -211,10 +225,12 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
     }
     const action = formData.action as PostMatchAction;
     const { tipo, subtipo } = getTipoSubtipo(action);
+    const absSec = parseMMSSClockToSeconds(t);
+    const { period, time: relSec } = absoluteSecondsToStored(absSec);
     const newEvent: PostMatchEvent = {
       id: `evt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      time: t,
-      period: formData.period,
+      time: formatSecondsToMMSS(relSec),
+      period,
       playerId: formData.playerId.trim(),
       action,
       tipo,
@@ -370,26 +386,15 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
           <p className="text-zinc-400 text-xs font-bold uppercase mb-3">Inserir evento</p>
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[100px]">
-              <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Tempo (apenas números)</label>
+              <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Tempo no jogo (apenas números)</label>
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="ex. 0100 → 01:00"
+                placeholder="minuto absoluto, ex. 0100"
                 value={formatDigitsToMMSS(formData.time)}
                 onChange={(e) => handleTimeInput(e.target.value)}
                 className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#00f0ff] font-mono tabular-nums"
               />
-            </div>
-            <div className="min-w-[110px]">
-              <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Período</label>
-              <select
-                value={formData.period}
-                onChange={(e) => updateForm('period', e.target.value as '1T' | '2T')}
-                className="w-full bg-zinc-950 border border-zinc-700 rounded px-3 py-2 text-white text-xs outline-none focus:border-[#00f0ff]"
-              >
-                <option value="1T">1º tempo</option>
-                <option value="2T">2º tempo</option>
-              </select>
             </div>
             <div className="min-w-[180px]">
               <label className="block text-[10px] text-zinc-500 uppercase font-bold mb-1">Jogador</label>
@@ -446,7 +451,6 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
             <thead>
               <tr className="bg-zinc-950 text-[10px] text-zinc-400 uppercase tracking-wider font-bold border-b border-zinc-800">
                 <th className="p-3 border-r border-zinc-800 w-24">Tempo (MM:SS)</th>
-                <th className="p-3 border-r border-zinc-800 w-28">Período</th>
                 <th className="p-3 border-r border-zinc-800 min-w-[160px]">Jogador</th>
                 <th className="p-3 border-r border-zinc-800 min-w-[180px]">Ação</th>
                 <th className="p-3 w-20 text-center">Remover</th>
@@ -458,10 +462,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
                 return (
                   <tr key={evt.id} className="border-b border-zinc-800 hover:bg-zinc-950/50">
                     <td className="p-3 border-r border-zinc-800 text-white text-xs font-mono">
-                      {evt.time}
-                    </td>
-                    <td className="p-3 border-r border-zinc-800 text-zinc-300 text-xs">
-                      {evt.period === '1T' ? '1º tempo' : '2º tempo'}
+                      {formatSecondsToMMSS(postMatchEventClockToAbsoluteSeconds(evt.time, evt.period))}
                     </td>
                     <td className="p-3 border-r border-zinc-800 text-white text-xs font-bold">
                       {p ? `#${p.jerseyNumber} ${p.name}` : '?'}

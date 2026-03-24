@@ -11,7 +11,6 @@ interface VideoScoutProps {
 interface ActionLog {
   id: number;
   realTime: string;
-  period: string;
   matchTimeRange: string;
   player: string;
   action: string;
@@ -34,8 +33,6 @@ export const VideoScout: React.FC<VideoScoutProps> = ({ config, matches, players
   
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   
-  // Context States
-  const [selectedPeriod, setSelectedPeriod] = useState<'1º Tempo' | '2º Tempo'>('1º Tempo');
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>(TIME_RANGES[0]);
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
@@ -84,7 +81,6 @@ export const VideoScout: React.FC<VideoScoutProps> = ({ config, matches, players
     const newLog: ActionLog = {
         id: Date.now(),
         realTime: new Date().toLocaleTimeString('pt-BR', { hour12: false }),
-        period: selectedPeriod,
         matchTimeRange: selectedTimeRange,
         player: player?.name || 'Desconhecido',
         action: actionName
@@ -207,26 +203,7 @@ export const VideoScout: React.FC<VideoScoutProps> = ({ config, matches, players
          {/* Right Column: Scouting Controls */}
          <div className="bg-black rounded-3xl border border-zinc-800 flex flex-col h-full overflow-hidden shadow-xl">
              
-             {/* 1. Context Controls (Period & Time Range) */}
              <div className="p-4 bg-zinc-950 border-b border-zinc-800 space-y-3">
-                 
-                 {/* Period Selector */}
-                 <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-                    <button 
-                        onClick={() => setSelectedPeriod('1º Tempo')}
-                        className={`flex-1 py-2 text-xs font-bold uppercase rounded-lg transition-all ${selectedPeriod === '1º Tempo' ? 'bg-[#10b981] text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
-                    >
-                        1º Tempo
-                    </button>
-                    <button 
-                         onClick={() => setSelectedPeriod('2º Tempo')}
-                         className={`flex-1 py-2 text-xs font-bold uppercase rounded-lg transition-all ${selectedPeriod === '2º Tempo' ? 'bg-[#10b981] text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
-                    >
-                        2º Tempo
-                    </button>
-                 </div>
-
-                 {/* Time Range Selector */}
                  <div>
                     <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2 flex items-center gap-1">
                         <Clock size={10} /> Faixa de Tempo
@@ -302,8 +279,8 @@ export const VideoScout: React.FC<VideoScoutProps> = ({ config, matches, players
                     {logs.map(log => (
                         <div key={log.id} className="flex justify-between items-center bg-black p-2 rounded border border-zinc-800 animate-fade-in group hover:border-zinc-700">
                             <div className="flex flex-col">
-                                <div className="flex gap-2 items-center">
-                                    <span className="text-[#10b981] text-[10px] font-bold uppercase">{log.period}</span>
+                                <div className="flex gap-2 items-center flex-wrap">
+                                    <span className="text-zinc-500 text-[10px] font-mono">{log.realTime}</span>
                                     <span className="text-zinc-500 text-[10px] font-mono">[{log.matchTimeRange}]</span>
                                 </div>
                                 <span className="text-white text-xs font-bold mt-0.5">{log.player}</span>
