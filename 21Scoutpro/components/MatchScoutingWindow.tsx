@@ -362,6 +362,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [showFreeKickResult, setShowFreeKickResult] = useState<boolean>(false);
   const [pendingFreeKickTeam, setPendingFreeKickTeam] = useState<'for' | 'against' | null>(null);
   const [pendingFreeKickKickerId, setPendingFreeKickKickerId] = useState<string | null>(null);
+  /** Após escolher Defesa/Pra fora (a favor): abre modal de cobrador antes de registrar */
+  const [pendingFreeKickResultToRegister, setPendingFreeKickResultToRegister] = useState<'saved' | 'outside' | 'noGoal' | null>(null);
   const [freeKickStep, setFreeKickStep] = useState<'team' | 'kicker' | 'result' | null>(null);
   const [penaltyStep, setPenaltyStep] = useState<'team' | 'kicker' | 'result' | null>(null);
   
@@ -494,20 +496,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const step = needsDetails(action) ? 'details' as const : 'player' as const;
     const flow = { step, action, details: null as string | null };
 
-    // Escanteio e Lateral: atalho com jogador já selecionado ou primeiro ativo; senão popup central de jogador
+    // Escanteio e Lateral: sempre popup central para escolher o jogador (sem atalho com seleção na lista)
     if (action === 'lateral' || action === 'corner') {
-      const pid = selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null);
-      if (pid) {
-        if (needsTimePopup()) {
-          setActionFlow({ ...flow, step: 'time', selectedPlayerId: pid, pendingTime: getTimeForEvent() ?? matchTime ?? 0 });
-        } else {
-          executeActionFlow(flow as NonNullable<typeof actionFlow>, pid);
-          setActionFlow(null);
-          setSelectedAction(null);
-        }
-      } else {
-        setActionFlow({ ...flow, step: 'player' as const });
-      }
+      setActionFlow({ ...flow, step: 'player' as const });
       return;
     }
 
@@ -1829,6 +1820,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setShowFreeKickResult(false);
     setPendingFreeKickTeam(null);
     setPendingFreeKickKickerId(null);
+    setPendingFreeKickResultToRegister(null);
     setFreeKickStep(null);
     setSelectedAction(null);
   };
@@ -3034,11 +3026,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               onClick={() => {
                                 setPendingGoalPlayerId(pid);
                                 setPendingAssistPlayerId(null);
-                                if (pendingGoalMethod && GOAL_METHODS_NO_ASSIST.includes(pendingGoalMethod)) {
-                                  setGoalStep('confirm');
-                                } else {
-                                  setGoalStep('method');
-                                }
+                                setGoalStep('method');
                               }}
                               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/15 border-2 border-green-500/80 hover:bg-green-500/25 transition-colors text-left"
                             >
@@ -3744,7 +3732,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               {/* Popup Tiro Livre - 1: Contra ou A favor */}
               {freeKickStep === 'team' && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); }} aria-hidden="true" />
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickResultToRegister(null); }} aria-hidden="true" />
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Tiro Livre - Contra ou A favor?</h3>
@@ -3762,8 +3750,53 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       >
                         Contra (Adversário)
                       </button>
-                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
+                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickResultToRegister(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
                         Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Popup Tiro Livre - Cobrador (Defesa / Pra fora — a favor) */}
+              {freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                  <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { setFreeKickStep('result'); setPendingFreeKickResultToRegister(null); }}
+                    aria-hidden="true"
+                  />
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
+                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
+                      <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Quem cobrou o tiro livre?</h3>
+                    </div>
+                    <div className="p-4 max-h-[50vh] overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-2">
+                        {activePlayers?.length ? activePlayers.map((player) => (
+                          <button
+                            key={player.id}
+                            type="button"
+                            onClick={() => {
+                              const res = pendingFreeKickResultToRegister;
+                              const pid = String(player.id).trim();
+                              if (res) handleRegisterFreeKick('for', pid, res);
+                            }}
+                            className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-violet-500 hover:bg-violet-500/10 transition-colors text-left"
+                          >
+                            <span>#{player.jerseyNumber} {player.nickname?.trim() || player.name}</span>
+                            {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
+                          </button>
+                        )) : (
+                          <p className="col-span-2 text-zinc-500 text-xs text-center py-2">Nenhum jogador ativo</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => { setFreeKickStep('result'); setPendingFreeKickResultToRegister(null); }}
+                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
+                      >
+                        Voltar
                       </button>
                     </div>
                   </div>
@@ -3772,7 +3805,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               {/* Popup Tiro Livre - 2: Resultado (Gol / Defesa / Pra fora) */}
               {freeKickStep === 'result' && pendingFreeKickTeam && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); }} aria-hidden="true" />
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); setPendingFreeKickResultToRegister(null); }} aria-hidden="true" />
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Resultado do Tiro Livre</h3>
@@ -3784,6 +3817,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setFreeKickStep(null);
                           setPendingFreeKickTeam(null);
                           setPendingFreeKickKickerId(null);
+                          setPendingFreeKickResultToRegister(null);
                           setPendingGoalMethod('Tiro Livre');
                           setPendingGoalTime(getTimeForEvent() ?? matchTime);
                           if (team === 'for') {
@@ -3803,8 +3837,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          const kickerId = pendingFreeKickTeam === 'for' ? (selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null)) : null;
-                          handleRegisterFreeKick(pendingFreeKickTeam, kickerId, 'saved');
+                          if (pendingFreeKickTeam === 'for') {
+                            setPendingFreeKickResultToRegister('saved');
+                            setFreeKickStep('kicker');
+                          } else {
+                            handleRegisterFreeKick('against', null, 'saved');
+                          }
                         }}
                         className="w-full px-4 py-4 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-sm rounded-xl hover:bg-purple-500/30 transition-colors"
                       >
@@ -3812,14 +3850,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          const kickerId = pendingFreeKickTeam === 'for' ? (selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null)) : null;
-                          handleRegisterFreeKick(pendingFreeKickTeam, kickerId, pendingFreeKickTeam === 'against' ? 'noGoal' : 'outside');
+                          if (pendingFreeKickTeam === 'for') {
+                            setPendingFreeKickResultToRegister('outside');
+                            setFreeKickStep('kicker');
+                          } else {
+                            handleRegisterFreeKick('against', null, 'noGoal');
+                          }
                         }}
                         className="w-full px-4 py-4 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-sm rounded-xl hover:bg-red-500/30 transition-colors"
                       >
                         Pra fora
                       </button>
-                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
+                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); setPendingFreeKickResultToRegister(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
                         Cancelar
                       </button>
                     </div>
