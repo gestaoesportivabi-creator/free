@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Play, Pause, Square, Users, ArrowRightLeft, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
-import { absoluteSecondsToStored, canonicalizePostMatchEventClock, deriveHalfFromAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
+import { HALF_RELATIVE_MAX_SECONDS, absoluteSecondsToStored, canonicalizePostMatchEventClock, deriveHalfFromAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -384,6 +384,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     wrongPassTransition?: boolean;
   } | null>(null);
   const [showPenaltyKickerSelection, setShowPenaltyKickerSelection] = useState<boolean>(false);
+  const [isManualSaving, setIsManualSaving] = useState<boolean>(false);
   const [showPenaltyResult, setShowPenaltyResult] = useState<boolean>(false);
   const [pendingPenaltyTeam, setPendingPenaltyTeam] = useState<'for' | 'against' | null>(null);
   const [pendingPenaltyKickerId, setPendingPenaltyKickerId] = useState<string | null>(null);
@@ -553,7 +554,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (isPostmatch) {
       return absoluteSecondsToStored(rawSeconds);
     }
-    return { time: rawSeconds, period: periodOverride ?? currentPeriod };
+    const clampedRelative = Math.max(0, Math.min(rawSeconds, HALF_RELATIVE_MAX_SECONDS));
+    return { time: clampedRelative, period: periodOverride ?? currentPeriod };
   };
 
   const executeActionFlow = (
@@ -1203,6 +1205,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
+    if (!window.confirm('Tem certeza que deseja finalizar a coleta?')) return;
 
     if (isPostmatch && onSave) {
       const savedMatch = buildMatchSnapshot('encerrado');
@@ -1219,6 +1222,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       await onSave(savedMatch, { source: 'manual' });
     }
     onClose();
+  };
+
+  // Salvar manualmente sem fechar a janela (confirmação explícita)
+  const handleManualSaveOnly = async () => {
+    if (!onSave) return;
+    if (!window.confirm('Tem certeza que deseja salvar os dados agora?')) return;
+    setIsManualSaving(true);
+    try {
+      const status: 'em_andamento' | 'encerrado' = ((isPostmatch && matchEvents.length >= 1) || isMatchEnded) ? 'encerrado' : 'em_andamento';
+      const savedMatch = buildMatchSnapshot(status);
+      await onSave(savedMatch, { source: 'manual' });
+      lastAutosaveSignatureRef.current = JSON.stringify(savedMatch);
+      alert('Dados salvos com sucesso.');
+    } catch (error) {
+      console.error('Erro ao salvar manualmente:', error);
+      alert('Falha ao salvar os dados. Tente novamente.');
+    } finally {
+      setIsManualSaving(false);
+    }
   };
 
   // Salvar rascunho para finalizar depois (status = em_andamento)
@@ -1265,14 +1287,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    const onBeforeUnload = () => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
       void saveSilently();
+      event.preventDefault();
+      event.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [isOpen, saveSilently]);
 
   const handleCloseWithSilentSave = async () => {
+    if (!window.confirm('Tem certeza que deseja fechar? Dados não salvos podem ser perdidos.')) return;
     await saveSilently();
     onClose();
   };
@@ -2211,17 +2236,31 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <List size={14} /> Logs
               </button>
               <div className="flex flex-col items-end gap-1">
-                <button
-                  onClick={handleEndCollection}
-                  disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                  className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
-                    (isPostmatch && matchEvents.length >= 1) || isMatchEnded
-                      ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
-                      : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                  }`}
-                >
-                  Finalizar Coleta
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleManualSaveOnly}
+                    disabled={isManualSaving}
+                    className={`px-3 py-2.5 rounded-xl border-2 text-[11px] uppercase font-bold tracking-wide transition-all ${
+                      isManualSaving
+                        ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-wait'
+                        : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-500 text-emerald-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-500/10'
+                    }`}
+                  >
+                    {isManualSaving ? 'Salvando...' : 'Salvar Dados'}
+                  </button>
+                  <button
+                    onClick={handleEndCollection}
+                    disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
+                    className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
+                      (isPostmatch && matchEvents.length >= 1) || isMatchEnded
+                        ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
+                    }`}
+                  >
+                    Finalizar Coleta
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={handleSaveLater}
