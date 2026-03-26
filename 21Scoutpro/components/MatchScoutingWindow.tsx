@@ -4123,13 +4123,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
                         <button
                           onClick={() => {
-                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5) return;
+                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
                             if (!isPostmatch && selectedAction !== 'foul') setIsRunning(false);
                             handleSelectAction('foul');
                           }}
-                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5}
+                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                           className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            (!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5
+                            (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : selectedAction === 'foul'
                               ? 'bg-orange-500/30 border-orange-500 text-orange-400'
