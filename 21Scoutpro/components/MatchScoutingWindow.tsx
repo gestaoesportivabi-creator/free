@@ -508,6 +508,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
     if (!actionFlow) return;
+    // Falta do adversário: só contabiliza; não abre popup com lista dos nossos jogadores
+    if (actionFlow.action === 'foul' && extra?.foulTeam === 'against') {
+      executeActionFlow(
+        { ...actionFlow, step: 'details', details, foulTeam: 'against', ...extra },
+        OPPONENT_FAKE_PLAYER_ID
+      );
+      return;
+    }
     setActionFlow({ ...actionFlow, step: 'player' as const, details, ...extra });
   };
 
@@ -1501,19 +1509,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Registrar falta: Nosso ou Adversário. Contagem continua após 5; a partir da 6ª o botão Tiro Livre fica disponível.
   const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
-    if (!pid) return;
+    const pid =
+      team === 'against'
+        ? (playerIdOverride ?? OPPONENT_FAKE_PLAYER_ID)
+        : (playerIdOverride ?? selectedPlayerId);
+    if (team === 'for' && !pid) return;
+    if (team === 'for' && pid === OPPONENT_FAKE_PLAYER_ID) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
 
-    const player = activePlayers.find(p => String(p.id).trim() === pid);
+    const player = team === 'against' ? null : activePlayers.find(p => String(p.id).trim() === pid);
     const subtipoText = team === 'for' ? 'Nosso' : 'Adversário';
     const newEvent: MatchEvent = {
       id: `foul-${Date.now()}`,
       type: 'foul',
       playerId: pid,
-      playerName: player?.name || '',
+      playerName: team === 'against' ? OPPONENT_FAKE_PLAYER_NAME : (player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       tipo: 'Falta',
