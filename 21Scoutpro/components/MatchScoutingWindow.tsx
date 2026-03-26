@@ -268,8 +268,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 }) => {
   const isPostmatch = mode === 'postmatch';
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
-  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto 0–20
+  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (21+ = 2º tempo)
   const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
+  /** Pós-jogo: 0:00 só abre popup «Informar tempo» se o usuário não escolheu 1º/2º no centro (ex.: após gol). */
+  const [manualHalfPinned, setManualHalfPinned] = useState<boolean>(true);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
@@ -555,7 +557,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const needsTimePopup = (): boolean =>
-    isPostmatch && manualMinute === 0 && manualSecond === 0;
+    isPostmatch && manualMinute === 0 && manualSecond === 0 && !manualHalfPinned;
 
   /** Tempo relativo à metade + period técnico; pós-jogo: `rawSeconds` é minuto absoluto 0–40. */
   const eventTimeAndPeriod = (rawSeconds: number, periodOverride?: MatchHalf): { time: number; period: MatchHalf } => {
@@ -689,7 +691,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return matchTime;
   };
 
-  // Pós-jogo: metade técnica deriva só do relógio informado (sem select de período).
+  // Pós-jogo: metade técnica deriva do relógio (1º tempo = min 0–20 abs.; 2º = 21–40) ou do botão 1º/2º Tempo.
   useEffect(() => {
     if (!isPostmatch) return;
     setCurrentPeriod(deriveHalfFromAbsoluteSeconds(manualMinute * 60 + manualSecond));
@@ -699,6 +701,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     if (isPostmatch) {
+      setManualMinute(0);
+      setManualSecond(0);
+      setManualHalfPinned(true);
+      setCurrentPeriod('1T');
       // Postmatch: pular lineup, usar selectedPlayerIds como jogadores ativos
       const ids = selectedPlayerIds && selectedPlayerIds.length > 0
         ? selectedPlayerIds
@@ -1800,10 +1806,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingGoalMethod(null);
     setGoalConfirmEditingTime(false);
     setGoalStep(null);
-    // Em postmatch: resetar tempo manual para que o próximo evento peça o tempo novamente
+    // Em postmatch: resetar relógio para 0:00 e pedir tempo de novo (popup ou botão 1º/2º Tempo)
     if (isPostmatch) {
       setManualMinute(0);
       setManualSecond(0);
+      setManualHalfPinned(false);
     }
   };
   
@@ -4152,28 +4159,41 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
                       <div className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
                         {isPostmatch ? (
-                          <div className="w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
-                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo (min:seg)</label>
-                            <div className="flex items-center gap-1">
-                              <select
-                                value={manualMinute}
-                                onChange={(e) => setManualMinute(parseInt(e.target.value, 10))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                          <div className="w-full h-full min-h-[80px] py-3 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
+                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo</label>
+                            <div className="flex w-full gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManualMinute(0);
+                                  setManualSecond(0);
+                                  setManualHalfPinned(true);
+                                  setCurrentPeriod('1T');
+                                }}
+                                className={`flex-1 min-h-[48px] rounded-lg border-2 font-bold uppercase text-xs sm:text-sm transition-colors ${
+                                  currentPeriod === '1T'
+                                    ? 'bg-[#00f0ff]/25 border-[#00f0ff] text-[#00f0ff]'
+                                    : 'bg-zinc-950 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300'
+                                }`}
                               >
-                                {Array.from({ length: 41 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
-                              <span className="text-zinc-500 font-bold">:</span>
-                              <select
-                                value={manualSecond}
-                                onChange={(e) => setManualSecond(parseInt(e.target.value, 10))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
+                                1º Tempo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setManualMinute(21);
+                                  setManualSecond(0);
+                                  setManualHalfPinned(true);
+                                  setCurrentPeriod('2T');
+                                }}
+                                className={`flex-1 min-h-[48px] rounded-lg border-2 font-bold uppercase text-xs sm:text-sm transition-colors ${
+                                  currentPeriod === '2T'
+                                    ? 'bg-[#00f0ff]/25 border-[#00f0ff] text-[#00f0ff]'
+                                    : 'bg-zinc-950 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300'
+                                }`}
                               >
-                                {Array.from({ length: 60 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
+                                2º Tempo
+                              </button>
                             </div>
                           </div>
                         ) : (
