@@ -56,6 +56,8 @@ const COLORS = {
   /** Contra-ataque (Tipos de Desarmes) — azul bem mais escuro que blueDark */
   counterAttackDark: [30, 58, 138] as [number, number, number],
   slate: [113, 113, 122] as [number, number, number],
+  /** Bloqueado (finalizações) — alinhado ao gráfico web */
+  amber: [245, 158, 11] as [number, number, number],
   black: [0, 0, 0] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
   gray: [100, 100, 100] as [number, number, number],
@@ -120,6 +122,7 @@ export interface ScoutPdfData {
     passesWrong: number;
     shotsOn: number;
     shotsOff: number;
+    shotsShootZone: number;
     tacklesWithBall: number;
     tacklesWithoutBall: number;
     tacklesCounterAttack: number;
@@ -146,6 +149,7 @@ export interface ScoutPdfData {
     passesWrong: number;
     shotsOn: number;
     shotsOff: number;
+    shotsShootZone: number;
     tacklesWithBall: number;
     tacklesWithoutBall: number;
     tacklesCounterAttack: number;
@@ -487,7 +491,13 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       const compactOpts = { chartHeight: barH };
       const pt = data.playerTables;
       const hdrPasses = ['JOGADOR', 'CERTOS', 'ERRADOS', 'TOTAL'] as [string, string, string, string];
-      const hdrShots = ['JOGADOR', 'NO GOL', 'FORA', 'TOTAL'] as [string, string, string, string];
+      const hdrShots = ['JOGADOR', 'NO GOL', 'FORA', 'BLOQ.', 'TOTAL'] as [
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
       const hdrTackles = ['JOGADOR', 'C/SEM POSSE', 'C.-ATQ.', 'TOTAL'] as [string, string, string, string];
       const hdrCrit = ['JOGADOR', 'P. ERRADOS', 'GER. TRANS.', 'TOTAL'] as [string, string, string, string];
 
@@ -501,12 +511,13 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         playerTable: pt?.passes?.length ? { headers: hdrPasses, rows: pt.passes } : undefined,
       });
 
-      // Pág 4: Chutes no Gol vs pra fora
+      // Pág 4: Finalizações (no gol, fora, bloqueado)
       newPageWithWatermark(doc, logoBase64, logoDims);
-      drawBarChartSection(doc, TOP_CHART_Y, 'Chutes no Gol vs Chutes pra Fora', data.chartData, [
+      drawBarChartSection(doc, TOP_CHART_Y, 'Finalizações', data.chartData, [
         { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
         { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
-      ], data.stats.shotsOn + data.stats.shotsOff, {
+        { key: 'shotsShootZone', label: 'Bloqueado', color: COLORS.amber },
+      ], data.stats.shotsOn + data.stats.shotsOff + data.stats.shotsShootZone, {
         ...compactOpts,
         playerTable: pt?.shots?.length ? { headers: hdrShots, rows: pt.shots } : undefined,
       });
@@ -688,6 +699,7 @@ function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): numb
     ['Passes Errados', data.stats.passesWrong],
     ['Chutes no Gol', data.stats.shotsOn],
     ['Chutes pra Fora', data.stats.shotsOff],
+    ['Chutes bloqueados', data.stats.shotsShootZone],
     ['Erros de Transição', data.stats.wrongPassesTransition],
     ['Cartões Amarelos', data.stats.yellowCards],
     ['Cartões Vermelhos', data.stats.redCards],
@@ -755,20 +767,21 @@ function chartTitleStyle(doc: jsPDF, title: string): string {
   return title.toUpperCase();
 }
 
-/** Tabela Top 10 jogadores abaixo do gráfico */
+/** Tabela Top 10 jogadores abaixo do gráfico (4 colunas ou 5 em finalizações). */
 function drawPlayerTableBlock(
   doc: jsPDF,
   startY: number,
-  headers: [string, string, string, string],
+  headers: [string, string, string, string] | [string, string, string, string, string],
   rows: PlayerTop10RowPdf[]
 ): void {
   if (!rows.length) return;
+  const five = headers.length === 5;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...COLORS.cyan);
   doc.text('TOP 10 JOGADORES', MARGIN, startY);
   startY += 5;
-  const colW = [72, 22, 22, 18];
+  const colW = five ? ([48, 17, 17, 17, 17] as const) : ([72, 22, 22, 18] as const);
   let x = MARGIN;
   doc.setTextColor(...COLORS.white);
   headers.forEach((h, i) => {
@@ -780,7 +793,8 @@ function drawPlayerTableBlock(
   doc.setFontSize(6.5);
   rows.forEach((r) => {
     x = MARGIN;
-    const name = r.name.length > 22 ? `${r.name.slice(0, 21)}…` : r.name;
+    const nameMax = five ? 18 : 22;
+    const name = r.name.length > nameMax ? `${r.name.slice(0, nameMax - 1)}…` : r.name;
     doc.setTextColor(...COLORS.white);
     doc.text(name, x, startY, { maxWidth: colW[0] });
     x += colW[0];
@@ -788,6 +802,10 @@ function drawPlayerTableBlock(
     x += colW[1];
     doc.text(String(r.col2), x, startY);
     x += colW[2];
+    if (five) {
+      doc.text(String(r.col3 ?? 0), x, startY);
+      x += colW[3];
+    }
     doc.text(String(r.total), x, startY);
     startY += 3.6;
   });
@@ -802,7 +820,10 @@ function drawBarChartSection(
   total: number,
   opts?: {
     chartHeight?: number;
-    playerTable?: { headers: [string, string, string, string]; rows: PlayerTop10RowPdf[] };
+    playerTable?: {
+      headers: [string, string, string, string] | [string, string, string, string, string];
+      rows: PlayerTop10RowPdf[];
+    };
   }
 ): void {
   const titleUpper = chartTitleStyle(doc, title);
@@ -858,14 +879,15 @@ function drawBarChartSection(
   });
 
   // Legenda centralizada
-  const legendWidth = series.length * 40;
+  const legendStep = series.length > 2 ? 46 : 40;
+  const legendWidth = series.length * legendStep;
   let legX = chartCenterX - legendWidth / 2 + 10;
   series.forEach((s) => {
     doc.setFillColor(...s.color);
     doc.rect(legX, chartTop + chartHeight + 12, 4, 3, 'F');
     doc.setTextColor(...COLORS.white);
     doc.text(s.label, legX + 6, chartTop + chartHeight + 14);
-    legX += 40;
+    legX += legendStep;
   });
 
   if (opts?.playerTable?.rows?.length) {
@@ -919,12 +941,22 @@ function drawTimePeriodChart(
     }
   });
 
-  doc.setFontSize(7);
+  doc.setFontSize(6);
   doc.setTextColor(...COLORS.white);
+  let axisLabelBottom = startY + chartHeight + 5;
   data.forEach((d, i) => {
-    const x = MARGIN + 45 + i * (chartWidth / data.length) + barW / 2 - 3;
-    const label = d.period.split('-')[0] || d.period;
-    doc.text(label, x, startY + chartHeight + 5, { align: 'center' });
+    const x = MARGIN + 45 + i * (chartWidth / data.length) + barW / 2;
+    const sep = ' - ';
+    const idx = d.period.indexOf(sep);
+    if (idx >= 0) {
+      const a = d.period.slice(0, idx);
+      const b = d.period.slice(idx + sep.length);
+      doc.text(a, x, startY + chartHeight + 4, { align: 'center' });
+      doc.text(b, x, startY + chartHeight + 8, { align: 'center' });
+      axisLabelBottom = Math.max(axisLabelBottom, startY + chartHeight + 8);
+    } else {
+      doc.text(d.period, x, startY + chartHeight + 5, { align: 'center' });
+    }
   });
 
   // Regra 7: Legenda igual ao scout coletivo
@@ -932,7 +964,7 @@ function drawTimePeriodChart(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(...COLORS.white);
-    doc.text(legendText, chartCenterX, startY + chartHeight + 18, { align: 'center' });
+    doc.text(legendText, chartCenterX, axisLabelBottom + 10, { align: 'center' });
   }
 }
 

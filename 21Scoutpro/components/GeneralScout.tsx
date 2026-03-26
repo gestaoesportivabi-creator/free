@@ -15,6 +15,20 @@ interface GeneralScoutProps {
 }
 
 
+/** Faixas de 5 min (0–50 min) para gols por período — legendas do eixo X */
+const GOAL_BY_PERIOD_LABELS = [
+  '00:00 - 05:00',
+  '05:01 - 10:00',
+  '10:01 - 15:00',
+  '15:01 - 20:00',
+  '20:01 - 25:00',
+  '25:01 - 30:00',
+  '30:01 - 35:00',
+  '35:01 - 40:00',
+  '40:01 - 45:00',
+  '45:01 - 50:00',
+] as const;
+
 const MONTHS = [
   { value: 'Todos', label: 'Todos os Meses' },
   { value: '0', label: 'Janeiro' },
@@ -135,6 +149,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.passesWrong += curr.teamStats.passesWrong || 0;
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
+      acc.shotsShootZone += curr.teamStats.shotsShootZone || 0;
       
       acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? (curr.teamStats as any).wrongPassesTransition ?? 0;
       const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
@@ -190,7 +205,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       return acc;
     }, {
       totalGames: 0, wins: 0, losses: 0, draws: 0, totalMinutes: 0, goalsConceded: 0, goalsScored: 0,
-      passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0,
+      passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0, shotsShootZone: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
@@ -229,59 +244,58 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     return !isNaN(minutesOnly) ? minutesOnly : null;
   };
 
-  // Time Period Data - Faixa de 00:00 a 50:00 dividida de 5 em 5 minutos
-  const timePeriodData = useMemo(() => {
-    // Criar períodos de 5 em 5 minutos de 00:00 a 50:00
-    const periods: string[] = [];
-    for (let i = 0; i <= 50; i += 5) {
-      const start = `${i.toString().padStart(2, '0')}:00`;
-      const end = i === 50 ? '50:00' : `${(i + 5).toString().padStart(2, '0')}:00`;
-      periods.push(`${start}-${end}`);
+  /** Segundos absolutos no jogo (0 … ~50 min) a partir do texto do relógio — para faixas de 5 min. */
+  const parseGoalTimeToTotalSeconds = (timeStr: string): number | null => {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    const paren = timeStr.match(/\(([12])T\)\s*$/i);
+    if (paren) {
+      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
+      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
+      return postMatchEventClockToAbsoluteSeconds(clockPart, period);
     }
-    
-    // Contar gols reais por período
+    const cleanTime = timeStr.split('(')[0].trim();
+    const parts = cleanTime.split(':');
+    if (parts.length === 2) {
+      const m = parseInt(parts[0], 10);
+      const sec = parseInt(parts[1], 10);
+      if (!isNaN(m) && !isNaN(sec) && sec >= 0 && sec <= 59) return m * 60 + sec;
+    }
+    const mOnly = parseInt(cleanTime, 10);
+    return !isNaN(mOnly) ? mOnly * 60 : null;
+  };
+
+  /** Índice 0–9 em GOAL_BY_PERIOD_LABELS; primeiro bloco [0, 5:00], depois a cada 5 min (ex.: 45:01–50:00). */
+  const goalPeriodIndexFromTotalSeconds = (tSec: number): number | null => {
+    if (!Number.isFinite(tSec) || tSec < 0) return null;
+    const maxSec = 50 * 60;
+    if (tSec > maxSec) return null;
+    if (tSec <= 300) return 0;
+    return Math.min(9, Math.floor((tSec - 1) / 300));
+  };
+
+  // Time Period Data — 10 faixas de 5 min (00:00–50:00)
+  const timePeriodData = useMemo(() => {
+    const periods = [...GOAL_BY_PERIOD_LABELS];
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
-    
-    // Processar gols feitos
+
     filteredMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
-      
       match.teamStats.goalTimes.forEach(goalTime => {
-        const minutes = parseGoalTimeToAbsoluteMinutes(goalTime.time);
-        if (minutes !== null && minutes >= 0 && minutes <= 50) {
-          // Encontrar em qual período de 5 minutos o gol cai
-          // Períodos: 0-5 (índice 0), 5-10 (índice 1), 10-15 (índice 2), etc.
-          // Para minutos 10-14, deve cair no período 10:00-15:00 (índice 2)
-          const periodIndex = Math.floor(minutes / 5);
-          if (periodIndex >= 0 && periodIndex < periods.length) {
-            scoredCounts[periodIndex]++;
-            // Debug log
-            console.log(`⚽ Gol feito: ${goalTime.time} → ${minutes}min → Período ${periodIndex} (${periods[periodIndex]})`);
-          }
-        } else {
-          console.warn(`⚠️ Tempo de gol inválido: ${goalTime.time} → ${minutes}min`);
-        }
+        const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
+        if (tSec === null) return;
+        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
+        if (periodIndex !== null) scoredCounts[periodIndex]++;
       });
     });
-    
-    // Processar gols tomados
+
     filteredMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
-      
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
-        const minutes = parseGoalTimeToAbsoluteMinutes(goalConceded.time);
-        if (minutes !== null && minutes >= 0 && minutes <= 50) {
-          // Encontrar em qual período de 5 minutos o gol cai
-          const periodIndex = Math.floor(minutes / 5);
-          if (periodIndex >= 0 && periodIndex < periods.length) {
-            concededCounts[periodIndex]++;
-            // Debug log
-            console.log(`🚫 Gol tomado: ${goalConceded.time} → ${minutes}min → Período ${periodIndex} (${periods[periodIndex]})`);
-          }
-        } else {
-          console.warn(`⚠️ Tempo de gol tomado inválido: ${goalConceded.time} → ${minutes}min`);
-        }
+        const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
+        if (tSec === null) return;
+        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
+        if (periodIndex !== null) concededCounts[periodIndex]++;
       });
     });
     
@@ -348,6 +362,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       passesWrong: match.teamStats.passesWrong ?? 0,
       shotsOn: match.teamStats.shotsOnTarget ?? 0,
       shotsOff: match.teamStats.shotsOffTarget ?? 0,
+      shotsShootZone: match.teamStats.shotsShootZone ?? 0,
       result: match.result
     }));
   }, [filteredMatches]);
@@ -814,13 +829,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard
-          title="Chutes no Gol vs Fora"
+          title="Finalizações"
           icon={BarChart3}
           headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{(stats.shotsOn || 0) + (stats.shotsOff || 0)}</span>
+              Total:{' '}
+              <span className="text-white">
+                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
+              </span>
             </span>
           }
         >
@@ -840,14 +858,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         if (value === 'Pra Fora') {
                           return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
                         }
+                        if (value === 'Bloqueado') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
+                        }
                         return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
-                    <Bar dataKey="shotsOn" name="No Gol" fill={COLORS.blueMedium}>
+                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
                         <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
                     </Bar>
-                    <Bar dataKey="shotsOff" name="Pra Fora" fill={COLORS.slate}>
+                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
                         <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
+                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
                     </Bar>
                 </BarChart>
              </ResponsiveContainer>
@@ -956,9 +980,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
+                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
-                    <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
+                    <XAxis dataKey="period" stroke="#71717a" tick={{ ...axisStyle, fontSize: 10 }} angle={-40} textAnchor="end" height={68} interval={0} />
                     <YAxis hide />
                     <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.green, strokeWidth: 1}} />
                     <Area type="monotone" dataKey="value" fill={COLORS.green} fillOpacity={0.25} stroke="none" />
@@ -990,9 +1014,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
+                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
-                    <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
+                    <XAxis dataKey="period" stroke="#71717a" tick={{ ...axisStyle, fontSize: 10 }} angle={-40} textAnchor="end" height={68} interval={0} />
                     <YAxis hide />
                     <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.rose, strokeWidth: 1}} />
                     <Area type="monotone" dataKey="value" fill={COLORS.rose} fillOpacity={0.25} stroke="none" />
@@ -1257,32 +1281,36 @@ const KPICard: React.FC<{title: string, value: number | string, subtitle?: strin
 // Componente de tabela de estatísticas por jogador
 const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors', players: Player[]}> = ({matches, statType, players}) => {
   const playerStats = useMemo(() => {
-    const statsMap = new Map<string, {name: string, correct: number, wrong: number, total: number}>();
-    
+    const statsMap = new Map<string, { name: string; correct: number; wrong: number; blocked?: number; total: number }>();
+
     matches.forEach(match => {
       if (!match.playerStats) return;
-      
+
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
         // Normalizar ID para comparação (string, trim)
         const normalizedPlayerId = String(playerId).trim();
-        
+
         // Buscar nome do jogador (comparar IDs normalizados)
         const player = players.find(p => String(p.id).trim() === normalizedPlayerId);
         const playerName = player ? player.name : normalizedPlayerId;
-        
+
         if (!statsMap.has(normalizedPlayerId)) {
-          statsMap.set(normalizedPlayerId, {name: playerName, correct: 0, wrong: 0, total: 0});
+          statsMap.set(normalizedPlayerId, { name: playerName, correct: 0, wrong: 0, total: 0 });
         }
         const stats = statsMap.get(normalizedPlayerId)!;
-        
+
         if (statType === 'passes') {
           stats.correct += pStats.passesCorrect || 0;
           stats.wrong += pStats.passesWrong || 0;
           stats.total += (pStats.passesCorrect || 0) + (pStats.passesWrong || 0);
         } else if (statType === 'shots') {
-          stats.correct += pStats.shotsOnTarget || 0;
-          stats.wrong += pStats.shotsOffTarget || 0;
-          stats.total += (pStats.shotsOnTarget || 0) + (pStats.shotsOffTarget || 0);
+          const on = pStats.shotsOnTarget || 0;
+          const off = pStats.shotsOffTarget || 0;
+          const blk = pStats.shotsShootZone || 0;
+          stats.correct += on;
+          stats.wrong += off;
+          stats.blocked = (stats.blocked ?? 0) + blk;
+          stats.total += on + off + blk;
         } else if (statType === 'tackles') {
           stats.correct += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0);
           stats.wrong += pStats.tacklesCounterAttack || 0;
@@ -1319,7 +1347,7 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
   return (
     <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
       <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
-        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Chutes' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
+        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Finalizações' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
       </h4>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -1330,20 +1358,25 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
                 {statType === 'passes'
                   ? 'Certos'
                   : statType === 'shots'
-                  ? 'No Gol'
-                  : statType === 'tackles'
-                  ? 'Total'
-                  : 'Passes Errados'}
+                    ? 'No Gol'
+                    : statType === 'tackles'
+                      ? 'Total'
+                      : 'Passes Errados'}
               </th>
               <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Errados'
                   : statType === 'shots'
-                  ? 'Fora'
-                  : statType === 'tackles'
-                  ? 'Contra-Ataque'
-                  : 'Geraram Transição'}
+                    ? 'Fora'
+                    : statType === 'tackles'
+                      ? 'Contra-Ataque'
+                      : 'Geraram Transição'}
               </th>
+              {statType === 'shots' && (
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Bloqueado
+                </th>
+              )}
               <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>Total</th>
             </tr>
           </thead>
@@ -1353,6 +1386,9 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
                 <td className="py-2 text-white" style={legendStyle}>{stat.name}</td>
                 <td className="py-2 text-right text-[#10b981]" style={legendStyle}>{stat.correct}</td>
                 <td className="py-2 text-right text-[#ff0055]" style={legendStyle}>{stat.wrong}</td>
+                {statType === 'shots' && (
+                  <td className="py-2 text-right text-amber-400" style={legendStyle}>{stat.blocked ?? 0}</td>
+                )}
                 <td className="py-2 text-right text-zinc-300" style={legendStyle}>{stat.total}</td>
               </tr>
             ))}

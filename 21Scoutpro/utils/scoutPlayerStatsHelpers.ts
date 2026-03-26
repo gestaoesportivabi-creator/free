@@ -9,6 +9,8 @@ export interface PlayerTop10RowPdf {
   name: string;
   col1: number;
   col2: number;
+  /** Finalizações: chutes bloqueados (shots). */
+  col3?: number;
   total: number;
 }
 
@@ -17,7 +19,10 @@ export function buildPlayerTop10ForPdf(
   players: Player[],
   statType: PlayerStatTypePdf
 ): PlayerTop10RowPdf[] {
-  const statsMap = new Map<string, { name: string; correct: number; wrong: number; total: number }>();
+  const statsMap = new Map<
+    string,
+    { name: string; correct: number; wrong: number; blocked?: number; total: number }
+  >();
 
   matches.forEach((match) => {
     if (!match.playerStats) return;
@@ -37,9 +42,13 @@ export function buildPlayerTop10ForPdf(
         stats.wrong += pStats.passesWrong || 0;
         stats.total += (pStats.passesCorrect || 0) + (pStats.passesWrong || 0);
       } else if (statType === 'shots') {
-        stats.correct += pStats.shotsOnTarget || 0;
-        stats.wrong += pStats.shotsOffTarget || 0;
-        stats.total += (pStats.shotsOnTarget || 0) + (pStats.shotsOffTarget || 0);
+        const on = pStats.shotsOnTarget || 0;
+        const off = pStats.shotsOffTarget || 0;
+        const blk = pStats.shotsShootZone || 0;
+        stats.correct += on;
+        stats.wrong += off;
+        stats.blocked = (stats.blocked ?? 0) + blk;
+        stats.total += on + off + blk;
       } else if (statType === 'tackles') {
         stats.correct += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0);
         stats.wrong += pStats.tacklesCounterAttack || 0;
@@ -62,10 +71,14 @@ export function buildPlayerTop10ForPdf(
     .filter((s) => s.total > 0)
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
-    .map((s) => ({
-      name: s.name,
-      col1: s.correct,
-      col2: s.wrong,
-      total: s.total,
-    }));
+    .map((s) => {
+      const row: PlayerTop10RowPdf = {
+        name: s.name,
+        col1: s.correct,
+        col2: s.wrong,
+        total: s.total,
+      };
+      if (statType === 'shots') row.col3 = s.blocked ?? 0;
+      return row;
+    });
 }
