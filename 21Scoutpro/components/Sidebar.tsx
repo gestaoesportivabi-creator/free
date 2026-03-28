@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock, ShieldCheck } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -298,6 +298,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                 </p>
             </div>
         </div>
+        )}
+        {currentUser?.isPlatformAdmin && (
+        <button 
+          onClick={() => { setActiveTab('admin'); onNavigate?.(); }}
+          title={retracted ? 'Todos os Usuários' : undefined}
+          className={`w-full flex items-center transition-colors font-bold rounded-lg uppercase tracking-wide whitespace-nowrap ${retracted ? 'justify-center p-2.5 mb-2' : 'justify-center space-x-2 px-3 py-2 mb-2 text-xs'} ${
+            activeTab === 'admin'
+              ? 'bg-[#00f0ff] text-black shadow-[0_0_15px_rgba(0,240,255,0.4)] border border-[#00f0ff]'
+              : 'text-zinc-400 hover:bg-zinc-900 hover:text-[#00f0ff] border border-zinc-900 hover:border-[#00f0ff]/30'
+          }`}
+        >
+          <ShieldCheck size={retracted ? 20 : 14} />
+          {!retracted && <span>Todos os Usuários</span>}
+        </button>
         )}
         <button 
           onClick={() => { setActiveTab('settings'); onNavigate?.(); }}

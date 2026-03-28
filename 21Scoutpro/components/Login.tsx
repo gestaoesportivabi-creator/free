@@ -65,16 +65,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
         const result = await response.json();
         
         if (result.success && result.data) {
-          // Salvar token
           localStorage.setItem('token', result.data.token);
-          console.log('✅ Token salvo no localStorage:', result.data.token.substring(0, 20) + '...');
           
-          // Criar objeto User
           const user: User = {
             id: result.data.user.id,
             name: result.data.user.name,
             email: result.data.user.email,
             role: result.data.user.role === 'TECNICO' ? 'Treinador' : result.data.user.role,
+            isPlatformAdmin: result.data.user.isPlatformAdmin ?? false,
           };
           
           console.log('👤 Usuário criado:', user);

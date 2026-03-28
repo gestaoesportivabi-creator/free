@@ -23,6 +23,11 @@ export const env = {
   
   // Frontend
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+
+  // Admin
+  MAX_REGISTERED_USERS: process.env.MAX_REGISTERED_USERS
+    ? parseInt(process.env.MAX_REGISTERED_USERS, 10)
+    : null as number | null,
 };
 
 // Validações

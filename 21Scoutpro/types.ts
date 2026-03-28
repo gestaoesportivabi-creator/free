@@ -6,6 +6,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  isPlatformAdmin?: boolean;
   photoUrl?: string;
   linkedPlayerId?: string;
   /** Nome do time (exibição) — persiste no backend para outro dispositivo */

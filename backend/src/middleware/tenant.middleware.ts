@@ -159,12 +159,13 @@ export function tenantMiddleware() {
       // Adicionar tenantInfo ao request
       req.tenantInfo = tenantInfo;
 
-      // DEBUG: Log final antes de prosseguir
-      console.log('[TENANT_MIDDLEWARE] TenantInfo adicionado ao request:', {
-        tecnico_id: req.tenantInfo?.tecnico_id,
-        clube_id: req.tenantInfo?.clube_id,
-        equipe_ids: req.tenantInfo?.equipe_ids,
-      });
+      if (isDev) {
+        console.log('[TENANT_MIDDLEWARE] TenantInfo adicionado ao request:', {
+          tecnico_id: req.tenantInfo?.tecnico_id,
+          clube_id: req.tenantInfo?.clube_id,
+          equipe_ids: req.tenantInfo?.equipe_ids,
+        });
+      }
 
       next();
       return;

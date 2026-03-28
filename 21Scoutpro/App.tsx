@@ -23,6 +23,7 @@ import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { ManagementReport } from './components/ManagementReport';
 import { EmBreve } from './components/EmBreve';
+import { AdminPanel } from './components/AdminPanel';
 import { NextMatchAlert } from './components/NextMatchAlert';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { DashboardTodayBlock } from './components/DashboardTodayBlock';
@@ -98,6 +99,7 @@ const TAB_LABELS: Record<string, string> = {
   assessment: 'Avaliação Física',
   academia: 'Musculação',
   settings: 'Configurações',
+  admin: 'Todos os Usuários',
 };
 
 /** Recursos necessários por aba (carregamento sob demanda). Abas "Em breve" = [] para render instantâneo */
@@ -118,6 +120,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   'qualidade-sono': [],
   academia: [],
   'management-report': ['players', 'matches', 'assessments', 'timeControls'],
+  admin: [],
   settings: [],
 };
 
@@ -811,7 +814,7 @@ export default function App() {
           }
 
           if (result.success && result.data) {
-              const d = result.data as { name?: string; email?: string; photoUrl?: string; role?: string; teamDisplayName?: string; teamShieldUrl?: string };
+              const d = result.data as { name?: string; email?: string; photoUrl?: string; role?: string; isPlatformAdmin?: boolean; teamDisplayName?: string; teamShieldUrl?: string };
               if (currentUser) {
                   const updatedUser: User = {
                       ...currentUser,
@@ -819,6 +822,7 @@ export default function App() {
                       email: d.email ?? currentUser.email,
                       photoUrl: d.photoUrl,
                       role: (d.role === 'TECNICO' ? 'Treinador' : d.role) ?? currentUser.role,
+                      isPlatformAdmin: d.isPlatformAdmin ?? currentUser.isPlatformAdmin,
                       teamDisplayName: d.teamDisplayName,
                       teamShieldUrl: d.teamShieldUrl,
                   };
@@ -1235,6 +1239,7 @@ export default function App() {
             name: u.name,
             email: u.email,
             role: u.role === 'TECNICO' ? 'Treinador' : u.role,
+            isPlatformAdmin: u.isPlatformAdmin ?? false,
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
             teamShieldUrl: u.teamShieldUrl,
@@ -1583,6 +1588,12 @@ export default function App() {
               assessments={assessments}
               timeControls={timeControls}
             />
+          </TabBackgroundWrapper>
+        );
+      case 'admin':
+        return (
+          <TabBackgroundWrapper>
+            <AdminPanel currentUser={currentUser} />
           </TabBackgroundWrapper>
         );
       case 'settings':
