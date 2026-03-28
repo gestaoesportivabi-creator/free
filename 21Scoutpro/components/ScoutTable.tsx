@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
+import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe } from '../utils/dateUtils';
@@ -9,6 +9,22 @@ import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
+import { isPersistedServerMatchId } from '../utils/matchUpsert';
+
+const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
+
+/** IDs de atletas nossos (não adversário) a partir do log — fallback quando não há `lineup.selectedPlayerIds` legado */
+function collectPlayerIdsFromPostMatchLog(log: PostMatchEvent[] | undefined): string[] {
+    if (!log?.length) return [];
+    const ids = new Set<string>();
+    for (const e of log) {
+        const pid = e.playerId != null ? String(e.playerId).trim() : '';
+        if (pid && pid !== OPPONENT_TEAM_ID) ids.add(pid);
+        if (e.passToPlayerId) ids.add(String(e.passToPlayerId).trim());
+        if (e.assistPlayerId) ids.add(String(e.assistPlayerId).trim());
+    }
+    return [...ids];
+}
 
 interface GoalTime {
     id: string;
@@ -72,7 +88,10 @@ interface ChampionshipMatch {
 type CalendarMatchItem = (MatchRecord & { type: 'saved' }) | (ChampionshipMatch & { type: 'scheduled' });
 
 interface ScoutTableProps {
-    onSave?: (match: MatchRecord, options?: { source?: 'manual' | 'autosave' }) => void | Promise<void>;
+    onSave?: (
+        match: MatchRecord,
+        options?: { source?: 'manual' | 'autosave' }
+    ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
     players: Player[];
     competitions: string[];
     matches?: MatchRecord[];
@@ -2594,8 +2613,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             ? players.filter((p) => selectedPlayersForMatch.has(String(p.id).trim()))
                             : (() => {
                                   const m = selectedMatch!;
-                                  const ids = Object.keys(m.playerStats || {});
-                                  return ids.length > 0 ? players.filter((p) => ids.includes(String(p.id).trim())) : players;
+                                  const saved = m.lineup?.selectedPlayerIds?.map((id) => String(id).trim()).filter(Boolean);
+                                  if (saved?.length) {
+                                      return players.filter((p) => saved.includes(String(p.id).trim()));
+                                  }
+                                  const fromStats = Object.keys(m.playerStats || {}).map((id) => id.trim());
+                                  const fromLog = collectPlayerIdsFromPostMatchLog(m.postMatchEventLog);
+                                  const merged = [...new Set([...fromStats, ...fromLog])];
+                                  return merged.length > 0
+                                      ? players.filter((p) => merged.includes(String(p.id).trim()))
+                                      : players;
                               })();
                         const isEditingExisting = !isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch);
                         return (
@@ -2613,15 +2640,17 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
                                 onSave={async (saved, options) => {
-                                    await onSave?.(saved, options);
+                                    const result = await onSave?.(saved, options);
+                                    if (result?.id) {
+                                        setSelectedMatch((prev) =>
+                                            prev ? { ...prev, ...result, id: result.id } : result
+                                        );
+                                    }
                                     if (options?.source === 'autosave') return;
                                     setShowPostMatchSheet(false);
-                                    const isExistingMatch = saved?.id && !String(saved.id).startsWith('sched-');
-                                    if (isExistingMatch) {
-                                        setSelectedMatch(saved);
-                                    } else {
-                                        handleBackToCalendar();
-                                    }
+                                    const isExistingMatch =
+                                        result?.id && isPersistedServerMatchId(String(result.id));
+                                    if (!isExistingMatch) handleBackToCalendar();
                                 }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
@@ -2641,9 +2670,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setSelectedPlayersForMatch(new Set(
-                                                Object.keys(selectedMatch!.playerStats || {}).map(id => id.trim())
-                                            ));
+                                            const m = selectedMatch!;
+                                            const fromLineup = m.lineup?.selectedPlayerIds?.map((id) => String(id).trim()).filter(Boolean);
+                                            const fromStats = Object.keys(m.playerStats || {}).map((id) => id.trim());
+                                            const fromLog = collectPlayerIdsFromPostMatchLog(m.postMatchEventLog);
+                                            const ids =
+                                                fromLineup?.length
+                                                    ? fromLineup
+                                                    : [...new Set([...fromStats, ...fromLog])];
+                                            setSelectedPlayersForMatch(new Set(ids));
                                             setShowPostMatchSheet(true);
                                         }}
                                         className="flex items-center gap-2 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
@@ -3527,10 +3562,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                     teams={teams || []}
                     matchType={selectedMatchType}
                     extraTimeMinutes={selectedExtraTimeMinutes}
-                    selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
+                    selectedPlayerIds={
+                        isScheduledMatch() && selectedPlayersForMatch.size > 0
+                            ? Array.from(selectedPlayersForMatch)
+                            : selectedMatch?.lineup?.selectedPlayerIds?.length
+                              ? selectedMatch.lineup.selectedPlayerIds.map((id) => String(id).trim())
+                              : undefined
+                    }
                     mode="realtime"
                     onSave={async (saved, options) => {
-                        await onSave?.(saved, options);
+                        const result = await onSave?.(saved, options);
+                        if (result?.id) {
+                            setSelectedMatch((prev) =>
+                                prev ? { ...prev, ...result, id: result.id } : result
+                            );
+                        }
                         if (options?.source === 'autosave') return;
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');

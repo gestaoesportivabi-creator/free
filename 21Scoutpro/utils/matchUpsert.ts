@@ -6,9 +6,17 @@ export interface MatchUpsertResult {
   operation: 'created' | 'updated';
 }
 
+/** IDs locais de rascunho/agenda — não existem no servidor; não tentar PUT (evita 404 + create duplicado). */
+export function isPersistedServerMatchId(id: string): boolean {
+  const s = id.trim();
+  if (s.length === 0) return false;
+  if (s.startsWith('sched-') || s.startsWith('temp-')) return false;
+  return true;
+}
+
 export async function upsertMatchRecord(newMatch: MatchRecord): Promise<MatchUpsertResult> {
   const idStr = newMatch.id != null ? String(newMatch.id).trim() : '';
-  const isExistingMatch = idStr.length > 0 && !idStr.startsWith('sched-');
+  const isExistingMatch = isPersistedServerMatchId(idStr);
 
   if (isExistingMatch) {
     try {

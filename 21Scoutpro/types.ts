@@ -231,6 +231,8 @@ export interface MatchRecord {
     players: string[]; // IDs dos 5 jogadores em quadra (primeiro é goleiro)
     bench: string[]; // IDs dos jogadores no banco
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
+    /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
+    selectedPlayerIds?: string[];
   };
   postMatchEventLog?: PostMatchEvent[];
   /** Histórico de substituições da partida */

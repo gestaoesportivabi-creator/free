@@ -109,6 +109,9 @@ export const RealtimeScoutPage: React.FC = () => {
         return;
       }
       const { saved } = await upsertMatchRecord(savedMatch);
+      if (saved?.id) {
+        setMatch((prev) => (prev ? { ...prev, ...saved, id: saved.id } : saved));
+      }
       if (saved && !isAutosave) {
         localStorage.removeItem('realtimeScoutData');
         alert('Partida salva com sucesso! Os dados foram gravados no sistema.');
@@ -116,12 +119,14 @@ export const RealtimeScoutPage: React.FC = () => {
       } else if (!saved && !isAutosave) {
         alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
       }
+      return saved;
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
       if (!isAutosave) {
         alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
       }
     }
+    return undefined;
   };
 
   const handleClose = () => {
