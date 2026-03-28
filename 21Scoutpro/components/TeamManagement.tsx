@@ -4,6 +4,50 @@ import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
 import { Shirt, Save, Plus, User, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
 import { IS_FREE_PLAN } from '../config';
 
+/** Limite inferior da data de nascimento (somente validação local no formulário). */
+const BIRTH_DATE_MIN_ISO = '1950-01-01';
+
+function getBirthDateMaxIsoLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Idade em anos completos a partir de YYYY-MM-DD (cálculo local, sem persistir idade digitada). */
+function calculateAgeFromBirthDateIso(isoDate: string): number | null {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  const [y, mo, d] = isoDate.split('-').map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  const birth = new Date(y, mo - 1, d);
+  if (birth.getFullYear() !== y || birth.getMonth() !== mo - 1 || birth.getDate() !== d) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  birth.setHours(0, 0, 0, 0);
+  let ageYears = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) ageYears--;
+  return ageYears >= 0 ? ageYears : null;
+}
+
+function isBirthDateInAllowedRangeLocal(isoDate: string): boolean {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return false;
+  const y = parseInt(isoDate.slice(0, 4), 10);
+  const cy = new Date().getFullYear();
+  return Number.isFinite(y) && y >= 1950 && y <= cy;
+}
+
+/** Lista de atletas: prioriza idade pela data de nascimento; senão usa idade salva (legado). */
+function formatPlayerAgeDisplay(player: Player): string {
+  if (player.birthDate) {
+    const a = calculateAgeFromBirthDateIso(player.birthDate);
+    if (a !== null) return `${a} anos`;
+  }
+  if (typeof player.age === 'number' && player.age >= 0) return `${player.age} anos`;
+  return '—';
+}
+
 interface TeamManagementProps {
     players: Player[];
     onAddPlayer: (player: Player) => void;
@@ -25,7 +69,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const [position, setPosition] = useState<Position>(config.positions[0] || 'Goleiro');
     const [jerseyNumber, setJerseyNumber] = useState('');
     const [dominantFoot, setDominantFoot] = useState<'Destro' | 'Canhoto' | 'Ambidestro'>('Destro');
-    const [age, setAge] = useState('');
     const [height, setHeight] = useState('');
     const [lastClub, setLastClub] = useState('');
     const [photoUrl, setPhotoUrl] = useState('');
@@ -63,6 +106,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const [newMaxLoadExercise, setNewMaxLoadExercise] = useState('');
     const [newMaxLoadType, setNewMaxLoadType] = useState<'Kg' | 'Repetições'>('Kg');
     const [newMaxLoadValue, setNewMaxLoadValue] = useState('');
+
+    const displayAgeFromBirth = useMemo(
+        () => (birthDate ? calculateAgeFromBirthDateIso(birthDate) : null),
+        [birthDate]
+    );
+
+    const birthDateMaxIso = getBirthDateMaxIsoLocal();
 
     // Mapeamento de tipos de lesão para locais possíveis
     const INJURY_LOCATIONS_BY_TYPE: Record<string, string[]> = {
@@ -110,7 +160,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setPosition(defaultPosition || config.positions[0] || 'Goleiro');
         setJerseyNumber('');
         setDominantFoot('Destro');
-        setAge('');
         setHeight('');
         setLastClub('');
         setPhotoUrl('');
@@ -150,7 +199,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setPosition(player.position);
         setJerseyNumber(player.jerseyNumber.toString());
         setDominantFoot(player.dominantFoot || 'Destro');
-        setAge(player.age?.toString() || '');
         setHeight(player.height?.toString() || '');
         setLastClub(player.lastClub || '');
         setPhotoUrl(player.photoUrl || '');
@@ -301,6 +349,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!birthDate || !isBirthDateInAllowedRangeLocal(birthDate)) {
+            alert('Informe a data de nascimento entre 1950 e o ano atual.');
+            return;
+        }
+        const ageToSave = calculateAgeFromBirthDateIso(birthDate);
+        if (ageToSave === null) {
+            alert('Data de nascimento inválida.');
+            return;
+        }
         
         // Recalculate days out for all injuries before saving
         const today = new Date();
@@ -334,7 +392,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             position,
             jerseyNumber: parseInt(jerseyNumber) || 0,
             dominantFoot,
-            age: parseInt(age) || 0,
+            age: ageToSave,
             height: parseInt(height) || 0,
             weight: weight ? parseFloat(weight.replace(',', '.')) : undefined,
             lastClub: lastClub?.trim() || '',
@@ -532,7 +590,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                 <div className="p-5 space-y-3">
                     <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
                         <span className="text-[10px] text-zinc-500 font-bold uppercase">Idade</span>
-                        <span className="text-white font-bold text-sm">{player.age} anos</span>
+                        <span className="text-white font-bold text-sm">{formatPlayerAgeDisplay(player)}</span>
                     </div>
                     <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
                         <span className="text-[10px] text-zinc-500 font-bold uppercase">Pé Dominante</span>
@@ -733,34 +791,29 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Idade</label>
-                                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="Anos" />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data de Nascimento</label>
+                                    <input
+                                        required
+                                        type="date"
+                                        value={birthDate}
+                                        onChange={(e) => setBirthDate(e.target.value)}
+                                        min={BIRTH_DATE_MIN_ISO}
+                                        max={birthDateMaxIso}
+                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]"
+                                    />
+                                    <p className="text-[10px] text-zinc-600 mt-1">Entre 1950 e o ano atual (somente neste formulário).</p>
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data de Nascimento</label>
-                                    <input 
-                                        type="date" 
-                                        value={birthDate} 
-                                        onChange={e => {
-                                            setBirthDate(e.target.value);
-                                            // Calcular idade automaticamente se data fornecida
-                                            if (e.target.value) {
-                                                const birth = new Date(e.target.value);
-                                                const today = new Date();
-                                                let calculatedAge = today.getFullYear() - birth.getFullYear();
-                                                const monthDiff = today.getMonth() - birth.getMonth();
-                                                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-                                                    calculatedAge--;
-                                                }
-                                                if (calculatedAge > 0 && calculatedAge < 100) {
-                                                    setAge(calculatedAge.toString());
-                                                }
-                                            }
-                                        }} 
-                                        max={new Date().toISOString().split('T')[0]}
-                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" 
-                                    />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Idade</label>
+                                    <div className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-zinc-300 outline-none">
+                                        {displayAgeFromBirth !== null ? (
+                                            <span className="text-white font-bold">{displayAgeFromBirth} anos</span>
+                                        ) : (
+                                            <span className="text-zinc-500">Preencha a data de nascimento</span>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-zinc-600 mt-1">Calculada automaticamente pela data de nascimento.</p>
                                 </div>
 
                                 <div>
