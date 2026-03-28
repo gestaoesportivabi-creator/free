@@ -118,6 +118,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
     /** Após tentar salvar: campos obrigatórios vazios/inválidos → asterisco vermelho + borda */
     const [profileFieldErrors, setProfileFieldErrors] = useState<Partial<Record<ProfileRequiredField, boolean>>>({});
+    /** Nº de camisa já usado por outro atleta (lista atual) */
+    const [jerseyDuplicateMessage, setJerseyDuplicateMessage] = useState<string | null>(null);
 
     const displayAgeFromBirth = useMemo(
         () => (birthDate ? calculateAgeFromBirthDateIso(birthDate) : null),
@@ -199,6 +201,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setEditMode(false);
         setActiveTab('profile');
         setProfileFieldErrors({});
+        setJerseyDuplicateMessage(null);
     };
 
 
@@ -222,6 +225,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setWeight((player as any).weight != null ? String((player as any).weight) : '');
         setMaxLoads(player.maxLoads || []);
         setProfileFieldErrors({});
+        setJerseyDuplicateMessage(null);
 
         setIsFormOpen(true);
     };
@@ -388,9 +392,26 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setProfileFieldErrors(nextErrors);
 
         if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk || !positionOk || !dominantFootOk) {
+            setJerseyDuplicateMessage(null);
             setActiveTab('profile');
             return;
         }
+
+        const jerseyNum = parseInt(jerseyNumber, 10);
+        const conflictingPlayer = players.find((p) => {
+            if (Number(p.jerseyNumber) !== jerseyNum) return false;
+            if (editMode && editPlayerId && String(p.id).trim() === String(editPlayerId).trim()) return false;
+            return true;
+        });
+        if (conflictingPlayer) {
+            const msg = `Este número de camisa (${jerseyNum}) já está em uso por ${conflictingPlayer.nickname?.trim() || conflictingPlayer.name}. Escolha outro número.`;
+            setJerseyDuplicateMessage(msg);
+            setProfileFieldErrors((prev) => ({ ...prev, jerseyNumber: true }));
+            alert(msg);
+            setActiveTab('profile');
+            return;
+        }
+        setJerseyDuplicateMessage(null);
 
         const ageToSave = calculateAgeFromBirthDateIso(birthDate!)!;
         setProfileFieldErrors({});
@@ -845,11 +866,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                         value={jerseyNumber}
                                         onChange={e => {
                                             setJerseyNumber(e.target.value);
+                                            setJerseyDuplicateMessage(null);
                                             setProfileFieldErrors((p) => ({ ...p, jerseyNumber: false }));
                                         }}
                                         className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.jerseyNumber ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
                                         placeholder="10"
                                     />
+                                    {jerseyDuplicateMessage && (
+                                        <p className="text-[10px] text-red-400 mt-1 font-medium">{jerseyDuplicateMessage}</p>
+                                    )}
                                 </div>
 
                                 <div>
