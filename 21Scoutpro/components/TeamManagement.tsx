@@ -39,7 +39,7 @@ function isBirthDateInAllowedRangeLocal(isoDate: string): boolean {
 }
 
 /** Lista de atletas: prioriza idade pela data de nascimento; senão usa idade salva (legado). */
-type ProfileRequiredField = 'name' | 'jerseyNumber' | 'birthDate' | 'height';
+type ProfileRequiredField = 'name' | 'jerseyNumber' | 'birthDate' | 'height' | 'weight';
 
 function formatPlayerAgeDisplay(player: Player): string {
   if (player.birthDate) {
@@ -360,6 +360,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const nameOk = name.trim().length > 0;
         const jerseyOk = jerseyNumber.trim().length > 0 && !Number.isNaN(parseInt(jerseyNumber, 10));
         const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
+        const weightParsed = weight.trim() ? parseFloat(weight.replace(',', '.')) : NaN;
+        const weightOk = weight.trim().length > 0 && Number.isFinite(weightParsed) && weightParsed > 0;
         const birthDateOk =
             !!birthDate &&
             isBirthDateInAllowedRangeLocal(birthDate) &&
@@ -370,10 +372,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             jerseyNumber: !jerseyOk,
             birthDate: !birthDateOk,
             height: !heightOk,
+            weight: !weightOk,
         };
         setProfileFieldErrors(nextErrors);
 
-        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk) {
+        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk) {
             setActiveTab('profile');
             return;
         }
@@ -415,7 +418,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             dominantFoot,
             age: ageToSave,
             height: parseInt(height) || 0,
-            weight: weight ? parseFloat(weight.replace(',', '.')) : undefined,
+            weight: weightParsed,
             lastClub: lastClub?.trim() ? lastClub.trim() : undefined,
             photoUrl: photoUrl?.trim() ? photoUrl.trim() : undefined,
             isTransferred: isTransferred,
@@ -884,8 +887,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Peso (kg)</label>
-                                    <input type="text" value={weight} onChange={e => setWeight(e.target.value.replace(/[^\d,.]/g, ''))} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="75" />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Peso (kg)
+                                        {profileFieldErrors.weight && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={weight}
+                                        onChange={e => {
+                                            setWeight(e.target.value.replace(/[^\d,.]/g, ''));
+                                            setProfileFieldErrors((p) => ({ ...p, weight: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.weight ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                        placeholder="75"
+                                    />
                                 </div>
 
                                 <div className="col-span-1 md:col-span-2">
