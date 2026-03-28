@@ -88,7 +88,7 @@ export interface Player {
   age: number;
   height: number;
   weight?: number; // Peso (kg)
-  lastClub: string;
+  lastClub?: string;
   photoUrl?: string;
   isTransferred?: boolean;
   transferDate?: string;

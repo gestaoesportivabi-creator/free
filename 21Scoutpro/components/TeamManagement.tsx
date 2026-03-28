@@ -350,6 +350,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
+        const nameOk = name.trim().length > 0;
+        const jerseyOk = jerseyNumber.trim().length > 0 && !Number.isNaN(parseInt(jerseyNumber, 10));
+        const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
+        if (!nameOk) {
+            alert('Informe o nome completo.');
+            return;
+        }
+        if (!jerseyOk) {
+            alert('Informe o número da camisa.');
+            return;
+        }
         if (!birthDate || !isBirthDateInAllowedRangeLocal(birthDate)) {
             alert('Informe a data de nascimento entre 1950 e o ano atual.');
             return;
@@ -357,6 +368,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const ageToSave = calculateAgeFromBirthDateIso(birthDate);
         if (ageToSave === null) {
             alert('Data de nascimento inválida.');
+            return;
+        }
+        if (!heightOk) {
+            alert('Informe a altura (cm).');
             return;
         }
         
@@ -395,8 +410,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             age: ageToSave,
             height: parseInt(height) || 0,
             weight: weight ? parseFloat(weight.replace(',', '.')) : undefined,
-            lastClub: lastClub?.trim() || '',
-            photoUrl: photoUrl || '',
+            lastClub: lastClub?.trim() ? lastClub.trim() : undefined,
+            photoUrl: photoUrl?.trim() ? photoUrl.trim() : undefined,
             isTransferred: isTransferred,
             transferDate: isTransferred ? transferDate : undefined,
             injuryHistory: updatedInjuryHistory,
@@ -754,14 +769,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                         )}
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} noValidate className="space-y-6">
                         
                         {/* TAB: PROFILE (Default) */}
                         {activeTab === 'profile' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Nome Completo</label>
-                                    <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="Ex: João da Silva" />
+                                    <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="Ex: João da Silva" />
                                 </div>
 
                                 <div>
@@ -778,7 +793,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
                                 <div>
                                     <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Nº Camisa</label>
-                                    <input required type="number" value={jerseyNumber} onChange={e => setJerseyNumber(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="10" />
+                                    <input type="number" value={jerseyNumber} onChange={e => setJerseyNumber(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="10" />
                                 </div>
 
                                 <div>
@@ -793,7 +808,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 <div>
                                     <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data de Nascimento</label>
                                     <input
-                                        required
                                         type="date"
                                         value={birthDate}
                                         onChange={(e) => setBirthDate(e.target.value)}
@@ -818,7 +832,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
                                 <div>
                                     <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Altura (cm)</label>
-                                    <input required type="number" value={height} onChange={e => setHeight(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="175" />
+                                    <input type="number" value={height} onChange={e => setHeight(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="175" />
                                 </div>
 
                                 <div>
@@ -827,12 +841,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Último Clube</label>
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Último Clube <span className="text-zinc-600 font-normal normal-case">(opcional)</span></label>
                                     <input type="text" value={lastClub} onChange={e => setLastClub(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="Clube Anterior" />
                                 </div>
 
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Foto (Upload)</label>
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Foto (Upload) <span className="text-zinc-600 font-normal normal-case">(opcional)</span></label>
                                     <div className="relative">
                                         <input 
                                             type="file" 
