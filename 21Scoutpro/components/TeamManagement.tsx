@@ -39,7 +39,14 @@ function isBirthDateInAllowedRangeLocal(isoDate: string): boolean {
 }
 
 /** Lista de atletas: prioriza idade pela data de nascimento; senão usa idade salva (legado). */
-type ProfileRequiredField = 'name' | 'jerseyNumber' | 'birthDate' | 'height' | 'weight';
+type ProfileRequiredField =
+    | 'name'
+    | 'jerseyNumber'
+    | 'birthDate'
+    | 'height'
+    | 'weight'
+    | 'position'
+    | 'dominantFoot';
 
 function formatPlayerAgeDisplay(player: Player): string {
   if (player.birthDate) {
@@ -68,9 +75,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     // Form State
     const [name, setName] = useState('');
     const [nickname, setNickname] = useState('');
-    const [position, setPosition] = useState<Position>(config.positions[0] || 'Goleiro');
+    const [position, setPosition] = useState<Position | ''>('');
     const [jerseyNumber, setJerseyNumber] = useState('');
-    const [dominantFoot, setDominantFoot] = useState<'Destro' | 'Canhoto' | 'Ambidestro'>('Destro');
+    const [dominantFoot, setDominantFoot] = useState<'Destro' | 'Canhoto' | 'Ambidestro' | ''>('');
     const [height, setHeight] = useState('');
     const [lastClub, setLastClub] = useState('');
     const [photoUrl, setPhotoUrl] = useState('');
@@ -159,12 +166,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         return INJURY_LOCATIONS_BY_TYPE[type] || INJURY_LOCATIONS_BY_TYPE['Outros'];
     };
 
-    const resetForm = (defaultPosition?: Position) => {
+    const resetForm = () => {
         setName('');
         setNickname('');
-        setPosition(defaultPosition || config.positions[0] || 'Goleiro');
+        setPosition('');
         setJerseyNumber('');
-        setDominantFoot('Destro');
+        setDominantFoot('');
         setHeight('');
         setLastClub('');
         setPhotoUrl('');
@@ -204,7 +211,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setNickname(player.nickname || '');
         setPosition(player.position);
         setJerseyNumber(player.jerseyNumber.toString());
-        setDominantFoot(player.dominantFoot || 'Destro');
+        setDominantFoot(player.dominantFoot || '');
         setHeight(player.height?.toString() || '');
         setLastClub(player.lastClub || '');
         setPhotoUrl(player.photoUrl || '');
@@ -362,6 +369,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
         const weightParsed = weight.trim() ? parseFloat(weight.replace(',', '.')) : NaN;
         const weightOk = weight.trim().length > 0 && Number.isFinite(weightParsed) && weightParsed > 0;
+        const positionOk = position !== '' && config.positions.includes(position as Position);
+        const dominantFootOk = dominantFoot !== '';
         const birthDateOk =
             !!birthDate &&
             isBirthDateInAllowedRangeLocal(birthDate) &&
@@ -373,10 +382,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             birthDate: !birthDateOk,
             height: !heightOk,
             weight: !weightOk,
+            position: !positionOk,
+            dominantFoot: !dominantFootOk,
         };
         setProfileFieldErrors(nextErrors);
 
-        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk) {
+        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk || !positionOk || !dominantFootOk) {
             setActiveTab('profile');
             return;
         }
@@ -413,9 +424,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             id: editMode && editPlayerId ? editPlayerId : `p${Date.now()}`,
             name,
             nickname: nickname || name.split(' ')[0],
-            position,
+            position: position as Position,
             jerseyNumber: parseInt(jerseyNumber) || 0,
-            dominantFoot,
+            dominantFoot: dominantFoot as 'Destro' | 'Canhoto' | 'Ambidestro',
             age: ageToSave,
             height: parseInt(height) || 0,
             weight: weightParsed,
@@ -618,7 +629,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                     </div>
                     <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
                         <span className="text-[10px] text-zinc-500 font-bold uppercase">Pé Dominante</span>
-                        <span className="text-white font-bold text-sm">{player.dominantFoot}</span>
+                        <span className="text-white font-bold text-sm">{player.dominantFoot || '—'}</span>
                     </div>
                      <div className="flex justify-between items-center border-b border-zinc-900 pb-2">
                         <span className="text-[10px] text-zinc-500 font-bold uppercase">Último Clube</span>
@@ -738,12 +749,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                     )}
                     <button 
                         onClick={() => {
-                            const expandedArr = Array.from(expandedPositions);
-                            const defaultPos = expandedArr.length === 1
-                                ? expandedArr[0] as Position
-                                : undefined;
                             if (!isFormOpen) {
-                                resetForm(defaultPos);
+                                resetForm();
                                 setEditMode(false);
                                 setEditPlayerId(null);
                                 setActiveTab('profile');
@@ -806,9 +813,25 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Posição</label>
-                                    <select value={position} onChange={e => setPosition(e.target.value as Position)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]">
-                                        {config.positions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Posição
+                                        {profileFieldErrors.position && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <select
+                                        value={position}
+                                        onChange={e => {
+                                            const v = e.target.value as Position | '';
+                                            setPosition(v);
+                                            setProfileFieldErrors((p) => ({ ...p, position: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.position ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                    >
+                                        <option value="">Selecione a posição</option>
+                                        {config.positions.map((pos) => (
+                                            <option key={pos} value={pos}>
+                                                {pos}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -830,8 +853,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Pé Dominante</label>
-                                    <select value={dominantFoot} onChange={e => setDominantFoot(e.target.value as any)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]">
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Pé Dominante
+                                        {profileFieldErrors.dominantFoot && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <select
+                                        value={dominantFoot}
+                                        onChange={e => {
+                                            const v = e.target.value as 'Destro' | 'Canhoto' | 'Ambidestro' | '';
+                                            setDominantFoot(v);
+                                            setProfileFieldErrors((p) => ({ ...p, dominantFoot: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.dominantFoot ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                    >
+                                        <option value="">Selecione o pé dominante</option>
                                         <option value="Destro">Destro</option>
                                         <option value="Canhoto">Canhoto</option>
                                         <option value="Ambidestro">Ambidestro</option>
