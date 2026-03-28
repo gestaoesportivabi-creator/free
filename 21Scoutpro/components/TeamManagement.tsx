@@ -39,6 +39,8 @@ function isBirthDateInAllowedRangeLocal(isoDate: string): boolean {
 }
 
 /** Lista de atletas: prioriza idade pela data de nascimento; senão usa idade salva (legado). */
+type ProfileRequiredField = 'name' | 'jerseyNumber' | 'birthDate' | 'height';
+
 function formatPlayerAgeDisplay(player: Player): string {
   if (player.birthDate) {
     const a = calculateAgeFromBirthDateIso(player.birthDate);
@@ -106,6 +108,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const [newMaxLoadExercise, setNewMaxLoadExercise] = useState('');
     const [newMaxLoadType, setNewMaxLoadType] = useState<'Kg' | 'Repetições'>('Kg');
     const [newMaxLoadValue, setNewMaxLoadValue] = useState('');
+
+    /** Após tentar salvar: campos obrigatórios vazios/inválidos → asterisco vermelho + borda */
+    const [profileFieldErrors, setProfileFieldErrors] = useState<Partial<Record<ProfileRequiredField, boolean>>>({});
 
     const displayAgeFromBirth = useMemo(
         () => (birthDate ? calculateAgeFromBirthDateIso(birthDate) : null),
@@ -186,6 +191,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setEditPlayerId(null);
         setEditMode(false);
         setActiveTab('profile');
+        setProfileFieldErrors({});
     };
 
 
@@ -208,7 +214,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         setBirthDate(player.birthDate || '');
         setWeight((player as any).weight != null ? String((player as any).weight) : '');
         setMaxLoads(player.maxLoads || []);
-        
+        setProfileFieldErrors({});
+
         setIsFormOpen(true);
     };
 
@@ -353,27 +360,26 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
         const nameOk = name.trim().length > 0;
         const jerseyOk = jerseyNumber.trim().length > 0 && !Number.isNaN(parseInt(jerseyNumber, 10));
         const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
-        if (!nameOk) {
-            alert('Informe o nome completo.');
+        const birthDateOk =
+            !!birthDate &&
+            isBirthDateInAllowedRangeLocal(birthDate) &&
+            calculateAgeFromBirthDateIso(birthDate) !== null;
+
+        const nextErrors: Partial<Record<ProfileRequiredField, boolean>> = {
+            name: !nameOk,
+            jerseyNumber: !jerseyOk,
+            birthDate: !birthDateOk,
+            height: !heightOk,
+        };
+        setProfileFieldErrors(nextErrors);
+
+        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk) {
+            setActiveTab('profile');
             return;
         }
-        if (!jerseyOk) {
-            alert('Informe o número da camisa.');
-            return;
-        }
-        if (!birthDate || !isBirthDateInAllowedRangeLocal(birthDate)) {
-            alert('Informe a data de nascimento entre 1950 e o ano atual.');
-            return;
-        }
-        const ageToSave = calculateAgeFromBirthDateIso(birthDate);
-        if (ageToSave === null) {
-            alert('Data de nascimento inválida.');
-            return;
-        }
-        if (!heightOk) {
-            alert('Informe a altura (cm).');
-            return;
-        }
+
+        const ageToSave = calculateAgeFromBirthDateIso(birthDate!)!;
+        setProfileFieldErrors({});
         
         // Recalculate days out for all injuries before saving
         const today = new Date();
@@ -775,8 +781,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                         {activeTab === 'profile' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Nome Completo</label>
-                                    <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="Ex: João da Silva" />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Nome Completo
+                                        {profileFieldErrors.name && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={e => {
+                                            setName(e.target.value);
+                                            setProfileFieldErrors((p) => ({ ...p, name: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.name ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                        placeholder="Ex: João da Silva"
+                                    />
                                 </div>
 
                                 <div>
@@ -792,8 +810,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Nº Camisa</label>
-                                    <input type="number" value={jerseyNumber} onChange={e => setJerseyNumber(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="10" />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Nº Camisa
+                                        {profileFieldErrors.jerseyNumber && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={jerseyNumber}
+                                        onChange={e => {
+                                            setJerseyNumber(e.target.value);
+                                            setProfileFieldErrors((p) => ({ ...p, jerseyNumber: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.jerseyNumber ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                        placeholder="10"
+                                    />
                                 </div>
 
                                 <div>
@@ -806,14 +836,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Data de Nascimento</label>
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Data de Nascimento
+                                        {profileFieldErrors.birthDate && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
                                     <input
                                         type="date"
                                         value={birthDate}
-                                        onChange={(e) => setBirthDate(e.target.value)}
+                                        onChange={(e) => {
+                                            setBirthDate(e.target.value);
+                                            setProfileFieldErrors((p) => ({ ...p, birthDate: false }));
+                                        }}
                                         min={BIRTH_DATE_MIN_ISO}
                                         max={birthDateMaxIso}
-                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]"
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.birthDate ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
                                     />
                                     <p className="text-[10px] text-zinc-600 mt-1">Entre 1950 e o ano atual (somente neste formulário).</p>
                                 </div>
@@ -831,8 +867,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                                 </div>
 
                                 <div>
-                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Altura (cm)</label>
-                                    <input type="number" value={height} onChange={e => setHeight(e.target.value)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]" placeholder="175" />
+                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
+                                        Altura (cm)
+                                        {profileFieldErrors.height && <span className="text-red-500 font-black" title="Campo obrigatório" aria-hidden>*</span>}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={height}
+                                        onChange={e => {
+                                            setHeight(e.target.value);
+                                            setProfileFieldErrors((p) => ({ ...p, height: false }));
+                                        }}
+                                        className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.height ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
+                                        placeholder="175"
+                                    />
                                 </div>
 
                                 <div>
