@@ -48,6 +48,90 @@ type ProfileRequiredField =
     | 'position'
     | 'dominantFoot';
 
+/**
+ * Mesmas regras para cadastro novo e edição (lápis): obrigatórios, data, peso/altura, camisa única.
+ */
+function validateCadastroFields(params: {
+    name: string;
+    jerseyNumber: string;
+    height: string;
+    weight: string;
+    position: Position | '';
+    dominantFoot: '' | 'Destro' | 'Canhoto' | 'Ambidestro';
+    birthDate: string;
+    configPositions: Position[];
+    players: Player[];
+    editMode: boolean;
+    editPlayerId: string | null;
+}):
+    | { ok: true; ageToSave: number; weightParsed: number; jerseyNum: number }
+    | {
+          ok: false;
+          nextErrors: Partial<Record<ProfileRequiredField, boolean>>;
+          jerseyDuplicateMessage: string | null;
+          duplicateAlertMessage: string | null;
+      } {
+    const {
+        name,
+        jerseyNumber,
+        height,
+        weight,
+        position,
+        dominantFoot,
+        birthDate,
+        configPositions,
+        players,
+        editMode,
+        editPlayerId,
+    } = params;
+
+    const nameOk = name.trim().length > 0;
+    const jerseyOk = jerseyNumber.trim().length > 0 && !Number.isNaN(parseInt(jerseyNumber, 10));
+    const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
+    const weightParsed = weight.trim() ? parseFloat(weight.replace(',', '.')) : NaN;
+    const weightOk = weight.trim().length > 0 && Number.isFinite(weightParsed) && weightParsed > 0;
+    const positionOk = position !== '' && configPositions.includes(position as Position);
+    const dominantFootOk = dominantFoot !== '';
+    const birthDateOk =
+        !!birthDate &&
+        isBirthDateInAllowedRangeLocal(birthDate) &&
+        calculateAgeFromBirthDateIso(birthDate) !== null;
+
+    const nextErrors: Partial<Record<ProfileRequiredField, boolean>> = {
+        name: !nameOk,
+        jerseyNumber: !jerseyOk,
+        birthDate: !birthDateOk,
+        height: !heightOk,
+        weight: !weightOk,
+        position: !positionOk,
+        dominantFoot: !dominantFootOk,
+    };
+
+    if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk || !positionOk || !dominantFootOk) {
+        return { ok: false, nextErrors, jerseyDuplicateMessage: null, duplicateAlertMessage: null };
+    }
+
+    const jerseyNum = parseInt(jerseyNumber, 10);
+    const conflictingPlayer = players.find((p) => {
+        if (Number(p.jerseyNumber) !== jerseyNum) return false;
+        if (editMode && editPlayerId && String(p.id).trim() === String(editPlayerId).trim()) return false;
+        return true;
+    });
+
+    if (conflictingPlayer) {
+        const duplicateAlertMessage = `Este número de camisa (${jerseyNum}) já está em uso por ${conflictingPlayer.nickname?.trim() || conflictingPlayer.name}. Escolha outro número.`;
+        return {
+            ok: false,
+            nextErrors: { ...nextErrors, jerseyNumber: true },
+            jerseyDuplicateMessage: duplicateAlertMessage,
+            duplicateAlertMessage,
+        };
+    }
+
+    const ageToSave = calculateAgeFromBirthDateIso(birthDate)!;
+    return { ok: true, ageToSave, weightParsed, jerseyNum };
+}
+
 function formatPlayerAgeDisplay(player: Player): string {
   if (player.birthDate) {
     const a = calculateAgeFromBirthDateIso(player.birthDate);
@@ -208,12 +292,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const handleEditClick = (player: Player) => {
         setEditMode(true);
         setEditPlayerId(player.id);
-        
-        // Populate fields
+        setActiveTab('profile');
+
+        // Populate fields (mesmas regras do novo atleta ao salvar — estado alinhado ao formulário)
         setName(player.name);
         setNickname(player.nickname || '');
         setPosition(player.position);
-        setJerseyNumber(player.jerseyNumber.toString());
+        setJerseyNumber(
+            player.jerseyNumber != null && player.jerseyNumber !== ''
+                ? String(player.jerseyNumber)
+                : ''
+        );
         setDominantFoot(player.dominantFoot || '');
         setHeight(player.height?.toString() || '');
         setLastClub(player.lastClub || '');
@@ -368,53 +457,33 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        const nameOk = name.trim().length > 0;
-        const jerseyOk = jerseyNumber.trim().length > 0 && !Number.isNaN(parseInt(jerseyNumber, 10));
-        const heightOk = height.trim().length > 0 && !Number.isNaN(parseInt(height, 10));
-        const weightParsed = weight.trim() ? parseFloat(weight.replace(',', '.')) : NaN;
-        const weightOk = weight.trim().length > 0 && Number.isFinite(weightParsed) && weightParsed > 0;
-        const positionOk = position !== '' && config.positions.includes(position as Position);
-        const dominantFootOk = dominantFoot !== '';
-        const birthDateOk =
-            !!birthDate &&
-            isBirthDateInAllowedRangeLocal(birthDate) &&
-            calculateAgeFromBirthDateIso(birthDate) !== null;
-
-        const nextErrors: Partial<Record<ProfileRequiredField, boolean>> = {
-            name: !nameOk,
-            jerseyNumber: !jerseyOk,
-            birthDate: !birthDateOk,
-            height: !heightOk,
-            weight: !weightOk,
-            position: !positionOk,
-            dominantFoot: !dominantFootOk,
-        };
-        setProfileFieldErrors(nextErrors);
-
-        if (!nameOk || !jerseyOk || !birthDateOk || !heightOk || !weightOk || !positionOk || !dominantFootOk) {
-            setJerseyDuplicateMessage(null);
-            setActiveTab('profile');
-            return;
-        }
-
-        const jerseyNum = parseInt(jerseyNumber, 10);
-        const conflictingPlayer = players.find((p) => {
-            if (Number(p.jerseyNumber) !== jerseyNum) return false;
-            if (editMode && editPlayerId && String(p.id).trim() === String(editPlayerId).trim()) return false;
-            return true;
+        const validation = validateCadastroFields({
+            name,
+            jerseyNumber,
+            height,
+            weight,
+            position,
+            dominantFoot,
+            birthDate,
+            configPositions: config.positions,
+            players,
+            editMode,
+            editPlayerId,
         });
-        if (conflictingPlayer) {
-            const msg = `Este número de camisa (${jerseyNum}) já está em uso por ${conflictingPlayer.nickname?.trim() || conflictingPlayer.name}. Escolha outro número.`;
-            setJerseyDuplicateMessage(msg);
-            setProfileFieldErrors((prev) => ({ ...prev, jerseyNumber: true }));
-            alert(msg);
+
+        if (!validation.ok) {
+            setProfileFieldErrors(validation.nextErrors);
+            setJerseyDuplicateMessage(validation.jerseyDuplicateMessage);
+            if (validation.duplicateAlertMessage) {
+                alert(validation.duplicateAlertMessage);
+            }
             setActiveTab('profile');
             return;
         }
-        setJerseyDuplicateMessage(null);
 
-        const ageToSave = calculateAgeFromBirthDateIso(birthDate!)!;
+        const { ageToSave, weightParsed } = validation;
         setProfileFieldErrors({});
+        setJerseyDuplicateMessage(null);
         
         // Recalculate days out for all injuries before saving
         const today = new Date();
@@ -808,8 +877,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
                     <form onSubmit={handleSubmit} noValidate className="space-y-6">
                         
-                        {/* TAB: PROFILE (Default) */}
-                        {activeTab === 'profile' && (
+                        {/* TAB: PROFILE — novo atleta sempre visível; edição (lápis) segue as mesmas regras ao salvar */}
+                        {(!editMode || activeTab === 'profile') && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1 flex items-center gap-0.5 flex-wrap">
