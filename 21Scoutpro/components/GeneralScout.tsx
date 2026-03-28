@@ -3,7 +3,6 @@ import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
 import { SportConfig, MatchRecord, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
-import { IS_FREE_PLAN } from '../config';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 import { postMatchEventClockToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
@@ -12,6 +11,8 @@ interface GeneralScoutProps {
   config: SportConfig;
   matches: MatchRecord[];
   players?: Player[];
+  /** Plano Essencial: bloqueia gráfico de posse */
+  isFreePlan?: boolean;
 }
 
 
@@ -45,7 +46,7 @@ const MONTHS = [
   { value: '11', label: 'Dezembro' },
 ];
 
-export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [] }) => {
+export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
@@ -726,7 +727,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
             {/* Posse de Bola - bloqueado no plano free */}
             <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" titleBlackItalic>
-                {IS_FREE_PLAN ? (
+                {isFreePlan ? (
                   <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                     <p className="text-zinc-400 text-sm max-w-md">

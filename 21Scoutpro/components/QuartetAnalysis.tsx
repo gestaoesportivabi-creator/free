@@ -3,11 +3,10 @@ import { Trophy, AlertCircle, ChevronDown, ChevronUp, Lock } from 'lucide-react'
 import { MatchRecord, Player } from '../types';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds } from '../utils/matchPeriod';
 import { ExpandableCard } from './ExpandableCard';
-import { IS_FREE_PLAN } from '../config';
-
 interface QuartetAnalysisProps {
   matches: MatchRecord[];
   players: Player[];
+  isFreePlan?: boolean;
 }
 
 /** Objeto final do quarteto para exibição (Análise de Quarteto de Linha) */
@@ -139,7 +138,7 @@ const QuartetCard: React.FC<{
   );
 };
 
-export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, players }) => {
+export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, players, isFreePlan = false }) => {
   const quartetAnalysis = useMemo(() => {
     type QuartetAgg = {
       playerIds: string[];
@@ -362,7 +361,7 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, playe
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ExpandableCard title="Quarteto Alta performance" icon={Trophy} headerColor="text-[#ccff00]">
-          {IS_FREE_PLAN ? (
+          {isFreePlan ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
               <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
               <p className="text-zinc-400 text-sm max-w-md">
@@ -383,7 +382,7 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, playe
         </ExpandableCard>
 
         <ExpandableCard title="Quarteto Baixa performance" icon={AlertCircle} headerColor="text-[#ff0055]">
-          {IS_FREE_PLAN ? (
+          {isFreePlan ? (
             <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
               <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
               <p className="text-zinc-400 text-sm max-w-md">

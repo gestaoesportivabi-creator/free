@@ -9,7 +9,6 @@ import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
-import { IS_FREE_PLAN } from '../config';
 
 interface GoalTime {
     id: string;
@@ -87,9 +86,28 @@ interface ScoutTableProps {
     onPostMatchOpenChange?: (open: boolean) => void;
     /** Chamado ao excluir uma partida salva do calendário (partidas vinculadas à tabela de campeonato continuam lá) */
     onDeleteMatch?: (matchId: string) => void | Promise<void>;
+    /** Plano Essencial: cadeados em colunas e coleta tempo real */
+    isFreePlan?: boolean;
+    /** Repassados pelo App (ex.: sidebar); reservado para evoluções */
+    currentUser?: import('../types').User | null;
+    onScoutWindowOpenChange?: (open: boolean) => void;
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange, onDeleteMatch }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({
+  onSave,
+  players,
+  competitions,
+  matches = [],
+  initialData,
+  onInitialDataUsed,
+  championshipMatches = [],
+  schedules = [],
+  teams = [],
+  championships = [],
+  onPostMatchOpenChange,
+  onDeleteMatch,
+  isFreePlan = false,
+}) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -2058,6 +2076,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                             }}
                             onSelect={(type: CollectionType) => setCollectionType(type)}
                             onBack={handleBackToCalendar}
+                            isFreePlan={isFreePlan}
                         />
                     )}
                     {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && !showPostMatchSheet && !showRealtimePrepForSavedMatch && (
@@ -2075,6 +2094,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 }
                             }}
                             onBack={handleBackToCalendar}
+                            isFreePlan={isFreePlan}
                         />
                     )}
 
@@ -2170,7 +2190,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
@@ -2322,7 +2342,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
@@ -2504,7 +2524,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     )}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />

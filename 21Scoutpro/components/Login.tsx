@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User, SubscriptionPlanName } from '../types';
 import { ShieldCheck } from 'lucide-react';
 import { getApiUrl } from '../config';
 
@@ -72,6 +72,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
             name: result.data.user.name,
             email: result.data.user.email,
             role: result.data.user.role === 'TECNICO' ? 'Treinador' : result.data.user.role,
+            planName: result.data.user.planName as SubscriptionPlanName | undefined,
             isPlatformAdmin: result.data.user.isPlatformAdmin ?? false,
           };
           

@@ -1,7 +1,5 @@
 import React from 'react';
 import { Play, Sheet, Calendar, ArrowLeft, Lock } from 'lucide-react';
-import { IS_FREE_PLAN } from '../config';
-
 export type CollectionType = 'realtime' | 'postmatch';
 
 interface MatchContext {
@@ -15,6 +13,8 @@ interface CollectionTypeSelectorProps {
   onSelect: (type: CollectionType) => void;
   onBack: () => void;
   onRealtimeSelect?: () => void; // Função opcional para abrir nova aba quando tempo real for selecionado
+  /** Plano Essencial: bloqueia opção Tempo real */
+  isFreePlan?: boolean;
 }
 
 const formatDate = (dateStr: string) => {
@@ -32,6 +32,7 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
   onSelect,
   onBack,
   onRealtimeSelect,
+  isFreePlan = false,
 }) => {
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -96,33 +97,33 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (IS_FREE_PLAN) return;
+              if (isFreePlan) return;
               if (onRealtimeSelect) {
                 onRealtimeSelect();
               } else {
                 onSelect('realtime');
               }
             }}
-            disabled={IS_FREE_PLAN}
+            disabled={isFreePlan}
             className={`flex items-center gap-4 p-6 rounded-xl border-2 text-left group ${
-              IS_FREE_PLAN
+              isFreePlan
                 ? 'bg-zinc-950 border-zinc-700 opacity-90 cursor-not-allowed'
                 : 'bg-zinc-950 border-zinc-800 hover:border-[#00f0ff]/50 transition-colors'
             }`}
           >
             <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex items-center justify-center border-2 ${
-              IS_FREE_PLAN ? 'bg-zinc-800/50 border-zinc-600' : 'bg-[#00f0ff]/20 border-[#00f0ff]/50 group-hover:bg-[#00f0ff]/30'
+              isFreePlan ? 'bg-zinc-800/50 border-zinc-600' : 'bg-[#00f0ff]/20 border-[#00f0ff]/50 group-hover:bg-[#00f0ff]/30'
             }`}>
-              {IS_FREE_PLAN ? (
+              {isFreePlan ? (
                 <Lock className="text-zinc-500" size={28} strokeWidth={1.5} />
               ) : (
                 <Play className="text-[#00f0ff]" size={28} />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`font-black text-lg uppercase tracking-tight ${IS_FREE_PLAN ? 'text-zinc-400' : 'text-white'}`}>Tempo real</div>
+              <div className={`font-black text-lg uppercase tracking-tight ${isFreePlan ? 'text-zinc-400' : 'text-white'}`}>Tempo real</div>
               <div className="text-zinc-500 text-sm mt-1">
-                {IS_FREE_PLAN
+                {isFreePlan
                   ? 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.'
                   : 'Coleta durante a partida. Escalação, cronômetro e registro de ações em tempo real.'}
               </div>

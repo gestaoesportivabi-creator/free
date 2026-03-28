@@ -119,6 +119,7 @@ export const authController = {
             email: user.email,
             name: user.name,
             role: mapRoleForFrontend(user.role.name),
+            planName: user.role.name,
             isPlatformAdmin: user.role.name === 'ADMINISTRADOR',
           },
         },
@@ -264,6 +265,7 @@ export const authController = {
             email: user.email,
             name: user.name,
             role: mapRoleForFrontend(user.role.name),
+            planName: user.role.name,
           },
         },
       });
@@ -398,6 +400,7 @@ export const authController = {
           name: user.name,
           email: user.email,
           role: user.role.name,
+          planName: user.role.name,
           roleDescription: user.role.description,
           createdAt: user.createdAt,
         },
@@ -446,11 +449,22 @@ export const authController = {
         });
       }
 
-      const data: { id: string; name: string; email: string; role: string; isPlatformAdmin: boolean; photoUrl?: string; teamDisplayName?: string; teamShieldUrl?: string } = {
+      const data: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        planName: string;
+        isPlatformAdmin: boolean;
+        photoUrl?: string;
+        teamDisplayName?: string;
+        teamShieldUrl?: string;
+      } = {
         id: user.id,
         name: user.name,
         email: user.email,
         role: mapRoleForFrontend(user.role.name),
+        planName: user.role.name,
         isPlatformAdmin: user.role.name === 'ADMINISTRADOR',
         photoUrl: user.photoUrl ?? undefined,
       };
@@ -929,6 +943,7 @@ export const authController = {
           name: user.name,
           email: user.email,
           role: mapRoleForFrontend(user.role.name),
+          planName: user.role.name,
           isPlatformAdmin: user.role.name === 'ADMINISTRADOR',
           photoUrl: user.photoUrl,
           teamDisplayName: user.teamDisplayName ?? undefined,

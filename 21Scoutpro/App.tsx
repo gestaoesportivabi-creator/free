@@ -33,12 +33,12 @@ import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
 import { QuartetAnalysis } from './components/QuartetAnalysis';
-import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
+import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
-import { IS_FREE_PLAN } from './config';
+import { isEssentialPlanUser } from './config';
 
 const SLIDES = [
     {
@@ -143,6 +143,9 @@ export default function App() {
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  /** Cadeados / “Em breve” só para plano Essencial (ou fallback VITE_PLAN sem planName) */
+  const essentialRestricted = useMemo(() => isEssentialPlanUser(currentUser), [currentUser]);
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
@@ -814,7 +817,16 @@ export default function App() {
           }
 
           if (result.success && result.data) {
-              const d = result.data as { name?: string; email?: string; photoUrl?: string; role?: string; isPlatformAdmin?: boolean; teamDisplayName?: string; teamShieldUrl?: string };
+              const d = result.data as {
+                name?: string;
+                email?: string;
+                photoUrl?: string;
+                role?: string;
+                planName?: string;
+                isPlatformAdmin?: boolean;
+                teamDisplayName?: string;
+                teamShieldUrl?: string;
+              };
               if (currentUser) {
                   const updatedUser: User = {
                       ...currentUser,
@@ -822,6 +834,7 @@ export default function App() {
                       email: d.email ?? currentUser.email,
                       photoUrl: d.photoUrl,
                       role: (d.role === 'TECNICO' ? 'Treinador' : d.role) ?? currentUser.role,
+                      planName: (d.planName as SubscriptionPlanName | undefined) ?? currentUser.planName,
                       isPlatformAdmin: d.isPlatformAdmin ?? currentUser.isPlatformAdmin,
                       teamDisplayName: d.teamDisplayName,
                       teamShieldUrl: d.teamShieldUrl,
@@ -1239,6 +1252,7 @@ export default function App() {
             name: u.name,
             email: u.email,
             role: u.role === 'TECNICO' ? 'Treinador' : u.role,
+            planName: u.planName as SubscriptionPlanName | undefined,
             isPlatformAdmin: u.isPlatformAdmin ?? false,
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
@@ -1366,7 +1380,8 @@ export default function App() {
               onAddPlayer={handleAddPlayer} 
               onUpdatePlayer={handleUpdatePlayer}
               onDeletePlayer={handleDeletePlayer}
-              config={config} 
+              config={config}
+              isFreePlan={essentialRestricted}
             />
           </TabBackgroundWrapper>
         );
@@ -1379,13 +1394,13 @@ export default function App() {
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <QuartetAnalysis matches={matches} players={players} />
+            <QuartetAnalysis matches={matches} players={players} isFreePlan={essentialRestricted} />
           </TabBackgroundWrapper>
         );
       case 'general':
-        return <GeneralScout config={config} matches={matchesWithScoreTarget} players={players} />; 
+        return <GeneralScout config={config} matches={matchesWithScoreTarget} players={players} isFreePlan={essentialRestricted} />; 
       case 'individual':
-        if (IS_FREE_PLAN) {
+        if (essentialRestricted) {
           return (
             <TabBackgroundWrapper>
               <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
@@ -1436,6 +1451,7 @@ export default function App() {
         return (
           <TabBackgroundWrapper>
             <ChampionshipTable
+            isFreePlan={essentialRestricted}
             matches={championshipMatches}
             competitions={competitions}
             championships={championships}
@@ -1535,6 +1551,7 @@ export default function App() {
           schedules={schedules}
           teams={teams}
           championships={championships}
+          isFreePlan={essentialRestricted}
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
           onPostMatchOpenChange={(open) => setSidebarRetracted(open)}
@@ -1567,7 +1584,7 @@ export default function App() {
           </TabBackgroundWrapper>
         );
       case 'management-report':
-        if (IS_FREE_PLAN) {
+        if (essentialRestricted) {
           return (
             <TabBackgroundWrapper>
               <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
@@ -1657,7 +1674,7 @@ export default function App() {
                     players={players}
                     nextMatch={overviewStats.nextMatch}
                     championships={championships}
-                  isFreePlan={IS_FREE_PLAN}
+                  isFreePlan={essentialRestricted}
                 />
               </section>
 
@@ -1666,7 +1683,7 @@ export default function App() {
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
                 <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
-                <StatCard label="Lesões no ano" value={IS_FREE_PLAN ? 'Em breve' : overviewStats.injuriesThisYear} helper={IS_FREE_PLAN ? '—' : String(overviewStats.currentYear)} />
+                <StatCard label="Lesões no ano" value={essentialRestricted ? 'Em breve' : overviewStats.injuriesThisYear} helper={essentialRestricted ? '—' : String(overviewStats.currentYear)} />
               </section>
 
               {/* 5. Ações principais no rodapé */}
@@ -1721,7 +1738,7 @@ export default function App() {
             onNavigate={() => setSidebarOpen(false)}
             retracted={sidebarRetracted}
             onToggleRetract={() => setSidebarRetracted((r) => !r)}
-            isFreePlan={IS_FREE_PLAN}
+            isFreePlan={essentialRestricted}
           />
         </>
       )}

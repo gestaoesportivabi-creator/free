@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
 import { Shirt, Save, Plus, User, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
-import { IS_FREE_PLAN } from '../config';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
 const BIRTH_DATE_MIN_ISO = '1950-01-01';
@@ -148,9 +147,11 @@ interface TeamManagementProps {
     onDeletePlayer?: (player: Player) => void;
     onClearDemoData?: () => Promise<void>;
     config: SportConfig;
+    /** Plano Essencial: UI com cadeados / em breve */
+    isFreePlan?: boolean;
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPlayer, onUpdatePlayer, onDeletePlayer, onClearDemoData, config }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPlayer, onUpdatePlayer, onDeletePlayer, onClearDemoData, config, isFreePlan = false }) => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [editPlayerId, setEditPlayerId] = useState<string | null>(null);
@@ -1091,7 +1092,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
                         {/* TAB: MEDICAL (Injury History) - bloqueada na versão free */}
                         {activeTab === 'medical' && (
-                            IS_FREE_PLAN ? (
+                            isFreePlan ? (
                                 <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
                                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                                     <p className="text-zinc-400 text-sm max-w-md">
@@ -1226,7 +1227,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
 
                         {/* TAB: MAX LOAD - bloqueada na versão free */}
                         {activeTab === 'maxLoad' && (
-                            IS_FREE_PLAN ? (
+                            isFreePlan ? (
                                 <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
                                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                                     <p className="text-zinc-400 text-sm max-w-md">
