@@ -13,6 +13,13 @@ import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
 
+function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
+  const n = Number(v);
+  if (n === 1 || n === 2) return n;
+  if (n === 0) return 0;
+  return 0;
+}
+
 export const matchesService = {
   async getAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord[]> {
     const jogos = await matchesRepository.findAll(tenantInfo, tx);
@@ -144,6 +151,10 @@ export const matchesService = {
     const teamStats = data.teamStats || {};
     const playerStats = data.playerStats || {};
 
+    const collectionPhase = normalizeCollectionPhase(
+      data.collectionPhase ?? data.collection_phase
+    );
+
     const jogo = await matchesRepository.create({
       equipeId,
       adversario,
@@ -159,6 +170,7 @@ export const matchesService = {
       playerRelationships: data.playerRelationships,
       lineup: data.lineup,
       substitutionHistory: data.substitutionHistory,
+      collectionPhase,
     }, tx);
 
     // Salvar status via raw SQL (coluna fora do Prisma schema)
@@ -301,6 +313,11 @@ export const matchesService = {
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
     if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
+    if (data.collectionPhase !== undefined || data.collection_phase !== undefined) {
+      jogoUpdate.collectionPhase = normalizeCollectionPhase(
+        data.collectionPhase ?? data.collection_phase
+      );
+    }
     const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
 
     // Salvar status via raw SQL (coluna fora do Prisma schema)

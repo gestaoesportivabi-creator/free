@@ -23,6 +23,7 @@ interface JogoDB {
   lineup?: unknown;
   substitutionHistory?: unknown;
   status?: string | null;
+  collectionPhase?: number;
   createdAt: Date | string;
 }
 
@@ -159,6 +160,10 @@ export function transformMatchToFrontend(
     teamStats,
     status: (jogo.status as MatchRecord['status']) || 'encerrado',
   };
+  const cp = jogo.collectionPhase;
+  if (cp === 0 || cp === 1 || cp === 2) {
+    result.collectionPhase = cp as 0 | 1 | 2;
+  }
   if (jogo.postMatchEventLog) result.postMatchEventLog = jogo.postMatchEventLog as MatchRecord['postMatchEventLog'];
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];

@@ -158,6 +158,8 @@ model Jogo {
   lineup                Json?                      @map("lineup")
   substitutionHistory   Json?                      @map("substitution_history")
   status                String?                    @default("encerrado") @db.VarChar(50)
+  // Coleta scout: 0 não iniciada, 1 primeiro tempo, 2 segundo tempo
+  collectionPhase       Int                        @default(0) @map("collection_phase") @db.SmallInt
   createdAt             DateTime                   @default(now()) @map("created_at")
   campeonatosJogos    CampeonatosJogos[]
   competicao          Competicao?                @relation(fields: [competicaoId], references: [id])

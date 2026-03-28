@@ -248,6 +248,12 @@ export interface MatchRecord {
   videoUrl?: string;
   /** Status da partida para exibição e filtros */
   status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  /**
+   * Fase da coleta ao vivo / pós-jogo (metade em que os novos lances são registrados).
+   * 0 = partida ainda não iniciada (só ao vivo, antes da escalação); 1 = 1º tempo; 2 = 2º tempo.
+   * Persistido na coluna `collection_phase` da tabela `jogos` (e devolvido pela API em cada GET).
+   */
+  collectionPhase?: 0 | 1 | 2;
 }
 
 // Physical Assessment Types

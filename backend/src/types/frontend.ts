@@ -70,6 +70,8 @@ export interface MatchRecord {
   lineup?: { players: string[]; bench: string[]; ballPossessionStart: string };
   substitutionHistory?: Array<{ playerOutId: string; playerInId: string; time: number; period: string }>;
   status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  /** Fase da coleta (coluna `collection_phase` em `jogos`): 0 não iniciada, 1º tempo, 2º tempo */
+  collectionPhase?: 0 | 1 | 2;
 }
 
 export interface MatchStats {
