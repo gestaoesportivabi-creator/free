@@ -3,7 +3,22 @@ import { flushSync } from 'react-dom';
 import { X, Play, Pause, Square, Users, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff, Lock, Unlock } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
-import { HALF_RELATIVE_MAX_SECONDS, absoluteSecondsToStored, canonicalizePostMatchEventClock, deriveHalfFromAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
+import {
+  HALF_RELATIVE_LAST_SECOND_1T,
+  HALF_RELATIVE_LAST_SECOND_2T,
+  HALF_RELATIVE_MAX_SECONDS,
+  absoluteSecondsToStored,
+  canonicalizePostMatchEventClock,
+  deriveHalfFromAbsoluteSeconds,
+  formatGoalTimeDigitsMask,
+  goalAbsoluteDigitsToRelativeSecondsSecondHalf,
+  goalAbsoluteDigitsToRelativeSecondsSecondHalfUnclamped,
+  goalDigitsToRelativeSeconds,
+  parseGoalTimeDigits,
+  secondHalfRelativeToGoalDigits,
+  storedToAbsoluteSeconds,
+  type MatchHalf,
+} from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
@@ -297,7 +312,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   }, []);
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
-  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (21+ = 2º tempo)
+  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (20+ = 2º tempo)
   const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
   /** Pós-jogo: 0:00 só abre popup «Informar tempo» se o usuário não escolheu 1º/2º no centro (ex.: após gol). */
   const [manualHalfPinned, setManualHalfPinned] = useState<boolean>(true);
@@ -322,10 +337,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [goalStep, setGoalStep] = useState<'team' | 'author' | 'assist' | 'method' | 'time' | null>(null); // Fluxo inline do gol (tempo após método/assistência)
   const [pendingGoalMethod, setPendingGoalMethod] = useState<string | null>(null); // Método do gol (para nosso ou tomado)
   const [pendingAssistPlayerId, setPendingAssistPlayerId] = useState<string | null>(null); // ID do assistente (null = sem assistência)
-  /** Período do lance no passo «Tempo» (persiste ao alternar até confirmar o gol). */
-  const [goalFlowPeriod, setGoalFlowPeriod] = useState<'1T' | '2T'>('1T');
   /** Tempo relativo à metade escolhida (0 … 20:59). */
   const [goalTimeRelSeconds, setGoalTimeRelSeconds] = useState(0);
+  /** Dígitos crus (até 4) para o campo texto MM:SS no passo tempo do gol; ex.: "1856" → 18:56. */
+  const [goalTimeDigits, setGoalTimeDigits] = useState('');
   /** Para «Voltar» no passo tempo: regressão ao método ou à assistência. */
   const [goalTimeReturnStep, setGoalTimeReturnStep] = useState<'method' | 'assist'>('method');
   
@@ -606,7 +621,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (isPostmatch) {
       return absoluteSecondsToStored(rawSeconds);
     }
-    const clampedRelative = Math.max(0, Math.min(rawSeconds, HALF_RELATIVE_MAX_SECONDS));
+    const cap =
+      (periodOverride ?? currentPeriod) === '2T' ? HALF_RELATIVE_LAST_SECOND_2T : HALF_RELATIVE_LAST_SECOND_1T;
+    const clampedRelative = Math.max(0, Math.min(rawSeconds, cap));
     return { time: clampedRelative, period: periodOverride ?? currentPeriod };
   };
 
@@ -744,29 +761,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return matchTime;
   };
 
-  /** Após escolher método (ou assistência), abre o passo de tempo com rascunho alinhado ao relógio atual. */
-  const enterGoalTimeStep = useCallback(
-    (from: 'method' | 'assist') => {
-      setGoalTimeReturnStep(from);
-      if (isPostmatch) {
-        const abs = manualMinute * 60 + manualSecond;
-        const os = absoluteSecondsToStored(abs);
-        setGoalFlowPeriod(firstHalfLocked ? '2T' : os.period);
-        setGoalTimeRelSeconds(os.time);
-      } else {
-        setGoalFlowPeriod(currentPeriod);
-        setGoalTimeRelSeconds(matchTime);
-      }
-      setGoalStep('time');
-    },
-    [isPostmatch, manualMinute, manualSecond, firstHalfLocked, currentPeriod, matchTime]
-  );
+  /** Após escolher método (ou assistência), abre o passo de tempo (campo vazio; período = `currentPeriod`). */
+  const enterGoalTimeStep = useCallback((from: 'method' | 'assist') => {
+    setGoalTimeReturnStep(from);
+    setGoalTimeRelSeconds(0);
+    setGoalTimeDigits('');
+    setGoalStep('time');
+  }, []);
 
   useEffect(() => {
     userEndedFirstHalfCollectionRef.current = false;
   }, [match?.id]);
 
-  // Pós-jogo: metade técnica deriva do relógio (1º tempo = min 0–20 abs.; 2º = 21–40) ou do botão 1º/2º Tempo.
+  // Pós-jogo: metade técnica deriva do relógio (1º tempo = min. 0–20 abs.; 2º = 20–40) ou do botão 1º/2º Tempo.
   useEffect(() => {
     if (!isPostmatch) return;
     if (firstHalfLocked) {
@@ -776,12 +783,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setCurrentPeriod(deriveHalfFromAbsoluteSeconds(manualMinute * 60 + manualSecond));
   }, [isPostmatch, manualMinute, manualSecond, firstHalfLocked]);
 
-  // Com 1º tempo encerrado, não permitir tempo absoluto < 21:00 (evita voltar ao 1T por edição de relógio).
+  // Com 1º tempo encerrado, não permitir tempo absoluto < 20:00 (evita voltar ao 1T por edição de relógio).
   useEffect(() => {
     if (!isPostmatch || !firstHalfLocked) return;
     const abs = manualMinute * 60 + manualSecond;
-    if (abs < 21 * 60) {
-      setManualMinute(21);
+    if (abs < 20 * 60) {
+      setManualMinute(20);
       setManualSecond(0);
     }
   }, [isPostmatch, firstHalfLocked, manualMinute, manualSecond]);
@@ -792,13 +799,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (isPostmatch) {
       if (match.collectionPhase === 2) {
         userEndedFirstHalfCollectionRef.current = false;
-        setManualMinute(21);
+        setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
         setCurrentPeriod('2T');
         setFirstHalfLocked(true);
       } else if (userEndedFirstHalfCollectionRef.current) {
-        setManualMinute(21);
+        setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
         setCurrentPeriod('2T');
@@ -877,9 +884,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     });
   }, [lineupPlayers, benchPlayers, players, currentGoalkeeperId]);
 
+  const isLineupGoalkeeperId = (id: string) =>
+    players.find((p) => String(p.id).trim() === id)?.position === 'Goleiro';
+
+  /** Locker lateral: no máximo 1 jogador com posição Goleiro; ao escolher outro goleiro, substitui o anterior. */
   const toggleLockerDraft = (playerId: string) => {
-    setLockerDraftIds(prev => {
-      if (prev.includes(playerId)) return prev.filter(x => x !== playerId);
+    setLockerDraftIds((prev) => {
+      if (prev.includes(playerId)) return prev.filter((x) => x !== playerId);
+      const addingGk = isLineupGoalkeeperId(playerId);
+      if (addingGk) {
+        const withoutOtherGoalkeepers = prev.filter((id) => !isLineupGoalkeeperId(id));
+        if (withoutOtherGoalkeepers.length >= 5) return prev;
+        return [...withoutOtherGoalkeepers, playerId];
+      }
       if (prev.length >= 5) return prev;
       return [...prev, playerId];
     });
@@ -999,7 +1016,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setFirstHalfLocked(false);
       }
     } else if (inSecondHalf) {
-      setManualMinute(21);
+      setManualMinute(20);
       setManualSecond(0);
       setManualHalfPinned(true);
       setFirstHalfLocked(true);
@@ -1053,7 +1070,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     userEndedFirstHalfCollectionRef.current = true;
     if (isPostmatch) {
       flushSync(() => {
-        setManualMinute(21);
+        setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
         setCurrentPeriod('2T');
@@ -2002,9 +2019,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     let goalTime: number;
     let goalPeriod: MatchHalf;
     if (isPostmatch) {
-      const os = absoluteSecondsToStored(rawGoalT);
-      goalTime = os.time;
-      goalPeriod = os.period;
+      if (goalPeriodOverride != null) {
+        const abs = rawGoalT ?? 0;
+        if (goalPeriodOverride === '1T') {
+          goalTime = abs;
+          goalPeriod = '1T';
+        } else {
+          goalTime = abs - 20 * 60;
+          goalPeriod = '2T';
+        }
+      } else {
+        const os = absoluteSecondsToStored(rawGoalT);
+        goalTime = os.time;
+        goalPeriod = os.period;
+      }
     } else {
       goalTime = rawGoalT;
       goalPeriod = (goalPeriodOverride ?? currentPeriod) as MatchHalf;
@@ -2071,7 +2099,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     // Em postmatch: resetar relógio para novo lance (mantém eixo do 2º tempo se o 1º já foi encerrado)
     if (isPostmatch) {
       if (firstHalfLocked) {
-        setManualMinute(21);
+        setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
       } else {
@@ -2083,10 +2111,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const completeGoalFromTimeStep = () => {
-    const rel = Math.max(0, Math.min(goalTimeRelSeconds, HALF_RELATIVE_MAX_SECONDS + 59));
-    const period = goalFlowPeriod;
-    const rawT = isPostmatch ? (period === '1T' ? rel : 21 * 60 + rel) : rel;
-    const periodOv = isPostmatch ? undefined : period;
+    const period = currentPeriod;
+    const maxRel = period === '1T' ? HALF_RELATIVE_LAST_SECOND_1T : HALF_RELATIVE_LAST_SECOND_2T;
+    const rel = Math.max(0, Math.min(goalTimeRelSeconds, maxRel));
+    const rawT = isPostmatch ? (period === '1T' ? rel : 20 * 60 + rel) : rel;
+    const periodOv = period;
     const assistPlayer = pendingAssistPlayerId
       ? activePlayers.find((p) => String(p.id).trim() === pendingAssistPlayerId)
       : null;
@@ -3093,7 +3122,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <>
                   {lockerOpen && (
                     <p className="text-amber-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
-                      Ativos: {lockerDraftIds.length}/5 — toque nos números; Ativos para trancar
+                      Ativos: {lockerDraftIds.length}/5 — no máx. 1 goleiro; toque nos números; Ativos para trancar
                     </p>
                   )}
                 <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
@@ -3173,7 +3202,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     setLockerDraftIds([]);
                   }
                 } else {
-                  setLockerDraftIds(squadActiveIds.length > 0 ? [...squadActiveIds] : []);
+                  const raw = squadActiveIds.length > 0 ? [...squadActiveIds] : [];
+                  let gkKept = false;
+                  const sanitized = raw.filter((id) => {
+                    if (!isLineupGoalkeeperId(id)) return true;
+                    if (gkKept) return false;
+                    gkKept = true;
+                    return true;
+                  });
+                  setLockerDraftIds(sanitized);
                   setLockerOpen(true);
                 }
               }}
@@ -3468,7 +3505,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </div>
               )}
 
-              {/* Passo tempo do gol — após método (ou assistência); período 1º/2º tempo + minuto relativo à metade */}
+              {/* Passo tempo do gol — período = tempo de coleta (`currentPeriod`); só minuto/segundo relativos */}
               {goalStep === 'time' && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
@@ -3482,67 +3519,57 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <Clock size={18} />
                         Tempo do gol
                       </h3>
-                      <p className="text-zinc-500 text-xs mt-1">Período e instante dentro da metade (0–20 min).</p>
+                      <p
+                        className={`mt-2 text-sm font-black uppercase tracking-wide ${
+                          currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
+                        }`}
+                      >
+                        {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
+                      </p>
                     </div>
                     <div className="p-4 space-y-4">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={firstHalfLocked}
-                          onClick={() => setGoalFlowPeriod('1T')}
-                          className={`flex-1 py-3 rounded-xl border-2 font-black uppercase text-xs transition-all ${
-                            goalFlowPeriod === '1T'
-                              ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200'
-                              : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                          } ${firstHalfLocked ? 'opacity-40 cursor-not-allowed' : ''}`}
-                        >
-                          1º tempo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGoalFlowPeriod('2T')}
-                          className={`flex-1 py-3 rounded-xl border-2 font-black uppercase text-xs transition-all ${
-                            goalFlowPeriod === '2T'
-                              ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200'
-                              : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                          }`}
-                        >
-                          2º tempo
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Minuto</label>
-                        <select
-                          value={Math.min(20, Math.floor(goalTimeRelSeconds / 60))}
+                      <div className="flex flex-col gap-2">
+                        <label className="text-zinc-400 text-xs font-bold uppercase">Tempo (minuto e segundo)</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={currentPeriod === '2T' ? '20:00' : '00:00'}
+                          value={formatGoalTimeDigitsMask(goalTimeDigits)}
                           onChange={(e) => {
-                            const m = parseInt(e.target.value, 10);
-                            setGoalTimeRelSeconds(m * 60 + (goalTimeRelSeconds % 60));
+                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            if (currentPeriod === '2T') {
+                              const unclamped =
+                                goalAbsoluteDigitsToRelativeSecondsSecondHalfUnclamped(raw);
+                              const rel = goalAbsoluteDigitsToRelativeSecondsSecondHalf(raw);
+                              setGoalTimeRelSeconds(rel);
+                              const needsClamp =
+                                raw.length === 4
+                                  ? unclamped !== rel
+                                  : unclamped > HALF_RELATIVE_LAST_SECOND_2T;
+                              if (needsClamp) {
+                                setGoalTimeDigits(secondHalfRelativeToGoalDigits(rel));
+                              } else {
+                                setGoalTimeDigits(raw);
+                              }
+                            } else {
+                              const maxRel = HALF_RELATIVE_LAST_SECOND_1T;
+                              const rel = goalDigitsToRelativeSeconds(raw, maxRel);
+                              setGoalTimeRelSeconds(rel);
+                              const { mm, ss } = parseGoalTimeDigits(raw);
+                              const unconstrained = mm * 60 + ss;
+                              if (unconstrained !== rel) {
+                                const cm = Math.floor(rel / 60);
+                                const cs = rel % 60;
+                                setGoalTimeDigits(`${String(cm).padStart(2, '0')}${String(cs).padStart(2, '0')}`);
+                              } else {
+                                setGoalTimeDigits(raw);
+                              }
+                            }
                           }}
-                          className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white text-sm font-mono font-bold outline-none focus:border-cyan-500"
-                        >
-                          {Array.from({ length: 21 }, (_, i) => (
-                            <option key={i} value={i}>
-                              {String(i).padStart(2, '0')}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Segundo</label>
-                        <select
-                          value={goalTimeRelSeconds % 60}
-                          onChange={(e) => {
-                            const s = parseInt(e.target.value, 10);
-                            setGoalTimeRelSeconds(Math.floor(goalTimeRelSeconds / 60) * 60 + s);
-                          }}
-                          className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 text-white text-sm font-mono font-bold outline-none focus:border-cyan-500"
-                        >
-                          {Array.from({ length: 60 }, (_, i) => (
-                            <option key={i} value={i}>
-                              {String(i).padStart(2, '0')}
-                            </option>
-                          ))}
-                        </select>
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-3 text-white text-lg font-mono font-bold outline-none focus:border-cyan-500 placeholder:text-zinc-600"
+                        />
                       </div>
                     </div>
                     <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex flex-col gap-2">
