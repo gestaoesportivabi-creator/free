@@ -68,7 +68,7 @@ interface MatchScoutingWindowProps {
   mode?: 'realtime' | 'postmatch'; // postmatch = tempo manual, sem cronômetro
   onSave?: (
     match: MatchRecord,
-    options?: { source?: 'manual' | 'autosave' }
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
   ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
   /** Usuário que está registrando as ações (para auditoria: quem fez/registrou cada ação) */
   recordedByUser?: { id?: string; name: string };
@@ -299,16 +299,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const id = match?.id != null ? String(match.id).trim() : '';
     return isPersistedServerMatchId(id) ? id : '';
   });
+  const persistedMatchIdRef = useRef<string>(isPersistedServerMatchId(match?.id != null ? String(match.id).trim() : '') ? String(match.id).trim() : '');
 
   useEffect(() => {
     const id = match?.id != null ? String(match.id).trim() : '';
-    if (isPersistedServerMatchId(id)) setPersistedMatchId(id);
+    if (isPersistedServerMatchId(id)) {
+      setPersistedMatchId(id);
+      persistedMatchIdRef.current = id;
+    }
   }, [match.id]);
 
   const applySaveResult = useCallback((r: MatchRecord | undefined | void) => {
     if (r && typeof r === 'object' && r.id != null) {
       const sid = String(r.id).trim();
-      if (sid) setPersistedMatchId(sid);
+      if (sid) {
+        persistedMatchIdRef.current = sid;
+        setPersistedMatchId(sid);
+      }
     }
   }, []);
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
@@ -409,6 +416,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const autosaveQueuedRef = useRef<boolean>(false);
   const autosaveSkipRef = useRef<boolean>(true);
   const lastAutosaveSignatureRef = useRef<string>('');
+  /** Só hidrata do `match` uma vez por id enquanto a janela está aberta (evita refresh do pai sobrescrever lances locais). */
+  const hydrationAppliedForMatchIdRef = useRef<string | null>(null);
+  const lastSeenMatchIdForHydrationRef = useRef<string | null>(null);
   /** Evita que efeitos de `match`/`init` repõem 1T após «Encerrar coleta do 1º tempo» antes do servidor gravar `collectionPhase: 2`. */
   const userEndedFirstHalfCollectionRef = useRef(false);
   
@@ -869,6 +879,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     if (!isMatchStarted && !showLineupModal) {
+      const Lm = match.lineup;
+      if (
+        Lm &&
+        Array.isArray(Lm.players) &&
+        Lm.players.length === 5 &&
+        Boolean(Lm.ballPossessionStart)
+      ) {
+        return;
+      }
       if (selectedPlayerIds && selectedPlayerIds.length > 0) {
         setBenchPlayers([...selectedPlayerIds]);
         setLineupPlayers([]);
@@ -880,7 +899,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setShowLineupModal(true);
       }
     }
-  }, [isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players, match?.collectionPhase, match?.id]);
+  }, [isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players, match?.collectionPhase, match?.id, match?.lineup]);
 
   // Jogadores ativos na coleta = só após trancar o locker com 5 IDs; sem ativos = ninguém selecionável na coleta
   useEffect(() => {
@@ -1020,12 +1039,46 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const foulsForCurrentPeriod = currentPeriod === '1T' ? foulsFor1T : foulsFor2T;
   const foulsAgainstCurrentPeriod = currentPeriod === '1T' ? foulsAgainst1T : foulsAgainst2T;
 
-  // Carregar eventos da partida ao abrir (postmatch ou partida incompleta com log salvo)
+  // Carregar log de lances e escalação ao abrir (incompleto: salvar/reabrir lineup + postMatchEventLog)
   useEffect(() => {
-    if (!isOpen || !match.postMatchEventLog?.length) return;
-    const converted = postMatchEventLogToMatchEvents(match.postMatchEventLog, players);
-    setMatchEvents(converted);
-    recalcGoalsAndFoulsFromEvents(converted);
+    if (!isOpen) {
+      hydrationAppliedForMatchIdRef.current = null;
+      lastSeenMatchIdForHydrationRef.current = null;
+      return;
+    }
+    const mid = String(match?.id ?? '').trim();
+    if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
+      hydrationAppliedForMatchIdRef.current = null;
+    }
+    lastSeenMatchIdForHydrationRef.current = mid;
+
+    if (hydrationAppliedForMatchIdRef.current === mid && mid !== '') {
+      return;
+    }
+
+    const log = match.postMatchEventLog;
+    const hasLog = log != null && log.length > 0;
+    const L = match.lineup;
+    const hasLineupData =
+      L != null &&
+      ((Array.isArray(L.players) && L.players.length > 0) ||
+        (Array.isArray(L.selectedPlayerIds) && L.selectedPlayerIds.length > 0) ||
+        (Array.isArray(L.bench) && L.bench.length > 0));
+
+    if (!hasLog && !hasLineupData) return;
+
+    hydrationAppliedForMatchIdRef.current = mid;
+
+    let converted: MatchEvent[] = [];
+    if (hasLog) {
+      converted = postMatchEventLogToMatchEvents(log, players);
+      setMatchEvents(converted);
+      recalcGoalsAndFoulsFromEvents(converted);
+    } else {
+      setMatchEvents([]);
+      recalcGoalsAndFoulsFromEvents([]);
+    }
+
     const has2TEvent = converted.some((e) => e.period === '2T');
     const phase = match.collectionPhase;
     if (phase === 2) {
@@ -1035,18 +1088,55 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       phase === 2 || (phase === undefined && has2TEvent) || userEndedFirstHalfCollectionRef.current;
 
     if (!isPostmatch) {
-      setLineupPlayers(match.lineup?.players ?? []);
-      setBenchPlayers(match.lineup?.bench ?? []);
-      if (match.lineup?.ballPossessionStart) {
-        setBallPossessionStart(match.lineup.ballPossessionStart);
+      if (hasLineupData && L) {
+        setLineupPlayers(L.players ?? []);
+        setBenchPlayers(L.bench ?? []);
+        if (L.ballPossessionStart) {
+          setBallPossessionStart(L.ballPossessionStart);
+        }
+        const tit = (L.players ?? []).filter(Boolean);
+        if (tit.length === 5 && L.ballPossessionStart) {
+          setIsMatchStarted(true);
+          setShowLineupModal(false);
+          setCurrentGoalkeeperId(tit[0]);
+          setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
+          setSquadActiveIds(tit);
+        } else if (hasLog) {
+          setIsMatchStarted(true);
+          setShowLineupModal(false);
+          setSquadActiveIds(tit.length === 5 ? tit : []);
+          if (tit[0]) setCurrentGoalkeeperId(tit[0]);
+        } else {
+          setIsMatchStarted(false);
+          setShowLineupModal(true);
+          setSquadActiveIds([]);
+        }
+      } else if (hasLog && L) {
+        setLineupPlayers(L.players ?? []);
+        setBenchPlayers(L.bench ?? []);
+        if (L.ballPossessionStart) {
+          setBallPossessionStart(L.ballPossessionStart);
+          setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
+        }
+        setIsMatchStarted(true);
+        setShowLineupModal(false);
+        const titFb = (L.players ?? []).filter(Boolean);
+        setSquadActiveIds(titFb.length === 5 ? titFb : []);
+        if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
-      setIsMatchStarted(true);
-      if (inSecondHalf) {
+      if (hasLog && inSecondHalf) {
         setCurrentPeriod('2T');
         setMatchTime(0);
         setFirstHalfLocked(true);
-      } else {
+      } else if (hasLog && !inSecondHalf) {
+        setCurrentPeriod('1T');
+        setFirstHalfLocked(false);
+      } else if (!hasLog && inSecondHalf) {
+        setCurrentPeriod('2T');
+        setMatchTime(0);
+        setFirstHalfLocked(true);
+      } else if (!hasLog && !inSecondHalf) {
         setCurrentPeriod('1T');
         setFirstHalfLocked(false);
       }
@@ -1057,7 +1147,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setFirstHalfLocked(true);
     }
     autosaveSkipRef.current = true;
-    // Após o próximo paint, `isMatchStarted` / período já refletem o resume (evita collectionPhase errado na assinatura).
     setTimeout(() => {
       autosaveSkipRef.current = false;
       try {
@@ -1449,7 +1538,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
 
     const result: 'V' | 'D' | 'E' = goalsFor > goalsAgainst ? 'V' : goalsAgainst > goalsFor ? 'D' : 'E';
-    const snapshotId = persistedMatchId.length > 0 ? persistedMatchId : match.id;
+    const snapshotId = persistedMatchIdRef.current.length > 0 ? persistedMatchIdRef.current : match.id;
     return {
       id: snapshotId,
       opponent: match.opponent,
@@ -1516,7 +1605,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const saveSilently = async () => {
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
-    if (matchEvents.length === 0) return;
+    const hasEvents = matchEvents.length > 0;
+    const hasRealtimeLineupDraft =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    const squadIdsForPost = [
+      ...new Set(
+        [
+          ...lineupPlayers.map((id) => String(id).trim()),
+          ...benchPlayers.map((id) => String(id).trim()),
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
+        ].filter(Boolean)
+      ),
+    ];
+    const hasPostmatchSquad = isPostmatch && squadIdsForPost.length > 0;
+    if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
     const snapshot = buildMatchSnapshot('em_andamento');
     const signature = JSON.stringify(snapshot);
@@ -1543,11 +1649,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   };
 
+  /** Espera o autosave em curso terminar para evitar corrida com save manual (duplicata / last-write). */
+  const waitForAutosaveIdle = useCallback(async (maxMs = 8000) => {
+    const t0 = Date.now();
+    while (autosaveInFlightRef.current) {
+      if (Date.now() - t0 > maxMs) break;
+      await new Promise<void>((r) => setTimeout(r, 50));
+    }
+  }, []);
+
   // Finalizar coleta (status = encerrado, mas editável depois)
   const handleEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
     if (!window.confirm('Tem certeza que deseja finalizar a coleta?')) return;
+
+    autosaveSkipRef.current = true;
+    await waitForAutosaveIdle();
 
     if (isPostmatch && onSave) {
       const savedMatch = buildMatchSnapshot('encerrado');
@@ -1566,16 +1684,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     onClose();
   };
 
-  // Salvar rascunho para finalizar depois (status = em_andamento)
+  // Guardar como incompleto (status = em_andamento)
   const handleSaveLater = async () => {
-    if (matchEvents.length === 0 && !isPostmatch) {
+    const hasRealtimeLineupOnly =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    if (matchEvents.length === 0 && !isPostmatch && !hasRealtimeLineupOnly) {
       onClose();
       return;
     }
 
+    autosaveSkipRef.current = true;
+    await waitForAutosaveIdle();
+
     if (onSave) {
       const savedMatch = buildMatchSnapshot('em_andamento');
-      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
+      applySaveResult(
+        await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
+      );
     }
     onClose();
   };
@@ -1584,7 +1712,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!isOpen) return;
     if (autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
-    if (matchEvents.length === 0) return;
+    const hasEvents = matchEvents.length > 0;
+    const hasRealtimeLineupDraft =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    const squadIdsForPost = [
+      ...new Set(
+        [
+          ...lineupPlayers.map((id) => String(id).trim()),
+          ...benchPlayers.map((id) => String(id).trim()),
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
+        ].filter(Boolean)
+      ),
+    ];
+    const hasPostmatchSquad = isPostmatch && squadIdsForPost.length > 0;
+    if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
     if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
     autosaveDebounceRef.current = setTimeout(() => {
@@ -1594,7 +1739,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return () => {
       if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
     };
-  }, [isOpen, isPostmatch, isMatchStarted, matchEvents, lineupPlayers, benchPlayers, substitutionHistory, possessionSecondsWith, possessionSecondsWithout, currentPeriod]);
+  }, [
+    isOpen,
+    isPostmatch,
+    isMatchStarted,
+    matchEvents,
+    lineupPlayers,
+    benchPlayers,
+    substitutionHistory,
+    possessionSecondsWith,
+    possessionSecondsWithout,
+    currentPeriod,
+    ballPossessionStart,
+    selectedPlayerIds,
+    match?.lineup?.selectedPlayerIds,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1648,15 +1807,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    setIsMatchStarted(true);
-    setShowLineupModal(false);
-    // Inicializar goleiro atual (primeiro da escalação)
-    if (lineupPlayers.length > 0) {
-      setCurrentGoalkeeperId(lineupPlayers[0]);
+    flushSync(() => {
+      setIsMatchStarted(true);
+      setShowLineupModal(false);
+      if (lineupPlayers.length > 0) {
+        setCurrentGoalkeeperId(lineupPlayers[0]);
+      }
+      setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
+    });
+    if (onSave) {
+      try {
+        autosaveSkipRef.current = false;
+        const snap = buildMatchSnapshot('em_andamento');
+        void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
+          applySaveResult(r);
+          lastAutosaveSignatureRef.current = JSON.stringify(snap);
+        });
+      } catch {
+        /* noop */
+      }
     }
-    // Inicializar posse conforme início
-    setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
-    // Cronômetro permanece zerado e parado; usuário clica em Iniciar para começar
   };
 
   // Adicionar jogador à escalação
@@ -2713,9 +2883,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveLater}
-                  className="text-[10px] text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
                 >
-                  finalizar depois
+                  Guardar como incompleto
                 </button>
               </div>
             </div>

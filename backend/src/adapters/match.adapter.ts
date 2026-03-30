@@ -158,7 +158,7 @@ export function transformMatchToFrontend(
     location: (jogo as { local?: string }).local || undefined,
     playerStats,
     teamStats,
-    status: (jogo.status as MatchRecord['status']) || 'encerrado',
+    status: (jogo.status as MatchRecord['status']) || undefined,
   };
   const cp = jogo.collectionPhase;
   if (cp === 0 || cp === 1 || cp === 2) {

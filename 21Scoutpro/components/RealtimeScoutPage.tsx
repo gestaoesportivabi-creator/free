@@ -45,7 +45,7 @@ export const RealtimeScoutPage: React.FC = () => {
           date: data.date,
           opponent: data.opponent,
           competition: data.competition,
-          status: 'nao_executado',
+          status: 'disponivel',
           result: 'E',
           goalsFor: 0,
           goalsAgainst: 0,
@@ -67,7 +67,13 @@ export const RealtimeScoutPage: React.FC = () => {
         if (data.matchId) {
           try {
             const dbMatch = await matchesApi.getById(data.matchId);
-            if (dbMatch?.id && (dbMatch.status === 'em_andamento' || (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))) {
+            if (
+              dbMatch?.id &&
+              (dbMatch.status === 'em_andamento' ||
+                dbMatch.status === 'disponivel' ||
+                dbMatch.status === 'nao_executado' ||
+                (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
+            ) {
               matchRecord = dbMatch;
             }
           } catch (fetchErr) {
@@ -103,9 +109,10 @@ export const RealtimeScoutPage: React.FC = () => {
 
   const handleSave = async (
     savedMatch: MatchRecord,
-    options?: { source?: 'manual' | 'autosave' }
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
   ) => {
     const isAutosave = options?.source === 'autosave';
+    const saveAsIncomplete = options?.saveAsIncomplete === true;
     try {
       if (!savedMatch || !savedMatch.teamStats) {
         if (!isAutosave) alert('Dados da partida incompletos. Não foi possível salvar.');
@@ -117,7 +124,11 @@ export const RealtimeScoutPage: React.FC = () => {
       }
       if (saved && !isAutosave) {
         localStorage.removeItem('realtimeScoutData');
-        alert('Partida salva com sucesso! Os dados foram gravados no sistema.');
+        alert(
+          saveAsIncomplete
+            ? 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.'
+            : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
+        );
         window.close();
       } else if (!saved && !isAutosave) {
         alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');

@@ -103,8 +103,10 @@ interface ScoutTableProps {
     championships?: Championship[];
     /** Chamado quando o popup Depois da Partida abre/fecha (para recolher sidebar e dar espaço) */
     onPostMatchOpenChange?: (open: boolean) => void;
-    /** Chamado ao excluir uma partida salva do calendário (partidas vinculadas à tabela de campeonato continuam lá) */
+    /** Chamado ao excluir uma partida salva do calendário */
     onDeleteMatch?: (matchId: string) => void | Promise<void>;
+    /** Chamado ao excluir uma partida programada (planilha de campeonato) — necessário para mostrar lixeira nos cartões `scheduled` */
+    onDeleteChampionshipMatch?: (championshipMatchId: string) => void | Promise<void>;
     /** Plano Essencial: cadeados em colunas e coleta tempo real */
     isFreePlan?: boolean;
     /** Repassados pelo App (ex.: sidebar); reservado para evoluções */
@@ -125,6 +127,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
   championships = [],
   onPostMatchOpenChange,
   onDeleteMatch,
+  onDeleteChampionshipMatch,
   isFreePlan = false,
 }) => {
     // Debug: log initialData quando recebido
@@ -1601,7 +1604,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             location: location.trim() || undefined,
             scoreTarget: scoreTarget.trim() || undefined,
             teamStats: teamStats,
-            playerStats: playerStats
+            playerStats: playerStats,
+            status: 'encerrado',
         };
 
         console.log('💾 Salvando partida:', {
@@ -1696,12 +1700,64 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     const scoreMessage = getScoreMessage();
     const teamName = teams.length > 0 ? teams[0].nome : 'Nossa Equipe';
 
-    // Função para normalizar a chave de comparação de partidas (Data + Adversário)
-    const getMatchKey = (date: string | undefined, opponent: string | undefined) => {
+    const normalizeMatchText = (value: string | undefined) =>
+        (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const normalizeMatchTime = (value: string | undefined): string => {
+        if (!value) return '';
+        const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return '';
+        const hour = Number(match[1]);
+        const minute = Number(match[2]);
+        if (
+            Number.isNaN(hour) ||
+            Number.isNaN(minute) ||
+            hour < 0 ||
+            hour > 23 ||
+            minute < 0 ||
+            minute > 59
+        ) {
+            return '';
+        }
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    };
+
+    const getMatchBaseKey = (
+        date: string | undefined,
+        opponent: string | undefined,
+        competition?: string
+    ) => {
         if (!date) return '';
         const dStr = date.slice(0, 10);
-        const normalizedOpponent = (opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        return `${dStr}_${normalizedOpponent}`;
+        return `${dStr}_${normalizeMatchText(opponent)}_${normalizeMatchText(competition)}`;
+    };
+
+    // Chave forte para dedupe em volume alto de jogos futuros.
+    const getMatchKey = (
+        date: string | undefined,
+        opponent: string | undefined,
+        competition?: string,
+        time?: string
+    ) => {
+        const base = getMatchBaseKey(date, opponent, competition);
+        if (!base) return '';
+        const normalizedTime = normalizeMatchTime(time);
+        return `${base}_${normalizedTime || 'sem_hora'}`;
+    };
+
+    const hasScheduledStarted = (date: string, time?: string) => {
+        const now = new Date();
+        const day = date.slice(0, 10);
+        if (!day) return false;
+        const normalizedTime = normalizeMatchTime(time);
+        if (normalizedTime) {
+            const startAt = new Date(`${day}T${normalizedTime}:00`);
+            if (Number.isNaN(startAt.getTime())) return false;
+            return now.getTime() > startAt.getTime();
+        }
+        const endOfDay = new Date(`${day}T23:59:59`);
+        if (Number.isNaN(endOfDay.getTime())) return false;
+        return now.getTime() > endOfDay.getTime();
     };
 
     // Função para verificar se uma partida não foi executada
@@ -1729,52 +1785,87 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         return hasNoStats;
     };
 
-    // Função para determinar o status da partida
-    const getMatchStatus = (item: CalendarMatchItem): 'programada' | 'incompleto' | 'finalizado' => {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const matchDate = new Date(item.date);
-        matchDate.setHours(0, 0, 0, 0);
-        
-        const isPast = matchDate <= now;
-        
-        if (item.type === 'scheduled') {
-            if (isPast) {
-                const schedKey = getMatchKey(item.date, item.opponent);
-                
-                const hasMatchRecord = matches.find(m => {
-                    return getMatchKey(m.date, m.opponent) === schedKey;
-                });
-                return hasMatchRecord ? 'finalizado' : 'incompleto';
-            }
-            return 'programada';
-        }
-        
-        if (item.type === 'saved') {
-            const match = item as MatchRecord;
-            if (match.status === 'em_andamento') return 'incompleto';
-            if (match.status === 'encerrado') return 'finalizado';
-            if (match.teamStats) return 'finalizado';
-            return 'incompleto';
-        }
-        
-        return 'programada';
+    const getSavedMatchStatus = (match: MatchRecord): 'disponivel' | 'incompleto' | 'finalizado' => {
+        if (match.status === 'disponivel' || match.status === 'nao_executado') return 'disponivel';
+        if (match.status === 'em_andamento') return 'incompleto';
+        if (match.status === 'encerrado') return 'finalizado';
+        if (match.status == null && isMatchNotExecuted(match)) return 'disponivel';
+        return 'finalizado';
     };
+
+    const findLinkedSavedMatchForScheduled = (
+        scheduled: ChampionshipMatch,
+        scheduledBaseCounts: Map<string, number>
+    ): MatchRecord | null => {
+        const detailedKey = getMatchKey(
+            scheduled.date,
+            scheduled.opponent,
+            scheduled.competition,
+            scheduled.time
+        );
+        const baseKey = getMatchBaseKey(scheduled.date, scheduled.opponent, scheduled.competition);
+        const exact = matches.find((m) => {
+            const savedDetailedKey = getMatchKey(m.date, m.opponent, m.competition);
+            return savedDetailedKey === detailedKey;
+        });
+        if (exact) return exact;
+        // Fallback sem hora apenas quando não há ambiguidade de programação.
+        if ((scheduledBaseCounts.get(baseKey) || 0) === 1) {
+            const byBase = matches.find((m) => {
+                const savedBaseKey = getMatchBaseKey(m.date, m.opponent, m.competition);
+                return savedBaseKey === baseKey;
+            });
+            if (byBase) return byBase;
+        }
+        return null;
+    };
+
+    /** Calendário Dados do jogo: Disponível → Incompleto → Finalizado (verde / amarelo / vermelho) */
+    const getMatchStatus = (
+        item: CalendarMatchItem,
+        scheduledBaseCounts: Map<string, number>
+    ): 'disponivel' | 'incompleto' | 'finalizado' => {
+        if (item.type === 'scheduled') {
+            const linkedSaved = findLinkedSavedMatchForScheduled(
+                item as ChampionshipMatch,
+                scheduledBaseCounts
+            );
+            if (linkedSaved) return getSavedMatchStatus(linkedSaved);
+            return hasScheduledStarted(item.date, (item as ChampionshipMatch).time)
+                ? 'incompleto'
+                : 'disponivel';
+        }
+
+        if (item.type === 'saved') {
+            return getSavedMatchStatus(item as MatchRecord);
+        }
+
+        return 'disponivel';
+    };
+
+    const calendarStatusSortOrder: Record<'disponivel' | 'incompleto' | 'finalizado', number> = {
+        disponivel: 0,
+        incompleto: 1,
+        finalizado: 2,
+    };
+
+    const scheduledBaseCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        championshipMatches.forEach((cm) => {
+            const base = getMatchBaseKey(cm.date, cm.opponent, cm.competition);
+            if (!base) return;
+            counts.set(base, (counts.get(base) || 0) + 1);
+        });
+        return counts;
+    }, [championshipMatches]);
 
     // Partidas unificadas (salvas + programadas) filtradas por intervalo de datas
     // Deduplica: se uma programada já tem uma versão salva (mesma data+adversário), mostra só a salva
     const filteredMatches = useMemo((): CalendarMatchItem[] => {
         const saved: CalendarMatchItem[] = matches.map((m) => ({ ...m, type: 'saved' as const }));
 
-        const savedKeys = new Set(
-            matches.map((m) => getMatchKey(m.date, m.opponent)).filter(Boolean)
-        );
-
         const scheduled: CalendarMatchItem[] = championshipMatches
-            .filter((cm) => {
-                const key = getMatchKey(cm.date, cm.opponent);
-                return key && !savedKeys.has(key);
-            })
+            .filter((cm) => !findLinkedSavedMatchForScheduled(cm, scheduledBaseCounts))
             .map((m) => ({ ...m, type: 'scheduled' as const }));
 
         const all: CalendarMatchItem[] = [...saved, ...scheduled];
@@ -1790,8 +1881,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                 matchDate.setHours(12, 0, 0, 0);
                 return matchDate >= start && matchDate <= end;
             })
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }, [matches, championshipMatches, startDate, endDate]);
+            .sort((a, b) => {
+                const sa = getMatchStatus(a, scheduledBaseCounts);
+                const sb = getMatchStatus(b, scheduledBaseCounts);
+                const tier = calendarStatusSortOrder[sa] - calendarStatusSortOrder[sb];
+                if (tier !== 0) return tier;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            });
+    }, [matches, championshipMatches, scheduledBaseCounts, startDate, endDate]);
 
 
     const handleResetToCurrentMonth = () => {
@@ -2013,16 +2110,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 <div className="flex items-center justify-between mb-3">
                                     <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
                                         (() => {
-                                            const status = getMatchStatus(item);
-                                            if (status === 'programada') return 'bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/50';
+                                            const status = getMatchStatus(item, scheduledBaseCounts);
+                                            if (status === 'disponivel') return 'bg-green-500/20 text-green-400 border border-green-500/50';
                                             if (status === 'incompleto') return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50';
                                             if (status === 'finalizado') return 'bg-red-500/20 text-red-400 border border-red-500/50';
                                             return 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/50';
                                         })()
                                     }`}>
                                         {(() => {
-                                            const status = getMatchStatus(item);
-                                            if (status === 'programada') return 'Programada';
+                                            const status = getMatchStatus(item, scheduledBaseCounts);
+                                            if (status === 'disponivel') return 'Disponível';
                                             if (status === 'incompleto') return 'Incompleto';
                                             if (status === 'finalizado') return 'Finalizado';
                                             return 'N/A';
@@ -2040,6 +2137,25 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                 }}
                                                 className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
                                                 title="Excluir partida"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                        {item.type === 'scheduled' && onDeleteChampionshipMatch && item.id && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (
+                                                        window.confirm(
+                                                            'Excluir esta partida programada da planilha? Esta ação não pode ser desfeita.'
+                                                        )
+                                                    ) {
+                                                        onDeleteChampionshipMatch(item.id as string);
+                                                    }
+                                                }}
+                                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                                                title="Excluir da planilha"
                                             >
                                                 <Trash2 size={16} />
                                             </button>
@@ -2640,6 +2756,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         );
                                     }
                                     if (options?.source === 'autosave') return;
+                                    if (options?.saveAsIncomplete) {
+                                        handleBackToCalendar();
+                                        return;
+                                    }
                                     setShowPostMatchSheet(false);
                                     const isExistingMatch =
                                         result?.id && isPersistedServerMatchId(String(result.id));
@@ -3572,6 +3692,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             );
                         }
                         if (options?.source === 'autosave') return;
+                        if (options?.saveAsIncomplete) {
+                            handleBackToCalendar();
+                            return;
+                        }
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');
                         setSelectedExtraTimeMinutes(5);

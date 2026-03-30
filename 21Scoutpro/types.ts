@@ -249,7 +249,7 @@ export interface MatchRecord {
   /** Link do vídeo (ex.: YouTube) para análise na cabine de vídeo */
   videoUrl?: string;
   /** Status da partida para exibição e filtros */
-  status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';
   /**
    * Fase da coleta ao vivo / pós-jogo (metade em que os novos lances são registrados).
    * 0 = partida ainda não iniciada (só ao vivo, antes da escalação); 1 = 1º tempo; 2 = 2º tempo.

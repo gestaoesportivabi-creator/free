@@ -37,6 +37,7 @@ import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, 
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
+import { isMatchFinalizedForScout } from './utils/matchStatus';
 import { isEssentialPlanUser } from './config';
 
 const SLIDES = [
@@ -275,9 +276,15 @@ export default function App() {
     };
   }, [matches, players, championshipMatches]);
 
+  /** Só partidas encerradas entram nas abas de Scout / ranking / relatório gerencial */
+  const matchesFinalizedForScout = useMemo(
+    () => matches.filter(isMatchFinalizedForScout),
+    [matches]
+  );
+
   // Enriquecer matches com scoreTarget (meta de desarmes) do campo "META DE DESARMES" da tabela de campeonato
   const matchesWithScoreTarget = useMemo(() => {
-    if (!championshipMatches?.length) return matches;
+    if (!championshipMatches?.length) return matchesFinalizedForScout;
     const byJogoId = new Map<string, ChampionshipMatch>();
     const byKey = new Map<string, ChampionshipMatch>();
     championshipMatches.forEach(cm => {
@@ -287,12 +294,12 @@ export default function App() {
         if (!byKey.has(k)) byKey.set(k, cm);
       }
     });
-    return matches.map(m => {
+    return matchesFinalizedForScout.map(m => {
       const cm = byJogoId.get(m.id) ?? byKey.get(`${m.date}|${(m.opponent || '').trim()}|${(m.competition || '').trim()}`);
       if (!cm?.scoreTarget) return m;
       return { ...m, scoreTarget: cm.scoreTarget };
     });
-  }, [matches, championshipMatches]);
+  }, [matchesFinalizedForScout, championshipMatches]);
 
   // Atualizar a cada minuto para contagem regressiva ao vivo
   const [liveNow, setLiveNow] = useState(() => new Date());
@@ -874,11 +881,25 @@ export default function App() {
       }
   };
 
+  const handleDeleteChampionshipMatch = async (championshipMatchId: string) => {
+    try {
+      const success = await championshipMatchesApi.delete(championshipMatchId);
+      if (success) {
+        setChampionshipMatches((prev) => prev.filter((m) => m.id !== championshipMatchId));
+        alert('Partida programada removida da planilha.');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir partida da planilha:', error);
+      alert('Não foi possível excluir a partida da planilha. Tente novamente.');
+    }
+  };
+
   const handleSaveMatch = async (
     newMatch: MatchRecord,
-    options?: { source?: 'manual' | 'autosave' }
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
   ): Promise<MatchRecord | undefined> => {
       const isAutosave = options?.source === 'autosave';
+      const saveAsIncomplete = options?.saveAsIncomplete === true;
       try {
         // Validar match antes de salvar
         if (!newMatch || !newMatch.teamStats) {
@@ -950,8 +971,12 @@ export default function App() {
               });
             }
             if (!isAutosave) {
-              alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
-              if (isCreated) setActiveTab('general');
+              if (saveAsIncomplete) {
+                alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');
+              } else {
+                alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
+                if (isCreated) setActiveTab('general');
+              }
             }
             return saved;
           } else {
@@ -1397,13 +1422,13 @@ export default function App() {
       case 'ranking': 
         return (
           <TabBackgroundWrapper>
-            <StatsRanking players={players} matches={matches} />
+            <StatsRanking players={players} matches={matchesFinalizedForScout} />
           </TabBackgroundWrapper>
         ); 
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <QuartetAnalysis matches={matches} players={players} isFreePlan={essentialRestricted} />
+            <QuartetAnalysis matches={matchesFinalizedForScout} players={players} isFreePlan={essentialRestricted} />
           </TabBackgroundWrapper>
         );
       case 'general':
@@ -1424,7 +1449,7 @@ export default function App() {
         }
         return (
           <TabBackgroundWrapper>
-            <IndividualScout config={config} currentUser={currentUser} matches={matches} players={players} timeControls={timeControls} />
+            <IndividualScout config={config} currentUser={currentUser} matches={matchesFinalizedForScout} players={players} timeControls={timeControls} />
           </TabBackgroundWrapper>
         );
       case 'physical':
@@ -1442,7 +1467,7 @@ export default function App() {
       case 'video':
         return (
           <TabBackgroundWrapper>
-            <VideoScout config={config} matches={matches} players={players} />
+            <VideoScout config={config} matches={matchesFinalizedForScout} players={players} />
           </TabBackgroundWrapper>
         );
       case 'schedule': // New Case
@@ -1565,6 +1590,7 @@ export default function App() {
           onScoutWindowOpenChange={setScoutWindowOpen}
           onPostMatchOpenChange={(open) => setSidebarRetracted(open)}
           onDeleteMatch={handleDeleteMatch}
+          onDeleteChampionshipMatch={handleDeleteChampionshipMatch}
             />
           </TabBackgroundWrapper>
         );
@@ -1610,7 +1636,7 @@ export default function App() {
           <TabBackgroundWrapper>
             <ManagementReport 
               players={players} 
-              matches={matches} 
+              matches={matchesFinalizedForScout} 
               assessments={assessments}
               timeControls={timeControls}
             />
