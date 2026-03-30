@@ -2095,7 +2095,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             }}
                             onSelect={(type: CollectionType) => setCollectionType(type)}
                             onBack={handleBackToCalendar}
-                            isFreePlan={isFreePlan}
                         />
                     )}
                     {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && !showPostMatchSheet && !showRealtimePrepForSavedMatch && (
@@ -2105,20 +2104,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 opponent: selectedMatch.opponent || '',
                                 competition: selectedMatch.competition,
                             }}
-                            onSelect={(type: CollectionType) => {
-                                if (type === 'realtime') {
-                                    setShowMatchTypeModal(true);
-                                } else {
-                                    setShowPostMatchSheet(true);
-                                }
-                            }}
+                            onSelect={() => setShowPostMatchSheet(true)}
                             onBack={handleBackToCalendar}
-                            isFreePlan={isFreePlan}
                         />
                     )}
 
                     {/* Preparação tempo real — partida salva (não executada): seleção de atletas antes de abrir a nova aba */}
-                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && (
+                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && false && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2252,7 +2244,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                         };
                                         localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                        window.open('/scout-realtime', '_blank');
+                                        // Tempo real isolado no painel: segue para pós-jogo.
+                                        setShowPostMatchSheet(true);
                                         setShowRealtimePrepForSavedMatch(false);
                                     }}
                                     disabled={selectedPlayersForMatch.size === 0}
@@ -2273,7 +2266,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                     )}
 
                     {/* Interface de Preparação para Partida Programada — tempo real */}
-                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && (
+                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && false && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2895,7 +2888,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                                 };
                                                 localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                                window.open('/scout-realtime', '_blank');
+                                                // Tempo real isolado no painel: segue para pós-jogo.
+                                                setShowPostMatchSheet(true);
                                                 setShowStartScoutConfirmation(false);
                                             }}
                                             disabled={selectedPlayersForMatch.size === 0}

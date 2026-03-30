@@ -25,7 +25,6 @@ import { ManagementReport } from './components/ManagementReport';
 import { EmBreve } from './components/EmBreve';
 import { AdminPanel } from './components/AdminPanel';
 import { NextMatchAlert } from './components/NextMatchAlert';
-import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { DashboardTodayBlock } from './components/DashboardTodayBlock';
 import { DashboardSquadAvailability } from './components/DashboardSquadAvailability';
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
@@ -1330,9 +1329,14 @@ export default function App() {
     );
   }
 
-  // Rota dedicada à coleta em tempo real (dados em localStorage; save via API)
+  // Tempo real isolado/desativado na UI principal.
   if (window.location.pathname === '/scout-realtime') {
-    return <RealtimeScoutPage />;
+    window.history.replaceState({}, '', '/dashboard');
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-zinc-400">Redirecionando...</p>
+      </div>
+    );
   }
 
   // Mostrar landing page

@@ -5,6 +5,9 @@ import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
 
+// Recurso legado: tempo real está isolado/desativado na UI principal.
+// Este componente permanece para possível reativação futura controlada.
+
 interface RealtimeScoutData {
   matchId?: string;
   date: string;
