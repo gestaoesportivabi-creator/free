@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
 import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
-import { SportConfig, MatchRecord, Player } from '../types';
+import { SportConfig, MatchRecord, MatchStats, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
@@ -98,11 +98,152 @@ function getBlockedShotsFromLog(match: MatchRecord): number {
   return blocked;
 }
 
+function emptyScopedStats(): MatchStats {
+  return {
+    goals: 0,
+    assists: 0,
+    passesCorrect: 0,
+    passesWrong: 0,
+    shotsOnTarget: 0,
+    shotsOffTarget: 0,
+    tacklesWithBall: 0,
+    tacklesWithoutBall: 0,
+    tacklesCounterAttack: 0,
+    transitionErrors: 0,
+    shotsShootZone: 0,
+    fouls: 0,
+    saves: 0,
+    yellowCards: 0,
+    redCards: 0,
+    goalsConceded: 0,
+    goalMethodsScored: {},
+    goalMethodsConceded: {},
+    goalTimes: [],
+    goalsConcededTimes: [],
+  };
+}
+
+function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchRecord {
+  const setPieceMethods = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
+  const srcLog = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  const log = srcLog.filter((e) => e.period === period);
+  const teamStats = emptyScopedStats();
+  const playerStats: Record<string, MatchStats> = {};
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+
+  const getPlayerStats = (playerId: string): MatchStats => {
+    const id = String(playerId).trim();
+    if (!playerStats[id]) playerStats[id] = emptyScopedStats();
+    return playerStats[id];
+  };
+
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const playerId = String(e?.playerId ?? '').trim();
+    const subtipo = String(e?.subtipo ?? '').trim();
+    const upperSubtipo = subtipo.toUpperCase();
+    const isOpponentGoal = e?.isOpponentGoal === true || upperSubtipo === 'CONTRA';
+
+    if (action === 'goal') {
+      if (isOpponentGoal) {
+        goalsAgainst += 1;
+        teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsConceded![method] = (teamStats.goalMethodsConceded![method] || 0) + 1;
+        }
+        teamStats.goalsConcededTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      } else {
+        goalsFor += 1;
+        teamStats.goals += 1;
+        if (playerId) {
+          const ps = getPlayerStats(playerId);
+          ps.goals += 1;
+        }
+        const assistId = String(e?.assistPlayerId ?? '').trim();
+        if (assistId) {
+          const aps = getPlayerStats(assistId);
+          aps.assists += 1;
+          teamStats.assists += 1;
+        }
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsScored![method] = (teamStats.goalMethodsScored![method] || 0) + 1;
+        }
+        teamStats.goalTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      }
+      continue;
+    }
+
+    if (!playerId) continue;
+    const ps = getPlayerStats(playerId);
+
+    if (action === 'passCorrect') {
+      ps.passesCorrect += 1; teamStats.passesCorrect += 1;
+    } else if (action === 'passWrong' || action === 'passTransicao') {
+      ps.passesWrong += 1; teamStats.passesWrong += 1;
+      if (e?.wrongPassGeneratedTransition === true || action === 'passTransicao') {
+        teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
+        ps.transitionErrors = (ps.transitionErrors ?? 0) + 1;
+      }
+    } else if (action === 'shotOn') {
+      ps.shotsOnTarget += 1; teamStats.shotsOnTarget += 1;
+    } else if (action === 'shotOff') {
+      ps.shotsOffTarget += 1; teamStats.shotsOffTarget += 1;
+    } else if (action === 'shotZonaChute') {
+      ps.shotsShootZone = (ps.shotsShootZone ?? 0) + 1;
+      teamStats.shotsShootZone = (teamStats.shotsShootZone ?? 0) + 1;
+    } else if (action === 'tackleWithBall') {
+      ps.tacklesWithBall += 1; teamStats.tacklesWithBall += 1;
+    } else if (action === 'tackleWithoutBall') {
+      ps.tacklesWithoutBall += 1; teamStats.tacklesWithoutBall += 1;
+    } else if (action === 'tackleCounter') {
+      ps.tacklesCounterAttack += 1; teamStats.tacklesCounterAttack += 1;
+    } else if (action === 'falta') {
+      teamStats.fouls = (teamStats.fouls ?? 0) + 1;
+      if (e?.foulTeam !== 'against') ps.fouls = (ps.fouls ?? 0) + 1;
+    } else if (action === 'save') {
+      ps.saves = (ps.saves ?? 0) + 1; teamStats.saves = (teamStats.saves ?? 0) + 1;
+    }
+
+    if (String(e?.tipo ?? '').toLowerCase() === 'cartão') {
+      if (upperSubtipo.includes('AMARELO')) {
+        ps.yellowCards = (ps.yellowCards ?? 0) + 1;
+        teamStats.yellowCards = (teamStats.yellowCards ?? 0) + 1;
+      } else if (upperSubtipo.includes('VERMELHO')) {
+        ps.redCards = (ps.redCards ?? 0) + 1;
+        teamStats.redCards = (teamStats.redCards ?? 0) + 1;
+      }
+    }
+  }
+
+  const methodsScored = teamStats.goalMethodsScored ?? {};
+  const methodsConceded = teamStats.goalMethodsConceded ?? {};
+  const goalsScoredSetPiece = Object.entries(methodsScored).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+  const goalsConcededSetPiece = Object.entries(methodsConceded).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+
+  return {
+    ...match,
+    goalsFor,
+    goalsAgainst,
+    playerStats,
+    teamStats: {
+      ...teamStats,
+      goalsScoredSetPiece,
+      goalsScoredOpenPlay: Math.max(0, (teamStats.goals ?? 0) - goalsScoredSetPiece),
+      goalsConcededSetPiece,
+      goalsConcededOpenPlay: Math.max(0, (teamStats.goalsConceded ?? 0) - goalsConcededSetPiece),
+    },
+  };
+}
+
 export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
+  const [periodFilter, setPeriodFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
 
@@ -111,6 +252,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     setCompFilter(value);
     setMonthFilter('Todos');
     setOpponentFilter('Todos');
+    setPeriodFilter('Todos');
   };
 
   // Calcular opções de filtros baseado na competição selecionada
@@ -175,9 +317,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     });
   }, [compFilter, opponentFilter, locationFilter, monthFilter, matches]);
 
+  const scopedMatches = useMemo(() => {
+    if (periodFilter === '1T' || periodFilter === '2T') {
+      return filteredMatches.map((m) => buildMatchScopedByPeriod(m, periodFilter as MatchHalf));
+    }
+    return filteredMatches;
+  }, [filteredMatches, periodFilter]);
+
   // KPIs
   const stats = useMemo(() => {
-    const acc = filteredMatches.reduce((acc, curr) => {
+    const acc = scopedMatches.reduce((acc, curr) => {
       // Validar se teamStats existe antes de acessar
       if (!curr || !curr.teamStats) {
         console.warn('⚠️ Match sem teamStats encontrado:', curr);
@@ -282,7 +431,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       goalMethodsScored: acc.goalMethodsScored,
       goalMethodsConceded: acc.goalMethodsConceded
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
   const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
@@ -339,7 +488,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
 
-    filteredMatches.forEach(match => {
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
       match.teamStats.goalTimes.forEach(goalTime => {
         const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
@@ -349,7 +498,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       });
     });
 
-    filteredMatches.forEach(match => {
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
         const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
@@ -409,10 +558,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       maxScoredPeriod: { period: maxScoredPeriod.period, percentage: scoredPercentage },
       maxConcededPeriod: { period: maxConcededPeriod.period, percentage: concededPercentage }
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   const chartData = useMemo(() => {
-    return filteredMatches.map(match => ({
+    return scopedMatches.map(match => ({
       ...(() => {
         const opp = getOpponentShotsFromLog(match);
         return {
@@ -434,7 +583,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       shotsShootZone: match.teamStats.shotsShootZone ?? getBlockedShotsFromLog(match),
       result: match.result
     }));
-  }, [filteredMatches]);
+  }, [scopedMatches]);
   
   // Dados de métodos de gol (usando goalMethodsScored/Conceded)
   const goalMethodsScoredData = useMemo(() => {
@@ -495,7 +644,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const gaugeMeta = useMemo(() => {
     let targetSum = 0;
     let tacklesSum = 0;
-    filteredMatches.forEach(m => {
+    scopedMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -512,7 +661,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       percentage: Math.min(pct, 100),
       percentageDisplay: hasTarget ? pct.toFixed(2) : '0.00',
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   const TACKLE_TARGET = gaugeMeta.TACKLE_TARGET;
   const totalTackles = gaugeMeta.totalTackles;
@@ -536,7 +685,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   // Alerta: partidas em que a meta foi alcançada e quantas resultaram em vitória
   const tackleTargetAlert = useMemo(() => {
     const matchesWithTarget: Array<{ achieved: boolean; victory: boolean }> = [];
-    filteredMatches.forEach(m => {
+    scopedMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -550,7 +699,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const achievedCount = matchesWithTarget.filter(x => x.achieved).length;
     const achievedAndVictory = matchesWithTarget.filter(x => x.achieved && x.victory).length;
     return { total, achievedCount, achievedAndVictory };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
   const possessionDonutData = useMemo(() => {
@@ -573,13 +722,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   }, [filteredMatches]);
 
   const hasPossessionData = useMemo(() => 
-    filteredMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
-    [filteredMatches]
+    scopedMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
+    [scopedMatches]
   );
 
   const goalkeeperDefenseRows = useMemo(() => {
     const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
-    for (const match of filteredMatches) {
+    for (const match of scopedMatches) {
       const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
       for (const e of log as any[]) {
         if (e?.action !== 'save') continue;
@@ -606,7 +755,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     return Array.from(map.values())
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total);
-  }, [filteredMatches, players]);
+  }, [scopedMatches, players]);
 
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
@@ -660,7 +809,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-end">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
           <Select 
             value={compFilter} 
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleCompFilterChange(e.target.value)}
@@ -680,6 +829,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             value={locationFilter} 
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocationFilter(e.target.value)}
             options={[{value: 'Todos', label: 'Todos Locais'}, {value: 'Mandante', label: 'Mandante'}, {value: 'Visitante', label: 'Visitante'}]}
+          />
+          <Select
+            value={periodFilter}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPeriodFilter(e.target.value)}
+            options={[
+              { value: 'Todos', label: 'Todos Períodos' },
+              { value: '1T', label: '1º Tempo' },
+              { value: '2T', label: '2º Tempo' },
+            ]}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -705,14 +863,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   monthFilter,
                   opponentFilter,
                   locationFilter,
+                  periodFilter,
                 },
                 teamShieldUrl: teamSettings.teamShieldUrl || undefined,
                 teamName: teamSettings.teamName || undefined,
                 playerTables: {
-                  passes: buildPlayerTop10ForPdf(filteredMatches, pl, 'passes'),
-                  shots: buildPlayerTop10ForPdf(filteredMatches, pl, 'shots'),
-                  tackles: buildPlayerTop10ForPdf(filteredMatches, pl, 'tackles'),
-                  criticalErrors: buildPlayerTop10ForPdf(filteredMatches, pl, 'criticalErrors'),
+                  passes: buildPlayerTop10ForPdf(scopedMatches, pl, 'passes'),
+                  shots: buildPlayerTop10ForPdf(scopedMatches, pl, 'shots'),
+                  tackles: buildPlayerTop10ForPdf(scopedMatches, pl, 'tackles'),
+                  criticalErrors: buildPlayerTop10ForPdf(scopedMatches, pl, 'criticalErrors'),
                 },
                 stats,
                 timePeriodData: {
@@ -795,19 +954,21 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Meta de Desarmes por Jogo - Speedometer */}
             <ExpandableCard noPadding headerColor="text-[#ccff00]">
-                <div className="min-h-48 w-full flex flex-col lg:flex-row lg:items-center justify-between px-6 py-6 gap-6 bg-zinc-950/50">
-                    <div className="flex flex-col gap-3 min-w-0 flex-1">
+                <div className={`min-h-48 w-full flex flex-col ${comparisonChild ? 'xl:flex-col' : 'lg:flex-row lg:items-center'} justify-between px-6 py-6 gap-6 bg-zinc-950/50`}>
+                    <div className={`flex flex-col gap-3 min-w-0 flex-1 ${comparisonChild ? 'max-w-full' : ''}`}>
                          <div className="flex items-center gap-3">
                              <Gauge size={32} className="text-[#00f0ff] shrink-0" />
-                             <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title-black-italic">Meta de Desarmes por Jogo</h2>
+                             <h2 className={`${comparisonChild ? 'text-lg md:text-xl' : 'text-xl md:text-2xl'} text-white uppercase tracking-tighter scout-card-title-black-italic`}>Meta de Desarmes por Jogo</h2>
                          </div>
-                         <p className="text-zinc-500 text-sm max-w-md" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                             A porcentagem é calculada em relação às metas definidas nas partidas já realizadas e salvas. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
+                         <p className={`text-zinc-500 ${comparisonChild ? 'text-xs leading-5' : 'text-sm'} ${comparisonChild ? 'max-w-full' : 'max-w-md'}`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                             A porcentagem é calculada em relação às metas definidas nas partidas realizadas e salvas.
+                             {' '}
+                             {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
                          {hasTackleTarget && tackleTargetAlert.total > 0 && (
-                           <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
+                          <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
                              <Info size={18} className="text-[#00f0ff] shrink-0 mt-0.5" />
-                             <p className="text-sm text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                            <p className={`${comparisonChild ? 'text-xs leading-5' : 'text-sm'} text-zinc-300`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
                                {tackleTargetAlert.total === 1 ? (
                                  tackleTargetAlert.achievedCount === 1 ? (
                                    tackleTargetAlert.achievedAndVictory === 1
@@ -822,7 +983,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                          )}
                     </div>
 
-                    <div className="flex items-center gap-6 lg:gap-8 shrink-0">
+                    <div className={`flex items-center ${comparisonChild ? 'justify-between' : ''} gap-6 lg:gap-8 shrink-0`}>
                         <div className="text-right">
                              <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Desarmes realizados</p>
                              <p className={`text-4xl md:text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
@@ -967,7 +1128,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="passes" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="passes" players={players} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1009,7 +1170,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
@@ -1061,7 +1222,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="tackles" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="tackles" players={players} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1186,7 +1347,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={filteredMatches} statType="shots" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="shots" players={players} />
         </ExpandableCard>
 
         <ExpandableCard

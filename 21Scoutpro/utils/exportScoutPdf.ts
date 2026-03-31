@@ -106,6 +106,7 @@ export interface ExportScoutPdfFilters {
   monthFilter?: string;
   opponentFilter?: string;
   locationFilter?: string;
+  periodFilter?: string;
 }
 
 export interface ScoutPdfData {
@@ -669,6 +670,13 @@ function formatLocationFilterForPdf(loc: string | undefined): string {
   return loc;
 }
 
+function formatPeriodFilterForPdf(period: string | undefined): string {
+  if (!period || period === 'Todos') return 'Todos os períodos';
+  if (period === '1T') return '1º Tempo';
+  if (period === '2T') return '2º Tempo';
+  return period;
+}
+
 /** Bloco «FILTROS APLICADOS» no topo da pág. 2; retorna Y após o bloco (ou startY se não houver filtros). */
 function drawFiltersSummary(doc: jsPDF, startY: number, filters?: ExportScoutPdfFilters): number {
   if (!filters) return startY;
@@ -677,12 +685,14 @@ function drawFiltersSummary(doc: jsPDF, startY: number, filters?: ExportScoutPdf
   const month = formatMonthFilterForPdf(filters.monthFilter);
   const opp = filters.opponentFilter?.trim() || 'Todos';
   const loc = formatLocationFilterForPdf(filters.locationFilter);
+  const period = formatPeriodFilterForPdf(filters.periodFilter);
 
   const lines = [
     `Competição: ${comp === 'Todas' ? 'Todas as competições' : comp}`,
     `Mês: ${month}`,
     `Adversário: ${opp === 'Todos' ? 'Todos os adversários' : opp}`,
     `Local: ${loc}`,
+    `Período: ${period}`,
   ];
 
   doc.setFont('helvetica', 'bold');
