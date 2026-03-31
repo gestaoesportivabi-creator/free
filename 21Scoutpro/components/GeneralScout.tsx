@@ -58,11 +58,13 @@ function getOpponentShotsFromLog(match: MatchRecord): {
   let outside = 0;
   for (const e of log as any[]) {
     if (e?.action !== 'save') continue;
-    const difficulty = e?.details?.saveDifficulty ?? e?.result;
-    const outcome = e?.details?.saveOutcome;
+    const difficultyRaw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+    const difficulty = difficultyRaw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
     if (difficulty === 'simple') simple += 1;
-    else if (difficulty === 'hard') hard += 1;
-    else if (difficulty === 'outside' || outcome === 'outside') outside += 1;
+    else if (difficulty === 'dificil' || difficulty === 'hard') hard += 1;
+    else if (difficulty === 'pra fora' || difficulty === 'outside') outside += 1;
   }
   return {
     shotsOnTarget: simple + hard,
@@ -871,44 +873,45 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard
-          title="Defesas"
+          title="Erros Críticos (Transição)"
           icon={BarChart3}
-          headerColor="text-purple-400"
+          headerColor="text-[#ff0055]"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
+              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                  <YAxis hide />
-                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                  <Legend
-                    wrapperStyle={legendLabelStyle}
-                    formatter={(value: string) => {
-                      if (value === 'Fácil') {
-                        return <span className="text-zinc-300" style={legendLabelStyle}>Fácil ({stats.savesSimple || 0})</span>;
-                      }
-                      if (value === 'Difícil') {
-                        return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
-                      }
-                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                    }}
-                  />
-                  <Bar dataKey="savesSimple" name="Fácil" fill={COLORS.blueCyan}>
-                      <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
-                  </Bar>
-                  <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
-                      <LabelList dataKey="savesHard" position="inside" {...labelStyle} />
-                  </Bar>
+               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
+                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
+                 <YAxis hide />
+                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
+                 <Legend
+                   wrapperStyle={legendLabelStyle}
+                   formatter={(value: string) => {
+                     if (value === 'Passes errados') {
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
+                     }
+                     if (value === 'Geraram transição') {
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
+                     }
+                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                   }}
+                 />
+                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
+                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
+                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
+                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
                </BarChart>
              </ResponsiveContainer>
            </div>
+           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
@@ -964,45 +967,44 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard
-          title="Erros Críticos (Transição)"
+          title="Defesas"
           icon={BarChart3}
-          headerColor="text-[#ff0055]"
+          headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
+              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
-                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
-                 <YAxis hide />
-                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
-                 <Legend
-                   wrapperStyle={legendLabelStyle}
-                   formatter={(value: string) => {
-                     if (value === 'Passes errados') {
-                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
-                     }
-                     if (value === 'Geraram transição') {
-                       return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
-                     }
-                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                   }}
-                 />
-                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
-                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
-                 </Bar>
-                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
-                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
-                 </Bar>
+               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                  <YAxis hide />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                  <Legend
+                    wrapperStyle={legendLabelStyle}
+                    formatter={(value: string) => {
+                      if (value === 'Fácil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Fácil ({stats.savesSimple || 0})</span>;
+                      }
+                      if (value === 'Difícil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
+                      }
+                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                    }}
+                  />
+                  <Bar dataKey="savesSimple" name="Fácil" fill={COLORS.blueCyan}>
+                      <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
+                  </Bar>
+                  <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
+                      <LabelList dataKey="savesHard" position="inside" {...labelStyle} />
+                  </Bar>
                </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
