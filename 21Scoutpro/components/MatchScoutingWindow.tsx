@@ -140,6 +140,7 @@ interface MatchEvent {
   period: '1T' | '2T'; // Período em que ocorreu
   result?: 'correct' | 'wrong' | 'inside' | 'outside' | 'post' | 'blocked' | 'normal' | 'contra' | 'withBall' | 'withoutBall' | 'counter' | 'goal' | 'saved' | 'noGoal' | 'simple' | 'hard' | LateralResult;
   cardType?: 'yellow' | 'secondYellow' | 'red';
+  cardTeam?: 'for' | 'against';
   isOpponentGoal?: boolean; // true se for gol do adversário
   passToPlayerId?: string; // ID do jogador que recebeu o passe
   passToPlayerName?: string; // Nome do jogador que recebeu o passe
@@ -600,12 +601,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setActionFlow(flow as any);
   };
 
-  const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
+  const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
     if (!actionFlow) return;
     // Falta do adversário: só contabiliza; não abre popup com lista dos nossos jogadores
     if (actionFlow.action === 'foul' && extra?.foulTeam === 'against') {
       executeActionFlow(
         { ...actionFlow, step: 'details', details, foulTeam: 'against', ...extra },
+        OPPONENT_FAKE_PLAYER_ID
+      );
+      return;
+    }
+    if (actionFlow.action === 'card' && extra?.cardTeam === 'against') {
+      executeActionFlow(
+        { ...actionFlow, step: 'details', details, cardTeam: 'against', ...extra },
         OPPONENT_FAKE_PLAYER_ID
       );
       return;
@@ -699,7 +707,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride);
           break;
         case 'card':
-          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride);
+          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride, flow.cardTeam ?? 'for');
           break;
         case 'save':
           handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride);
@@ -1355,6 +1363,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     for (const e of events) {
       // Cartões: atualizar yellowCards/redCards em playerStats (não têm PostMatchAction)
       if (e.type === 'card' && e.playerId) {
+        if (e.cardTeam === 'against' || String(e.playerId).trim() === OPPONENT_FAKE_PLAYER_ID) {
+          continue;
+        }
         const playerId = String(e.playerId).trim();
         if (!playerStats[playerId]) playerStats[playerId] = emptyStats();
         const ps = playerStats[playerId];
@@ -1895,6 +1906,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (action === 'foul') {
       startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
+      setSelectedAction(action);
+      return;
+    }
+    if (action === 'cardAgainst') {
+      setActionFlow({
+        step: 'details',
+        action: 'card',
+        details: null,
+        cardTeam: 'against',
+      });
       setSelectedAction(action);
       return;
     }
@@ -2545,8 +2566,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar cartão
-  const handleRegisterCard = (cardType: 'yellow' | 'secondYellow' | 'red', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+  const handleRegisterCard = (
+    cardType: 'yellow' | 'secondYellow' | 'red',
+    playerIdOverride?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T',
+    cardTeam: 'for' | 'against' = 'for'
+  ) => {
+    const pid =
+      cardTeam === 'against'
+        ? OPPONENT_FAKE_PLAYER_ID
+        : (playerIdOverride ?? selectedPlayerId);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -2558,15 +2588,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `card-${Date.now()}`,
       type: 'card',
       playerId: pid,
-      playerName: player?.name || '',
+      playerName: cardTeam === 'against' ? OPPONENT_FAKE_PLAYER_NAME : (player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       cardType,
+      cardTeam,
       tipo,
       subtipo,
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
+    if (cardTeam === 'against') {
+      setSelectedAction(null);
+      setSelectedPlayerId(null);
+      return;
+    }
     
     // Adicionar cartão ao histórico do jogador
     setPlayerCards(prev => {
@@ -3928,11 +3964,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </div>
                       )}
                       {actionFlow.action === 'card' && (
-                        <div className="grid grid-cols-3 gap-3">
-                          <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow' }); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Amarelo</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('secondYellow', { cardType: 'secondYellow' }); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">2º Amarelo</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
-                        </div>
+                        actionFlow.cardTeam === 'against' ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow', cardTeam: 'against' }); }} className="px-4 py-3 bg-yellow-500/10 border-2 border-yellow-700 text-yellow-300 font-bold uppercase text-[11px] rounded-lg hover:bg-yellow-500/20 transition-colors">Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red', cardTeam: 'against' }); }} className="px-4 py-3 bg-red-500/10 border-2 border-red-700 text-red-300 font-bold uppercase text-[11px] rounded-lg hover:bg-red-500/20 transition-colors">Vermelho</button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-3">
+                            <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow' }); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('secondYellow', { cardType: 'secondYellow' }); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">2º Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
+                          </div>
+                        )
                       )}
                       {actionFlow.action === 'save' && (
                         <div className="space-y-3">
@@ -4544,8 +4587,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
                     </div>
 
-                    {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO - tamanhos similares */}
-                    <div className="grid grid-cols-4 gap-1 shrink-0 min-h-[56px]">
+                    {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO, CARTÃO ADVERSÁRIO */}
+                    <div className="grid grid-cols-5 gap-1 shrink-0 min-h-[56px]">
                       <button
                         onClick={() => {
                           if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
@@ -4639,6 +4682,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         }`}
                       >
                         CARTÃO
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!isMatchStarted) return;
+                          if (isBlockedByPenalty) return;
+                          handleSelectAction('cardAgainst');
+                        }}
+                        disabled={!isMatchStarted || isBlockedByPenalty}
+                        className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
+                          !isMatchStarted || isBlockedByPenalty
+                            ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                            : selectedAction === 'cardAgainst'
+                            ? 'bg-amber-500/40 border-amber-500 text-white'
+                            : 'bg-zinc-900 border-amber-500/30 text-amber-500/70 hover:bg-amber-500/20 hover:border-amber-500 hover:text-amber-400'
+                        }`}
+                      >
+                        CARTÃO ADVERSÁRIO
                       </button>
                     </div>
                   </div>
