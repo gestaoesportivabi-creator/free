@@ -13,6 +13,8 @@ interface GeneralScoutProps {
   players?: Player[];
   /** Plano Essencial: bloqueia gráfico de posse */
   isFreePlan?: boolean;
+  /** Uso interno: evita reabrir modo comparação em instâncias filhas */
+  comparisonChild?: boolean;
 }
 
 
@@ -96,12 +98,13 @@ function getBlockedShotsFromLog(match: MatchRecord): number {
   return blocked;
 }
 
-export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false }) => {
+export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
@@ -614,6 +617,36 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'normal', fontStyle: 'normal' };
   const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontFamily: CHART_FONT };
 
+  if (!comparisonChild && compareMode) {
+    return (
+      <div className="space-y-4 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
+        <div className="bg-black p-4 rounded-2xl border border-zinc-900 shadow-lg flex items-center justify-between">
+          <div>
+            <h2 className="text-sm text-white uppercase tracking-wide scout-card-title">Modo Comparação</h2>
+            <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Compare lado a lado com dois conjuntos de filtros independentes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCompareMode(false)}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
+          >
+            Sair da Comparação
+          </button>
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
       
@@ -649,6 +682,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             options={[{value: 'Todos', label: 'Todos Locais'}, {value: 'Mandante', label: 'Mandante'}, {value: 'Visitante', label: 'Visitante'}]}
           />
         </div>
+        <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={async () => {
@@ -712,6 +746,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           <FileDown size={16} />
           {pdfExporting ? 'Gerando PDF...' : 'Exportar PDF'}
         </button>
+        {!comparisonChild && (
+          <button
+            type="button"
+            onClick={() => setCompareMode(true)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
+            title="Ativar modo comparação"
+          >
+            Comparação
+          </button>
+        )}
+        </div>
         </div>
       </div>
 
