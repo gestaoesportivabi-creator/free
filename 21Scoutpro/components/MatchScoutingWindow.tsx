@@ -130,6 +130,8 @@ const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border
 // Jogador "fake" para o adversário — usado apenas para contabilizar gols sofridos e métodos de gols do adversário
 const OPPONENT_FAKE_PLAYER_ID = 'OPPONENT_TEAM';
 const OPPONENT_FAKE_PLAYER_NAME = 'Adversário';
+const TEAM_EVENT_FAKE_PLAYER_ID = 'TEAM_EVENT';
+const TEAM_EVENT_FAKE_PLAYER_NAME = 'Equipe';
 
 interface MatchEvent {
   id: string;
@@ -616,6 +618,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         { ...actionFlow, step: 'details', details, cardTeam: 'against', ...extra },
         OPPONENT_FAKE_PLAYER_ID
       );
+      return;
+    }
+    if (
+      ballPossessionNow === 'sem' &&
+      (actionFlow.action === 'tackle' || actionFlow.action === 'save') &&
+      (actionFlow.selectedPlayerId == null || String(actionFlow.selectedPlayerId).trim().length === 0)
+    ) {
+      executeActionFlow({ ...actionFlow, step: 'details', details, ...extra }, TEAM_EVENT_FAKE_PLAYER_ID);
       return;
     }
     const pid = actionFlow.selectedPlayerId != null ? String(actionFlow.selectedPlayerId).trim() : '';
@@ -1919,6 +1929,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setSelectedAction(action);
       return;
     }
+    if (ballPossessionNow === 'sem' && (action === 'tackle' || action === 'save')) {
+      startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
+      setSelectedAction(action);
+      return;
+    }
+    if (ballPossessionNow === 'sem' && action === 'block') {
+      if (!isPostmatch) setIsRunning(false);
+      handleRegisterBlock(hasSelectedPlayer ? selectedPlayerId : TEAM_EVENT_FAKE_PLAYER_ID);
+      setSelectedAction(action);
+      return;
+    }
     if (!hasSelectedPlayer) {
       alert('Selecione um jogador primeiro.');
       return;
@@ -1929,7 +1950,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   // Registrar desarme
   const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+    const pid =
+      playerIdOverride ??
+      selectedPlayerId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -1941,7 +1965,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `tackle-${Date.now()}`,
       type: 'tackle',
       playerId: pid,
-      playerName: player?.nickname || player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.nickname || player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       result,
@@ -1981,7 +2008,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       )
         ? String(selectedPlayerId).trim()
         : null;
-    const pid = playerIdOverride ?? selectedSidebarGoalkeeperId ?? currentGoalkeeperId;
+    const pid =
+      playerIdOverride ??
+      selectedSidebarGoalkeeperId ??
+      currentGoalkeeperId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -1993,7 +2024,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `save-${Date.now()}`,
       type: 'save',
       playerId: pid,
-      playerName: player?.nickname?.trim() || player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.nickname?.trim() || player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       result: difficulty,
@@ -2011,7 +2045,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   // Registrar bloqueio
   const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+    const pid =
+      playerIdOverride ??
+      selectedPlayerId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -2023,7 +2060,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `block-${Date.now()}`,
       type: 'block',
       playerId: pid,
-      playerName: player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       tipo,
@@ -3991,6 +4031,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'simple' }, selectedId);
                                   return;
                                 }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'simple' }, TEAM_EVENT_FAKE_PLAYER_ID);
+                                  return;
+                                }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'simple' } : prev));
                               }}
                               className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors"
@@ -4008,6 +4052,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'hard' }, selectedId);
                                   return;
                                 }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'hard' }, TEAM_EVENT_FAKE_PLAYER_ID);
+                                  return;
+                                }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'hard' } : prev));
                               }}
                               className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors"
@@ -4023,6 +4071,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
                                 if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'outside' }, selectedId);
+                                  return;
+                                }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'outside' }, TEAM_EVENT_FAKE_PLAYER_ID);
                                   return;
                                 }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'outside' } : prev));
@@ -4543,8 +4595,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-blue-500/20 text-blue-500/50 opacity-70'
                                   : selectedAction === 'tackle'
                                   ? 'bg-blue-500/30 border-blue-500 text-blue-400'
                                   : 'bg-zinc-900 border-blue-500/30 text-blue-500/70 hover:bg-blue-500/20 hover:border-blue-500 hover:text-blue-400'
@@ -4558,8 +4608,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-purple-500/20 text-purple-500/50 opacity-70'
                                   : selectedAction === 'save'
                                   ? 'bg-purple-500/30 border-purple-500 text-purple-400'
                                   : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
@@ -4573,8 +4621,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-yellow-500/20 text-yellow-500/50 opacity-70'
                                   : selectedAction === 'block'
                                   ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
                                   : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
