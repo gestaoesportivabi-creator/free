@@ -2755,15 +2755,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             prev ? { ...prev, ...result, id: result.id } : result
                                         );
                                     }
-                                    if (options?.source === 'autosave') return;
+                                    if (options?.source === 'autosave') return result;
                                     if (options?.saveAsIncomplete) {
                                         handleBackToCalendar();
-                                        return;
+                                        return result;
                                     }
                                     setShowPostMatchSheet(false);
                                     const isExistingMatch =
                                         result?.id && isPersistedServerMatchId(String(result.id));
                                     if (!isExistingMatch) handleBackToCalendar();
+                                    return result;
                                 }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
