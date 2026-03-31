@@ -228,7 +228,7 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       case 'save':
         type = 'save';
         if (pe.subtipo === 'Pra fora') result = 'outside';
-        else if (pe.subtipo === 'Simples') result = 'simple';
+        else if (pe.subtipo === 'Simples' || pe.subtipo === 'DEFESA SIMPLES') result = 'simple';
         else if (pe.subtipo === 'Difícil') result = 'hard';
         break;
       case 'assist':
@@ -533,7 +533,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (result === 'counter') return { tipo: 'Desarme', subtipo: 'Contra-ataque' };
         return { tipo: 'Desarme', subtipo: '' };
       case 'save':
-        if (result === 'simple') return { tipo: 'Defesa', subtipo: 'Simples' };
+        if (result === 'simple') return { tipo: 'Defesa', subtipo: 'DEFESA SIMPLES' };
         if (result === 'hard') return { tipo: 'Defesa', subtipo: 'Difícil' };
         if (result === 'outside') return { tipo: 'Defesa', subtipo: 'Pra fora' };
         return { tipo: 'Defesa', subtipo: 'Defesa' };
@@ -786,7 +786,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         return [{ value: 'Com posse', result: 'withBall' }, { value: 'Sem posse', result: 'withoutBall' }, { value: 'Contra-ataque', result: 'counter' }];
       case 'save':
         return [
-          { value: 'Simples', result: 'simple' },
+          { value: 'DEFESA SIMPLES', result: 'simple' },
           { value: 'Difícil', result: 'hard' },
           { value: 'Pra fora', result: 'outside' },
         ];
@@ -3952,7 +3952,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               }}
                               className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors"
                             >
-                              Defesa fácil
+                              DEFESA SIMPLES
                             </button>
                             <button
                               type="button"

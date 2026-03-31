@@ -62,9 +62,9 @@ function getOpponentShotsFromLog(match: MatchRecord): {
     const difficulty = difficultyRaw
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
-    if (difficulty === 'simple') simple += 1;
-    else if (difficulty === 'dificil' || difficulty === 'hard') hard += 1;
-    else if (difficulty === 'pra fora' || difficulty === 'outside') outside += 1;
+    if (difficulty.includes('simple') || difficulty.includes('simples') || difficulty.includes('facil')) simple += 1;
+    else if (difficulty.includes('dificil') || difficulty.includes('hard')) hard += 1;
+    else if (difficulty.includes('pra fora') || difficulty.includes('fora') || difficulty.includes('outside')) outside += 1;
   }
   return {
     shotsOnTarget: simple + hard,
@@ -72,6 +72,28 @@ function getOpponentShotsFromLog(match: MatchRecord): {
     savesSimple: simple,
     savesHard: hard,
   };
+}
+
+function getBlockedShotsFromLog(match: MatchRecord): number {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let blocked = 0;
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+    const subtipo = String(e?.subtipo ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (action === 'shotZonaChute') {
+      blocked += 1;
+      continue;
+    }
+    if (tipo === 'finalizacao' && subtipo === 'bloqueado') {
+      blocked += 1;
+    }
+  }
+  return blocked;
 }
 
 export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false }) => {
@@ -178,7 +200,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.passesWrong += curr.teamStats.passesWrong || 0;
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
-      acc.shotsShootZone += curr.teamStats.shotsShootZone || 0;
+      acc.shotsShootZone += (curr.teamStats.shotsShootZone ?? getBlockedShotsFromLog(curr)) || 0;
       const oppShots = getOpponentShotsFromLog(curr);
       acc.opponentShotsOn += oppShots.shotsOnTarget;
       acc.opponentShotsOff += oppShots.shotsOffTarget;
@@ -406,7 +428,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       passesWrong: match.teamStats.passesWrong ?? 0,
       shotsOn: match.teamStats.shotsOnTarget ?? 0,
       shotsOff: match.teamStats.shotsOffTarget ?? 0,
-      shotsShootZone: match.teamStats.shotsShootZone ?? 0,
+      shotsShootZone: match.teamStats.shotsShootZone ?? getBlockedShotsFromLog(match),
       result: match.result
     }));
   }, [filteredMatches]);
@@ -567,9 +589,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
         }
         const row = map.get(playerId)!;
-        if (norm === 'simple') row.easy += 1;
-        if (norm === 'dificil' || norm === 'hard') row.hard += 1;
-        if (norm === 'simple' || norm === 'dificil' || norm === 'hard') row.total += 1;
+        if (norm.includes('simple') || norm.includes('simples') || norm.includes('facil')) row.easy += 1;
+        if (norm.includes('dificil') || norm.includes('hard')) row.hard += 1;
+        if (
+          norm.includes('simple') ||
+          norm.includes('simples') ||
+          norm.includes('facil') ||
+          norm.includes('dificil') ||
+          norm.includes('hard')
+        ) row.total += 1;
       }
     }
     return Array.from(map.values())
@@ -1012,8 +1040,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   <Legend
                     wrapperStyle={legendLabelStyle}
                     formatter={(value: string) => {
-                      if (value === 'Fácil') {
-                        return <span className="text-zinc-300" style={legendLabelStyle}>Fácil ({stats.savesSimple || 0})</span>;
+                      if (value === 'DEFESA SIMPLES') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>DEFESA SIMPLES ({stats.savesSimple || 0})</span>;
                       }
                       if (value === 'Difícil') {
                         return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
@@ -1021,7 +1049,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                       return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                     }}
                   />
-                  <Bar dataKey="savesSimple" name="Fácil" fill={COLORS.blueCyan}>
+                  <Bar dataKey="savesSimple" name="DEFESA SIMPLES" fill={COLORS.blueCyan}>
                       <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
                   </Bar>
                   <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
@@ -1035,7 +1063,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <thead>
                  <tr className="border-b border-zinc-800">
                    <th className="text-left py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Goleiro</th>
-                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Fácil</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Defesa Simples</th>
                    <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Difícil</th>
                    <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Total</th>
                  </tr>
