@@ -139,7 +139,7 @@ export const matchesRepository = {
     substitutionHistory?: object;
     collectionPhase?: number;
   }, tx?: TransactionClient): Promise<JogoDB> {
-    return db(tx).jogo.create({
+    const created = (await db(tx).jogo.create({
       data: {
         equipeId: data.equipeId,
         adversario: data.adversario,
@@ -155,9 +155,11 @@ export const matchesRepository = {
         playerRelationships: data.playerRelationships as any,
         lineup: data.lineup as any,
         substitutionHistory: data.substitutionHistory as any,
-        collectionPhase: data.collectionPhase ?? 0,
       },
-    }) as Promise<JogoDB>;
+    })) as JogoDB;
+    const phase = data.collectionPhase ?? 0;
+    await matchesRepository.setCollectionPhase(created.id, phase, tx);
+    return { ...created, collectionPhase: phase };
   },
 
   async update(id: string, data: Partial<JogoDB>, tx?: TransactionClient): Promise<JogoDB> {
@@ -198,6 +200,15 @@ export const matchesRepository = {
     await db(tx).$executeRawUnsafe(
       'UPDATE jogos SET status = $1 WHERE id = $2',
       status,
+      jogoId
+    );
+  },
+
+  /** Persiste fase da coleta (evita Prisma client desatualizado sem `collectionPhase` no create/update). */
+  async setCollectionPhase(jogoId: string, phase: number, tx?: TransactionClient): Promise<void> {
+    await db(tx).$executeRawUnsafe(
+      'UPDATE jogos SET collection_phase = $1 WHERE id = $2',
+      phase,
       jogoId
     );
   },

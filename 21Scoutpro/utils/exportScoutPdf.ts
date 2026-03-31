@@ -106,6 +106,7 @@ export interface ExportScoutPdfFilters {
   monthFilter?: string;
   opponentFilter?: string;
   locationFilter?: string;
+  periodFilter?: string;
 }
 
 export interface ScoutPdfData {
@@ -123,6 +124,10 @@ export interface ScoutPdfData {
     shotsOn: number;
     shotsOff: number;
     shotsShootZone: number;
+    opponentShotsOn: number;
+    opponentShotsOff: number;
+    savesSimple: number;
+    savesHard: number;
     tacklesWithBall: number;
     tacklesWithoutBall: number;
     tacklesCounterAttack: number;
@@ -150,6 +155,10 @@ export interface ScoutPdfData {
     shotsOn: number;
     shotsOff: number;
     shotsShootZone: number;
+    opponentShotsOn: number;
+    opponentShotsOff: number;
+    savesSimple: number;
+    savesHard: number;
     tacklesWithBall: number;
     tacklesWithoutBall: number;
     tacklesCounterAttack: number;
@@ -511,15 +520,14 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         playerTable: pt?.passes?.length ? { headers: hdrPasses, rows: pt.passes } : undefined,
       });
 
-      // Pág 4: Finalizações (no gol, fora, bloqueado)
+      // Pág 4: Erros Críticos (Transição)
       newPageWithWatermark(doc, logoBase64, logoDims);
-      drawBarChartSection(doc, TOP_CHART_Y, 'Finalizações', data.chartData, [
-        { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
-        { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
-        { key: 'shotsShootZone', label: 'Bloqueado', color: COLORS.amber },
-      ], data.stats.shotsOn + data.stats.shotsOff + data.stats.shotsShootZone, {
+      drawBarChartSection(doc, TOP_CHART_Y, 'Erros Críticos (Transição)', data.chartData, [
+        { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
+        { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
+      ], data.stats.wrongPassesTransition, {
         ...compactOpts,
-        playerTable: pt?.shots?.length ? { headers: hdrShots, rows: pt.shots } : undefined,
+        playerTable: pt?.criticalErrors?.length ? { headers: hdrCrit, rows: pt.criticalErrors } : undefined,
       });
 
       // Pág 5: Tipos de Desarmes
@@ -533,17 +541,36 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         playerTable: pt?.tackles?.length ? { headers: hdrTackles, rows: pt.tackles } : undefined,
       });
 
-      // Pág 6: Erros Críticos (Transição)
+      // Pág 6: Defesas
       newPageWithWatermark(doc, logoBase64, logoDims);
-      drawBarChartSection(doc, TOP_CHART_Y, 'Erros Críticos (Transição)', data.chartData, [
-        { key: 'passesWrong', label: 'Passes errados', color: COLORS.slate },
-        { key: 'transitionErrors', label: 'Geraram transição', color: COLORS.rose },
-      ], data.stats.wrongPassesTransition, {
+      drawBarChartSection(doc, TOP_CHART_Y, 'Defesas', data.chartData, [
+        { key: 'savesSimple', label: 'Defesa Simples', color: COLORS.blueLight },
+        { key: 'savesHard', label: 'Difícil', color: COLORS.blueDark },
+      ], data.stats.savesSimple + data.stats.savesHard, {
         ...compactOpts,
-        playerTable: pt?.criticalErrors?.length ? { headers: hdrCrit, rows: pt.criticalErrors } : undefined,
       });
 
-      // Pág 7–8: Gols por período (uma página cada)
+      // Pág 7: Finalizações (no gol, fora, bloqueado)
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Finalizações', data.chartData, [
+        { key: 'shotsOn', label: 'No Gol', color: COLORS.blueMedium },
+        { key: 'shotsOff', label: 'Pra Fora', color: COLORS.slate },
+        { key: 'shotsShootZone', label: 'Bloqueado', color: COLORS.amber },
+      ], data.stats.shotsOn + data.stats.shotsOff + data.stats.shotsShootZone, {
+        ...compactOpts,
+        playerTable: pt?.shots?.length ? { headers: hdrShots, rows: pt.shots } : undefined,
+      });
+
+      // Pág 8: Finalizações Adversário
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Finalizações Adversário', data.chartData, [
+        { key: 'opponentShotsOn', label: 'No Gol', color: COLORS.rose },
+        { key: 'opponentShotsOff', label: 'Pra Fora', color: COLORS.slate },
+      ], data.stats.opponentShotsOn + data.stats.opponentShotsOff, {
+        ...compactOpts,
+      });
+
+      // Pág 9–10: Gols por período (uma página cada)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green,
         `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,
@@ -643,6 +670,13 @@ function formatLocationFilterForPdf(loc: string | undefined): string {
   return loc;
 }
 
+function formatPeriodFilterForPdf(period: string | undefined): string {
+  if (!period || period === 'Todos') return 'Todos os períodos';
+  if (period === '1T') return '1º Tempo';
+  if (period === '2T') return '2º Tempo';
+  return period;
+}
+
 /** Bloco «FILTROS APLICADOS» no topo da pág. 2; retorna Y após o bloco (ou startY se não houver filtros). */
 function drawFiltersSummary(doc: jsPDF, startY: number, filters?: ExportScoutPdfFilters): number {
   if (!filters) return startY;
@@ -651,12 +685,14 @@ function drawFiltersSummary(doc: jsPDF, startY: number, filters?: ExportScoutPdf
   const month = formatMonthFilterForPdf(filters.monthFilter);
   const opp = filters.opponentFilter?.trim() || 'Todos';
   const loc = formatLocationFilterForPdf(filters.locationFilter);
+  const period = formatPeriodFilterForPdf(filters.periodFilter);
 
   const lines = [
     `Competição: ${comp === 'Todas' ? 'Todas as competições' : comp}`,
     `Mês: ${month}`,
     `Adversário: ${opp === 'Todos' ? 'Todos os adversários' : opp}`,
     `Local: ${loc}`,
+    `Período: ${period}`,
   ];
 
   doc.setFont('helvetica', 'bold');
@@ -700,6 +736,10 @@ function drawResumoSection(doc: jsPDF, startY: number, data: ScoutPdfData): numb
     ['Chutes no Gol', data.stats.shotsOn],
     ['Chutes pra Fora', data.stats.shotsOff],
     ['Chutes bloqueados', data.stats.shotsShootZone],
+    ['Defesa simples', data.stats.savesSimple],
+    ['Defesa difícil', data.stats.savesHard],
+    ['Finalizações adv. no gol', data.stats.opponentShotsOn],
+    ['Finalizações adv. fora', data.stats.opponentShotsOff],
     ['Erros de Transição', data.stats.wrongPassesTransition],
     ['Cartões Amarelos', data.stats.yellowCards],
     ['Cartões Vermelhos', data.stats.redCards],

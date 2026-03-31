@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
 import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
-import { SportConfig, MatchRecord, Player } from '../types';
+import { SportConfig, MatchRecord, MatchStats, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
@@ -13,6 +13,8 @@ interface GeneralScoutProps {
   players?: Player[];
   /** Plano Essencial: bloqueia gráfico de posse */
   isFreePlan?: boolean;
+  /** Uso interno: evita reabrir modo comparação em instâncias filhas */
+  comparisonChild?: boolean;
 }
 
 
@@ -46,18 +48,211 @@ const MONTHS = [
   { value: '11', label: 'Dezembro' },
 ];
 
-export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false }) => {
+function getOpponentShotsFromLog(match: MatchRecord): {
+  shotsOnTarget: number;
+  shotsOffTarget: number;
+  savesSimple: number;
+  savesHard: number;
+} {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let simple = 0;
+  let hard = 0;
+  let outside = 0;
+  for (const e of log as any[]) {
+    if (e?.action !== 'save') continue;
+    const difficultyRaw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+    const difficulty = difficultyRaw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (difficulty.includes('simple') || difficulty.includes('simples') || difficulty.includes('facil')) simple += 1;
+    else if (difficulty.includes('dificil') || difficulty.includes('hard')) hard += 1;
+    else if (difficulty.includes('pra fora') || difficulty.includes('fora') || difficulty.includes('outside')) outside += 1;
+  }
+  return {
+    shotsOnTarget: simple + hard,
+    shotsOffTarget: outside,
+    savesSimple: simple,
+    savesHard: hard,
+  };
+}
+
+function getBlockedShotsFromLog(match: MatchRecord): number {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let blocked = 0;
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+    const subtipo = String(e?.subtipo ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (action === 'shotZonaChute') {
+      blocked += 1;
+      continue;
+    }
+    if (tipo === 'finalizacao' && subtipo === 'bloqueado') {
+      blocked += 1;
+    }
+  }
+  return blocked;
+}
+
+function emptyScopedStats(): MatchStats {
+  return {
+    goals: 0,
+    assists: 0,
+    passesCorrect: 0,
+    passesWrong: 0,
+    shotsOnTarget: 0,
+    shotsOffTarget: 0,
+    tacklesWithBall: 0,
+    tacklesWithoutBall: 0,
+    tacklesCounterAttack: 0,
+    transitionErrors: 0,
+    shotsShootZone: 0,
+    fouls: 0,
+    saves: 0,
+    yellowCards: 0,
+    redCards: 0,
+    goalsConceded: 0,
+    goalMethodsScored: {},
+    goalMethodsConceded: {},
+    goalTimes: [],
+    goalsConcededTimes: [],
+  };
+}
+
+function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchRecord {
+  const setPieceMethods = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
+  const srcLog = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  const log = srcLog.filter((e) => e.period === period);
+  const teamStats = emptyScopedStats();
+  const playerStats: Record<string, MatchStats> = {};
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+
+  const getPlayerStats = (playerId: string): MatchStats => {
+    const id = String(playerId).trim();
+    if (!playerStats[id]) playerStats[id] = emptyScopedStats();
+    return playerStats[id];
+  };
+
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const playerId = String(e?.playerId ?? '').trim();
+    const subtipo = String(e?.subtipo ?? '').trim();
+    const upperSubtipo = subtipo.toUpperCase();
+    const isOpponentGoal = e?.isOpponentGoal === true || upperSubtipo === 'CONTRA';
+
+    if (action === 'goal') {
+      if (isOpponentGoal) {
+        goalsAgainst += 1;
+        teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsConceded![method] = (teamStats.goalMethodsConceded![method] || 0) + 1;
+        }
+        teamStats.goalsConcededTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      } else {
+        goalsFor += 1;
+        teamStats.goals += 1;
+        if (playerId) {
+          const ps = getPlayerStats(playerId);
+          ps.goals += 1;
+        }
+        const assistId = String(e?.assistPlayerId ?? '').trim();
+        if (assistId) {
+          const aps = getPlayerStats(assistId);
+          aps.assists += 1;
+          teamStats.assists += 1;
+        }
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsScored![method] = (teamStats.goalMethodsScored![method] || 0) + 1;
+        }
+        teamStats.goalTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      }
+      continue;
+    }
+
+    if (!playerId) continue;
+    const ps = getPlayerStats(playerId);
+
+    if (action === 'passCorrect') {
+      ps.passesCorrect += 1; teamStats.passesCorrect += 1;
+    } else if (action === 'passWrong' || action === 'passTransicao') {
+      ps.passesWrong += 1; teamStats.passesWrong += 1;
+      if (e?.wrongPassGeneratedTransition === true || action === 'passTransicao') {
+        teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
+        ps.transitionErrors = (ps.transitionErrors ?? 0) + 1;
+      }
+    } else if (action === 'shotOn') {
+      ps.shotsOnTarget += 1; teamStats.shotsOnTarget += 1;
+    } else if (action === 'shotOff') {
+      ps.shotsOffTarget += 1; teamStats.shotsOffTarget += 1;
+    } else if (action === 'shotZonaChute') {
+      ps.shotsShootZone = (ps.shotsShootZone ?? 0) + 1;
+      teamStats.shotsShootZone = (teamStats.shotsShootZone ?? 0) + 1;
+    } else if (action === 'tackleWithBall') {
+      ps.tacklesWithBall += 1; teamStats.tacklesWithBall += 1;
+    } else if (action === 'tackleWithoutBall') {
+      ps.tacklesWithoutBall += 1; teamStats.tacklesWithoutBall += 1;
+    } else if (action === 'tackleCounter') {
+      ps.tacklesCounterAttack += 1; teamStats.tacklesCounterAttack += 1;
+    } else if (action === 'falta') {
+      teamStats.fouls = (teamStats.fouls ?? 0) + 1;
+      if (e?.foulTeam !== 'against') ps.fouls = (ps.fouls ?? 0) + 1;
+    } else if (action === 'save') {
+      ps.saves = (ps.saves ?? 0) + 1; teamStats.saves = (teamStats.saves ?? 0) + 1;
+    }
+
+    if (String(e?.tipo ?? '').toLowerCase() === 'cartão') {
+      if (upperSubtipo.includes('AMARELO')) {
+        ps.yellowCards = (ps.yellowCards ?? 0) + 1;
+        teamStats.yellowCards = (teamStats.yellowCards ?? 0) + 1;
+      } else if (upperSubtipo.includes('VERMELHO')) {
+        ps.redCards = (ps.redCards ?? 0) + 1;
+        teamStats.redCards = (teamStats.redCards ?? 0) + 1;
+      }
+    }
+  }
+
+  const methodsScored = teamStats.goalMethodsScored ?? {};
+  const methodsConceded = teamStats.goalMethodsConceded ?? {};
+  const goalsScoredSetPiece = Object.entries(methodsScored).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+  const goalsConcededSetPiece = Object.entries(methodsConceded).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+
+  return {
+    ...match,
+    goalsFor,
+    goalsAgainst,
+    playerStats,
+    teamStats: {
+      ...teamStats,
+      goalsScoredSetPiece,
+      goalsScoredOpenPlay: Math.max(0, (teamStats.goals ?? 0) - goalsScoredSetPiece),
+      goalsConcededSetPiece,
+      goalsConcededOpenPlay: Math.max(0, (teamStats.goalsConceded ?? 0) - goalsConcededSetPiece),
+    },
+  };
+}
+
+export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
+  const [periodFilter, setPeriodFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
     setCompFilter(value);
     setMonthFilter('Todos');
     setOpponentFilter('Todos');
+    setPeriodFilter('Todos');
   };
 
   // Calcular opções de filtros baseado na competição selecionada
@@ -122,9 +317,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     });
   }, [compFilter, opponentFilter, locationFilter, monthFilter, matches]);
 
+  const scopedMatches = useMemo(() => {
+    if (periodFilter === '1T' || periodFilter === '2T') {
+      return filteredMatches.map((m) => buildMatchScopedByPeriod(m, periodFilter as MatchHalf));
+    }
+    return filteredMatches;
+  }, [filteredMatches, periodFilter]);
+
   // KPIs
   const stats = useMemo(() => {
-    const acc = filteredMatches.reduce((acc, curr) => {
+    const acc = scopedMatches.reduce((acc, curr) => {
       // Validar se teamStats existe antes de acessar
       if (!curr || !curr.teamStats) {
         console.warn('⚠️ Match sem teamStats encontrado:', curr);
@@ -150,7 +352,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.passesWrong += curr.teamStats.passesWrong || 0;
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
-      acc.shotsShootZone += curr.teamStats.shotsShootZone || 0;
+      acc.shotsShootZone += (curr.teamStats.shotsShootZone ?? getBlockedShotsFromLog(curr)) || 0;
+      const oppShots = getOpponentShotsFromLog(curr);
+      acc.opponentShotsOn += oppShots.shotsOnTarget;
+      acc.opponentShotsOff += oppShots.shotsOffTarget;
+      acc.savesSimple += oppShots.savesSimple;
+      acc.savesHard += oppShots.savesHard;
       
       acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? (curr.teamStats as any).wrongPassesTransition ?? 0;
       const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
@@ -207,6 +414,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     }, {
       totalGames: 0, wins: 0, losses: 0, draws: 0, totalMinutes: 0, goalsConceded: 0, goalsScored: 0,
       passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0, shotsShootZone: 0,
+      opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
@@ -223,7 +431,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       goalMethodsScored: acc.goalMethodsScored,
       goalMethodsConceded: acc.goalMethodsConceded
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
   const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
@@ -280,7 +488,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
 
-    filteredMatches.forEach(match => {
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
       match.teamStats.goalTimes.forEach(goalTime => {
         const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
@@ -290,7 +498,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       });
     });
 
-    filteredMatches.forEach(match => {
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
         const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
@@ -350,10 +558,19 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       maxScoredPeriod: { period: maxScoredPeriod.period, percentage: scoredPercentage },
       maxConcededPeriod: { period: maxConcededPeriod.period, percentage: concededPercentage }
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   const chartData = useMemo(() => {
-    return filteredMatches.map(match => ({
+    return scopedMatches.map(match => ({
+      ...(() => {
+        const opp = getOpponentShotsFromLog(match);
+        return {
+          opponentShotsOn: opp.shotsOnTarget,
+          opponentShotsOff: opp.shotsOffTarget,
+          savesSimple: opp.savesSimple,
+          savesHard: opp.savesHard,
+        };
+      })(),
       name: match.opponent,
       transitionErrors: match.teamStats.transitionErrors ?? (match.teamStats as any).wrongPassesTransition ?? 0,
       tacklesCounterAttack: match.teamStats.tacklesCounterAttack ?? 0,
@@ -363,10 +580,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       passesWrong: match.teamStats.passesWrong ?? 0,
       shotsOn: match.teamStats.shotsOnTarget ?? 0,
       shotsOff: match.teamStats.shotsOffTarget ?? 0,
-      shotsShootZone: match.teamStats.shotsShootZone ?? 0,
+      shotsShootZone: match.teamStats.shotsShootZone ?? getBlockedShotsFromLog(match),
       result: match.result
     }));
-  }, [filteredMatches]);
+  }, [scopedMatches]);
   
   // Dados de métodos de gol (usando goalMethodsScored/Conceded)
   const goalMethodsScoredData = useMemo(() => {
@@ -427,7 +644,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const gaugeMeta = useMemo(() => {
     let targetSum = 0;
     let tacklesSum = 0;
-    filteredMatches.forEach(m => {
+    scopedMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -444,7 +661,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       percentage: Math.min(pct, 100),
       percentageDisplay: hasTarget ? pct.toFixed(2) : '0.00',
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   const TACKLE_TARGET = gaugeMeta.TACKLE_TARGET;
   const totalTackles = gaugeMeta.totalTackles;
@@ -468,7 +685,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   // Alerta: partidas em que a meta foi alcançada e quantas resultaram em vitória
   const tackleTargetAlert = useMemo(() => {
     const matchesWithTarget: Array<{ achieved: boolean; victory: boolean }> = [];
-    filteredMatches.forEach(m => {
+    scopedMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -482,7 +699,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const achievedCount = matchesWithTarget.filter(x => x.achieved).length;
     const achievedAndVictory = matchesWithTarget.filter(x => x.achieved && x.victory).length;
     return { total, achievedCount, achievedAndVictory };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
   const possessionDonutData = useMemo(() => {
@@ -505,9 +722,40 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   }, [filteredMatches]);
 
   const hasPossessionData = useMemo(() => 
-    filteredMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
-    [filteredMatches]
+    scopedMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
+    [scopedMatches]
   );
+
+  const goalkeeperDefenseRows = useMemo(() => {
+    const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
+    for (const match of scopedMatches) {
+      const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+      for (const e of log as any[]) {
+        if (e?.action !== 'save') continue;
+        const playerId = String(e?.playerId ?? '').trim();
+        if (!playerId) continue;
+        const raw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+        const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!map.has(playerId)) {
+          const p = players.find((x) => String(x.id).trim() === playerId);
+          map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
+        }
+        const row = map.get(playerId)!;
+        if (norm.includes('simple') || norm.includes('simples') || norm.includes('facil')) row.easy += 1;
+        if (norm.includes('dificil') || norm.includes('hard')) row.hard += 1;
+        if (
+          norm.includes('simple') ||
+          norm.includes('simples') ||
+          norm.includes('facil') ||
+          norm.includes('dificil') ||
+          norm.includes('hard')
+        ) row.total += 1;
+      }
+    }
+    return Array.from(map.values())
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [scopedMatches, players]);
 
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
@@ -517,6 +765,36 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const tooltipStyle = { backgroundColor: '#000', borderColor: '#333', color: '#fff', fontFamily: CHART_FONT, borderRadius: '8px', fontSize: '14px' };
   const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'normal', fontStyle: 'normal' };
   const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontFamily: CHART_FONT };
+
+  if (!comparisonChild && compareMode) {
+    return (
+      <div className="space-y-4 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
+        <div className="bg-black p-4 rounded-2xl border border-zinc-900 shadow-lg flex items-center justify-between">
+          <div>
+            <h2 className="text-sm text-white uppercase tracking-wide scout-card-title">Modo Comparação</h2>
+            <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Compare lado a lado com dois conjuntos de filtros independentes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCompareMode(false)}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
+          >
+            Sair da Comparação
+          </button>
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
@@ -531,7 +809,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-end">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
           <Select 
             value={compFilter} 
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleCompFilterChange(e.target.value)}
@@ -552,7 +830,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocationFilter(e.target.value)}
             options={[{value: 'Todos', label: 'Todos Locais'}, {value: 'Mandante', label: 'Mandante'}, {value: 'Visitante', label: 'Visitante'}]}
           />
+          <Select
+            value={periodFilter}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPeriodFilter(e.target.value)}
+            options={[
+              { value: 'Todos', label: 'Todos Períodos' },
+              { value: '1T', label: '1º Tempo' },
+              { value: '2T', label: '2º Tempo' },
+            ]}
+          />
         </div>
+        <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={async () => {
@@ -575,14 +863,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   monthFilter,
                   opponentFilter,
                   locationFilter,
+                  periodFilter,
                 },
                 teamShieldUrl: teamSettings.teamShieldUrl || undefined,
                 teamName: teamSettings.teamName || undefined,
                 playerTables: {
-                  passes: buildPlayerTop10ForPdf(filteredMatches, pl, 'passes'),
-                  shots: buildPlayerTop10ForPdf(filteredMatches, pl, 'shots'),
-                  tackles: buildPlayerTop10ForPdf(filteredMatches, pl, 'tackles'),
-                  criticalErrors: buildPlayerTop10ForPdf(filteredMatches, pl, 'criticalErrors'),
+                  passes: buildPlayerTop10ForPdf(scopedMatches, pl, 'passes'),
+                  shots: buildPlayerTop10ForPdf(scopedMatches, pl, 'shots'),
+                  tackles: buildPlayerTop10ForPdf(scopedMatches, pl, 'tackles'),
+                  criticalErrors: buildPlayerTop10ForPdf(scopedMatches, pl, 'criticalErrors'),
                 },
                 stats,
                 timePeriodData: {
@@ -616,6 +905,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           <FileDown size={16} />
           {pdfExporting ? 'Gerando PDF...' : 'Exportar PDF'}
         </button>
+        {!comparisonChild && (
+          <button
+            type="button"
+            onClick={() => setCompareMode(true)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
+            title="Ativar modo comparação"
+          >
+            Comparação
+          </button>
+        )}
+        </div>
         </div>
       </div>
 
@@ -654,19 +954,21 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Meta de Desarmes por Jogo - Speedometer */}
             <ExpandableCard noPadding headerColor="text-[#ccff00]">
-                <div className="min-h-48 w-full flex flex-col lg:flex-row lg:items-center justify-between px-6 py-6 gap-6 bg-zinc-950/50">
-                    <div className="flex flex-col gap-3 min-w-0 flex-1">
+                <div className={`min-h-48 w-full flex flex-col ${comparisonChild ? 'xl:flex-col' : 'lg:flex-row lg:items-center'} justify-between px-6 py-6 gap-6 bg-zinc-950/50`}>
+                    <div className={`flex flex-col gap-3 min-w-0 flex-1 ${comparisonChild ? 'max-w-full' : ''}`}>
                          <div className="flex items-center gap-3">
                              <Gauge size={32} className="text-[#00f0ff] shrink-0" />
-                             <h2 className="text-xl md:text-2xl text-white uppercase tracking-tighter scout-card-title-black-italic">Meta de Desarmes por Jogo</h2>
+                             <h2 className={`${comparisonChild ? 'text-lg md:text-xl' : 'text-xl md:text-2xl'} text-white uppercase tracking-tighter scout-card-title-black-italic`}>Meta de Desarmes por Jogo</h2>
                          </div>
-                         <p className="text-zinc-500 text-sm max-w-md" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                             A porcentagem é calculada em relação às metas definidas nas partidas já realizadas e salvas. {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
+                         <p className={`text-zinc-500 ${comparisonChild ? 'text-xs leading-5' : 'text-sm'} ${comparisonChild ? 'max-w-full' : 'max-w-md'}`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                             A porcentagem é calculada em relação às metas definidas nas partidas realizadas e salvas.
+                             {' '}
+                             {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
                          {hasTackleTarget && tackleTargetAlert.total > 0 && (
-                           <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
+                          <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
                              <Info size={18} className="text-[#00f0ff] shrink-0 mt-0.5" />
-                             <p className="text-sm text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                            <p className={`${comparisonChild ? 'text-xs leading-5' : 'text-sm'} text-zinc-300`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
                                {tackleTargetAlert.total === 1 ? (
                                  tackleTargetAlert.achievedCount === 1 ? (
                                    tackleTargetAlert.achievedAndVictory === 1
@@ -681,7 +983,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                          )}
                     </div>
 
-                    <div className="flex items-center gap-6 lg:gap-8 shrink-0">
+                    <div className={`flex items-center ${comparisonChild ? 'justify-between' : ''} gap-6 lg:gap-8 shrink-0`}>
                         <div className="text-right">
                              <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Desarmes realizados</p>
                              <p className={`text-4xl md:text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
@@ -826,59 +1128,49 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="passes" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="passes" players={players} />
         </ExpandableCard>
 
         <ExpandableCard
-          title="Finalizações"
+          title="Erros Críticos (Transição)"
           icon={BarChart3}
-          headerColor="text-purple-400"
+          headerColor="text-[#ff0055]"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total:{' '}
-              <span className="text-white">
-                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
-              </span>
+              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                    <YAxis hide />
-                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend
-                      wrapperStyle={legendLabelStyle}
-                      formatter={(value: string) => {
-                        if (value === 'No Gol') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
-                        }
-                        if (value === 'Pra Fora') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
-                        }
-                        if (value === 'Bloqueado') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
-                        }
-                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                      }}
-                    />
-                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
-                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
-                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
-                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
-                    </Bar>
-                </BarChart>
+               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
+                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
+                 <YAxis hide />
+                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
+                 <Legend
+                   wrapperStyle={legendLabelStyle}
+                   formatter={(value: string) => {
+                     if (value === 'Passes errados') {
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
+                     }
+                     if (value === 'Geraram transição') {
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
+                     }
+                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                   }}
+                 />
+                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
+                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
+                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
+                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
+                 </Bar>
+               </BarChart>
              </ResponsiveContainer>
            </div>
-           {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="shots" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="criticalErrors" players={players} />
         </ExpandableCard>
       </div>
 
@@ -930,49 +1222,173 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="tackles" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="tackles" players={players} />
         </ExpandableCard>
 
         <ExpandableCard
-          title="Erros Críticos (Transição)"
+          title="Defesas"
           icon={BarChart3}
-          headerColor="text-[#ff0055]"
+          headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
+              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
-                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
-                 <YAxis hide />
-                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
-                 <Legend
-                   wrapperStyle={legendLabelStyle}
-                   formatter={(value: string) => {
-                     if (value === 'Passes errados') {
-                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
-                     }
-                     if (value === 'Geraram transição') {
-                       return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
-                     }
-                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                   }}
-                 />
-                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
-                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
-                 </Bar>
-                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
-                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
-                 </Bar>
+               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                  <YAxis hide />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                  <Legend
+                    wrapperStyle={legendLabelStyle}
+                    formatter={(value: string) => {
+                      if (value === 'DEFESA SIMPLES') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>DEFESA SIMPLES ({stats.savesSimple || 0})</span>;
+                      }
+                      if (value === 'Difícil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
+                      }
+                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                    }}
+                  />
+                  <Bar dataKey="savesSimple" name="DEFESA SIMPLES" fill={COLORS.blueCyan}>
+                      <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
+                  </Bar>
+                  <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
+                      <LabelList dataKey="savesHard" position="inside" {...labelStyle} />
+                  </Bar>
                </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
+           <div className="mt-4 overflow-x-auto">
+             <table className="w-full text-xs">
+               <thead>
+                 <tr className="border-b border-zinc-800">
+                   <th className="text-left py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Goleiro</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Defesa Simples</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Difícil</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Total</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {goalkeeperDefenseRows.length > 0 ? (
+                   goalkeeperDefenseRows.map((row, idx) => (
+                     <tr key={`def-gk-${idx}`} className="border-b border-zinc-900/50">
+                       <td className="py-2 text-white" style={legendLabelStyle}>{row.name}</td>
+                       <td className="py-2 text-right text-blue-300" style={legendLabelStyle}>{row.easy}</td>
+                       <td className="py-2 text-right text-blue-500" style={legendLabelStyle}>{row.hard}</td>
+                       <td className="py-2 text-right text-zinc-300" style={legendLabelStyle}>{row.total}</td>
+                     </tr>
+                   ))
+                 ) : (
+                   <tr>
+                     <td colSpan={4} className="py-3 text-center text-zinc-500" style={legendLabelStyle}>
+                       Nenhuma defesa registrada no período filtrado.
+                     </td>
+                   </tr>
+                 )}
+               </tbody>
+             </table>
+           </div>
+        </ExpandableCard>
+      </div>
+
+      {/* Finalizações (nossas) + Finalizações do adversário */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <ExpandableCard
+          title="Finalizações"
+          icon={BarChart3}
+          headerColor="text-purple-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total:{' '}
+              <span className="text-white">
+                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
+              </span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
+                        }
+                        if (value === 'Bloqueado') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
+                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
+                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
+                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
+           <PlayerStatsTable matches={scopedMatches} statType="shots" players={players} />
+        </ExpandableCard>
+
+        <ExpandableCard
+          title="Finalizações Adversário"
+          icon={BarChart3}
+          headerColor="text-red-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total: <span className="text-white">{(stats.opponentShotsOn || 0) + (stats.opponentShotsOff || 0)}</span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.opponentShotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.opponentShotsOff || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="opponentShotsOn" name="No Gol" fill="#ef4444">
+                        <LabelList dataKey="opponentShotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="opponentShotsOff" name="Pra Fora" fill={COLORS.slate}>
+                        <LabelList dataKey="opponentShotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
         </ExpandableCard>
       </div>
 

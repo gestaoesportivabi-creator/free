@@ -75,7 +75,7 @@ export interface MatchRecord {
     selectedPlayerIds?: string[];
   };
   substitutionHistory?: Array<{ playerOutId: string; playerInId: string; time: number; period: string }>;
-  status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';
   /** Fase da coleta (coluna `collection_phase` em `jogos`): 0 não iniciada, 1º tempo, 2º tempo */
   collectionPhase?: 0 | 1 | 2;
 }

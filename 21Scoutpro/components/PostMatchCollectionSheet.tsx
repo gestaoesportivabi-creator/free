@@ -339,6 +339,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
       playerStats,
       teamStats,
       postMatchEventLog: postMatchEventLogWithRecordedBy,
+      status: 'encerrado',
     };
 
     onSave(savedMatch);
