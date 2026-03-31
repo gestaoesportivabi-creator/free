@@ -56,9 +56,9 @@ app.use(cors({
   credentials: true,
 }));
 
-// Parser de JSON
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Parser de JSON (aumentado para suportar foto base64 no cadastro/edição de atleta)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check
 app.get('/health', (_req, res) => {

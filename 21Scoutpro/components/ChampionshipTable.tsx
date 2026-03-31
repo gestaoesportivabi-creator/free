@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag, Lock } from 'lucide-react';
 import { Championship } from '../types';
-import { IS_FREE_PLAN } from '../config';
 import { setChampionshipCards } from '../utils/championshipCards';
 import { parseLocalDateOnly, isDateInPast, formatDateSafe } from '../utils/dateUtils';
 
@@ -14,7 +13,8 @@ export interface ChampionshipMatch {
     competition: string;
     phase?: string; // Fase da partida (ex: "1 Fase classificatória", "1 PlayOffs")
     location?: string; // Mandante/Visitante
-    scoreTarget?: string; // Meta de desarmes esperada
+    scoreTarget?: string; // Meta de desarmes esperada (campo na tabela de campeonato)
+    jogoId?: string | null; // ID do jogo realizado quando vinculado
 }
 
 interface SavedMatch {
@@ -33,6 +33,7 @@ interface ChampionshipTableProps {
     onSaveChampionship?: (championship: Championship) => void; // Callback para salvar campeonato
     teams?: { id: string; nome: string }[]; // Equipes para cadastrar no campeonato
     allMatches?: SavedMatch[];
+    isFreePlan?: boolean;
 }
 
 const PHASE_OPTIONS = [
@@ -50,7 +51,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     championships = [],
     onSaveChampionship,
     teams = [],
-    allMatches = []
+    allMatches = [],
+    isFreePlan = false,
 }) => {
     // Debug: log matches
     useEffect(() => {
@@ -100,6 +102,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     });
     const [showChampionshipMatchesForm, setShowChampionshipMatchesForm] = useState(false);
     const [currentChampionshipId, setCurrentChampionshipId] = useState<string | null>(null);
+    const [currentChampionshipName, setCurrentChampionshipName] = useState<string>('');
     const [championshipMatchesForm, setChampionshipMatchesForm] = useState<ChampionshipMatch[]>([]);
     
     // Estados para importação
@@ -215,9 +218,10 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             onSaveChampionship(championshipToSave);
         }
         
-        // Fechar modal e abrir formulário de partidas
+        // Fechar modal e abrir formulário de partidas (nome do campeonato preenchido em todas)
         setShowChampionshipModal(false);
         setCurrentChampionshipId(championshipToSave.id);
+        setCurrentChampionshipName(championshipToSave.name);
         setChampionshipMatchesForm([{
             id: '',
             date: new Date().toISOString().split('T')[0],
@@ -232,12 +236,13 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     
     const handleAddChampionshipMatch = () => {
         const championship = championships.find(c => c.id === currentChampionshipId);
+        const competitionName = currentChampionshipName || championship?.name || '';
         setChampionshipMatchesForm([...championshipMatchesForm, {
             id: '',
             date: new Date().toISOString().split('T')[0],
             time: '20:00',
             opponent: '',
-            competition: championship?.name || '',
+            competition: competitionName,
             location: 'Mandante',
             scoreTarget: ''
         }]);
@@ -273,6 +278,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         setShowChampionshipMatchesForm(false);
         setChampionshipMatchesForm([]);
         setCurrentChampionshipId(null);
+        setCurrentChampionshipName('');
     };
     
     // Funções para importação
@@ -991,7 +997,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                             {/* Pontuação por resultado - bloqueada na versão free */}
                             <div className="border-t border-zinc-800 pt-4">
                                 <h4 className="text-white font-bold text-sm mb-4 uppercase">Pontuação por resultado</h4>
-                                {IS_FREE_PLAN ? (
+                                {isFreePlan ? (
                                     <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
                                         <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
                                         <p className="text-zinc-400 text-sm max-w-md">
@@ -1037,7 +1043,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                             {/* Regras de Suspensão - bloqueadas na versão free */}
                             <div className="border-t border-zinc-800 pt-4">
                                 <h4 className="text-white font-bold text-sm mb-4 uppercase">Regras de Suspensão</h4>
-                                {IS_FREE_PLAN ? (
+                                {isFreePlan ? (
                                     <div className="flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-zinc-800 bg-zinc-950/50 text-center">
                                         <Lock className="w-10 h-10 text-zinc-500 mb-3" strokeWidth={1.5} />
                                         <p className="text-zinc-400 text-sm max-w-md">
@@ -1163,6 +1169,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     setShowChampionshipMatchesForm(false);
                                     setChampionshipMatchesForm([]);
                                     setCurrentChampionshipId(null);
+                                    setCurrentChampionshipName('');
                                 }}
                                 className="text-zinc-400 hover:text-white transition-colors"
                             >
@@ -1287,6 +1294,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     setShowChampionshipMatchesForm(false);
                                     setChampionshipMatchesForm([]);
                                     setCurrentChampionshipId(null);
+                                    setCurrentChampionshipName('');
                                 }}
                                 className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 font-bold uppercase text-xs rounded-xl transition-colors"
                             >

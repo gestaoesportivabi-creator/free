@@ -23,8 +23,8 @@ import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { ManagementReport } from './components/ManagementReport';
 import { EmBreve } from './components/EmBreve';
+import { AdminPanel } from './components/AdminPanel';
 import { NextMatchAlert } from './components/NextMatchAlert';
-import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { DashboardTodayBlock } from './components/DashboardTodayBlock';
 import { DashboardSquadAvailability } from './components/DashboardSquadAvailability';
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
@@ -32,11 +32,13 @@ import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
 import { QuartetAnalysis } from './components/QuartetAnalysis';
-import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship } from './types';
+import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
-import { IS_FREE_PLAN } from './config';
+import { upsertMatchRecord } from './utils/matchUpsert';
+import { isMatchFinalizedForScout } from './utils/matchStatus';
+import { isEssentialPlanUser } from './config';
 
 const SLIDES = [
     {
@@ -97,6 +99,7 @@ const TAB_LABELS: Record<string, string> = {
   assessment: 'Avaliação Física',
   academia: 'Musculação',
   settings: 'Configurações',
+  admin: 'Todos os Usuários',
 };
 
 /** Recursos necessários por aba (carregamento sob demanda). Abas "Em breve" = [] para render instantâneo */
@@ -106,7 +109,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   schedule: ['schedules'],
   championship: ['championshipMatches', 'competitions', 'championships', 'matches'],
   table: ['players', 'competitions', 'matches', 'championshipMatches', 'championships', 'schedules', 'teams'],
-  general: ['matches', 'players'],
+  general: ['matches', 'players', 'championshipMatches'],
   individual: ['matches', 'players', 'timeControls'],
   ranking: [],
   physical: [],
@@ -117,6 +120,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   'qualidade-sono': [],
   academia: [],
   'management-report': ['players', 'matches', 'assessments', 'timeControls'],
+  admin: [],
   settings: [],
 };
 
@@ -139,6 +143,9 @@ export default function App() {
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  /** Cadeados / “Em breve” só para plano Essencial (ou fallback VITE_PLAN sem planName) */
+  const essentialRestricted = useMemo(() => isEssentialPlanUser(currentUser), [currentUser]);
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
@@ -268,6 +275,31 @@ export default function App() {
       nextMatch
     };
   }, [matches, players, championshipMatches]);
+
+  /** Só partidas encerradas entram nas abas de Scout / ranking / relatório gerencial */
+  const matchesFinalizedForScout = useMemo(
+    () => matches.filter(isMatchFinalizedForScout),
+    [matches]
+  );
+
+  // Enriquecer matches com scoreTarget (meta de desarmes) do campo "META DE DESARMES" da tabela de campeonato
+  const matchesWithScoreTarget = useMemo(() => {
+    if (!championshipMatches?.length) return matchesFinalizedForScout;
+    const byJogoId = new Map<string, ChampionshipMatch>();
+    const byKey = new Map<string, ChampionshipMatch>();
+    championshipMatches.forEach(cm => {
+      if (cm.scoreTarget && cm.scoreTarget.trim() !== '') {
+        if (cm.jogoId) byJogoId.set(cm.jogoId, cm);
+        const k = `${cm.date}|${(cm.opponent || '').trim()}|${(cm.competition || '').trim()}`;
+        if (!byKey.has(k)) byKey.set(k, cm);
+      }
+    });
+    return matchesFinalizedForScout.map(m => {
+      const cm = byJogoId.get(m.id) ?? byKey.get(`${m.date}|${(m.opponent || '').trim()}|${(m.competition || '').trim()}`);
+      if (!cm?.scoreTarget) return m;
+      return { ...m, scoreTarget: cm.scoreTarget };
+    });
+  }, [matchesFinalizedForScout, championshipMatches]);
 
   // Atualizar a cada minuto para contagem regressiva ao vivo
   const [liveNow, setLiveNow] = useState(() => new Date());
@@ -453,14 +485,14 @@ export default function App() {
 
   // --- Funções de carregamento por recurso (sob demanda) ---
   const loadPlayers = async () => {
-    try {
-      const token = localStorage.getItem('token');
+      try {
+        const token = localStorage.getItem('token');
       if (!token) return;
       const apiPlayers = await playersApi.getAll().catch(err => { console.error('❌ Erro ao carregar players:', err); return []; });
-      const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-      const apiIds = new Set(apiPlayers.map(p => p.id));
-      const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
-      setPlayers([...apiPlayers, ...localOnly]);
+        const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
+        const apiIds = new Set(apiPlayers.map(p => p.id));
+        const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
+        setPlayers([...apiPlayers, ...localOnly]);
       setLoadedResources(prev => ({ ...prev, players: true }));
     } catch {
       const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
@@ -475,7 +507,7 @@ export default function App() {
       if (!token) return;
       const matchesData = await matchesApi.getAll().catch(err => { console.error('❌ Erro ao carregar matches:', err); return []; });
       const validMatches = (matchesData as MatchRecord[]).filter(m => m && m.teamStats);
-      setMatches(validMatches);
+        setMatches(validMatches);
       setLoadedResources(prev => ({ ...prev, matches: true }));
     } catch {
       setMatches([]);
@@ -488,7 +520,7 @@ export default function App() {
       const token = localStorage.getItem('token');
       if (!token) return;
       const teamsData = await teamsApi.getAll().catch(err => { console.error('❌ Erro ao carregar teams:', err); return []; });
-      setTeams(teamsData as Team[]);
+        setTeams(teamsData as Team[]);
       setLoadedResources(prev => ({ ...prev, teams: true }));
     } catch {
       setTeams([]);
@@ -516,19 +548,19 @@ export default function App() {
       });
 
       const validSchedules = (Array.isArray(apiSchedules) ? apiSchedules : [])
-        .filter((s: WeeklySchedule) => s && s.id)
-        .map((s: WeeklySchedule) => ({
-          ...s,
-          days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
+            .filter((s: WeeklySchedule) => s && s.id)
+            .map((s: WeeklySchedule) => ({
+              ...s,
+              days: Array.isArray(s.days) ? s.days : (s.days ? [s.days] : []),
           isActive: s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true'
-        }))
-        .sort((a: WeeklySchedule, b: WeeklySchedule) => {
-          if (a.isActive && !b.isActive) return -1;
-          if (!a.isActive && b.isActive) return 1;
+            }))
+            .sort((a: WeeklySchedule, b: WeeklySchedule) => {
+              if (a.isActive && !b.isActive) return -1;
+              if (!a.isActive && b.isActive) return 1;
           return (b.createdAt || 0) - (a.createdAt || 0);
-        });
+            });
 
-      setSchedules(validSchedules);
+          setSchedules(validSchedules);
       localStorage.setItem('scout21_schedules_local', JSON.stringify(validSchedules));
       setLoadedResources(prev => ({ ...prev, schedules: true }));
     } catch {
@@ -672,7 +704,7 @@ export default function App() {
     const now = Date.now();
     setSchedules(prev => {
         const validSchedules = prev.filter(s => {
-            const created = s.createdAt || now;
+            const created = s.createdAt || now; 
             return (now - created) < thirtyDaysInMs;
         });
         if (validSchedules.length !== prev.length) {
@@ -747,7 +779,7 @@ export default function App() {
       const token = localStorage.getItem('token');
       console.log('🔑 Token no localStorage:', token ? 'PRESENTE' : 'AUSENTE');
       setCurrentUser(user);
-      setActiveTab('dashboard');
+      setActiveTab('dashboard'); 
       console.log('✅ currentUser atualizado, useEffect deve ser disparado');
   };
 
@@ -791,7 +823,16 @@ export default function App() {
           }
 
           if (result.success && result.data) {
-              const d = result.data as { name?: string; email?: string; photoUrl?: string; role?: string; teamDisplayName?: string; teamShieldUrl?: string };
+              const d = result.data as {
+                name?: string;
+                email?: string;
+                photoUrl?: string;
+                role?: string;
+                planName?: string;
+                isPlatformAdmin?: boolean;
+                teamDisplayName?: string;
+                teamShieldUrl?: string;
+              };
               if (currentUser) {
                   const updatedUser: User = {
                       ...currentUser,
@@ -799,6 +840,8 @@ export default function App() {
                       email: d.email ?? currentUser.email,
                       photoUrl: d.photoUrl,
                       role: (d.role === 'TECNICO' ? 'Treinador' : d.role) ?? currentUser.role,
+                      planName: (d.planName as SubscriptionPlanName | undefined) ?? currentUser.planName,
+                      isPlatformAdmin: d.isPlatformAdmin ?? currentUser.isPlatformAdmin,
                       teamDisplayName: d.teamDisplayName,
                       teamShieldUrl: d.teamShieldUrl,
                   };
@@ -835,15 +878,33 @@ export default function App() {
     } catch (err) {
       console.error('Erro ao excluir partida:', err);
       alert('Não foi possível excluir a partida. Tente novamente.');
+      }
+  };
+
+  const handleDeleteChampionshipMatch = async (championshipMatchId: string) => {
+    try {
+      const success = await championshipMatchesApi.delete(championshipMatchId);
+      if (success) {
+        setChampionshipMatches((prev) => prev.filter((m) => m.id !== championshipMatchId));
+        alert('Partida programada removida da planilha.');
+      }
+    } catch (error) {
+      console.error('Erro ao excluir partida da planilha:', error);
+      alert('Não foi possível excluir a partida da planilha. Tente novamente.');
     }
   };
 
-  const handleSaveMatch = async (newMatch: MatchRecord) => {
+  const handleSaveMatch = async (
+    newMatch: MatchRecord,
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+  ): Promise<MatchRecord | undefined> => {
+      const isAutosave = options?.source === 'autosave';
+      const saveAsIncomplete = options?.saveAsIncomplete === true;
       try {
         // Validar match antes de salvar
         if (!newMatch || !newMatch.teamStats) {
           console.error('❌ Erro: Match inválido ao salvar:', newMatch);
-          alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
+          if (!isAutosave) alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
           return;
         }
 
@@ -856,39 +917,12 @@ export default function App() {
           playerStatsCount: Object.keys(newMatch.playerStats || {}).length
         });
 
-        // Partida existente: id presente e não é sched-* (permite re-salvar ao editar log sem depender da lista em memória)
-        const idStr = newMatch.id != null ? String(newMatch.id).trim() : '';
-        const isExistingMatch = idStr.length > 0 && !idStr.startsWith('sched-');
-
-        let saved: MatchRecord | null;
-        if (isExistingMatch) {
-          console.log('📝 Atualizando partida existente:', idStr);
-          try {
-            saved = await matchesApi.update(idStr, newMatch);
-          } catch (err: unknown) {
-            const is404 = err instanceof Error && (err.message.includes('404') || err.message.toLowerCase().includes('não encontrado') || err.message.toLowerCase().includes('not found'));
-            if (is404) {
-              console.warn('Partida não encontrada no servidor (404), criando nova.');
-              const matchToCreate = { ...newMatch };
-              delete (matchToCreate as any).id;
-              saved = await matchesApi.create(matchToCreate);
-            } else {
-              throw err;
-            }
-          }
-        } else {
-          const matchToCreate = { ...newMatch };
-          if (matchToCreate.id?.startsWith('sched-')) {
-            delete (matchToCreate as any).id;
-          } else if (matchToCreate.id) {
-            delete (matchToCreate as any).id;
-          }
-          console.log('➕ Criando nova partida');
-          saved = await matchesApi.create(matchToCreate);
-        }
+        const { saved, operation } = await upsertMatchRecord(newMatch);
+        const isCreated = operation === 'created';
         console.log('💾 Resposta do salvamento:', saved);
         
         if (saved) {
+          // Devolver ao chamador (ex.: coleta) para fixar o mesmo id em memória — sem criar partidas novas a cada save
           // Atualizar cartões por campeonato (regras de suspensão) usando o payload enviado
           const competitionName = newMatch.competition || saved.competition;
           const statsSource = newMatch.playerStats || saved.playerStats;
@@ -936,20 +970,30 @@ export default function App() {
                 return [saved, ...prev];
               });
             }
-            alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
-            if (!isExistingMatch) setActiveTab('general');
+            if (!isAutosave) {
+              if (saveAsIncomplete) {
+                alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');
+              } else {
+                alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
+                if (isCreated) setActiveTab('general');
+              }
+            }
+            return saved;
           } else {
             console.error('❌ Erro: Match salvo sem teamStats:', saved);
-            alert("Partida salva, mas com dados incompletos. Verifique o console.");
+            if (!isAutosave) alert("Partida salva, mas com dados incompletos. Verifique o console.");
+            return saved;
           }
         } else {
           console.error('❌ Erro: Resposta do salvamento foi null/undefined');
-          alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
+          if (!isAutosave) alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
         }
+        return undefined;
       } catch (error) {
         console.error('❌ Erro ao salvar partida:', error);
         const msg = error instanceof Error ? error.message : 'Erro desconhecido';
-        alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
+        if (!isAutosave) alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
+        return undefined;
       }
   };
 
@@ -1237,6 +1281,8 @@ export default function App() {
             name: u.name,
             email: u.email,
             role: u.role === 'TECNICO' ? 'Treinador' : u.role,
+            planName: u.planName as SubscriptionPlanName | undefined,
+            isPlatformAdmin: u.isPlatformAdmin ?? false,
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
             teamShieldUrl: u.teamShieldUrl,
@@ -1308,9 +1354,14 @@ export default function App() {
     );
   }
 
-  // Rota dedicada à coleta em tempo real (dados em localStorage; save via API)
+  // Tempo real isolado/desativado na UI principal.
   if (window.location.pathname === '/scout-realtime') {
-    return <RealtimeScoutPage />;
+    window.history.replaceState({}, '', '/dashboard');
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-zinc-400">Redirecionando...</p>
+      </div>
+    );
   }
 
   // Mostrar landing page
@@ -1363,26 +1414,27 @@ export default function App() {
               onAddPlayer={handleAddPlayer} 
               onUpdatePlayer={handleUpdatePlayer}
               onDeletePlayer={handleDeletePlayer}
-              config={config} 
+              config={config}
+              isFreePlan={essentialRestricted}
             />
           </TabBackgroundWrapper>
         );
-      case 'ranking':
+      case 'ranking': 
         return (
           <TabBackgroundWrapper>
-            <StatsRanking players={players} matches={matches} />
+            <StatsRanking players={players} matches={matchesFinalizedForScout} />
           </TabBackgroundWrapper>
-        );
+        ); 
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <QuartetAnalysis matches={matches} players={players} />
+            <QuartetAnalysis matches={matchesFinalizedForScout} players={players} isFreePlan={essentialRestricted} />
           </TabBackgroundWrapper>
         );
       case 'general':
-        return <GeneralScout config={config} matches={matches} players={players} />; 
+        return <GeneralScout config={config} matches={matchesWithScoreTarget} players={players} isFreePlan={essentialRestricted} />; 
       case 'individual':
-        if (IS_FREE_PLAN) {
+        if (essentialRestricted) {
           return (
             <TabBackgroundWrapper>
               <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
@@ -1397,7 +1449,7 @@ export default function App() {
         }
         return (
           <TabBackgroundWrapper>
-            <IndividualScout config={config} currentUser={currentUser} matches={matches} players={players} timeControls={timeControls} />
+            <IndividualScout config={config} currentUser={currentUser} matches={matchesFinalizedForScout} players={players} timeControls={timeControls} />
           </TabBackgroundWrapper>
         );
       case 'physical':
@@ -1415,7 +1467,7 @@ export default function App() {
       case 'video':
         return (
           <TabBackgroundWrapper>
-            <VideoScout config={config} matches={matches} players={players} />
+            <VideoScout config={config} matches={matchesFinalizedForScout} players={players} />
           </TabBackgroundWrapper>
         );
       case 'schedule': // New Case
@@ -1433,6 +1485,7 @@ export default function App() {
         return (
           <TabBackgroundWrapper>
             <ChampionshipTable
+            isFreePlan={essentialRestricted}
             matches={championshipMatches}
             competitions={competitions}
             championships={championships}
@@ -1450,11 +1503,11 @@ export default function App() {
               } catch (err) {
                 console.error('Erro ao salvar campeonato:', err);
                 // Fallback: atualizar localmente
-                setChampionships(prev => {
-                  const updated = prev.filter(c => c.id !== championship.id);
-                  updated.push(championship);
-                  return updated;
-                });
+              setChampionships(prev => {
+                const updated = prev.filter(c => c.id !== championship.id);
+                updated.push(championship);
+                return updated;
+              });
               }
             }}
             onSave={async (match) => {
@@ -1532,10 +1585,12 @@ export default function App() {
           schedules={schedules}
           teams={teams}
           championships={championships}
+          isFreePlan={essentialRestricted}
           currentUser={currentUser}
           onScoutWindowOpenChange={setScoutWindowOpen}
           onPostMatchOpenChange={(open) => setSidebarRetracted(open)}
           onDeleteMatch={handleDeleteMatch}
+          onDeleteChampionshipMatch={handleDeleteChampionshipMatch}
             />
           </TabBackgroundWrapper>
         );
@@ -1564,7 +1619,7 @@ export default function App() {
           </TabBackgroundWrapper>
         );
       case 'management-report':
-        if (IS_FREE_PLAN) {
+        if (essentialRestricted) {
           return (
             <TabBackgroundWrapper>
               <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
@@ -1581,17 +1636,23 @@ export default function App() {
           <TabBackgroundWrapper>
             <ManagementReport 
               players={players} 
-              matches={matches} 
+              matches={matchesFinalizedForScout} 
               assessments={assessments}
               timeControls={timeControls}
             />
           </TabBackgroundWrapper>
         );
+      case 'admin':
+        return (
+          <TabBackgroundWrapper>
+            <AdminPanel currentUser={currentUser} />
+          </TabBackgroundWrapper>
+        );
       case 'settings':
         return (
           <TabBackgroundWrapper>
-            <Settings
-              currentUser={currentUser}
+            <Settings 
+              currentUser={currentUser} 
               onUpdateUser={handleUpdateUser}
             />
           </TabBackgroundWrapper>
@@ -1634,21 +1695,21 @@ export default function App() {
 
               {/* 2. Bloco Status operacional do dia */}
               <section className="shrink-0">
-                <DashboardTodayBlock
-                  nextCommitment={nextCommitmentForToday}
-                  focusOfDay={focusOfDay}
-                  activeAlerts={activeAlertsForToday}
+              <DashboardTodayBlock
+                nextCommitment={nextCommitmentForToday}
+                focusOfDay={focusOfDay}
+                activeAlerts={activeAlertsForToday}
                   lastMatchResults={lastMatchResults}
                 />
               </section>
 
               {/* 3. Elenco disponível */}
               <section className="shrink-0">
-                <DashboardSquadAvailability
-                  players={players}
-                  nextMatch={overviewStats.nextMatch}
-                  championships={championships}
-                  isFreePlan={IS_FREE_PLAN}
+                  <DashboardSquadAvailability
+                    players={players}
+                    nextMatch={overviewStats.nextMatch}
+                    championships={championships}
+                  isFreePlan={essentialRestricted}
                 />
               </section>
 
@@ -1657,7 +1718,7 @@ export default function App() {
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
                 <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
-                <StatCard label="Lesões no ano" value={IS_FREE_PLAN ? 'Em breve' : overviewStats.injuriesThisYear} helper={IS_FREE_PLAN ? '—' : String(overviewStats.currentYear)} />
+                <StatCard label="Lesões no ano" value={essentialRestricted ? 'Em breve' : overviewStats.injuriesThisYear} helper={essentialRestricted ? '—' : String(overviewStats.currentYear)} />
               </section>
 
               {/* 5. Ações principais no rodapé */}
@@ -1697,22 +1758,22 @@ export default function App() {
               aria-label="Fechar menu"
             />
           )}
-          <Sidebar
-            activeTab={activeTab}
-            setActiveTab={handleTabChange}
-            onLogout={() => {
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={handleTabChange} 
+          onLogout={() => {
               console.log('👋 Logout - Limpando dados e voltando para home');
               clearAllUserData(true);
-              setCurrentUser(null);
-              setCurrentRoute('landing');
-            }}
-            currentUser={currentUser}
+            setCurrentUser(null);
+            setCurrentRoute('landing');
+          }}
+          currentUser={currentUser}
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             onNavigate={() => setSidebarOpen(false)}
             retracted={sidebarRetracted}
             onToggleRetract={() => setSidebarRetracted((r) => !r)}
-            isFreePlan={IS_FREE_PLAN}
+            isFreePlan={essentialRestricted}
           />
         </>
       )}
@@ -1734,7 +1795,7 @@ export default function App() {
           </header>
         )}
         <div className="flex-1 p-4 sm:p-6 min-w-0 print:p-0 overflow-x-hidden">
-          {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
+        {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
         </div>
       </main>
     </div>

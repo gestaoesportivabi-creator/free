@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { Save, User as UserIcon, Lock, CheckCircle, Shield, Plus, Users, RefreshCw } from 'lucide-react';
-import { usersApi, RegisteredUser } from '../services/api';
+import { Save, User as UserIcon, Lock, CheckCircle, Shield, Plus } from 'lucide-react';
 
 const CURRENT_TEAM_STORAGE_KEY = 'scout21_settings_current_team';
 
@@ -30,9 +29,6 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
   const [teamEndDate, setTeamEndDate] = useState('');
   const [teamShieldUrl, setTeamShieldUrl] = useState('');
 
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
-
   useEffect(() => {
     if (currentUser) {
       setName(currentUser.name || '');
@@ -60,22 +56,6 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
         setTeamShieldUrl((prev) => (prev !== '' ? prev : data.shieldUrl || ''));
       }
     } catch (_) {}
-  }, []);
-
-  const loadUsers = async () => {
-    setUsersLoading(true);
-    try {
-      const data = await usersApi.getAll();
-      setRegisteredUsers(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Erro ao carregar usuários:', err);
-    } finally {
-      setUsersLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadUsers();
   }, []);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -343,59 +323,6 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
         </div>
       </div>
 
-      {/* Usuários Cadastrados */}
-      <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-bold uppercase text-sm tracking-widest flex items-center gap-2">
-            <Users size={16} className="text-[#10b981]" /> Usuários Cadastrados
-          </h3>
-          <button
-            type="button"
-            onClick={loadUsers}
-            disabled={usersLoading}
-            className="text-zinc-400 hover:text-[#10b981] transition-colors p-1.5 rounded-lg hover:bg-zinc-900"
-            title="Atualizar lista"
-          >
-            <RefreshCw size={16} className={usersLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-
-        {usersLoading && registeredUsers.length === 0 ? (
-          <p className="text-zinc-500 text-sm text-center py-4">Carregando...</p>
-        ) : registeredUsers.length === 0 ? (
-          <p className="text-zinc-500 text-sm text-center py-4">Nenhum usuário encontrado.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400 text-xs uppercase tracking-wider">
-                  <th className="text-left py-2 px-3 font-bold">Nome</th>
-                  <th className="text-left py-2 px-3 font-bold">E-mail</th>
-                  <th className="text-left py-2 px-3 font-bold">Função</th>
-                  <th className="text-left py-2 px-3 font-bold">Cadastro</th>
-                </tr>
-              </thead>
-              <tbody>
-                {registeredUsers.map((u) => (
-                  <tr key={u.id} className="border-b border-zinc-800/50 hover:bg-zinc-900/50 transition-colors">
-                    <td className="py-2.5 px-3 text-white font-medium">{u.name}</td>
-                    <td className="py-2.5 px-3 text-[#00f0ff]">{u.email}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="text-xs font-bold text-[#10b981] bg-[#10b981]/10 px-2 py-0.5 rounded-full border border-[#10b981]/20">
-                        {u.role === 'TECNICO' ? 'Treinador' : u.role}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-zinc-400">
-                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-zinc-600 text-xs mt-3 text-right">{registeredUsers.length} usuário(s) cadastrado(s)</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

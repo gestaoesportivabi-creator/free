@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship } from '../types';
+import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe } from '../utils/dateUtils';
@@ -9,7 +9,22 @@ import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
-import { IS_FREE_PLAN } from '../config';
+import { isPersistedServerMatchId } from '../utils/matchUpsert';
+
+const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
+
+/** IDs de atletas nossos (não adversário) a partir do log — fallback quando não há `lineup.selectedPlayerIds` legado */
+function collectPlayerIdsFromPostMatchLog(log: PostMatchEvent[] | undefined): string[] {
+    if (!log?.length) return [];
+    const ids = new Set<string>();
+    for (const e of log) {
+        const pid = e.playerId != null ? String(e.playerId).trim() : '';
+        if (pid && pid !== OPPONENT_TEAM_ID) ids.add(pid);
+        if (e.passToPlayerId) ids.add(String(e.passToPlayerId).trim());
+        if (e.assistPlayerId) ids.add(String(e.assistPlayerId).trim());
+    }
+    return [...ids];
+}
 
 interface GoalTime {
     id: string;
@@ -73,7 +88,10 @@ interface ChampionshipMatch {
 type CalendarMatchItem = (MatchRecord & { type: 'saved' }) | (ChampionshipMatch & { type: 'scheduled' });
 
 interface ScoutTableProps {
-    onSave?: (match: MatchRecord) => void;
+    onSave?: (
+        match: MatchRecord,
+        options?: { source?: 'manual' | 'autosave' }
+    ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
     players: Player[];
     competitions: string[];
     matches?: MatchRecord[];
@@ -85,11 +103,33 @@ interface ScoutTableProps {
     championships?: Championship[];
     /** Chamado quando o popup Depois da Partida abre/fecha (para recolher sidebar e dar espaço) */
     onPostMatchOpenChange?: (open: boolean) => void;
-    /** Chamado ao excluir uma partida salva do calendário (partidas vinculadas à tabela de campeonato continuam lá) */
+    /** Chamado ao excluir uma partida salva do calendário */
     onDeleteMatch?: (matchId: string) => void | Promise<void>;
+    /** Chamado ao excluir uma partida programada (planilha de campeonato) — necessário para mostrar lixeira nos cartões `scheduled` */
+    onDeleteChampionshipMatch?: (championshipMatchId: string) => void | Promise<void>;
+    /** Plano Essencial: cadeados em colunas e coleta tempo real */
+    isFreePlan?: boolean;
+    /** Repassados pelo App (ex.: sidebar); reservado para evoluções */
+    currentUser?: import('../types').User | null;
+    onScoutWindowOpenChange?: (open: boolean) => void;
 }
 
-export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competitions, matches = [], initialData, onInitialDataUsed, championshipMatches = [], schedules = [], teams = [], championships = [], onPostMatchOpenChange, onDeleteMatch }) => {
+export const ScoutTable: React.FC<ScoutTableProps> = ({
+  onSave,
+  players,
+  competitions,
+  matches = [],
+  initialData,
+  onInitialDataUsed,
+  championshipMatches = [],
+  schedules = [],
+  teams = [],
+  championships = [],
+  onPostMatchOpenChange,
+  onDeleteMatch,
+  onDeleteChampionshipMatch,
+  isFreePlan = false,
+}) => {
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -125,6 +165,37 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     }, [showPostMatchSheet, onPostMatchOpenChange]);
     const [preparationAthleteFilter, setPreparationAthleteFilter] = useState<'goleiros' | 'linha'>('goleiros'); // Goleiros | Atletas de linha na preparação
+    const [preparationFutsalHint, setPreparationFutsalHint] = useState<string | null>(null);
+
+    const selectPrepAthleteFilter = useCallback((t: 'goleiros' | 'linha') => {
+        setPreparationFutsalHint(null);
+        setPreparationAthleteFilter(t);
+    }, []);
+
+    /** Futsal: mínimo 1 goleiro e 4 jogadores de linha. Ajusta aba e mensagem se faltar algo. */
+    const validateFutsalLineupSelection = useCallback((): boolean => {
+        const list = players || [];
+        const gkIds = new Set(list.filter((p) => p.position === 'Goleiro').map((p) => String(p.id).trim()));
+        const lineIds = new Set(list.filter((p) => p.position !== 'Goleiro').map((p) => String(p.id).trim()));
+        let gkCount = 0;
+        let lineCount = 0;
+        selectedPlayersForMatch.forEach((id) => {
+            if (gkIds.has(id)) gkCount += 1;
+            else if (lineIds.has(id)) lineCount += 1;
+        });
+        if (gkCount < 1) {
+            setPreparationAthleteFilter('goleiros');
+            setPreparationFutsalHint('No futsal são 5 jogadores em quadra: selecione pelo menos 1 goleiro.');
+            return false;
+        }
+        if (lineCount < 4) {
+            setPreparationAthleteFilter('linha');
+            setPreparationFutsalHint('Complete a equipe: selecione pelo menos 4 atletas de linha (1 goleiro + 4 de linha).');
+            return false;
+        }
+        setPreparationFutsalHint(null);
+        return true;
+    }, [players, selectedPlayersForMatch]);
 
     // Calendário: filtro de datas (default: mês atual) e modo de visualização
     const [startDate, setStartDate] = useState<string>(() => {
@@ -664,40 +735,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         }
     }, [entries, championshipMatches, initialData, opponent, competition, location]);
 
-    // Função para determinar o período do gol (1T ou 2T) baseado no minuto
-    const getGoalPeriod = (timeString: string): string => {
+    /** Exibe o horário do gol; remove sufixo legado "(1T)"/"(2T)" sem acrescentar novo sufixo. */
+    const formatGoalTimeForSave = (timeString: string): string => {
         if (!timeString || timeString.trim() === '') return '-';
-        
-        const trimmedTime = timeString.trim();
-        
-        // Remover parênteses e período se já existir (ex: "12:43 (1T)" -> "12:43")
-        const cleanTime = trimmedTime.replace(/\s*\([12]T\)/gi, '').trim();
-        
-        // Formato esperado: "MM:SS" ou "M:SS" ou apenas número "MM"
-        const timeParts = cleanTime.split(':');
-        let minutes = 0;
-        
-        if (timeParts.length === 2) {
-            // Formato "MM:SS" ou "M:SS"
-            minutes = parseInt(timeParts[0]) || 0;
-        } else if (timeParts.length === 1) {
-            // Formato apenas número (minutos)
-            minutes = parseInt(timeParts[0]) || 0;
-        }
-        
-        // Em futsal: 1T = 0-20min, 2T = 21-40min
-        // Se o minuto for > 0 e <= 20, é 1T; se for > 20 e <= 40, é 2T
-        if (minutes > 0 && minutes <= 20) {
-            return `${cleanTime} (1T)`;
-        } else if (minutes > 20 && minutes <= 40) {
-            return `${cleanTime} (2T)`;
-        } else if (minutes === 0) {
-            // Se for 0, não sabemos o período ainda
-            return cleanTime;
-        } else {
-            // Se passar de 40min, pode ser prorrogação ou erro de digitação
-            return `${cleanTime} (ET)`;
-        }
+        return timeString.trim().replace(/\s*\([12]T\)/gi, '').trim();
     };
 
     const handlePlayerSelect = (index: number, playerId: string) => {
@@ -1466,7 +1507,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             entry.goalTimes.forEach(goalTime => {
                 if (goalTime.time && goalTime.time.trim() !== '') {
                     // Formatar o tempo com período antes de salvar
-                    const formattedTime = getGoalPeriod(goalTime.time);
+                    const formattedTime = formatGoalTimeForSave(goalTime.time);
                     allGoalTimes.push({
                         time: formattedTime,
                         method: goalTime.method && goalTime.method.trim() !== '' ? goalTime.method.trim() : undefined
@@ -1481,7 +1522,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         goalsConceded.forEach(goalConceded => {
             if (goalConceded.time && goalConceded.time.trim() !== '') {
                 // Formatar o tempo com período antes de salvar
-                const formattedTime = getGoalPeriod(goalConceded.time);
+                const formattedTime = formatGoalTimeForSave(goalConceded.time);
                 allGoalsConcededTimes.push({
                     time: formattedTime,
                     method: goalConceded.method && goalConceded.method.trim() !== '' ? goalConceded.method.trim() : undefined
@@ -1563,7 +1604,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
             location: location.trim() || undefined,
             scoreTarget: scoreTarget.trim() || undefined,
             teamStats: teamStats,
-            playerStats: playerStats
+            playerStats: playerStats,
+            status: 'encerrado',
         };
 
         console.log('💾 Salvando partida:', {
@@ -1658,12 +1700,64 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
     const scoreMessage = getScoreMessage();
     const teamName = teams.length > 0 ? teams[0].nome : 'Nossa Equipe';
 
-    // Função para normalizar a chave de comparação de partidas (Data + Adversário)
-    const getMatchKey = (date: string | undefined, opponent: string | undefined) => {
+    const normalizeMatchText = (value: string | undefined) =>
+        (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const normalizeMatchTime = (value: string | undefined): string => {
+        if (!value) return '';
+        const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return '';
+        const hour = Number(match[1]);
+        const minute = Number(match[2]);
+        if (
+            Number.isNaN(hour) ||
+            Number.isNaN(minute) ||
+            hour < 0 ||
+            hour > 23 ||
+            minute < 0 ||
+            minute > 59
+        ) {
+            return '';
+        }
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    };
+
+    const getMatchBaseKey = (
+        date: string | undefined,
+        opponent: string | undefined,
+        competition?: string
+    ) => {
         if (!date) return '';
         const dStr = date.slice(0, 10);
-        const normalizedOpponent = (opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        return `${dStr}_${normalizedOpponent}`;
+        return `${dStr}_${normalizeMatchText(opponent)}_${normalizeMatchText(competition)}`;
+    };
+
+    // Chave forte para dedupe em volume alto de jogos futuros.
+    const getMatchKey = (
+        date: string | undefined,
+        opponent: string | undefined,
+        competition?: string,
+        time?: string
+    ) => {
+        const base = getMatchBaseKey(date, opponent, competition);
+        if (!base) return '';
+        const normalizedTime = normalizeMatchTime(time);
+        return `${base}_${normalizedTime || 'sem_hora'}`;
+    };
+
+    const hasScheduledStarted = (date: string, time?: string) => {
+        const now = new Date();
+        const day = date.slice(0, 10);
+        if (!day) return false;
+        const normalizedTime = normalizeMatchTime(time);
+        if (normalizedTime) {
+            const startAt = new Date(`${day}T${normalizedTime}:00`);
+            if (Number.isNaN(startAt.getTime())) return false;
+            return now.getTime() > startAt.getTime();
+        }
+        const endOfDay = new Date(`${day}T23:59:59`);
+        if (Number.isNaN(endOfDay.getTime())) return false;
+        return now.getTime() > endOfDay.getTime();
     };
 
     // Função para verificar se uma partida não foi executada
@@ -1691,52 +1785,87 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
         return hasNoStats;
     };
 
-    // Função para determinar o status da partida
-    const getMatchStatus = (item: CalendarMatchItem): 'programada' | 'incompleto' | 'finalizado' => {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const matchDate = new Date(item.date);
-        matchDate.setHours(0, 0, 0, 0);
-        
-        const isPast = matchDate <= now;
-        
-        if (item.type === 'scheduled') {
-            if (isPast) {
-                const schedKey = getMatchKey(item.date, item.opponent);
-                
-                const hasMatchRecord = matches.find(m => {
-                    return getMatchKey(m.date, m.opponent) === schedKey;
-                });
-                return hasMatchRecord ? 'finalizado' : 'incompleto';
-            }
-            return 'programada';
-        }
-        
-        if (item.type === 'saved') {
-            const match = item as MatchRecord;
-            if (match.status === 'em_andamento') return 'incompleto';
-            if (match.status === 'encerrado') return 'finalizado';
-            if (match.teamStats) return 'finalizado';
-            return 'incompleto';
-        }
-        
-        return 'programada';
+    const getSavedMatchStatus = (match: MatchRecord): 'disponivel' | 'incompleto' | 'finalizado' => {
+        if (match.status === 'disponivel' || match.status === 'nao_executado') return 'disponivel';
+        if (match.status === 'em_andamento') return 'incompleto';
+        if (match.status === 'encerrado') return 'finalizado';
+        if (match.status == null && isMatchNotExecuted(match)) return 'disponivel';
+        return 'finalizado';
     };
+
+    const findLinkedSavedMatchForScheduled = (
+        scheduled: ChampionshipMatch,
+        scheduledBaseCounts: Map<string, number>
+    ): MatchRecord | null => {
+        const detailedKey = getMatchKey(
+            scheduled.date,
+            scheduled.opponent,
+            scheduled.competition,
+            scheduled.time
+        );
+        const baseKey = getMatchBaseKey(scheduled.date, scheduled.opponent, scheduled.competition);
+        const exact = matches.find((m) => {
+            const savedDetailedKey = getMatchKey(m.date, m.opponent, m.competition);
+            return savedDetailedKey === detailedKey;
+        });
+        if (exact) return exact;
+        // Fallback sem hora apenas quando não há ambiguidade de programação.
+        if ((scheduledBaseCounts.get(baseKey) || 0) === 1) {
+            const byBase = matches.find((m) => {
+                const savedBaseKey = getMatchBaseKey(m.date, m.opponent, m.competition);
+                return savedBaseKey === baseKey;
+            });
+            if (byBase) return byBase;
+        }
+        return null;
+    };
+
+    /** Calendário Dados do jogo: Disponível → Incompleto → Finalizado (verde / amarelo / vermelho) */
+    const getMatchStatus = (
+        item: CalendarMatchItem,
+        scheduledBaseCounts: Map<string, number>
+    ): 'disponivel' | 'incompleto' | 'finalizado' => {
+        if (item.type === 'scheduled') {
+            const linkedSaved = findLinkedSavedMatchForScheduled(
+                item as ChampionshipMatch,
+                scheduledBaseCounts
+            );
+            if (linkedSaved) return getSavedMatchStatus(linkedSaved);
+            return hasScheduledStarted(item.date, (item as ChampionshipMatch).time)
+                ? 'incompleto'
+                : 'disponivel';
+        }
+
+        if (item.type === 'saved') {
+            return getSavedMatchStatus(item as MatchRecord);
+        }
+
+        return 'disponivel';
+    };
+
+    const calendarStatusSortOrder: Record<'disponivel' | 'incompleto' | 'finalizado', number> = {
+        disponivel: 0,
+        incompleto: 1,
+        finalizado: 2,
+    };
+
+    const scheduledBaseCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        championshipMatches.forEach((cm) => {
+            const base = getMatchBaseKey(cm.date, cm.opponent, cm.competition);
+            if (!base) return;
+            counts.set(base, (counts.get(base) || 0) + 1);
+        });
+        return counts;
+    }, [championshipMatches]);
 
     // Partidas unificadas (salvas + programadas) filtradas por intervalo de datas
     // Deduplica: se uma programada já tem uma versão salva (mesma data+adversário), mostra só a salva
     const filteredMatches = useMemo((): CalendarMatchItem[] => {
         const saved: CalendarMatchItem[] = matches.map((m) => ({ ...m, type: 'saved' as const }));
 
-        const savedKeys = new Set(
-            matches.map((m) => getMatchKey(m.date, m.opponent)).filter(Boolean)
-        );
-
         const scheduled: CalendarMatchItem[] = championshipMatches
-            .filter((cm) => {
-                const key = getMatchKey(cm.date, cm.opponent);
-                return key && !savedKeys.has(key);
-            })
+            .filter((cm) => !findLinkedSavedMatchForScheduled(cm, scheduledBaseCounts))
             .map((m) => ({ ...m, type: 'scheduled' as const }));
 
         const all: CalendarMatchItem[] = [...saved, ...scheduled];
@@ -1752,8 +1881,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                 matchDate.setHours(12, 0, 0, 0);
                 return matchDate >= start && matchDate <= end;
             })
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    }, [matches, championshipMatches, startDate, endDate]);
+            .sort((a, b) => {
+                const sa = getMatchStatus(a, scheduledBaseCounts);
+                const sb = getMatchStatus(b, scheduledBaseCounts);
+                const tier = calendarStatusSortOrder[sa] - calendarStatusSortOrder[sb];
+                if (tier !== 0) return tier;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            });
+    }, [matches, championshipMatches, scheduledBaseCounts, startDate, endDate]);
 
 
     const handleResetToCurrentMonth = () => {
@@ -1975,16 +2110,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 <div className="flex items-center justify-between mb-3">
                                     <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
                                         (() => {
-                                            const status = getMatchStatus(item);
-                                            if (status === 'programada') return 'bg-[#00f0ff]/20 text-[#00f0ff] border border-[#00f0ff]/50';
+                                            const status = getMatchStatus(item, scheduledBaseCounts);
+                                            if (status === 'disponivel') return 'bg-green-500/20 text-green-400 border border-green-500/50';
                                             if (status === 'incompleto') return 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50';
                                             if (status === 'finalizado') return 'bg-red-500/20 text-red-400 border border-red-500/50';
                                             return 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/50';
                                         })()
                                     }`}>
                                         {(() => {
-                                            const status = getMatchStatus(item);
-                                            if (status === 'programada') return 'Programada';
+                                            const status = getMatchStatus(item, scheduledBaseCounts);
+                                            if (status === 'disponivel') return 'Disponível';
                                             if (status === 'incompleto') return 'Incompleto';
                                             if (status === 'finalizado') return 'Finalizado';
                                             return 'N/A';
@@ -2002,6 +2137,25 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                 }}
                                                 className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
                                                 title="Excluir partida"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                        {item.type === 'scheduled' && onDeleteChampionshipMatch && item.id && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (
+                                                        window.confirm(
+                                                            'Excluir esta partida programada da planilha? Esta ação não pode ser desfeita.'
+                                                        )
+                                                    ) {
+                                                        onDeleteChampionshipMatch(item.id as string);
+                                                    }
+                                                }}
+                                                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 transition-colors"
+                                                title="Excluir da planilha"
                                             >
                                                 <Trash2 size={16} />
                                             </button>
@@ -2066,19 +2220,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 opponent: selectedMatch.opponent || '',
                                 competition: selectedMatch.competition,
                             }}
-                            onSelect={(type: CollectionType) => {
-                                if (type === 'realtime') {
-                                    setShowMatchTypeModal(true);
-                                } else {
-                                    setShowPostMatchSheet(true);
-                                }
-                            }}
+                            onSelect={() => setShowPostMatchSheet(true)}
                             onBack={handleBackToCalendar}
                         />
                     )}
 
                     {/* Preparação tempo real — partida salva (não executada): seleção de atletas antes de abrir a nova aba */}
-                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && (
+                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && false && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2127,8 +2275,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2169,7 +2317,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
@@ -2199,6 +2347,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     type="button"
                                     onClick={() => {
                                         if (selectedPlayersForMatch.size === 0) return;
+                                        if (!validateFutsalLineupSelection()) return;
                                         const realtimeScoutData = {
                                             matchId: selectedMatch.id,
                                             date: selectedMatch.date,
@@ -2211,7 +2360,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                         };
                                         localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                        window.open('/scout-realtime', '_blank');
+                                        // Tempo real isolado no painel: segue para pós-jogo.
+                                        setShowPostMatchSheet(true);
                                         setShowRealtimePrepForSavedMatch(false);
                                     }}
                                     disabled={selectedPlayersForMatch.size === 0}
@@ -2220,6 +2370,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <Target size={20} /> Iniciar Scout da Partida (abre em nova aba)
                                 </button>
                             </div>
+                            {preparationFutsalHint && (
+                                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                    {preparationFutsalHint}
+                                </div>
+                            )}
                             {selectedPlayersForMatch.size === 0 && (
                                 <p className="text-amber-400 text-xs text-center">Selecione pelo menos um atleta para abrir o scout em nova aba.</p>
                             )}
@@ -2227,7 +2382,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     )}
 
                     {/* Interface de Preparação para Partida Programada — tempo real */}
-                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && (
+                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && false && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2273,8 +2428,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2315,7 +2470,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     {player.position && <p className={`text-[8px] font-medium mt-0.5 ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-zinc-500'}`}>{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</p>}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
@@ -2383,10 +2538,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 )}
                             </div>
 
-                            <div className="flex justify-center">
+                            <div className="flex flex-col items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setShowStartScoutConfirmation(true)}
+                                    onClick={() => {
+                                        if (!validateFutsalLineupSelection()) return;
+                                        setShowStartScoutConfirmation(true);
+                                    }}
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] ${
                                         selectedPlayersForMatch.size === 0
@@ -2396,6 +2554,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 >
                                     <Play size={18} /> Iniciar Scout da Partida
                                 </button>
+                                {preparationFutsalHint && (
+                                    <div className="w-full max-w-lg rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                        {preparationFutsalHint}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2441,8 +2604,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
                                         <Users className="text-[#00f0ff]" size={16} /> Selecionar Atletas
                                     </h3>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
-                                    <button type="button" onClick={() => setPreparationAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('goleiros')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'goleiros' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Goleiros</button>
+                                    <button type="button" onClick={() => selectPrepAthleteFilter('linha')} className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${preparationAthleteFilter === 'linha' ? 'bg-[#00f0ff] text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'}`}>Atletas de linha</button>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -2489,7 +2652,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     )}
                                                 </div>
                                                 <div className="flex flex-col items-end justify-between gap-0.5 flex-shrink-0">
-                                                    {IS_FREE_PLAN ? (
+                                                    {isFreePlan ? (
                                                         <div className="flex flex-col items-center justify-center gap-0 rounded border border-zinc-600/50 bg-zinc-800/50 px-1 py-0.5">
                                                             <span className="text-[7px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>
                                                             <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
@@ -2514,10 +2677,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 {(preparationAthleteFilter === 'goleiros' ? players.filter(p => p.position === 'Goleiro') : players.filter(p => p.position !== 'Goleiro')).length === 0 && <p className="text-zinc-500 text-sm text-center py-6">Nenhum jogador nesta categoria</p>}
                             </div>
 
-                            <div className="flex justify-center">
+                            <div className="flex flex-col items-center gap-3">
                                 <button
                                     type="button"
-                                    onClick={() => setShowPostMatchSheet(true)}
+                                    onClick={() => {
+                                        if (!validateFutsalLineupSelection()) return;
+                                        setShowPostMatchSheet(true);
+                                    }}
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors ${
                                         selectedPlayersForMatch.size === 0
@@ -2525,8 +2691,13 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                             : 'bg-[#00f0ff] hover:bg-[#00d9e6] text-black shadow-[0_0_15px_rgba(0,240,255,0.3)]'
                                     }`}
                                 >
-                                    Continuar para planilha
+                                    Continuar para coleta de dados
                                 </button>
+                                {preparationFutsalHint && (
+                                    <div className="w-full max-w-lg rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-200 text-sm text-center">
+                                        {preparationFutsalHint}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -2551,8 +2722,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                             ? players.filter((p) => selectedPlayersForMatch.has(String(p.id).trim()))
                             : (() => {
                                   const m = selectedMatch!;
-                                  const ids = Object.keys(m.playerStats || {});
-                                  return ids.length > 0 ? players.filter((p) => ids.includes(String(p.id).trim())) : players;
+                                  const saved = m.lineup?.selectedPlayerIds?.map((id) => String(id).trim()).filter(Boolean);
+                                  if (saved?.length) {
+                                      return players.filter((p) => saved.includes(String(p.id).trim()));
+                                  }
+                                  const fromStats = Object.keys(m.playerStats || {}).map((id) => id.trim());
+                                  const fromLog = collectPlayerIdsFromPostMatchLog(m.postMatchEventLog);
+                                  const merged = [...new Set([...fromStats, ...fromLog])];
+                                  return merged.length > 0
+                                      ? players.filter((p) => merged.includes(String(p.id).trim()))
+                                      : players;
                               })();
                         const isEditingExisting = !isScheduledMatch() && selectedMatch && !isMatchNotExecuted(selectedMatch);
                         return (
@@ -2569,15 +2748,23 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                 extraTimeMinutes={selectedExtraTimeMinutes}
                                 selectedPlayerIds={postmatchPlayers.map((p) => String(p.id).trim())}
                                 mode="postmatch"
-                                onSave={async (saved) => {
-                                    await onSave?.(saved);
-                                    setShowPostMatchSheet(false);
-                                    const isExistingMatch = saved?.id && !String(saved.id).startsWith('sched-');
-                                    if (isExistingMatch) {
-                                        setSelectedMatch(saved);
-                                    } else {
-                                        handleBackToCalendar();
+                                onSave={async (saved, options) => {
+                                    const result = await onSave?.(saved, options);
+                                    if (result?.id) {
+                                        setSelectedMatch((prev) =>
+                                            prev ? { ...prev, ...result, id: result.id } : result
+                                        );
                                     }
+                                    if (options?.source === 'autosave') return result;
+                                    if (options?.saveAsIncomplete) {
+                                        handleBackToCalendar();
+                                        return result;
+                                    }
+                                    setShowPostMatchSheet(false);
+                                    const isExistingMatch =
+                                        result?.id && isPersistedServerMatchId(String(result.id));
+                                    if (!isExistingMatch) handleBackToCalendar();
+                                    return result;
                                 }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
@@ -2597,9 +2784,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setSelectedPlayersForMatch(new Set(
-                                                Object.keys(selectedMatch!.playerStats || {}).map(id => id.trim())
-                                            ));
+                                            const m = selectedMatch!;
+                                            const fromLineup = m.lineup?.selectedPlayerIds?.map((id) => String(id).trim()).filter(Boolean);
+                                            const fromStats = Object.keys(m.playerStats || {}).map((id) => id.trim());
+                                            const fromLog = collectPlayerIdsFromPostMatchLog(m.postMatchEventLog);
+                                            const ids =
+                                                fromLineup?.length
+                                                    ? fromLineup
+                                                    : [...new Set([...fromStats, ...fromLog])];
+                                            setSelectedPlayersForMatch(new Set(ids));
                                             setShowPostMatchSheet(true);
                                         }}
                                         className="flex items-center gap-2 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
@@ -2816,7 +3009,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                                                     selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                                 };
                                                 localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                                window.open('/scout-realtime', '_blank');
+                                                // Tempo real isolado no painel: segue para pós-jogo.
+                                                setShowPostMatchSheet(true);
                                                 setShowStartScoutConfirmation(false);
                                             }}
                                             disabled={selectedPlayersForMatch.size === 0}
@@ -3483,10 +3677,26 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({ onSave, players, competi
                     teams={teams || []}
                     matchType={selectedMatchType}
                     extraTimeMinutes={selectedExtraTimeMinutes}
-                    selectedPlayerIds={isScheduledMatch() && selectedPlayersForMatch ? Array.from(selectedPlayersForMatch) : undefined}
+                    selectedPlayerIds={
+                        isScheduledMatch() && selectedPlayersForMatch.size > 0
+                            ? Array.from(selectedPlayersForMatch)
+                            : selectedMatch?.lineup?.selectedPlayerIds?.length
+                              ? selectedMatch.lineup.selectedPlayerIds.map((id) => String(id).trim())
+                              : undefined
+                    }
                     mode="realtime"
-                    onSave={async (saved) => {
-                        await onSave?.(saved);
+                    onSave={async (saved, options) => {
+                        const result = await onSave?.(saved, options);
+                        if (result?.id) {
+                            setSelectedMatch((prev) =>
+                                prev ? { ...prev, ...result, id: result.id } : result
+                            );
+                        }
+                        if (options?.source === 'autosave') return;
+                        if (options?.saveAsIncomplete) {
+                            handleBackToCalendar();
+                            return;
+                        }
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');
                         setSelectedExtraTimeMinutes(5);

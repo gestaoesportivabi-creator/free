@@ -13,6 +13,63 @@ import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
 
+function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
+  const n = Number(v);
+  if (n === 1 || n === 2) return n;
+  if (n === 0) return 0;
+  return 0;
+}
+
+function isValidMatchStatus(v: unknown): v is NonNullable<MatchRecord['status']> {
+  return (
+    v === 'disponivel' ||
+    v === 'nao_executado' ||
+    v === 'em_andamento' ||
+    v === 'encerrado'
+  );
+}
+
+function hasNonZeroCoreStats(match: MatchRecord): boolean {
+  const t = match.teamStats;
+  if (!t) return false;
+  return (
+    (t.goals ?? 0) > 0 ||
+    (t.goalsConceded ?? 0) > 0 ||
+    (t.assists ?? 0) > 0 ||
+    (t.passesCorrect ?? 0) > 0 ||
+    (t.passesWrong ?? 0) > 0 ||
+    (t.shotsOnTarget ?? 0) > 0 ||
+    (t.shotsOffTarget ?? 0) > 0 ||
+    (t.tacklesWithBall ?? 0) > 0 ||
+    (t.tacklesWithoutBall ?? 0) > 0 ||
+    (t.tacklesCounterAttack ?? 0) > 0 ||
+    (t.transitionErrors ?? 0) > 0 ||
+    Object.keys(match.playerStats || {}).length > 0
+  );
+}
+
+function inferStatusFromData(
+  rawStatus: unknown,
+  match: MatchRecord,
+  jogo?: { collectionPhase?: number; postMatchEventLog?: unknown; lineup?: unknown }
+): NonNullable<MatchRecord['status']> {
+  if (isValidMatchStatus(rawStatus)) return rawStatus;
+
+  const phase = jogo?.collectionPhase;
+  const hasEventLog =
+    Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0;
+  const lineup = jogo?.lineup as { players?: unknown[]; selectedPlayerIds?: unknown[] } | undefined;
+  const hasLineupDraft =
+    (Array.isArray(lineup?.players) && lineup.players.length > 0) ||
+    (Array.isArray(lineup?.selectedPlayerIds) && lineup.selectedPlayerIds.length > 0);
+
+  if (phase === 1 || phase === 2) return 'em_andamento';
+  if (hasEventLog) return 'encerrado';
+  if (hasNonZeroCoreStats(match)) return 'encerrado';
+  if (phase === 0 || hasLineupDraft) return 'disponivel';
+  return 'disponivel';
+}
+
 export const matchesService = {
   async getAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord[]> {
     const jogos = await matchesRepository.findAll(tenantInfo, tx);
@@ -44,7 +101,7 @@ export const matchesService = {
       const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
       const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
       const st = statusMap.get(jogo.id);
-      match.status = (st || 'encerrado') as MatchRecord['status'];
+      match.status = inferStatusFromData(st, match, jogo as any);
       const mg = metodoGolMap.get(jogo.id);
       if (mg && match.teamStats) {
         try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
@@ -75,7 +132,7 @@ export const matchesService = {
       matchesRepository.getMetodoGolTomadoByJogoIds([id], tx),
     ]);
     const st = statusMap.get(id);
-    match.status = (st || 'encerrado') as MatchRecord['status'];
+    match.status = inferStatusFromData(st, match, jogo as any);
     const mg = metodoGolMap.get(id);
     if (mg && match.teamStats) {
       try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
@@ -144,6 +201,10 @@ export const matchesService = {
     const teamStats = data.teamStats || {};
     const playerStats = data.playerStats || {};
 
+    const collectionPhase = normalizeCollectionPhase(
+      data.collectionPhase ?? data.collection_phase
+    );
+
     const jogo = await matchesRepository.create({
       equipeId,
       adversario,
@@ -159,19 +220,50 @@ export const matchesService = {
       playerRelationships: data.playerRelationships,
       lineup: data.lineup,
       substitutionHistory: data.substitutionHistory,
+      collectionPhase,
     }, tx);
 
     // Salvar status via raw SQL (coluna fora do Prisma schema)
-    const matchStatus = data.status || 'encerrado';
+    const matchStatus = inferStatusFromData(data.status, {
+      id: '',
+      opponent: adversario,
+      date: (typeof rawDate === 'string' ? rawDate : dataDate.toISOString()).slice(0, 10),
+      result: (data.resultado ?? data.result ?? 'E') as 'V' | 'D' | 'E',
+      goalsFor: golsPro,
+      goalsAgainst: golsContra,
+      competition: data.campeonato ?? data.competition,
+      playerStats: playerStats || {},
+      teamStats: {
+        goals: teamStats.goals ?? golsPro,
+        assists: teamStats.assists ?? 0,
+        passesCorrect: teamStats.passesCorrect ?? 0,
+        passesWrong: teamStats.passesWrong ?? 0,
+        shotsOnTarget: teamStats.shotsOnTarget ?? 0,
+        shotsOffTarget: teamStats.shotsOffTarget ?? 0,
+        tacklesWithBall: teamStats.tacklesWithBall ?? 0,
+        tacklesWithoutBall: teamStats.tacklesWithoutBall ?? 0,
+        tacklesCounterAttack: teamStats.tacklesCounterAttack ?? 0,
+        transitionErrors: teamStats.transitionErrors ?? 0,
+        goalsConceded: teamStats.goalsConceded ?? golsContra,
+      },
+      postMatchEventLog: Array.isArray(data.postMatchEventLog) ? data.postMatchEventLog : undefined,
+      lineup: data.lineup,
+      collectionPhase,
+    }, {
+      collectionPhase,
+      postMatchEventLog: data.postMatchEventLog,
+      lineup: data.lineup,
+    });
     await matchesRepository.setStatus(jogo.id, matchStatus, tx);
 
     // Extrair métodos de gol do postMatchEventLog
     let metodoGol: string | null = null;
-    const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+    const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean; subtipo?: string }> | undefined;
     if (eventLog && Array.isArray(eventLog)) {
       const methodCounts: Record<string, number> = {};
       for (const ev of eventLog) {
-        if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+        const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+        if (ev.action === 'goal' && ev.goalMethod && !isConceded) {
           methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
         }
       }
@@ -188,7 +280,8 @@ export const matchesService = {
     if (eventLog && Array.isArray(eventLog)) {
       const concededCounts: Record<string, number> = {};
       for (const ev of eventLog) {
-        if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+        const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+        if (ev.action === 'goal' && ev.goalMethod && isConceded) {
           concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
         }
       }
@@ -267,7 +360,11 @@ export const matchesService = {
       estatisticasJogadores as any,
       estatisticasEquipe || undefined
     );
-    result.status = matchStatus as MatchRecord['status'];
+    result.status = inferStatusFromData(matchStatus, result, {
+      collectionPhase,
+      postMatchEventLog: data.postMatchEventLog,
+      lineup: data.lineup,
+    });
     if (metodoGol && result.teamStats) {
       try { result.teamStats.goalMethodsScored = JSON.parse(metodoGol); } catch { /* ignore */ }
     }
@@ -301,6 +398,15 @@ export const matchesService = {
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
     const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
 
+    // collection_phase via SQL (compatível com Prisma client antigo sem o campo no update)
+    if (data.collectionPhase !== undefined || data.collection_phase !== undefined) {
+      await matchesRepository.setCollectionPhase(
+        id,
+        normalizeCollectionPhase(data.collectionPhase ?? data.collection_phase),
+        tx
+      );
+    }
+
     // Salvar status via raw SQL (coluna fora do Prisma schema)
     if (data.status !== undefined) {
       await matchesRepository.setStatus(id, data.status, tx);
@@ -310,11 +416,12 @@ export const matchesService = {
     const teamStats = data.teamStats;
     if (teamStats) {
       let metodoGol: string | null = null;
-      const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean }> | undefined;
+      const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean; subtipo?: string }> | undefined;
       if (eventLog && Array.isArray(eventLog)) {
         const methodCounts: Record<string, number> = {};
         for (const ev of eventLog) {
-          if (ev.action === 'goal' && ev.goalMethod && !ev.isOpponentGoal) {
+          const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+          if (ev.action === 'goal' && ev.goalMethod && !isConceded) {
             methodCounts[ev.goalMethod] = (methodCounts[ev.goalMethod] || 0) + 1;
           }
         }
@@ -331,7 +438,8 @@ export const matchesService = {
       if (eventLog && Array.isArray(eventLog)) {
         const concededCounts: Record<string, number> = {};
         for (const ev of eventLog) {
-          if (ev.action === 'goal' && ev.goalMethod && ev.isOpponentGoal) {
+          const isConceded = ev.isOpponentGoal || ev.subtipo === 'Contra';
+          if (ev.action === 'goal' && ev.goalMethod && isConceded) {
             concededCounts[ev.goalMethod] = (concededCounts[ev.goalMethod] || 0) + 1;
           }
         }
@@ -417,7 +525,11 @@ export const matchesService = {
       matchesRepository.getMetodoGolTomadoByJogoIds([id], tx),
     ]);
     const st = statusMap.get(id);
-    result.status = (st || 'encerrado') as MatchRecord['status'];
+    result.status = inferStatusFromData(st, result, {
+      collectionPhase: (jogo as any)?.collectionPhase,
+      postMatchEventLog: (jogo as any)?.postMatchEventLog,
+      lineup: (jogo as any)?.lineup,
+    });
     const mg = metodoGolMap.get(id);
     if (mg && result.teamStats) {
       try { result.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }

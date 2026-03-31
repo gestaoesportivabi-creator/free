@@ -1,11 +1,17 @@
 // User Types
 export type UserRole = 'Treinador' | 'Preparador Físico' | 'Supervisor' | 'Diretor' | 'Atleta';
 
+/** Plano na base (Role.name); usado para UI de cadeados — não confundir com `role` do front (Treinador, etc.) */
+export type SubscriptionPlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'ADMINISTRADOR';
+
 export interface User {
   id?: string;
   name: string;
   email: string;
   role: UserRole;
+  /** Plano real do backend (ESSENCIAL, COMPETICAO, PERFORMANCE, ADMINISTRADOR) */
+  planName?: SubscriptionPlanName;
+  isPlatformAdmin?: boolean;
   photoUrl?: string;
   linkedPlayerId?: string;
   /** Nome do time (exibição) — persiste no backend para outro dispositivo */
@@ -88,7 +94,7 @@ export interface Player {
   age: number;
   height: number;
   weight?: number; // Peso (kg)
-  lastClub: string;
+  lastClub?: string;
   photoUrl?: string;
   isTransferred?: boolean;
   transferDate?: string;
@@ -225,6 +231,8 @@ export interface MatchRecord {
     players: string[]; // IDs dos 5 jogadores em quadra (primeiro é goleiro)
     bench: string[]; // IDs dos jogadores no banco
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
+    /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
+    selectedPlayerIds?: string[];
   };
   postMatchEventLog?: PostMatchEvent[];
   /** Histórico de substituições da partida */
@@ -238,8 +246,16 @@ export interface MatchRecord {
   possessionSecondsWith?: number;
   /** Segundos sem posse de bola – evolução campeonato */
   possessionSecondsWithout?: number;
+  /** Link do vídeo (ex.: YouTube) para análise na cabine de vídeo */
+  videoUrl?: string;
   /** Status da partida para exibição e filtros */
-  status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';
+  /**
+   * Fase da coleta ao vivo / pós-jogo (metade em que os novos lances são registrados).
+   * 0 = partida ainda não iniciada (só ao vivo, antes da escalação); 1 = 1º tempo; 2 = 2º tempo.
+   * Persistido na coluna `collection_phase` da tabela `jogos` (e devolvido pela API em cada GET).
+   */
+  collectionPhase?: 0 | 1 | 2;
 }
 
 // Physical Assessment Types

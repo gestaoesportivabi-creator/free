@@ -23,6 +23,7 @@ interface JogoDB {
   lineup?: unknown;
   substitutionHistory?: unknown;
   status?: string | null;
+  collectionPhase?: number;
   createdAt: Date | string;
 }
 
@@ -157,8 +158,12 @@ export function transformMatchToFrontend(
     location: (jogo as { local?: string }).local || undefined,
     playerStats,
     teamStats,
-    status: (jogo.status as MatchRecord['status']) || 'encerrado',
+    status: (jogo.status as MatchRecord['status']) || undefined,
   };
+  const cp = jogo.collectionPhase;
+  if (cp === 0 || cp === 1 || cp === 2) {
+    result.collectionPhase = cp as 0 | 1 | 2;
+  }
   if (jogo.postMatchEventLog) result.postMatchEventLog = jogo.postMatchEventLog as MatchRecord['postMatchEventLog'];
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
@@ -170,12 +175,12 @@ export function transformMatchToFrontend(
     const goalTimes: Array<{ time: string; method?: string }> = [];
     const goalsConcededTimes: Array<{ time: string; method?: string }> = [];
     for (const ev of eventLog) {
-      const e = ev as { action?: string; time?: string; period?: string; isOpponentGoal?: boolean; goalMethod?: string };
+      const e = ev as { action?: string; time?: string; period?: string; isOpponentGoal?: boolean; goalMethod?: string; subtipo?: string };
       if (e.action !== 'goal' || !e.time) continue;
       const timeStr = typeof e.time === 'string' ? e.time : String(e.time);
       const period = e.period || '1T';
       const entry = { time: `${timeStr} (${period})`, method: e.goalMethod?.trim() || undefined };
-      if (e.isOpponentGoal) {
+      if (e.isOpponentGoal || e.subtipo === 'Contra') {
         goalsConcededTimes.push(entry);
       } else {
         goalTimes.push(entry);

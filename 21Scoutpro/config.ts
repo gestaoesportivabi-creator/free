@@ -7,6 +7,8 @@
  * (ou a URL do seu backend em produção). Assim o front local usa os dados do backend online.
  */
 
+import type { User } from './types';
+
 // URL do Backend PostgreSQL
 // Em desenvolvimento: http://localhost:3000/api
 // Em produção: usar URL relativa (/api) se VITE_API_URL não estiver definida
@@ -30,8 +32,19 @@ export const getApiUrl = () => {
 
 export const API_URL = getApiUrl();
 
-/** Versão free: esconde dados de suspensos, condição física, etc. e mostra "Em breve" onde aplicável */
+/** Versão free (build): fallback quando `planName` não veio do backend (sessão antiga) */
 export const IS_FREE_PLAN = (import.meta.env.VITE_PLAN ?? 'free') === 'free';
+
+/**
+ * UI com cadeados / “Em breve” apenas no plano Essencial.
+ * COMPETICAO, PERFORMANCE e ADMINISTRADOR: sem restrições de UI de plano.
+ * Sem `planName`: mantém comportamento antigo via `IS_FREE_PLAN`.
+ */
+export function isEssentialPlanUser(user: User | null): boolean {
+  if (user?.planName === 'ESSENCIAL') return true;
+  if (user?.planName != null) return false;
+  return IS_FREE_PLAN;
+}
 
 // Mapeamento de recursos para rotas da API
 // Mantido para compatibilidade com services/api.ts

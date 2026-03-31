@@ -1,17 +1,36 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
-import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown } from 'lucide-react';
-import { SportConfig, MatchRecord, Player } from '../types';
+import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
+import { SportConfig, MatchRecord, MatchStats, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
-import { IS_FREE_PLAN } from '../config';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
+import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
+import { postMatchEventClockToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 
 interface GeneralScoutProps {
   config: SportConfig;
   matches: MatchRecord[];
   players?: Player[];
+  /** Plano Essencial: bloqueia gráfico de posse */
+  isFreePlan?: boolean;
+  /** Uso interno: evita reabrir modo comparação em instâncias filhas */
+  comparisonChild?: boolean;
 }
 
+
+/** Faixas de 5 min (0–50 min) para gols por período — legendas do eixo X */
+const GOAL_BY_PERIOD_LABELS = [
+  '00:00 - 05:00',
+  '05:01 - 10:00',
+  '10:01 - 15:00',
+  '15:01 - 20:00',
+  '20:01 - 25:00',
+  '25:01 - 30:00',
+  '30:01 - 35:00',
+  '35:01 - 40:00',
+  '40:01 - 45:00',
+  '45:01 - 50:00',
+] as const;
 
 const MONTHS = [
   { value: 'Todos', label: 'Todos os Meses' },
@@ -29,18 +48,211 @@ const MONTHS = [
   { value: '11', label: 'Dezembro' },
 ];
 
-export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [] }) => {
+function getOpponentShotsFromLog(match: MatchRecord): {
+  shotsOnTarget: number;
+  shotsOffTarget: number;
+  savesSimple: number;
+  savesHard: number;
+} {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let simple = 0;
+  let hard = 0;
+  let outside = 0;
+  for (const e of log as any[]) {
+    if (e?.action !== 'save') continue;
+    const difficultyRaw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+    const difficulty = difficultyRaw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (difficulty.includes('simple') || difficulty.includes('simples') || difficulty.includes('facil')) simple += 1;
+    else if (difficulty.includes('dificil') || difficulty.includes('hard')) hard += 1;
+    else if (difficulty.includes('pra fora') || difficulty.includes('fora') || difficulty.includes('outside')) outside += 1;
+  }
+  return {
+    shotsOnTarget: simple + hard,
+    shotsOffTarget: outside,
+    savesSimple: simple,
+    savesHard: hard,
+  };
+}
+
+function getBlockedShotsFromLog(match: MatchRecord): number {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let blocked = 0;
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+    const subtipo = String(e?.subtipo ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (action === 'shotZonaChute') {
+      blocked += 1;
+      continue;
+    }
+    if (tipo === 'finalizacao' && subtipo === 'bloqueado') {
+      blocked += 1;
+    }
+  }
+  return blocked;
+}
+
+function emptyScopedStats(): MatchStats {
+  return {
+    goals: 0,
+    assists: 0,
+    passesCorrect: 0,
+    passesWrong: 0,
+    shotsOnTarget: 0,
+    shotsOffTarget: 0,
+    tacklesWithBall: 0,
+    tacklesWithoutBall: 0,
+    tacklesCounterAttack: 0,
+    transitionErrors: 0,
+    shotsShootZone: 0,
+    fouls: 0,
+    saves: 0,
+    yellowCards: 0,
+    redCards: 0,
+    goalsConceded: 0,
+    goalMethodsScored: {},
+    goalMethodsConceded: {},
+    goalTimes: [],
+    goalsConcededTimes: [],
+  };
+}
+
+function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchRecord {
+  const setPieceMethods = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
+  const srcLog = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  const log = srcLog.filter((e) => e.period === period);
+  const teamStats = emptyScopedStats();
+  const playerStats: Record<string, MatchStats> = {};
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+
+  const getPlayerStats = (playerId: string): MatchStats => {
+    const id = String(playerId).trim();
+    if (!playerStats[id]) playerStats[id] = emptyScopedStats();
+    return playerStats[id];
+  };
+
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim();
+    const playerId = String(e?.playerId ?? '').trim();
+    const subtipo = String(e?.subtipo ?? '').trim();
+    const upperSubtipo = subtipo.toUpperCase();
+    const isOpponentGoal = e?.isOpponentGoal === true || upperSubtipo === 'CONTRA';
+
+    if (action === 'goal') {
+      if (isOpponentGoal) {
+        goalsAgainst += 1;
+        teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsConceded![method] = (teamStats.goalMethodsConceded![method] || 0) + 1;
+        }
+        teamStats.goalsConcededTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      } else {
+        goalsFor += 1;
+        teamStats.goals += 1;
+        if (playerId) {
+          const ps = getPlayerStats(playerId);
+          ps.goals += 1;
+        }
+        const assistId = String(e?.assistPlayerId ?? '').trim();
+        if (assistId) {
+          const aps = getPlayerStats(assistId);
+          aps.assists += 1;
+          teamStats.assists += 1;
+        }
+        const method = String(e?.goalMethod ?? e?.subtipo ?? '').trim().toUpperCase();
+        if (method) {
+          teamStats.goalMethodsScored![method] = (teamStats.goalMethodsScored![method] || 0) + 1;
+        }
+        teamStats.goalTimes!.push({ time: `${e.time} (${period})`, method: method || undefined });
+      }
+      continue;
+    }
+
+    if (!playerId) continue;
+    const ps = getPlayerStats(playerId);
+
+    if (action === 'passCorrect') {
+      ps.passesCorrect += 1; teamStats.passesCorrect += 1;
+    } else if (action === 'passWrong' || action === 'passTransicao') {
+      ps.passesWrong += 1; teamStats.passesWrong += 1;
+      if (e?.wrongPassGeneratedTransition === true || action === 'passTransicao') {
+        teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
+        ps.transitionErrors = (ps.transitionErrors ?? 0) + 1;
+      }
+    } else if (action === 'shotOn') {
+      ps.shotsOnTarget += 1; teamStats.shotsOnTarget += 1;
+    } else if (action === 'shotOff') {
+      ps.shotsOffTarget += 1; teamStats.shotsOffTarget += 1;
+    } else if (action === 'shotZonaChute') {
+      ps.shotsShootZone = (ps.shotsShootZone ?? 0) + 1;
+      teamStats.shotsShootZone = (teamStats.shotsShootZone ?? 0) + 1;
+    } else if (action === 'tackleWithBall') {
+      ps.tacklesWithBall += 1; teamStats.tacklesWithBall += 1;
+    } else if (action === 'tackleWithoutBall') {
+      ps.tacklesWithoutBall += 1; teamStats.tacklesWithoutBall += 1;
+    } else if (action === 'tackleCounter') {
+      ps.tacklesCounterAttack += 1; teamStats.tacklesCounterAttack += 1;
+    } else if (action === 'falta') {
+      teamStats.fouls = (teamStats.fouls ?? 0) + 1;
+      if (e?.foulTeam !== 'against') ps.fouls = (ps.fouls ?? 0) + 1;
+    } else if (action === 'save') {
+      ps.saves = (ps.saves ?? 0) + 1; teamStats.saves = (teamStats.saves ?? 0) + 1;
+    }
+
+    if (String(e?.tipo ?? '').toLowerCase() === 'cartão') {
+      if (upperSubtipo.includes('AMARELO')) {
+        ps.yellowCards = (ps.yellowCards ?? 0) + 1;
+        teamStats.yellowCards = (teamStats.yellowCards ?? 0) + 1;
+      } else if (upperSubtipo.includes('VERMELHO')) {
+        ps.redCards = (ps.redCards ?? 0) + 1;
+        teamStats.redCards = (teamStats.redCards ?? 0) + 1;
+      }
+    }
+  }
+
+  const methodsScored = teamStats.goalMethodsScored ?? {};
+  const methodsConceded = teamStats.goalMethodsConceded ?? {};
+  const goalsScoredSetPiece = Object.entries(methodsScored).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+  const goalsConcededSetPiece = Object.entries(methodsConceded).reduce((s, [k, v]) => s + (setPieceMethods.includes(k) ? v : 0), 0);
+
+  return {
+    ...match,
+    goalsFor,
+    goalsAgainst,
+    playerStats,
+    teamStats: {
+      ...teamStats,
+      goalsScoredSetPiece,
+      goalsScoredOpenPlay: Math.max(0, (teamStats.goals ?? 0) - goalsScoredSetPiece),
+      goalsConcededSetPiece,
+      goalsConcededOpenPlay: Math.max(0, (teamStats.goalsConceded ?? 0) - goalsConcededSetPiece),
+    },
+  };
+}
+
+export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
   const [monthFilter, setMonthFilter] = useState<string>('Todos');
+  const [periodFilter, setPeriodFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
     setCompFilter(value);
     setMonthFilter('Todos');
     setOpponentFilter('Todos');
+    setPeriodFilter('Todos');
   };
 
   // Calcular opções de filtros baseado na competição selecionada
@@ -83,7 +295,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     blueCyan: '#0ea5e9', // Cyan Blue
     slate: '#71717a',   // Zinc
     rose: '#ff0055',    // Erros / transição
-    green: '#22c55e',   // Gols feitos por período
+    green: '#22c55e',   // Gols por período + passes certos (barras)
+    /** Contra-ataque em Tipos de Desarme — mais escuro que Sem Posse */
+    tackleCounterDark: '#1e3a8a',
   };
 
   const filteredMatches = useMemo(() => {
@@ -103,9 +317,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     });
   }, [compFilter, opponentFilter, locationFilter, monthFilter, matches]);
 
+  const scopedMatches = useMemo(() => {
+    if (periodFilter === '1T' || periodFilter === '2T') {
+      return filteredMatches.map((m) => buildMatchScopedByPeriod(m, periodFilter as MatchHalf));
+    }
+    return filteredMatches;
+  }, [filteredMatches, periodFilter]);
+
   // KPIs
   const stats = useMemo(() => {
-    const acc = filteredMatches.reduce((acc, curr) => {
+    const acc = scopedMatches.reduce((acc, curr) => {
       // Validar se teamStats existe antes de acessar
       if (!curr || !curr.teamStats) {
         console.warn('⚠️ Match sem teamStats encontrado:', curr);
@@ -131,6 +352,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.passesWrong += curr.teamStats.passesWrong || 0;
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
+      acc.shotsShootZone += (curr.teamStats.shotsShootZone ?? getBlockedShotsFromLog(curr)) || 0;
+      const oppShots = getOpponentShotsFromLog(curr);
+      acc.opponentShotsOn += oppShots.shotsOnTarget;
+      acc.opponentShotsOff += oppShots.shotsOffTarget;
+      acc.savesSimple += oppShots.savesSimple;
+      acc.savesHard += oppShots.savesHard;
       
       acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? (curr.teamStats as any).wrongPassesTransition ?? 0;
       const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
@@ -186,7 +413,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       return acc;
     }, {
       totalGames: 0, wins: 0, losses: 0, draws: 0, totalMinutes: 0, goalsConceded: 0, goalsScored: 0,
-      passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0,
+      passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0, shotsShootZone: 0,
+      opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
@@ -203,12 +431,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       goalMethodsScored: acc.goalMethodsScored,
       goalMethodsConceded: acc.goalMethodsConceded
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
-  // Para o gráfico de gols por período: usar apenas o valor de minutos (e segundos) informado.
-  // Não somar 20 para 2T — o eixo do gráfico é só 00:00–50:00 pelo minuto cadastrado.
-  const parseTimeToMinutes = (timeStr: string): number | null => {
+  /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
+  const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
     if (!timeStr || typeof timeStr !== 'string') return null;
+    const paren = timeStr.match(/\(([12])T\)\s*$/i);
+    if (paren) {
+      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
+      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
+      const absSec = postMatchEventClockToAbsoluteSeconds(clockPart, period);
+      return Math.floor(absSec / 60);
+    }
     const cleanTime = timeStr.split('(')[0].trim();
     const parts = cleanTime.split(':');
     if (parts.length === 2) {
@@ -219,59 +453,58 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     return !isNaN(minutesOnly) ? minutesOnly : null;
   };
 
-  // Time Period Data - Faixa de 00:00 a 50:00 dividida de 5 em 5 minutos
-  const timePeriodData = useMemo(() => {
-    // Criar períodos de 5 em 5 minutos de 00:00 a 50:00
-    const periods: string[] = [];
-    for (let i = 0; i <= 50; i += 5) {
-      const start = `${i.toString().padStart(2, '0')}:00`;
-      const end = i === 50 ? '50:00' : `${(i + 5).toString().padStart(2, '0')}:00`;
-      periods.push(`${start}-${end}`);
+  /** Segundos absolutos no jogo (0 … ~50 min) a partir do texto do relógio — para faixas de 5 min. */
+  const parseGoalTimeToTotalSeconds = (timeStr: string): number | null => {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    const paren = timeStr.match(/\(([12])T\)\s*$/i);
+    if (paren) {
+      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
+      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
+      return postMatchEventClockToAbsoluteSeconds(clockPart, period);
     }
-    
-    // Contar gols reais por período
+    const cleanTime = timeStr.split('(')[0].trim();
+    const parts = cleanTime.split(':');
+    if (parts.length === 2) {
+      const m = parseInt(parts[0], 10);
+      const sec = parseInt(parts[1], 10);
+      if (!isNaN(m) && !isNaN(sec) && sec >= 0 && sec <= 59) return m * 60 + sec;
+    }
+    const mOnly = parseInt(cleanTime, 10);
+    return !isNaN(mOnly) ? mOnly * 60 : null;
+  };
+
+  /** Índice 0–9 em GOAL_BY_PERIOD_LABELS; primeiro bloco [0, 5:00], depois a cada 5 min (ex.: 45:01–50:00). */
+  const goalPeriodIndexFromTotalSeconds = (tSec: number): number | null => {
+    if (!Number.isFinite(tSec) || tSec < 0) return null;
+    const maxSec = 50 * 60;
+    if (tSec > maxSec) return null;
+    if (tSec <= 300) return 0;
+    return Math.min(9, Math.floor((tSec - 1) / 300));
+  };
+
+  // Time Period Data — 10 faixas de 5 min (00:00–50:00)
+  const timePeriodData = useMemo(() => {
+    const periods = [...GOAL_BY_PERIOD_LABELS];
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
-    
-    // Processar gols feitos
-    filteredMatches.forEach(match => {
+
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
-      
       match.teamStats.goalTimes.forEach(goalTime => {
-        const minutes = parseTimeToMinutes(goalTime.time);
-        if (minutes !== null && minutes >= 0 && minutes <= 50) {
-          // Encontrar em qual período de 5 minutos o gol cai
-          // Períodos: 0-5 (índice 0), 5-10 (índice 1), 10-15 (índice 2), etc.
-          // Para minutos 10-14, deve cair no período 10:00-15:00 (índice 2)
-          const periodIndex = Math.floor(minutes / 5);
-          if (periodIndex >= 0 && periodIndex < periods.length) {
-            scoredCounts[periodIndex]++;
-            // Debug log
-            console.log(`⚽ Gol feito: ${goalTime.time} → ${minutes}min → Período ${periodIndex} (${periods[periodIndex]})`);
-          }
-        } else {
-          console.warn(`⚠️ Tempo de gol inválido: ${goalTime.time} → ${minutes}min`);
-        }
+        const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
+        if (tSec === null) return;
+        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
+        if (periodIndex !== null) scoredCounts[periodIndex]++;
       });
     });
-    
-    // Processar gols tomados
-    filteredMatches.forEach(match => {
+
+    scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
-      
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
-        const minutes = parseTimeToMinutes(goalConceded.time);
-        if (minutes !== null && minutes >= 0 && minutes <= 50) {
-          // Encontrar em qual período de 5 minutos o gol cai
-          const periodIndex = Math.floor(minutes / 5);
-          if (periodIndex >= 0 && periodIndex < periods.length) {
-            concededCounts[periodIndex]++;
-            // Debug log
-            console.log(`🚫 Gol tomado: ${goalConceded.time} → ${minutes}min → Período ${periodIndex} (${periods[periodIndex]})`);
-          }
-        } else {
-          console.warn(`⚠️ Tempo de gol tomado inválido: ${goalConceded.time} → ${minutes}min`);
-        }
+        const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
+        if (tSec === null) return;
+        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
+        if (periodIndex !== null) concededCounts[periodIndex]++;
       });
     });
     
@@ -325,10 +558,19 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       maxScoredPeriod: { period: maxScoredPeriod.period, percentage: scoredPercentage },
       maxConcededPeriod: { period: maxConcededPeriod.period, percentage: concededPercentage }
     };
-  }, [filteredMatches]);
+  }, [scopedMatches]);
 
   const chartData = useMemo(() => {
-    return filteredMatches.map(match => ({
+    return scopedMatches.map(match => ({
+      ...(() => {
+        const opp = getOpponentShotsFromLog(match);
+        return {
+          opponentShotsOn: opp.shotsOnTarget,
+          opponentShotsOff: opp.shotsOffTarget,
+          savesSimple: opp.savesSimple,
+          savesHard: opp.savesHard,
+        };
+      })(),
       name: match.opponent,
       transitionErrors: match.teamStats.transitionErrors ?? (match.teamStats as any).wrongPassesTransition ?? 0,
       tacklesCounterAttack: match.teamStats.tacklesCounterAttack ?? 0,
@@ -338,9 +580,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       passesWrong: match.teamStats.passesWrong ?? 0,
       shotsOn: match.teamStats.shotsOnTarget ?? 0,
       shotsOff: match.teamStats.shotsOffTarget ?? 0,
+      shotsShootZone: match.teamStats.shotsShootZone ?? getBlockedShotsFromLog(match),
       result: match.result
     }));
-  }, [filteredMatches]);
+  }, [scopedMatches]);
   
   // Dados de métodos de gol (usando goalMethodsScored/Conceded)
   const goalMethodsScoredData = useMemo(() => {
@@ -392,36 +635,71 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
   // Cores para gráficos de rosca (expandir conforme necessário) - Tons de Azul
   const PIE_COLORS = [COLORS.blue, COLORS.blueLight, COLORS.blueMedium, COLORS.blueDark, COLORS.blueDarker, COLORS.blueCyan, COLORS.slate];
+  // Métodos Detalhados Gols Marcados - cores mais escuras
+  const PIE_COLORS_SCORED_DARK = ['#0099a3', '#4a8de8', '#2d6ad8', '#1d4fd6', '#16338c', '#0a8bc4', '#5a5a62'];
   const PIE_COLORS_CONCEDED = [COLORS.blueDarker, COLORS.blueDark, COLORS.blueMedium, COLORS.blue, COLORS.blueLight, COLORS.blueCyan, COLORS.slate];
 
-  const TACKLE_TARGET = useMemo(() => {
-    const targets = filteredMatches
-      .map(m => {
-        if (!m.scoreTarget) return null;
-        const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
-        return isNaN(num) ? null : num;
-      })
-      .filter((t): t is number => t !== null);
-    
-    if (targets.length === 0) return 60; // Fallback se nenhuma meta foi definida
-    return targets.reduce((a, b) => a + b, 0) / targets.length;
-  }, [filteredMatches]);
+  // Meta de desarmes = só partidas realizadas e salvas (com teamStats) que têm meta definida
+  // Porcentagem = desarmes dessas partidas / soma das metas dessas partidas
+  const gaugeMeta = useMemo(() => {
+    let targetSum = 0;
+    let tacklesSum = 0;
+    scopedMatches.forEach(m => {
+      if (!m.scoreTarget || !m.teamStats) return;
+      const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
+      if (isNaN(num) || num <= 0) return;
+      targetSum += num;
+      const t = (m.teamStats.tacklesWithBall || 0) + (m.teamStats.tacklesWithoutBall || 0) + (m.teamStats.tacklesCounterAttack || 0);
+      tacklesSum += t;
+    });
+    const hasTarget = targetSum > 0;
+    const pct = hasTarget ? (tacklesSum / targetSum) * 100 : 0;
+    return {
+      TACKLE_TARGET: targetSum,
+      totalTackles: tacklesSum,
+      hasTackleTarget: hasTarget,
+      percentage: Math.min(pct, 100),
+      percentageDisplay: hasTarget ? pct.toFixed(2) : '0.00',
+    };
+  }, [scopedMatches]);
 
-  const currentTackles = parseFloat(stats.avgTacklesPerGame.toString());
-  const percentage = Math.min((currentTackles / TACKLE_TARGET) * 100, 100);
-  const percentageDisplay = Math.round((currentTackles / TACKLE_TARGET) * 100);
-  
+  const TACKLE_TARGET = gaugeMeta.TACKLE_TARGET;
+  const totalTackles = gaugeMeta.totalTackles;
+  const hasTackleTarget = gaugeMeta.hasTackleTarget;
+  const percentage = gaugeMeta.percentage;
+  const percentageDisplay = gaugeMeta.percentageDisplay;
+  const percentageDisplayNum = parseFloat(percentageDisplay);
+
   // Logic for Speedometer Color - Tons de Azul
   let gaugeColor = COLORS.blue;
-  if (percentageDisplay < 75) gaugeColor = '#ef4444'; // Red (mantido para erro)
-  else if (percentageDisplay <= 90) gaugeColor = COLORS.blueDark; // Dark Blue
-  else if (percentageDisplay <= 99) gaugeColor = COLORS.blueMedium; // Medium Blue
+  if (percentageDisplayNum < 75) gaugeColor = '#ef4444'; // Red (mantido para erro)
+  else if (percentageDisplayNum <= 90) gaugeColor = COLORS.blueDark; // Dark Blue
+  else if (percentageDisplayNum <= 99) gaugeColor = COLORS.blueMedium; // Medium Blue
   else gaugeColor = COLORS.blue; // Cyan Blue (>= 100%)
 
   const gaugeData = [
     { name: 'Conquistado', value: percentage },
     { name: 'Restante', value: 100 - percentage }
   ];
+
+  // Alerta: partidas em que a meta foi alcançada e quantas resultaram em vitória
+  const tackleTargetAlert = useMemo(() => {
+    const matchesWithTarget: Array<{ achieved: boolean; victory: boolean }> = [];
+    scopedMatches.forEach(m => {
+      if (!m.scoreTarget || !m.teamStats) return;
+      const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
+      if (isNaN(num) || num <= 0) return;
+      const tackles = (m.teamStats.tacklesWithBall || 0) + (m.teamStats.tacklesWithoutBall || 0) + (m.teamStats.tacklesCounterAttack || 0);
+      const achieved = tackles >= num;
+      const r = m.result as string;
+      const victory = (r === 'V' || r === 'Vitória');
+      matchesWithTarget.push({ achieved, victory });
+    });
+    const total = matchesWithTarget.length;
+    const achievedCount = matchesWithTarget.filter(x => x.achieved).length;
+    const achievedAndVictory = matchesWithTarget.filter(x => x.achieved && x.victory).length;
+    return { total, achievedCount, achievedAndVictory };
+  }, [scopedMatches]);
 
   // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
   const possessionDonutData = useMemo(() => {
@@ -444,18 +722,79 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   }, [filteredMatches]);
 
   const hasPossessionData = useMemo(() => 
-    filteredMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
-    [filteredMatches]
+    scopedMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
+    [scopedMatches]
   );
+
+  const goalkeeperDefenseRows = useMemo(() => {
+    const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
+    for (const match of scopedMatches) {
+      const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+      for (const e of log as any[]) {
+        if (e?.action !== 'save') continue;
+        const playerId = String(e?.playerId ?? '').trim();
+        if (!playerId) continue;
+        const raw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+        const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!map.has(playerId)) {
+          const p = players.find((x) => String(x.id).trim() === playerId);
+          map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
+        }
+        const row = map.get(playerId)!;
+        if (norm.includes('simple') || norm.includes('simples') || norm.includes('facil')) row.easy += 1;
+        if (norm.includes('dificil') || norm.includes('hard')) row.hard += 1;
+        if (
+          norm.includes('simple') ||
+          norm.includes('simples') ||
+          norm.includes('facil') ||
+          norm.includes('dificil') ||
+          norm.includes('hard')
+        ) row.total += 1;
+      }
+    }
+    return Array.from(map.values())
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [scopedMatches, players]);
 
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
   const CHART_FONT_SIZE = 12;
-  const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE };
+  const legendLabelStyle = { fontFamily: CHART_FONT, fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontStyle: 'normal' };
 
   const tooltipStyle = { backgroundColor: '#000', borderColor: '#333', color: '#fff', fontFamily: CHART_FONT, borderRadius: '8px', fontSize: '14px' };
-  const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'bold' };
-  const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'bold', fontFamily: CHART_FONT };
+  const axisStyle = { fontSize: CHART_FONT_SIZE, fontFamily: CHART_FONT, fill: '#a1a1aa', fontWeight: 'normal', fontStyle: 'normal' };
+  const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontFamily: CHART_FONT };
+
+  if (!comparisonChild && compareMode) {
+    return (
+      <div className="space-y-4 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
+        <div className="bg-black p-4 rounded-2xl border border-zinc-900 shadow-lg flex items-center justify-between">
+          <div>
+            <h2 className="text-sm text-white uppercase tracking-wide scout-card-title">Modo Comparação</h2>
+            <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Compare lado a lado com dois conjuntos de filtros independentes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCompareMode(false)}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
+          >
+            Sair da Comparação
+          </button>
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+          <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
+            <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
@@ -463,14 +802,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       {/* Control Bar - Black Piano */}
       <div className="bg-black p-5 rounded-3xl border border-zinc-900 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-end">
         <div>
-            <h2 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wide mb-1">
+            <h2 className="text-sm text-white flex items-center gap-2 uppercase tracking-wide mb-1 scout-card-title">
             <Filter className="text-[#00f0ff]" size={16} /> Filtros de Dados
             </h2>
-            <p className="text-xs text-zinc-500 font-bold">Selecione os parâmetros para análise.</p>
+            <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Selecione os parâmetros para análise.</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-stretch sm:items-end">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 w-full md:w-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 w-full md:w-auto">
           <Select 
             value={compFilter} 
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleCompFilterChange(e.target.value)}
@@ -491,18 +830,48 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocationFilter(e.target.value)}
             options={[{value: 'Todos', label: 'Todos Locais'}, {value: 'Mandante', label: 'Mandante'}, {value: 'Visitante', label: 'Visitante'}]}
           />
+          <Select
+            value={periodFilter}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPeriodFilter(e.target.value)}
+            options={[
+              { value: 'Todos', label: 'Todos Períodos' },
+              { value: '1T', label: '1º Tempo' },
+              { value: '2T', label: '2º Tempo' },
+            ]}
+          />
         </div>
+        <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={async () => {
             setPdfExporting(true);
             try {
+              const teamSettings = (() => {
+                try {
+                  const raw = localStorage.getItem('scout21_settings_current_team');
+                  if (!raw) return {};
+                  const d = JSON.parse(raw);
+                  return { teamShieldUrl: d.shieldUrl || '', teamName: d.teamName || '' };
+                } catch {
+                  return {};
+                }
+              })();
+              const pl = players || [];
               await exportScoutToPdf({
                 filters: {
                   compFilter,
                   monthFilter,
                   opponentFilter,
                   locationFilter,
+                  periodFilter,
+                },
+                teamShieldUrl: teamSettings.teamShieldUrl || undefined,
+                teamName: teamSettings.teamName || undefined,
+                playerTables: {
+                  passes: buildPlayerTop10ForPdf(scopedMatches, pl, 'passes'),
+                  shots: buildPlayerTop10ForPdf(scopedMatches, pl, 'shots'),
+                  tackles: buildPlayerTop10ForPdf(scopedMatches, pl, 'tackles'),
+                  criticalErrors: buildPlayerTop10ForPdf(scopedMatches, pl, 'criticalErrors'),
                 },
                 stats,
                 timePeriodData: {
@@ -518,8 +887,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 goalOriginConcededData,
                 gaugeData: {
                   percentageDisplay,
-                  avgTackles: stats.avgTacklesPerGame.toString(),
+                  totalTackles,
                   tackleTarget: TACKLE_TARGET,
+                  hasTackleTarget,
                 },
               });
             } catch (err) {
@@ -535,6 +905,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           <FileDown size={16} />
           {pdfExporting ? 'Gerando PDF...' : 'Exportar PDF'}
         </button>
+        {!comparisonChild && (
+          <button
+            type="button"
+            onClick={() => setCompareMode(true)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
+            title="Ativar modo comparação"
+          >
+            Comparação
+          </button>
+        )}
+        </div>
         </div>
       </div>
 
@@ -573,23 +954,46 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Meta de Desarmes por Jogo - Speedometer */}
             <ExpandableCard noPadding headerColor="text-[#ccff00]">
-                <div className="min-h-48 w-full flex flex-col lg:flex-row lg:items-center justify-between px-6 py-6 gap-6 bg-zinc-950/50">
-                    <div className="flex flex-col gap-3 min-w-0 flex-1">
+                <div className={`min-h-48 w-full flex flex-col ${comparisonChild ? 'xl:flex-col' : 'lg:flex-row lg:items-center'} justify-between px-6 py-6 gap-6 bg-zinc-950/50`}>
+                    <div className={`flex flex-col gap-3 min-w-0 flex-1 ${comparisonChild ? 'max-w-full' : ''}`}>
                          <div className="flex items-center gap-3">
                              <Gauge size={32} className="text-[#00f0ff] shrink-0" />
-                             <h2 className="text-xl md:text-2xl font-black text-white uppercase italic tracking-tighter">Meta de Desarmes por Jogo</h2>
+                             <h2 className={`${comparisonChild ? 'text-lg md:text-xl' : 'text-xl md:text-2xl'} text-white uppercase tracking-tighter scout-card-title-black-italic`}>Meta de Desarmes por Jogo</h2>
                          </div>
-                         <p className="text-zinc-500 font-bold text-sm max-w-md">
-                             Monitoramento em tempo real da performance defensiva em relação à meta de {Math.round(TACKLE_TARGET)} desarmes por jogo.
+                         <p className={`text-zinc-500 ${comparisonChild ? 'text-xs leading-5' : 'text-sm'} ${comparisonChild ? 'max-w-full' : 'max-w-md'}`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                             A porcentagem é calculada em relação às metas definidas nas partidas realizadas e salvas.
+                             {' '}
+                             {hasTackleTarget ? `Meta total: ${Math.round(TACKLE_TARGET)} desarmes.` : 'Cadastre metas nas partidas para acompanhar.'}
                          </p>
+                         {hasTackleTarget && tackleTargetAlert.total > 0 && (
+                          <div className="flex items-start gap-2 p-3 rounded-xl bg-zinc-900/80 border border-zinc-700/50">
+                             <Info size={18} className="text-[#00f0ff] shrink-0 mt-0.5" />
+                            <p className={`${comparisonChild ? 'text-xs leading-5' : 'text-sm'} text-zinc-300`} style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                               {tackleTargetAlert.total === 1 ? (
+                                 tackleTargetAlert.achievedCount === 1 ? (
+                                   tackleTargetAlert.achievedAndVictory === 1
+                                     ? 'Nesta partida, a meta de desarmes foi alcançada e o resultado foi vitória.'
+                                     : 'Nesta partida, a meta de desarmes foi alcançada, porém o resultado não foi vitória.'
+                                 ) : 'Nesta partida, a meta de desarmes não foi alcançada.'
+                               ) : (
+                                 <>Em total de <span className="text-white font-medium">{tackleTargetAlert.total}</span> partidas salvas (com meta definida), a meta de desarmes foi alcançada em <span className="text-[#00f0ff] font-medium">{tackleTargetAlert.achievedCount}</span> delas, porém somente <span className="text-[#22c55e] font-medium">{tackleTargetAlert.achievedAndVictory}</span> resultaram em vitória.</>
+                               )}
+                             </p>
+                           </div>
+                         )}
                     </div>
 
-                    <div className="flex items-center gap-6 lg:gap-8 shrink-0">
+                    <div className={`flex items-center ${comparisonChild ? 'justify-between' : ''} gap-6 lg:gap-8 shrink-0`}>
                         <div className="text-right">
-                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Resultado Atual</p>
+                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Desarmes realizados</p>
                              <p className={`text-4xl md:text-5xl font-black tracking-tighter`} style={{ color: gaugeColor }}>
-                                 {stats.avgTacklesPerGame}
+                                 {totalTackles}
                              </p>
+                             {hasTackleTarget && (
+                               <p className="text-[10px] text-zinc-500 mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                                 Meta: {Math.round(TACKLE_TARGET)}
+                               </p>
+                             )}
                         </div>
 
                         <div className="h-32 w-40 shrink-0 relative pb-2">
@@ -614,9 +1018,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                             </ResponsiveContainer>
                             <div className="absolute top-[60%] left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
                                 <span className="text-2xl block mb-1">
-                                    {percentageDisplay >= 100 ? '🚀' : percentageDisplay >= 75 ? '🔥' : '⚠️'}
+                                    {hasTackleTarget ? (percentageDisplayNum >= 100 ? '🚀' : percentageDisplayNum >= 75 ? '🔥' : '⚠️') : '—'}
                                 </span>
-                                <span className="text-white font-black text-xl">{percentageDisplay}%</span>
+                                <span className="text-white font-black text-xl">{hasTackleTarget ? `${percentageDisplay}%` : 'N/A'}</span>
                             </div>
                         </div>
                     </div>
@@ -624,8 +1028,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             </ExpandableCard>
 
             {/* Posse de Bola - bloqueado no plano free */}
-            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]">
-                {IS_FREE_PLAN ? (
+            <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" titleBlackItalic>
+                {isFreePlan ? (
                   <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
                     <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
                     <p className="text-zinc-400 text-sm max-w-md">
@@ -634,7 +1038,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   </div>
                 ) : (
                   <>
-                    <p className="text-xs text-zinc-500 mb-4 font-medium">Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
+                    <p className="text-xs text-zinc-500 mb-4" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
                     {hasPossessionData && possessionDonutData ? (
                       <div className="flex flex-col md:flex-row items-center gap-6">
                         <div className="h-56 w-56 max-w-full flex-shrink-0">
@@ -656,7 +1060,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                                   <Cell key={`posse-${index}`} fill={entry.fill} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} />
+                              <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} />
                               <Legend />
                             </PieChart>
                           </ResponsiveContainer>
@@ -665,14 +1069,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           {possessionDonutData.map((entry, i) => (
                             <div key={entry.name} className="flex items-center gap-2">
                               <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
-                              <span className="text-zinc-300 font-medium">{entry.name}</span>
-                              <span className="text-white font-bold">{entry.value}%</span>
+                              <span className="text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.name}</span>
+                              <span className="text-white" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.value}%</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <p className="text-zinc-500 text-sm py-8 text-center">Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
+                      <p className="text-zinc-500 text-sm py-8 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
                     )}
                   </>
                 )}
@@ -680,16 +1084,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
        </div>
 
       {/* Distribution of Table Stats */}
-      <h3 className="text-white font-bold uppercase tracking-widest text-sm pl-2 border-l-4 border-[#00f0ff]">Distribuição de Estatísticas da Tabela</h3>
+      <h3 className="text-white uppercase tracking-widest text-sm pl-2 border-l-4 border-[#00f0ff] scout-card-title">Distribuição de Estatísticas da Tabela</h3>
       
       {/* Passes & Shots */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         <ExpandableCard
           title="Passes Certos vs Errados"
           icon={BarChart3}
-          headerColor="text-blue-400"
+          headerColor="text-green-400"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{(stats.passesCorrect || 0) + (stats.passesWrong || 0)}</span>
             </span>
           }
@@ -713,7 +1118,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                       }}
                     />
-                    <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.blue} stackId="a">
+                    <Bar dataKey="passesCorrect" name="Passes Certos" fill={COLORS.green} stackId="a">
                         <LabelList dataKey="passesCorrect" position="inside" {...labelStyle} />
                     </Bar>
                     <Bar dataKey="passesWrong" name="Passes Errados" fill="#ef4444" stackId="a">
@@ -723,108 +1128,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="passes" players={players} />
-        </ExpandableCard>
-
-        <ExpandableCard
-          title="Chutes no Gol vs Fora"
-          icon={BarChart3}
-          headerColor="text-purple-400"
-          headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
-              Total: <span className="text-white">{(stats.shotsOn || 0) + (stats.shotsOff || 0)}</span>
-            </span>
-          }
-        >
-           <div className="h-64 w-full">
-             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                    <YAxis hide />
-                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend
-                      wrapperStyle={legendLabelStyle}
-                      formatter={(value: string) => {
-                        if (value === 'No Gol') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
-                        }
-                        if (value === 'Pra Fora') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
-                        }
-                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                      }}
-                    />
-                    <Bar dataKey="shotsOn" name="No Gol" fill={COLORS.blueMedium}>
-                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="shotsOff" name="Pra Fora" fill={COLORS.slate}>
-                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
-                    </Bar>
-                </BarChart>
-             </ResponsiveContainer>
-           </div>
-           {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="shots" players={players} />
-        </ExpandableCard>
-      </div>
-
-      {/* Defensive Stats (Tackles & Errors) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <ExpandableCard
-          title="Tipos de Desarme"
-          icon={BarChart3}
-          headerColor="text-emerald-400"
-          headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
-              Total: <span className="text-white">{stats.tacklesTotal || 0}</span>
-            </span>
-          }
-        >
-           <div className="h-64 w-full">
-             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                    <YAxis hide />
-                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend
-                      wrapperStyle={legendLabelStyle}
-                      formatter={(value: string) => {
-                        if (value === 'Com Posse') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Com Posse ({stats.tacklesWithBall || 0})</span>;
-                        }
-                        if (value === 'Sem Posse') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Sem Posse ({stats.tacklesWithoutBall || 0})</span>;
-                        }
-                        if (value === 'Contra-Ataque') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Contra-Ataque ({stats.tacklesCounterAttack || 0})</span>;
-                        }
-                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                      }}
-                    />
-                    <Bar dataKey="tacklesWithBall" name="Com Posse" fill={COLORS.blueLight}>
-                        <LabelList dataKey="tacklesWithBall" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="tacklesWithoutBall" name="Sem Posse" fill={COLORS.blueDark}>
-                        <LabelList dataKey="tacklesWithoutBall" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="tacklesCounterAttack" name="Contra-Ataque" fill={COLORS.blue}>
-                        <LabelList dataKey="tacklesCounterAttack" position="inside" {...labelStyle} />
-                    </Bar>
-                </BarChart>
-             </ResponsiveContainer>
-           </div>
-           {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="tackles" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="passes" players={players} />
         </ExpandableCard>
 
         <ExpandableCard
           title="Erros Críticos (Transição)"
           icon={BarChart3}
           headerColor="text-[#ff0055]"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
             </span>
           }
@@ -857,18 +1170,236 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
+           <PlayerStatsTable matches={scopedMatches} statType="criticalErrors" players={players} />
+        </ExpandableCard>
+      </div>
+
+      {/* Defensive Stats (Tackles & Errors) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <ExpandableCard
+          title="Tipos de Desarme"
+          icon={BarChart3}
+          headerColor="text-emerald-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total: <span className="text-white">{stats.tacklesTotal || 0}</span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'Com Posse') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Com Posse ({stats.tacklesWithBall || 0})</span>;
+                        }
+                        if (value === 'Sem Posse') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Sem Posse ({stats.tacklesWithoutBall || 0})</span>;
+                        }
+                        if (value === 'Contra-Ataque') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Contra-Ataque ({stats.tacklesCounterAttack || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="tacklesWithBall" name="Com Posse" fill={COLORS.blueLight}>
+                        <LabelList dataKey="tacklesWithBall" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="tacklesWithoutBall" name="Sem Posse" fill={COLORS.blueDark}>
+                        <LabelList dataKey="tacklesWithoutBall" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="tacklesCounterAttack" name="Contra-Ataque" fill={COLORS.tackleCounterDark}>
+                        <LabelList dataKey="tacklesCounterAttack" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
+           {/* Tabela de estatísticas por jogador */}
+           <PlayerStatsTable matches={scopedMatches} statType="tackles" players={players} />
+        </ExpandableCard>
+
+        <ExpandableCard
+          title="Defesas"
+          icon={BarChart3}
+          headerColor="text-purple-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                  <YAxis hide />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                  <Legend
+                    wrapperStyle={legendLabelStyle}
+                    formatter={(value: string) => {
+                      if (value === 'DEFESA SIMPLES') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>DEFESA SIMPLES ({stats.savesSimple || 0})</span>;
+                      }
+                      if (value === 'Difícil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
+                      }
+                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                    }}
+                  />
+                  <Bar dataKey="savesSimple" name="DEFESA SIMPLES" fill={COLORS.blueCyan}>
+                      <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
+                  </Bar>
+                  <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
+                      <LabelList dataKey="savesHard" position="inside" {...labelStyle} />
+                  </Bar>
+               </BarChart>
+             </ResponsiveContainer>
+           </div>
+           <div className="mt-4 overflow-x-auto">
+             <table className="w-full text-xs">
+               <thead>
+                 <tr className="border-b border-zinc-800">
+                   <th className="text-left py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Goleiro</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Defesa Simples</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Difícil</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Total</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {goalkeeperDefenseRows.length > 0 ? (
+                   goalkeeperDefenseRows.map((row, idx) => (
+                     <tr key={`def-gk-${idx}`} className="border-b border-zinc-900/50">
+                       <td className="py-2 text-white" style={legendLabelStyle}>{row.name}</td>
+                       <td className="py-2 text-right text-blue-300" style={legendLabelStyle}>{row.easy}</td>
+                       <td className="py-2 text-right text-blue-500" style={legendLabelStyle}>{row.hard}</td>
+                       <td className="py-2 text-right text-zinc-300" style={legendLabelStyle}>{row.total}</td>
+                     </tr>
+                   ))
+                 ) : (
+                   <tr>
+                     <td colSpan={4} className="py-3 text-center text-zinc-500" style={legendLabelStyle}>
+                       Nenhuma defesa registrada no período filtrado.
+                     </td>
+                   </tr>
+                 )}
+               </tbody>
+             </table>
+           </div>
+        </ExpandableCard>
+      </div>
+
+      {/* Finalizações (nossas) + Finalizações do adversário */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <ExpandableCard
+          title="Finalizações"
+          icon={BarChart3}
+          headerColor="text-purple-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total:{' '}
+              <span className="text-white">
+                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
+              </span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
+                        }
+                        if (value === 'Bloqueado') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
+                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
+                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
+                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
+           <PlayerStatsTable matches={scopedMatches} statType="shots" players={players} />
+        </ExpandableCard>
+
+        <ExpandableCard
+          title="Finalizações Adversário"
+          icon={BarChart3}
+          headerColor="text-red-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total: <span className="text-white">{(stats.opponentShotsOn || 0) + (stats.opponentShotsOff || 0)}</span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.opponentShotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.opponentShotsOff || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="opponentShotsOn" name="No Gol" fill="#ef4444">
+                        <LabelList dataKey="opponentShotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="opponentShotsOff" name="Pra Fora" fill={COLORS.slate}>
+                        <LabelList dataKey="opponentShotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
         </ExpandableCard>
       </div>
 
       {/* Row: Goals by Time Period */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]">
+        <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
+                <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
-                    <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
+                    <XAxis dataKey="period" stroke="#71717a" tick={{ ...axisStyle, fontSize: 10 }} angle={-40} textAnchor="end" height={68} interval={0} />
                     <YAxis hide />
                     <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.green, strokeWidth: 1}} />
                     <Area type="monotone" dataKey="value" fill={COLORS.green} fillOpacity={0.25} stroke="none" />
@@ -882,27 +1413,27 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Feitos"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols feitos por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
+             <p className="text-white text-sm" style={legendLabelStyle}>
                <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.period}</span>
              </p>
            </div>
         </ExpandableCard>
 
-        <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]">
+        <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]" scoutTitleStyle>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 28 }}>
+                <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={true} />
-                    <XAxis dataKey="period" stroke="#71717a" tick={axisStyle} angle={-45} textAnchor="end" height={80} />
+                    <XAxis dataKey="period" stroke="#71717a" tick={{ ...axisStyle, fontSize: 10 }} angle={-40} textAnchor="end" height={68} interval={0} />
                     <YAxis hide />
                     <Tooltip contentStyle={tooltipStyle} cursor={{stroke: COLORS.rose, strokeWidth: 1}} />
                     <Area type="monotone" dataKey="value" fill={COLORS.rose} fillOpacity={0.25} stroke="none" />
@@ -916,16 +1447,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                         name="Gols Tomados"
                     >
                         {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={-25} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
                         {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="bold" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
            </div>
            {/* Cartão com porcentagem do maior número de gols tomados por período */}
            <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-             <p className="text-white text-sm font-bold" style={legendLabelStyle}>
+             <p className="text-white text-sm" style={legendLabelStyle}>
                <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.percentage}%</span> dos gols tomados saíram no período de <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.period}</span>
              </p>
            </div>
@@ -938,8 +1469,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title={`Métodos de ${config.labels.goals} Marcado`}
           icon={PieChartIcon}
           headerColor="text-white"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{originScoredData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
             </span>
           }
@@ -947,12 +1479,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
-                          data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS[i % PIE_COLORS.length] }))}
+                          data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_SCORED_DARK[i % PIE_COLORS_SCORED_DARK.length] }))}
                           cx="50%"
                           cy="50%"
                           innerRadius={60}
@@ -962,12 +1494,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           isAnimationActive={true}
                       >
                           {goalMethodsScoredData.map((entry, index) => (
-                              <Cell key={`cell-scored-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="#fff" strokeWidth={1} />
+                              <Cell key={`cell-scored-${index}`} fill={PIE_COLORS_SCORED_DARK[index % PIE_COLORS_SCORED_DARK.length]} stroke="#fff" strokeWidth={1} />
                           ))}
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -976,8 +1510,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
                  {goalMethodsScoredData.map((entry, index) => (
                    <div key={`leg-scored-${index}`} className="flex items-center gap-1.5 min-w-0">
-                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                     <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS_SCORED_DARK[index % PIE_COLORS_SCORED_DARK.length] }} />
+                     <span className="text-zinc-400 text-[10px] truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                    </div>
                  ))}
                </div>
@@ -985,7 +1519,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Origem do Gol</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -999,12 +1533,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           dataKey="value"
                           isAnimationActive={true}
                       >
-                          <Cell fill={COLORS.blue} stroke="#fff" strokeWidth={2} />
-                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.blue} stroke="#fff" strokeWidth={1} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={1} />
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1013,13 +1549,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blue }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredOpen}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsScoredOpen}</span>
                  </div>
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsScoredSet}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Parada</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsScoredSet}</span>
                  </div>
                </div>
              </div>
@@ -1030,8 +1566,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           title={`Métodos de ${config.labels.goals} Tomado`}
           icon={PieChartIcon}
           headerColor="text-white"
+          scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
               Total: <span className="text-white">{originConcededData.reduce((s, e) => s + (e.value ?? 0), 0)}</span>
             </span>
           }
@@ -1039,7 +1576,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         <div className="flex flex-col lg:flex-row min-h-0 w-full gap-6 p-4">
              {/* Gráfico 1: Métodos Detalhados */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Métodos Detalhados</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -1059,7 +1596,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1069,7 +1608,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  {goalMethodsConcededData.map((entry, index) => (
                    <div key={`leg-conceded-${index}`} className="flex items-center gap-1.5 min-w-0">
                      <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length] }} />
-                     <span className="text-zinc-400 text-[10px] font-bold truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
+                     <span className="text-zinc-400 text-[10px] truncate uppercase" style={legendLabelStyle} title={entry.name}>{entry.name}</span>
                    </div>
                  ))}
                </div>
@@ -1077,7 +1616,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
              {/* Gráfico 2: Origem (Bola Rolando vs Parada) */}
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
-               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-4 text-center shrink-0">Origem do Gol</h4>
+               <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Origem do Gol</h4>
                <div className="flex-1 min-h-[200px] w-full">
                  <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -1091,12 +1630,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                           dataKey="value"
                           isAnimationActive={true}
                       >
-                          <Cell fill={COLORS.blueDarker} stroke="#fff" strokeWidth={2} />
-                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={2} />
+                          <Cell fill={COLORS.blueDarker} stroke="#fff" strokeWidth={1} />
+                          <Cell fill={COLORS.slate} stroke="#fff" strokeWidth={1} />
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={12} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
                       </Pie>
                       <Tooltip
-                        contentStyle={{ ...tooltipStyle, color: '#e4e4e7', border: '1px solid #52525b' }}
+                        contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
                   </PieChart>
@@ -1105,13 +1646,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                <div className="shrink-0 mt-4 flex justify-center gap-6 items-center">
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.blueDarker }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Rolando</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededOpen}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Rolando</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsConcededOpen}</span>
                  </div>
                  <div className="flex items-center gap-2">
                    <span className="shrink-0 w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.slate }} />
-                   <span className="text-white text-xs font-black uppercase tracking-tighter italic">Bola Parada</span>
-                   <span className="text-zinc-500 text-xs font-bold">{stats.goalsConcededSet}</span>
+                   <span className="text-white text-xs uppercase tracking-tighter" style={legendLabelStyle}>Bola Parada</span>
+                   <span className="text-zinc-500 text-xs" style={legendLabelStyle}>{stats.goalsConcededSet}</span>
                  </div>
                </div>
              </div>
@@ -1144,9 +1685,9 @@ const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelec
 const KPICard: React.FC<{title: string, value: number | string, subtitle?: string, icon: any, color: string, bg?: string}> = ({title, value, subtitle, icon: Icon, color, bg = "bg-black border-zinc-900"}) => (
     <div className={`rounded-3xl p-5 flex items-center justify-between shadow-lg transition-colors border ${bg}`}>
         <div>
-            <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">{title}</p>
+            <p className="text-xs text-zinc-400 uppercase tracking-wider mb-1 scout-card-title">{title}</p>
             <p className="text-3xl font-black text-white italic">{value}</p>
-            {subtitle && <p className="text-xs text-zinc-500 font-bold mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-zinc-500 mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{subtitle}</p>}
         </div>
         <div className={`p-3 rounded-xl bg-zinc-950/50 border border-zinc-900 ${color}`}>
             <Icon size={24} />
@@ -1157,32 +1698,36 @@ const KPICard: React.FC<{title: string, value: number | string, subtitle?: strin
 // Componente de tabela de estatísticas por jogador
 const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors', players: Player[]}> = ({matches, statType, players}) => {
   const playerStats = useMemo(() => {
-    const statsMap = new Map<string, {name: string, correct: number, wrong: number, total: number}>();
-    
+    const statsMap = new Map<string, { name: string; correct: number; wrong: number; blocked?: number; total: number }>();
+
     matches.forEach(match => {
       if (!match.playerStats) return;
-      
+
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
         // Normalizar ID para comparação (string, trim)
         const normalizedPlayerId = String(playerId).trim();
-        
+
         // Buscar nome do jogador (comparar IDs normalizados)
         const player = players.find(p => String(p.id).trim() === normalizedPlayerId);
         const playerName = player ? player.name : normalizedPlayerId;
-        
+
         if (!statsMap.has(normalizedPlayerId)) {
-          statsMap.set(normalizedPlayerId, {name: playerName, correct: 0, wrong: 0, total: 0});
+          statsMap.set(normalizedPlayerId, { name: playerName, correct: 0, wrong: 0, total: 0 });
         }
         const stats = statsMap.get(normalizedPlayerId)!;
-        
+
         if (statType === 'passes') {
           stats.correct += pStats.passesCorrect || 0;
           stats.wrong += pStats.passesWrong || 0;
           stats.total += (pStats.passesCorrect || 0) + (pStats.passesWrong || 0);
         } else if (statType === 'shots') {
-          stats.correct += pStats.shotsOnTarget || 0;
-          stats.wrong += pStats.shotsOffTarget || 0;
-          stats.total += (pStats.shotsOnTarget || 0) + (pStats.shotsOffTarget || 0);
+          const on = pStats.shotsOnTarget || 0;
+          const off = pStats.shotsOffTarget || 0;
+          const blk = pStats.shotsShootZone || 0;
+          stats.correct += on;
+          stats.wrong += off;
+          stats.blocked = (stats.blocked ?? 0) + blk;
+          stats.total += on + off + blk;
         } else if (statType === 'tackles') {
           stats.correct += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0);
           stats.wrong += pStats.tacklesCounterAttack || 0;
@@ -1215,44 +1760,53 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
 
   if (playerStats.length === 0) return null;
 
+  const legendStyle = { fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' };
   return (
     <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
-      <h4 className="text-white text-xs font-bold uppercase mb-3 tracking-wider">
-        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Chutes' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
+      <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
+        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Finalizações' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
       </h4>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-zinc-800">
-              <th className="text-left py-2 text-zinc-400 font-bold uppercase">Jogador</th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">
+              <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>Jogador</th>
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Certos'
                   : statType === 'shots'
-                  ? 'No Gol'
-                  : statType === 'tackles'
-                  ? 'Total'
-                  : 'Passes Errados'}
+                    ? 'No Gol'
+                    : statType === 'tackles'
+                      ? 'Total'
+                      : 'Passes Errados'}
               </th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Errados'
                   : statType === 'shots'
-                  ? 'Fora'
-                  : statType === 'tackles'
-                  ? 'Contra-Ataque'
-                  : 'Geraram Transição'}
+                    ? 'Fora'
+                    : statType === 'tackles'
+                      ? 'Contra-Ataque'
+                      : 'Geraram Transição'}
               </th>
-              <th className="text-right py-2 text-zinc-400 font-bold uppercase">Total</th>
+              {statType === 'shots' && (
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Bloqueado
+                </th>
+              )}
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>Total</th>
             </tr>
           </thead>
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                <td className="py-2 text-white font-bold">{stat.name}</td>
-                <td className="py-2 text-right text-[#10b981] font-bold">{stat.correct}</td>
-                <td className="py-2 text-right text-[#ff0055] font-bold">{stat.wrong}</td>
-                <td className="py-2 text-right text-zinc-300 font-bold">{stat.total}</td>
+                <td className="py-2 text-white" style={legendStyle}>{stat.name}</td>
+                <td className="py-2 text-right text-[#10b981]" style={legendStyle}>{stat.correct}</td>
+                <td className="py-2 text-right text-[#ff0055]" style={legendStyle}>{stat.wrong}</td>
+                {statType === 'shots' && (
+                  <td className="py-2 text-right text-amber-400" style={legendStyle}>{stat.blocked ?? 0}</td>
+                )}
+                <td className="py-2 text-right text-zinc-300" style={legendStyle}>{stat.total}</td>
               </tr>
             ))}
           </tbody>

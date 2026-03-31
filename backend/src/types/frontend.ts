@@ -67,9 +67,17 @@ export interface MatchRecord {
   teamStats: MatchStats;
   playerRelationships?: { [p1: string]: { [p2: string]: { passes: number; assists: number } } };
   postMatchEventLog?: Array<{ id: string; time: string; period: string; playerId: string; action: string; tipo: string; subtipo: string; passToPlayerId?: string; playerName?: string; passToPlayerName?: string; zone?: 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR'; recordedByUserId?: string; recordedByName?: string }>;
-  lineup?: { players: string[]; bench: string[]; ballPossessionStart: string };
+  lineup?: {
+    players: string[];
+    bench: string[];
+    ballPossessionStart: string;
+    /** Elenco convocado (persistido no JSON `lineup`) */
+    selectedPlayerIds?: string[];
+  };
   substitutionHistory?: Array<{ playerOutId: string; playerInId: string; time: number; period: string }>;
-  status?: 'encerrado' | 'em_andamento' | 'nao_executado';
+  status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';
+  /** Fase da coleta (coluna `collection_phase` em `jogos`): 0 não iniciada, 1º tempo, 2º tempo */
+  collectionPhase?: 0 | 1 | 2;
 }
 
 export interface MatchStats {

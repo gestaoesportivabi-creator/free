@@ -423,11 +423,114 @@ export interface RegisteredUser {
   name: string;
   email: string;
   role: string;
+  roleDescription?: string;
+  isActive: boolean;
   createdAt: string;
+  updatedAt?: string;
+  lastLoginAt?: string | null;
 }
 
-export const usersApi = {
-  getAll: () => get<RegisteredUser>('auth/users'),
+export interface AdminStats {
+  totalUsers: number;
+  maxUsers: number | null;
+  remainingSlots: number | null;
+  registrationsByDay: Record<string, number>;
+}
+
+export interface AdminUpdateUserPayload {
+  email?: string;
+  password?: string;
+  roleName?: string;
+}
+
+export interface AdminCreateUserPayload {
+  name: string;
+  email: string;
+  password: string;
+  roleName: string;
+}
+
+export const adminApi = {
+  getUsers: () => get<RegisteredUser>('auth/admin/users'),
+  createUser: async (
+    body: AdminCreateUserPayload
+  ): Promise<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    roleDescription?: string | null;
+    createdAt: string;
+  }> => {
+    const url = `${getApiUrl()}/auth/admin/users`;
+    const token = localStorage.getItem('token') || '';
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((result as { error?: string }).error || `Erro ${response.status}`);
+    }
+    if (!(result as { success?: boolean }).success || !(result as { data?: unknown }).data) {
+      throw new Error((result as { error?: string }).error || 'Resposta inválida');
+    }
+    return (result as {
+      data: {
+        id: string;
+        name: string;
+        email: string;
+        role: string;
+        roleDescription?: string | null;
+        createdAt: string;
+      };
+    }).data;
+  },
+  updateUser: async (
+    userId: string,
+    body: AdminUpdateUserPayload
+  ): Promise<{ id: string; name: string; email: string; role: string; roleDescription?: string | null }> => {
+    const url = `${getApiUrl()}/auth/admin/users/${encodeURIComponent(userId)}`;
+    const token = localStorage.getItem('token') || '';
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((result as { error?: string }).error || `Erro ${response.status}`);
+    }
+    if (!(result as { success?: boolean }).success || !(result as { data?: unknown }).data) {
+      throw new Error((result as { error?: string }).error || 'Resposta inválida');
+    }
+    return (result as { data: { id: string; name: string; email: string; role: string; roleDescription?: string | null } }).data;
+  },
+  getStats: async (): Promise<AdminStats | null> => {
+    try {
+      const url = `${getApiUrl()}/auth/admin/stats`;
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) return null;
+      const result = await response.json();
+      return result.success ? result.data : null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /**

@@ -1,7 +1,25 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Play, Pause, Square, Users, ArrowRightLeft, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
+import { X, Play, Pause, Square, Users, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff, Lock, Unlock } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
+import {
+  HALF_RELATIVE_LAST_SECOND_1T,
+  HALF_RELATIVE_LAST_SECOND_2T,
+  HALF_RELATIVE_MAX_SECONDS,
+  absoluteSecondsToStored,
+  canonicalizePostMatchEventClock,
+  deriveHalfFromAbsoluteSeconds,
+  formatGoalTimeDigitsMask,
+  goalAbsoluteDigitsToRelativeSecondsSecondHalf,
+  goalAbsoluteDigitsToRelativeSecondsSecondHalfUnclamped,
+  goalDigitsToRelativeSeconds,
+  parseGoalTimeDigits,
+  secondHalfRelativeToGoalDigits,
+  storedToAbsoluteSeconds,
+  type MatchHalf,
+} from '../utils/matchPeriod';
+import { isPersistedServerMatchId } from '../utils/matchUpsert';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -48,7 +66,10 @@ interface MatchScoutingWindowProps {
   extraTimeMinutes?: number;
   selectedPlayerIds?: string[]; // IDs dos jogadores selecionados
   mode?: 'realtime' | 'postmatch'; // postmatch = tempo manual, sem cronômetro
-  onSave?: (match: MatchRecord) => void; // Chamado em postmatch ao encerrar coleta
+  onSave?: (
+    match: MatchRecord,
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+  ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
   /** Usuário que está registrando as ações (para auditoria: quem fez/registrou cada ação) */
   recordedByUser?: { id?: string; name: string };
   /** Quando true, ocupa todo o viewport (ex.: sidebar foi escondida pelo app) */
@@ -59,16 +80,16 @@ interface MatchScoutingWindowProps {
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
 
-/** Períodos do gol para o gráfico no scout coletivo. Cronômetro reinicia por tempo (0–20 min cada). */
+/** Faixas de minuto para gráfico de períodos (scout coletivo). Tempo relativo à metade armazenada em `period` (0–20 min por metade). */
 function getGoalPeriod(period: '1T' | '2T', timeSeconds: number): number {
-  // 1º tempo: período 1 = 0:00–5:00, 2 = 5:01–10:00, 3 = 10:01–15:00, 4 = 15:01–20:00
+  // period === '1T': buckets 1–4 (0–20 min relativos)
   if (period === '1T') {
     if (timeSeconds <= 5 * 60) return 1;
     if (timeSeconds <= 10 * 60) return 2;
     if (timeSeconds <= 15 * 60) return 3;
     return 4;
   }
-  // 2º tempo: período 5 = 20:01–25:00, 6 = 25:01–30:00, 7 = 30:01–35:00, 8 = 35:01–40:00
+  // period === '2T': buckets 5–8 (0–20 min relativos ao 2T)
   if (period === '2T') {
     if (timeSeconds <= 5 * 60) return 5;
     if (timeSeconds <= 10 * 60) return 6;
@@ -87,6 +108,9 @@ const GOAL_METHODS_CONCEDED = [
 
 const BOLA_PARADA_METHODS = ['Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti'];
 
+/** Métodos em que não há assistência (fluxo gol nosso). */
+const GOAL_METHODS_NO_ASSIST: ReadonlyArray<string> = ['Pênalti', 'Tiro Livre'];
+
 /** Ícone e cor de fundo viva por método de gol (futsal) */
 const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border: string; hover: string; text: string }> = {
   'Ataque': { icon: <Target size={16} />, bg: 'bg-blue-500/20', border: 'border-blue-500/50', hover: 'hover:bg-blue-500', text: 'text-blue-400 hover:text-white' },
@@ -100,6 +124,7 @@ const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border
   'Pênalti': { icon: <Circle size={16} />, bg: 'bg-rose-500/20', border: 'border-rose-500/50', hover: 'hover:bg-rose-600', text: 'text-rose-400 hover:text-white' },
   'MARCAÇÃO ALTA': { icon: <Hand size={16} />, bg: 'bg-emerald-500/20', border: 'border-emerald-500/50', hover: 'hover:bg-emerald-600', text: 'text-emerald-400 hover:text-white' },
   'Perda de bola na primeira linha da defesa': { icon: <ShieldOff size={16} />, bg: 'bg-red-600/20', border: 'border-red-600/50', hover: 'hover:bg-red-700', text: 'text-red-400 hover:text-white' },
+  'Gol Contra': { icon: <ShieldOff size={16} />, bg: 'bg-amber-500/20', border: 'border-amber-500/50', hover: 'hover:bg-amber-500', text: 'text-amber-400 hover:text-black' },
 };
 
 // Jogador "fake" para o adversário — usado apenas para contabilizar gols sofridos e métodos de gols do adversário
@@ -152,7 +177,7 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
   };
 
   return log.map(pe => {
-    const timeSeconds = parseMMSSToSeconds(pe.time);
+    const { time: timeSeconds, period: normalizedPeriod } = canonicalizePostMatchEventClock(pe.time, pe.period);
     let type: MatchEvent['type'];
     let result: MatchEvent['result'] | undefined;
 
@@ -202,6 +227,9 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         break;
       case 'save':
         type = 'save';
+        if (pe.subtipo === 'Pra fora') result = 'outside';
+        else if (pe.subtipo === 'Simples' || pe.subtipo === 'DEFESA SIMPLES') result = 'simple';
+        else if (pe.subtipo === 'Difícil') result = 'hard';
         break;
       case 'assist':
         type = 'goal';
@@ -220,18 +248,25 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       playerId,
       playerName,
       time: timeSeconds,
-      period: pe.period,
+      period: normalizedPeriod,
       tipo: pe.tipo,
       subtipo: pe.subtipo,
     };
     if (result !== undefined) event.result = result;
+    if (type === 'save' && result) {
+      event.details =
+        result === 'outside' ? { saveOutcome: 'outside' } : { saveDifficulty: result as 'simple' | 'hard' };
+    }
     if (pe.passToPlayerId) {
       event.passToPlayerId = String(pe.passToPlayerId).trim();
       event.passToPlayerName = pe.passToPlayerName ?? playerById.get(event.passToPlayerId)?.name;
     }
     if (pe.zone && zoneToResult[pe.zone]) event.result = zoneToResult[pe.zone];
     if (pe.goalMethod) event.goalMethod = pe.goalMethod;
-    if (pe.isOpponentGoal === true) event.isOpponentGoal = true;
+    if (pe.isOpponentGoal === true || (pe.action === 'goal' && pe.subtipo === 'Contra')) {
+      event.isOpponentGoal = true;
+      event.result = 'contra';
+    }
     if (pe.assistPlayerId) {
       event.assistPlayerId = String(pe.assistPlayerId).trim();
       event.assistPlayerName = pe.assistPlayerName ?? playerById.get(event.assistPlayerId)?.name;
@@ -259,15 +294,40 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   sidebarRetracted = false,
 }) => {
   const isPostmatch = mode === 'postmatch';
+  /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
+  const [persistedMatchId, setPersistedMatchId] = useState<string>(() => {
+    const id = match?.id != null ? String(match.id).trim() : '';
+    return isPersistedServerMatchId(id) ? id : '';
+  });
+  const persistedMatchIdRef = useRef<string>(isPersistedServerMatchId(match?.id != null ? String(match.id).trim() : '') ? String(match.id).trim() : '');
+
+  useEffect(() => {
+    const id = match?.id != null ? String(match.id).trim() : '';
+    if (isPersistedServerMatchId(id)) {
+      setPersistedMatchId(id);
+      persistedMatchIdRef.current = id;
+    }
+  }, [match.id]);
+
+  const applySaveResult = useCallback((r: MatchRecord | undefined | void) => {
+    if (r && typeof r === 'object' && r.id != null) {
+      const sid = String(r.id).trim();
+      if (sid) {
+        persistedMatchIdRef.current = sid;
+        setPersistedMatchId(sid);
+      }
+    }
+  }, []);
   const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
-  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto 0–20
+  const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (20+ = 2º tempo)
   const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
+  /** Pós-jogo: 0:00 só abre popup «Informar tempo» se o usuário não escolheu 1º/2º no centro (ex.: após gol). */
+  const [manualHalfPinned, setManualHalfPinned] = useState<boolean>(true);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
-  const [showSubstitutions, setShowSubstitutions] = useState<boolean>(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null); // ID do jogador selecionado para ação
   const [goalsFor, setGoalsFor] = useState<number>(0); // Gols da nossa equipe
   const [goalsAgainst, setGoalsAgainst] = useState<number>(0); // Gols do adversário
@@ -281,11 +341,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [pendingGoalIsOpponent, setPendingGoalIsOpponent] = useState<boolean>(false); // Se o gol é do adversário
   const [pendingGoalPlayerId, setPendingGoalPlayerId] = useState<string | null>(null); // ID do jogador autor do gol (se gol nosso)
   const [pendingGoalTime, setPendingGoalTime] = useState<number | null>(null); // Tempo capturado quando GOL foi clicado
-  const [pendingGoalPeriod, setPendingGoalPeriod] = useState<'1T' | '2T' | null>(null); // Período do gol (editável no confirm)
-  const [goalConfirmEditingTime, setGoalConfirmEditingTime] = useState<boolean>(false); // Toggle editar tempo no popup confirmar
-  const [goalStep, setGoalStep] = useState<'team' | 'author' | 'assist' | 'method' | 'confirm' | null>(null); // Fluxo inline do gol
+  const [goalStep, setGoalStep] = useState<'team' | 'author' | 'assist' | 'method' | 'time' | null>(null); // Fluxo inline do gol (tempo após método/assistência)
   const [pendingGoalMethod, setPendingGoalMethod] = useState<string | null>(null); // Método do gol (para nosso ou tomado)
   const [pendingAssistPlayerId, setPendingAssistPlayerId] = useState<string | null>(null); // ID do assistente (null = sem assistência)
+  /** Tempo relativo à metade escolhida (0 … 20:59). */
+  const [goalTimeRelSeconds, setGoalTimeRelSeconds] = useState(0);
+  /** Dígitos crus (até 4) para o campo texto MM:SS no passo tempo do gol; ex.: "1856" → 18:56. */
+  const [goalTimeDigits, setGoalTimeDigits] = useState('');
+  /** Para «Voltar» no passo tempo: regressão ao método ou à assistência. */
+  const [goalTimeReturnStep, setGoalTimeReturnStep] = useState<'method' | 'assist'>('method');
   
   // Estado para rastrear cartões por jogador
   const [playerCards, setPlayerCards] = useState<Record<string, Array<'yellow' | 'secondYellow' | 'red'>>>({});
@@ -302,9 +366,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [pendingPassResult, setPendingPassResult] = useState<'correct' | 'wrong' | null>(null);
   const [pendingPassEventId, setPendingPassEventId] = useState<string | null>(null);
   const [pendingPassSenderId, setPendingPassSenderId] = useState<string | null>(null); // ID do passador aguardando receptor
+  const [requirePassReceiver, setRequirePassReceiver] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('scout21_requirePassReceiver') === 'true';
+    } catch {
+      return false;
+    }
+  });
   
   // Estados para período e posse
   const [currentPeriod, setCurrentPeriod] = useState<'1T' | '2T'>('1T');
+  /** Após encerrar coleta do 1º tempo (ou intervalo → 2º), não volta mais ao 1T. */
+  const [firstHalfLocked, setFirstHalfLocked] = useState(false);
   const [ballPossessionNow, setBallPossessionNow] = useState<'com' | 'sem'>('com');
   const ballPossessionNowRef = useRef<'com' | 'sem'>(ballPossessionNow);
   useEffect(() => { ballPossessionNowRef.current = ballPossessionNow; }, [ballPossessionNow]);
@@ -323,6 +396,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     period: '1T' | '2T';
   }>>([]);
   const [substitutionCounts, setSubstitutionCounts] = useState<Record<string, number>>({});
+  /** Elenco em quadra + banco: quem está “ativo” para a coleta (exatamente 5 quando trancado). */
+  const [squadActiveIds, setSquadActiveIds] = useState<string[]>([]);
+  /** Locker aberto = editando quem está ativo; fechado = inativos ficam cinza/desabilitados. */
+  const [lockerOpen, setLockerOpen] = useState<boolean>(false);
+  const [lockerDraftIds, setLockerDraftIds] = useState<string[]>([]);
   
   // Estado de expulsão: time joga com um a menos até 2 min (cronometrados) ou gol adversário; então pode repor no slot
   const EXPULSION_WAIT_SECONDS = 120; // 2 minutos cronometrados
@@ -332,6 +410,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     period: '1T' | '2T';
   } | null>(null);
   const [showExpulsionReplacementSelection, setShowExpulsionReplacementSelection] = useState<boolean>(false);
+  const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autosaveInFlightRef = useRef<boolean>(false);
+  const autosaveQueuedRef = useRef<boolean>(false);
+  const autosaveSkipRef = useRef<boolean>(true);
+  const lastAutosaveSignatureRef = useRef<string>('');
+  /** Só hidrata do `match` uma vez por id enquanto a janela está aberta (evita refresh do pai sobrescrever lances locais). */
+  const hydrationAppliedForMatchIdRef = useRef<string | null>(null);
+  const lastSeenMatchIdForHydrationRef = useRef<string | null>(null);
+  /** Evita que efeitos de `match`/`init` repõem 1T após «Encerrar coleta do 1º tempo» antes do servidor gravar `collectionPhase: 2`. */
+  const userEndedFirstHalfCollectionRef = useRef(false);
   
   // Estados para confirmação de falta com zona
   const [showFoulConfirmation, setShowFoulConfirmation] = useState<boolean>(false);
@@ -340,7 +429,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Tela de logs (eventos em tabela editável)
   const [showLogsView, setShowLogsView] = useState<boolean>(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ time: number; period: '1T' | '2T'; type: MatchEvent['type']; result?: MatchEvent['result']; cardType?: MatchEvent['cardType']; foulTeam?: 'for' | 'against'; assistPlayerId?: string | null; assistPlayerName?: string | null } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ time: number; period: '1T' | '2T'; type: MatchEvent['type']; result?: MatchEvent['result']; cardType?: MatchEvent['cardType']; foulTeam?: 'for' | 'against'; playerId?: string | null; playerName?: string | null; assistPlayerId?: string | null; assistPlayerName?: string | null } | null>(null);
   const [editTimeInput, setEditTimeInput] = useState<string>('');
   
   // Estados para tiro livre e pênalti (fluxo inline)
@@ -349,13 +438,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [showFreeKickResult, setShowFreeKickResult] = useState<boolean>(false);
   const [pendingFreeKickTeam, setPendingFreeKickTeam] = useState<'for' | 'against' | null>(null);
   const [pendingFreeKickKickerId, setPendingFreeKickKickerId] = useState<string | null>(null);
+  /** Após escolher Defesa/Pra fora (a favor): abre modal de cobrador antes de registrar */
+  const [pendingFreeKickResultToRegister, setPendingFreeKickResultToRegister] = useState<'saved' | 'outside' | 'noGoal' | null>(null);
   const [freeKickStep, setFreeKickStep] = useState<'team' | 'kicker' | 'result' | null>(null);
   const [penaltyStep, setPenaltyStep] = useState<'team' | 'kicker' | 'result' | null>(null);
   
   const [showPenaltyTeamSelection, setShowPenaltyTeamSelection] = useState<boolean>(false);
 
-  // Novo fluxo: Ação → Detalhes (popup) → [Passe Errado: Gerou transição?] → Jogador (popup) → Tempo (popup se necessário)
-  type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'time' | null;
+  // Novo fluxo: Ação → Detalhes (popup) → Jogador (lista lateral) → Tempo (popup se necessário)
+  type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
   const [actionFlow, setActionFlow] = useState<{
     step: ActionFlowStep;
     action: string | null;
@@ -365,7 +456,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     foulTeam?: 'for' | 'against';
     zone?: LateralResult;
     pendingTime?: number;
-    pendingPeriod?: '1T' | '2T';
     /** Passe errado: true = gerou transição, false = não gerou */
     wrongPassTransition?: boolean;
   } | null>(null);
@@ -375,6 +465,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [pendingPenaltyKickerId, setPendingPenaltyKickerId] = useState<string | null>(null);
 
   const teamName = teams && teams.length > 0 ? teams[0].nome : 'Nossa Equipe';
+  const hasSelectedPlayer = selectedPlayerId != null && String(selectedPlayerId).trim().length > 0;
+  const shouldHighlightPlayerPanel = isMatchStarted && !hasSelectedPlayer;
+  const selectedPlayer = hasSelectedPlayer
+    ? players.find((p) => String(p.id).trim() === String(selectedPlayerId).trim()) ?? null
+    : null;
+
+  /** Aviso não bloqueante (ex.: canto superior direito). */
+  const [topRightNotice, setTopRightNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!topRightNotice) return;
+    const id = window.setTimeout(() => setTopRightNotice(null), 4500);
+    return () => window.clearTimeout(id);
+  }, [topRightNotice]);
   
   // Funções para gerenciar frequência de substituições em localStorage
   const loadSubstitutionFrequency = (): Record<string, number> => {
@@ -430,8 +533,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (result === 'counter') return { tipo: 'Desarme', subtipo: 'Contra-ataque' };
         return { tipo: 'Desarme', subtipo: '' };
       case 'save':
-        if (result === 'simple') return { tipo: 'Defesa', subtipo: 'Simples' };
+        if (result === 'simple') return { tipo: 'Defesa', subtipo: 'DEFESA SIMPLES' };
         if (result === 'hard') return { tipo: 'Defesa', subtipo: 'Difícil' };
+        if (result === 'outside') return { tipo: 'Defesa', subtipo: 'Pra fora' };
         return { tipo: 'Defesa', subtipo: 'Defesa' };
       case 'block':
         return { tipo: 'Bloqueio', subtipo: 'Bloqueio' };
@@ -478,85 +582,75 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   };
 
-  const startActionFlow = (action: string) => {
-    const step = needsDetails(action) ? 'details' as const : 'player' as const;
-    const flow = { step, action, details: null as string | null };
+  const startActionFlow = (action: string, preSelectedPlayerId?: string | null) => {
+    const cleanSelectedPlayerId = preSelectedPlayerId != null ? String(preSelectedPlayerId).trim() : '';
+    const flow = {
+      step: needsDetails(action) ? 'details' as const : 'player' as const,
+      action,
+      details: null as string | null,
+      selectedPlayerId: cleanSelectedPlayerId.length > 0 ? cleanSelectedPlayerId : undefined,
+    };
 
-    // Escanteio e Lateral: registrar com um clique, sem confirmação de jogador (usa selecionado ou primeiro ativo)
-    if (action === 'lateral' || action === 'corner') {
-      const pid = selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null);
-      if (pid) {
-        if (needsTimePopup()) {
-          setActionFlow({ ...flow, step: 'time', selectedPlayerId: pid });
-        } else {
-          executeActionFlow(flow as NonNullable<typeof actionFlow>, pid);
-          setActionFlow(null);
-          setSelectedAction(null);
-        }
-      }
+    // Escanteio e Lateral: após detalhes, jogador só pela lista à esquerda
+    if ((action === 'lateral' || action === 'corner' || action === 'block') && flow.selectedPlayerId) {
+      executeActionFlow({ ...flow, step: 'details' as const }, flow.selectedPlayerId);
       return;
     }
 
-    if (step === 'player' && selectedPlayerId) {
-      if (needsTimePopup()) {
-        setActionFlow({ ...flow, step: 'time', selectedPlayerId });
-      } else {
-        executeActionFlow(flow as NonNullable<typeof actionFlow>, selectedPlayerId);
-        setActionFlow(null);
-        setSelectedAction(null);
-      }
-      return;
-    }
     setActionFlow(flow as any);
   };
 
   const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
-    // Passe: usar jogador da aba lateral, sem passo de confirmação de jogador
-    if (actionFlow?.action === 'pass') {
-      const nextFlow = { ...actionFlow, step: 'player' as const, details, ...extra };
-      const pid = selectedPlayerId;
-      if (pid) {
-        if (needsTimePopup()) {
-          setActionFlow({ ...nextFlow, step: 'time', selectedPlayerId: pid });
-        } else {
-          executeActionFlow(nextFlow, pid);
-          cancelActionFlow();
-        }
-        return;
-      }
-      cancelActionFlow();
+    if (!actionFlow) return;
+    // Falta do adversário: só contabiliza; não abre popup com lista dos nossos jogadores
+    if (actionFlow.action === 'foul' && extra?.foulTeam === 'against') {
+      executeActionFlow(
+        { ...actionFlow, step: 'details', details, foulTeam: 'against', ...extra },
+        OPPONENT_FAKE_PLAYER_ID
+      );
       return;
     }
-
-    // Lateral e escanteio: usar jogador da aba lateral, sem passo de confirmação
-    if (actionFlow?.action === 'lateral' || actionFlow?.action === 'corner') {
-      const nextFlow = actionFlow ? { ...actionFlow, step: 'player' as const, details, ...extra } : null;
-      const pid = selectedPlayerId;
-      if (pid && nextFlow) {
-        if (needsTimePopup()) {
-          setActionFlow({ ...nextFlow, step: 'time', selectedPlayerId: pid });
-        } else {
-          executeActionFlow(nextFlow, pid);
-          cancelActionFlow();
-        }
-        return;
-      }
-      setActionFlow(nextFlow);
-      return;
-    }
-
-    // Outras ações: manter fluxo normal
-    const nextFlow = actionFlow ? { ...actionFlow, step: 'player' as const, details, ...extra } : null;
-    if (nextFlow && selectedPlayerId) {
+    const pid = actionFlow.selectedPlayerId != null ? String(actionFlow.selectedPlayerId).trim() : '';
+    const nextFlow = { ...actionFlow, details, ...extra };
+    if (pid.length > 0) {
       if (needsTimePopup()) {
-        setActionFlow({ ...nextFlow, step: 'time', selectedPlayerId });
+        setActionFlow({ ...nextFlow, step: 'time' as const, pendingTime: getTimeForEvent() ?? matchTime ?? 0, selectedPlayerId: pid });
       } else {
-        executeActionFlow(nextFlow, selectedPlayerId);
-        cancelActionFlow();
+        executeActionFlow({ ...nextFlow, step: 'details' as const, selectedPlayerId: pid }, pid);
       }
       return;
     }
-    setActionFlow(nextFlow);
+    setActionFlow({ ...nextFlow, step: 'player' as const });
+  };
+
+  /** Escolha de jogador no fluxo actionFlow (lista lateral). */
+  const handleActionFlowPlayerPick = (clickedPlayerId: string) => {
+    if (!actionFlow?.action) return;
+    if (needsTimePopup()) {
+      setActionFlow(prev =>
+        prev
+          ? {
+              ...prev,
+              step: 'time' as const,
+              selectedPlayerId: clickedPlayerId,
+              pendingTime: getTimeForEvent() ?? matchTime ?? 0,
+              details: prev.details ?? null,
+              wrongPassTransition: prev.wrongPassTransition,
+            }
+          : null
+      );
+    } else {
+      completeActionFlowWithPlayer(clickedPlayerId);
+    }
+  };
+
+  const handleActionFlowPlayerModalBack = () => {
+    if (!actionFlow?.action) return;
+    if (needsDetails(actionFlow.action)) {
+      setActionFlow(prev => (prev ? { ...prev, step: 'details' as const, selectedPlayerId: undefined } : null));
+    } else {
+      cancelActionFlow();
+    }
   };
 
   const cancelActionFlow = () => {
@@ -565,7 +659,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const needsTimePopup = (): boolean =>
-    isPostmatch && manualMinute === 0 && manualSecond === 0;
+    isPostmatch && manualMinute === 0 && manualSecond === 0 && !manualHalfPinned;
+
+  /** Tempo relativo à metade + period técnico; pós-jogo: `rawSeconds` é minuto absoluto 0–40. */
+  const eventTimeAndPeriod = (rawSeconds: number, periodOverride?: MatchHalf): { time: number; period: MatchHalf } => {
+    if (isPostmatch) {
+      return absoluteSecondsToStored(rawSeconds);
+    }
+    const cap =
+      (periodOverride ?? currentPeriod) === '2T' ? HALF_RELATIVE_LAST_SECOND_2T : HALF_RELATIVE_LAST_SECOND_1T;
+    const clampedRelative = Math.max(0, Math.min(rawSeconds, cap));
+    return { time: clampedRelative, period: periodOverride ?? currentPeriod };
+  };
 
   const executeActionFlow = (
     flow: NonNullable<typeof actionFlow>,
@@ -574,40 +679,39 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     periodOverride?: '1T' | '2T'
   ) => {
     if (!flow?.action) return;
-    const time = timeOverride ?? getTimeForEvent() ?? matchTime;
-    const period = periodOverride ?? currentPeriod;
+    const rawT = timeOverride ?? getTimeForEvent() ?? matchTime;
 
     const run = () => {
       switch (flow.action) {
         case 'pass': {
           const isWrong = flow.details === 'wrong';
           const generatedTransition = isWrong ? (flow.wrongPassTransition === true) : undefined;
-          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, time, period, generatedTransition);
+          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, rawT, periodOverride, generatedTransition);
           break;
         }
         case 'shot':
-          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, time, period);
+          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, rawT, periodOverride);
           break;
         case 'foul':
-          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, time, period);
+          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride);
           break;
         case 'tackle':
-          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, time, period);
+          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride);
           break;
         case 'card':
-          handleRegisterCard(flow.cardType ?? 'yellow', playerId, time, period);
+          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride);
           break;
         case 'save':
-          handleRegisterSave(flow.details as 'simple' | 'hard', playerId, time, period);
+          handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride);
           break;
         case 'lateral':
-          handleRegisterLateral(flow.zone, playerId, time, period);
+          handleRegisterLateral(flow.zone, playerId, rawT, periodOverride);
           break;
         case 'corner':
-          handleRegisterCorner(flow.zone, playerId, time, period);
+          handleRegisterCorner(flow.zone, playerId, rawT, periodOverride);
           break;
         case 'block':
-          handleRegisterBlock(playerId, time, period);
+          handleRegisterBlock(playerId, rawT, periodOverride);
           break;
         default:
           break;
@@ -625,6 +729,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   ) => {
     if (!actionFlow?.action) return;
     executeActionFlow(actionFlow, playerId, timeOverride, periodOverride);
+  };
+
+  /** Após Defesa fácil/difícil/pra fora: goleiro pela lista lateral; pós-jogo sem tempo abre o passo `time`. */
+  const completeSaveAfterGoalkeeperPick = (flow: NonNullable<typeof actionFlow>, gkId: string) => {
+    if (
+      flow.action !== 'save' ||
+      (flow.details !== 'simple' && flow.details !== 'hard' && flow.details !== 'outside')
+    ) {
+      return;
+    }
+    if (needsTimePopup()) {
+      setActionFlow({ ...flow, step: 'time', selectedPlayerId: gkId, pendingTime: getTimeForEvent() ?? matchTime ?? 0 });
+    } else {
+      executeActionFlow(flow, gkId);
+    }
   };
 
   // Opções de tipo de ação para a tela de logs (value = MatchEvent['type'])
@@ -665,6 +784,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         return [{ value: 'Amarelo', cardType: 'yellow' }, { value: 'Segundo Amarelo', cardType: 'secondYellow' }, { value: 'Vermelho', cardType: 'red' }];
       case 'tackle':
         return [{ value: 'Com posse', result: 'withBall' }, { value: 'Sem posse', result: 'withoutBall' }, { value: 'Contra-ataque', result: 'counter' }];
+      case 'save':
+        return [
+          { value: 'DEFESA SIMPLES', result: 'simple' },
+          { value: 'Difícil', result: 'hard' },
+          { value: 'Pra fora', result: 'outside' },
+        ];
       case 'freeKick':
       case 'penalty':
         return [{ value: 'Gol', result: 'goal' }, { value: 'Defendido', result: 'saved' }, { value: 'Pra fora', result: 'outside' }, { value: 'Trave', result: 'post' }, { value: 'Não gol', result: 'noGoal' }];
@@ -681,10 +806,62 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return matchTime;
   };
 
+  /** Após escolher método (ou assistência), abre o passo de tempo (campo vazio; período = `currentPeriod`). */
+  const enterGoalTimeStep = useCallback((from: 'method' | 'assist') => {
+    setGoalTimeReturnStep(from);
+    setGoalTimeRelSeconds(0);
+    setGoalTimeDigits('');
+    setGoalStep('time');
+  }, []);
+
+  useEffect(() => {
+    userEndedFirstHalfCollectionRef.current = false;
+  }, [match?.id]);
+
+  // Pós-jogo: metade técnica deriva do relógio (1º tempo = min. 0–20 abs.; 2º = 20–40) ou do botão 1º/2º Tempo.
+  useEffect(() => {
+    if (!isPostmatch) return;
+    if (firstHalfLocked) {
+      setCurrentPeriod('2T');
+      return;
+    }
+    setCurrentPeriod(deriveHalfFromAbsoluteSeconds(manualMinute * 60 + manualSecond));
+  }, [isPostmatch, manualMinute, manualSecond, firstHalfLocked]);
+
+  // Com 1º tempo encerrado, não permitir tempo absoluto < 20:00 (evita voltar ao 1T por edição de relógio).
+  useEffect(() => {
+    if (!isPostmatch || !firstHalfLocked) return;
+    const abs = manualMinute * 60 + manualSecond;
+    if (abs < 20 * 60) {
+      setManualMinute(20);
+      setManualSecond(0);
+    }
+  }, [isPostmatch, firstHalfLocked, manualMinute, manualSecond]);
+
   // Inicializar modal de escalação quando janela abrir (apenas realtime)
   useEffect(() => {
     if (!isOpen) return;
     if (isPostmatch) {
+      if (match.collectionPhase === 2) {
+        userEndedFirstHalfCollectionRef.current = false;
+        setManualMinute(20);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+        setCurrentPeriod('2T');
+        setFirstHalfLocked(true);
+      } else if (userEndedFirstHalfCollectionRef.current) {
+        setManualMinute(20);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+        setCurrentPeriod('2T');
+        setFirstHalfLocked(true);
+      } else {
+        setManualMinute(0);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+        setCurrentPeriod('1T');
+        setFirstHalfLocked(false);
+      }
       // Postmatch: pular lineup, usar selectedPlayerIds como jogadores ativos
       const ids = selectedPlayerIds && selectedPlayerIds.length > 0
         ? selectedPlayerIds
@@ -702,6 +879,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     if (!isMatchStarted && !showLineupModal) {
+      const Lm = match.lineup;
+      if (
+        Lm &&
+        Array.isArray(Lm.players) &&
+        Lm.players.length === 5 &&
+        Boolean(Lm.ballPossessionStart)
+      ) {
+        return;
+      }
       if (selectedPlayerIds && selectedPlayerIds.length > 0) {
         setBenchPlayers([...selectedPlayerIds]);
         setLineupPlayers([]);
@@ -713,20 +899,62 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setShowLineupModal(true);
       }
     }
-  }, [isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players]);
+  }, [isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players, match?.collectionPhase, match?.id, match?.lineup]);
 
-  // Atualizar jogadores ativos baseado na escalação; goleiro (primeiro da escalação) sempre primeiro na lista
+  // Jogadores ativos na coleta = só após trancar o locker com 5 IDs; sem ativos = ninguém selecionável na coleta
   useEffect(() => {
     if (!isOpen || isPostmatch) return;
-    if (players && players.length > 0 && lineupPlayers.length > 0) {
-      const active = lineupPlayers
-        .map(id => players.find(p => String(p.id).trim() === id))
-        .filter((p): p is Player => p != null);
-      setActivePlayers(active);
-    } else if (lineupPlayers.length === 0) {
+    if (squadActiveIds.length === 0) {
       setActivePlayers([]);
+      return;
     }
-  }, [isOpen, isPostmatch, players, lineupPlayers]);
+    if (!players?.length) {
+      setActivePlayers([]);
+      return;
+    }
+    const active = squadActiveIds
+      .map(id => players.find(p => String(p.id).trim() === id))
+      .filter((p): p is Player => p != null);
+    setActivePlayers(active);
+  }, [isOpen, isPostmatch, players, squadActiveIds]);
+
+  const allSquadPlayers = useMemo(() => {
+    const ids = [...new Set([...lineupPlayers, ...benchPlayers])];
+    const list = ids
+      .map(id => players.find(p => String(p.id).trim() === id))
+      .filter((p): p is Player => p != null);
+    return [...list].sort((a, b) => {
+      const aId = String(a.id).trim();
+      const bId = String(b.id).trim();
+      const aGK = a.position === 'Goleiro' || aId === currentGoalkeeperId;
+      const bGK = b.position === 'Goleiro' || bId === currentGoalkeeperId;
+      if (aGK && !bGK) return -1;
+      if (!aGK && bGK) return 1;
+      if (aGK && bGK && currentGoalkeeperId) {
+        if (aId === currentGoalkeeperId) return -1;
+        if (bId === currentGoalkeeperId) return 1;
+      }
+      return (a.jerseyNumber ?? 0) - (b.jerseyNumber ?? 0);
+    });
+  }, [lineupPlayers, benchPlayers, players, currentGoalkeeperId]);
+
+  const isLineupGoalkeeperId = (id: string) =>
+    players.find((p) => String(p.id).trim() === id)?.position === 'Goleiro';
+
+  /** Locker lateral: no máximo 1 jogador com posição Goleiro; ao escolher outro goleiro, substitui o anterior. */
+  const toggleLockerDraft = (playerId: string) => {
+    setLockerDraftIds((prev) => {
+      if (prev.includes(playerId)) return prev.filter((x) => x !== playerId);
+      const addingGk = isLineupGoalkeeperId(playerId);
+      if (addingGk) {
+        const withoutOtherGoalkeepers = prev.filter((id) => !isLineupGoalkeeperId(id));
+        if (withoutOtherGoalkeepers.length >= 5) return prev;
+        return [...withoutOtherGoalkeepers, playerId];
+      }
+      if (prev.length >= 5) return prev;
+      return [...prev, playerId];
+    });
+  };
 
   // Cronômetro e acúmulo de tempo com/sem posse
   useEffect(() => {
@@ -761,7 +989,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     let foulsAgainstCalc = 0;
     for (const e of events) {
       if (e.type === 'goal') {
-        if (e.isOpponentGoal) goalsAgainstCalc += 1;
+        if (e.isOpponentGoal || e.result === 'contra') goalsAgainstCalc += 1;
         else goalsForCalc += 1;
       } else if (e.type === 'foul') {
         if (e.foulTeam === 'against') foulsAgainstCalc += 1;
@@ -775,6 +1003,27 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Faltas por período: exibição e regra dos 5 vinculadas ao período selecionado (botão central de tempo)
+  /** Goleiros em quadra após Defesa fácil/difícil (titulares + goleiro linha ativo; fallback: todos em quadra). */
+  const saveGoalkeeperOptions = useMemo(() => {
+    let fromGk = activePlayers.filter(p => p.position === 'Goleiro');
+    const ck = currentGoalkeeperId ? String(currentGoalkeeperId).trim() : '';
+    if (ck && !fromGk.some(p => String(p.id).trim() === ck)) {
+      const lineGk = activePlayers.find(p => String(p.id).trim() === ck);
+      if (lineGk) fromGk = [...fromGk, lineGk];
+    }
+    const isFallback = fromGk.length === 0 && activePlayers.length > 0;
+    const players = isFallback ? [...activePlayers] : fromGk;
+    const sorted = [...players].sort((a, b) => {
+      if (ck) {
+        const aFirst = String(a.id).trim() === ck ? -1 : 0;
+        const bFirst = String(b.id).trim() === ck ? -1 : 0;
+        if (aFirst !== bFirst) return aFirst - bFirst;
+      }
+      return (a.jerseyNumber ?? 0) - (b.jerseyNumber ?? 0);
+    });
+    return { players: sorted, isFallback };
+  }, [activePlayers, currentGoalkeeperId]);
+
   const { foulsFor1T, foulsFor2T, foulsAgainst1T, foulsAgainst2T } = useMemo(() => {
     let f1 = 0, f2 = 0, a1 = 0, a2 = 0;
     for (const e of matchEvents) {
@@ -790,20 +1039,129 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const foulsForCurrentPeriod = currentPeriod === '1T' ? foulsFor1T : foulsFor2T;
   const foulsAgainstCurrentPeriod = currentPeriod === '1T' ? foulsAgainst1T : foulsAgainst2T;
 
-  // Carregar eventos da partida ao abrir "Editar Dados" (postmatch com postMatchEventLog)
+  // Carregar log de lances e escalação ao abrir (incompleto: salvar/reabrir lineup + postMatchEventLog)
   useEffect(() => {
-    if (!isOpen || mode !== 'postmatch' || !match.postMatchEventLog?.length) return;
-    const converted = postMatchEventLogToMatchEvents(match.postMatchEventLog, players);
-    setMatchEvents(converted);
-    recalcGoalsAndFoulsFromEvents(converted);
-  }, [isOpen, mode, match?.id, match?.postMatchEventLog]);
+    if (!isOpen) {
+      hydrationAppliedForMatchIdRef.current = null;
+      lastSeenMatchIdForHydrationRef.current = null;
+      return;
+    }
+    const mid = String(match?.id ?? '').trim();
+    if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
+      hydrationAppliedForMatchIdRef.current = null;
+    }
+    lastSeenMatchIdForHydrationRef.current = mid;
+
+    if (hydrationAppliedForMatchIdRef.current === mid && mid !== '') {
+      return;
+    }
+
+    const log = match.postMatchEventLog;
+    const hasLog = log != null && log.length > 0;
+    const L = match.lineup;
+    const hasLineupData =
+      L != null &&
+      ((Array.isArray(L.players) && L.players.length > 0) ||
+        (Array.isArray(L.selectedPlayerIds) && L.selectedPlayerIds.length > 0) ||
+        (Array.isArray(L.bench) && L.bench.length > 0));
+
+    if (!hasLog && !hasLineupData) return;
+
+    hydrationAppliedForMatchIdRef.current = mid;
+
+    let converted: MatchEvent[] = [];
+    if (hasLog) {
+      converted = postMatchEventLogToMatchEvents(log, players);
+      setMatchEvents(converted);
+      recalcGoalsAndFoulsFromEvents(converted);
+    } else {
+      setMatchEvents([]);
+      recalcGoalsAndFoulsFromEvents([]);
+    }
+
+    const has2TEvent = converted.some((e) => e.period === '2T');
+    const phase = match.collectionPhase;
+    if (phase === 2) {
+      userEndedFirstHalfCollectionRef.current = false;
+    }
+    const inSecondHalf =
+      phase === 2 || (phase === undefined && has2TEvent) || userEndedFirstHalfCollectionRef.current;
+
+    if (!isPostmatch) {
+      if (hasLineupData && L) {
+        setLineupPlayers(L.players ?? []);
+        setBenchPlayers(L.bench ?? []);
+        if (L.ballPossessionStart) {
+          setBallPossessionStart(L.ballPossessionStart);
+        }
+        const tit = (L.players ?? []).filter(Boolean);
+        if (tit.length === 5 && L.ballPossessionStart) {
+          setIsMatchStarted(true);
+          setShowLineupModal(false);
+          setCurrentGoalkeeperId(tit[0]);
+          setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
+          setSquadActiveIds(tit);
+        } else if (hasLog) {
+          setIsMatchStarted(true);
+          setShowLineupModal(false);
+          setSquadActiveIds(tit.length === 5 ? tit : []);
+          if (tit[0]) setCurrentGoalkeeperId(tit[0]);
+        } else {
+          setIsMatchStarted(false);
+          setShowLineupModal(true);
+          setSquadActiveIds([]);
+        }
+      } else if (hasLog && L) {
+        setLineupPlayers(L.players ?? []);
+        setBenchPlayers(L.bench ?? []);
+        if (L.ballPossessionStart) {
+          setBallPossessionStart(L.ballPossessionStart);
+          setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
+        }
+        setIsMatchStarted(true);
+        setShowLineupModal(false);
+        const titFb = (L.players ?? []).filter(Boolean);
+        setSquadActiveIds(titFb.length === 5 ? titFb : []);
+        if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
+      }
+      setSubstitutionHistory(match.substitutionHistory ?? []);
+      if (hasLog && inSecondHalf) {
+        setCurrentPeriod('2T');
+        setMatchTime(0);
+        setFirstHalfLocked(true);
+      } else if (hasLog && !inSecondHalf) {
+        setCurrentPeriod('1T');
+        setFirstHalfLocked(false);
+      } else if (!hasLog && inSecondHalf) {
+        setCurrentPeriod('2T');
+        setMatchTime(0);
+        setFirstHalfLocked(true);
+      } else if (!hasLog && !inSecondHalf) {
+        setCurrentPeriod('1T');
+        setFirstHalfLocked(false);
+      }
+    } else if (inSecondHalf) {
+      setManualMinute(20);
+      setManualSecond(0);
+      setManualHalfPinned(true);
+      setFirstHalfLocked(true);
+    }
+    autosaveSkipRef.current = true;
+    setTimeout(() => {
+      autosaveSkipRef.current = false;
+      try {
+        const initialSnapshot = JSON.stringify(buildMatchSnapshot('em_andamento'));
+        lastAutosaveSignatureRef.current = initialSnapshot;
+      } catch (_) {}
+    }, 0);
+  }, [isOpen, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
 
   // Toggle cronômetro
   const handleToggleTimer = () => {
     setIsRunning(!isRunning);
   };
 
-  // Encerrar tempo (1T → análise intervalo, 2T → fim de jogo)
+  // Encerrar tempo (primeira metade → modal de intervalo; segunda metade → fim de jogo)
   const handleEndTime = () => {
     if (matchTime >= 20 * 60) {
       setIsRunning(false);
@@ -811,19 +1169,100 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (currentPeriod === '1T') {
         setShowIntervalAnalysis(true);
       } else {
-        // Segundo tempo: encerrar partida
+        // Segunda metade: encerrar partida
         setIsMatchEnded(true);
       }
     }
   };
   
-  // Iniciar segundo tempo
-  const handleStartSecondHalf = () => {
+  /** Segundo tempo no ao vivo: cronômetro zera, posse inverte (mesmo após intervalo ou após “encerrar coleta 1º tempo”). */
+  const applySecondHalfRealtime = () => {
     setCurrentPeriod('2T');
-    setMatchTime(0); // Zerar cronômetro para 2º tempo
+    setMatchTime(0);
     setShowIntervalAnalysis(false);
-    // Posse inicial do 2º tempo: oposto do início do 1º
     setBallPossessionNow(ballPossessionStart === 'us' ? 'sem' : 'com');
+    setFirstHalfLocked(true);
+  };
+
+  const handleStartSecondHalf = () => {
+    applySecondHalfRealtime();
+  };
+
+  /** Encerra a coleta do 1º tempo: ativa 2º tempo; faltas exibidas passam a ser as do 2T (novos lances entram como 2T). */
+  const handleEndFirstHalfCollection = () => {
+    if (currentPeriod !== '1T') return;
+    userEndedFirstHalfCollectionRef.current = true;
+    if (isPostmatch) {
+      flushSync(() => {
+        setManualMinute(20);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+        setCurrentPeriod('2T');
+        setFirstHalfLocked(true);
+      });
+    } else {
+      flushSync(() => {
+        setIsRunning(false);
+        applySecondHalfRealtime();
+      });
+    }
+    if (onSave && isOpen) {
+      setTimeout(() => {
+        try {
+          autosaveSkipRef.current = false;
+          const snap = buildMatchSnapshot('em_andamento');
+          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
+            applySaveResult(r);
+            lastAutosaveSignatureRef.current = JSON.stringify(snap);
+          });
+        } catch (_) {
+          /* noop */
+        }
+      }, 0);
+    }
+  };
+
+  /** Volta a coletar no 1º tempo (edição/correção); novos lances passam a ser 1T até encerrar de novo. */
+  const handleReturnToFirstHalfCollection = () => {
+    if (currentPeriod !== '2T') return;
+    if (
+      !window.confirm(
+        'Voltar ao 1º tempo? O relógio de coleta será reiniciado para 0:00 no 1º tempo. Novos eventos serão registrados no 1º tempo.'
+      )
+    ) {
+      return;
+    }
+    userEndedFirstHalfCollectionRef.current = false;
+    if (isPostmatch) {
+      flushSync(() => {
+        setManualMinute(0);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+        setCurrentPeriod('1T');
+        setFirstHalfLocked(false);
+      });
+    } else {
+      flushSync(() => {
+        setIsRunning(false);
+        setCurrentPeriod('1T');
+        setMatchTime(0);
+        setFirstHalfLocked(false);
+      });
+    }
+    if (onSave && isOpen) {
+      setTimeout(() => {
+        try {
+          autosaveSkipRef.current = false;
+          const snap = buildMatchSnapshot('em_andamento');
+          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
+            applySaveResult(r);
+            lastAutosaveSignatureRef.current = JSON.stringify(snap);
+          });
+        } catch (_) {
+          /* noop */
+        }
+      }, 0);
+    }
   };
 
   // Processar dualidades dos eventos (opcional: filtrar por período, ex. só 1T)
@@ -934,7 +1373,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (!action) continue;
 
       // Garantir que gols do adversário sejam contabilizados mesmo se, por algum motivo, vierem sem playerId
-      if (action === 'goal' && e.isOpponentGoal && !e.playerId) {
+      if (action === 'goal' && (e.isOpponentGoal || e.result === 'contra') && !e.playerId) {
         goalsAgainst += 1;
         teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
         // Métodos de gols tomados (fallback)
@@ -973,8 +1412,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       const timeStr = formatTimeToMMSS(e.time);
 
       if (action === 'goal') {
-        if (e.isOpponentGoal) {
-          // Gol do adversário: contabilizar apenas nos dados do time (não em playerStats, que pertence à nossa equipe)
+        if (e.isOpponentGoal || e.result === 'contra') {
           goalsAgainst += 1;
           teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
           if (e.goalMethod && e.goalMethod.trim() !== '') {
@@ -1100,8 +1538,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
 
     const result: 'V' | 'D' | 'E' = goalsFor > goalsAgainst ? 'V' : goalsAgainst > goalsFor ? 'D' : 'E';
+    const snapshotId = persistedMatchIdRef.current.length > 0 ? persistedMatchIdRef.current : match.id;
     return {
-      id: match.id,
+      id: snapshotId,
       opponent: match.opponent,
       date: match.date,
       result,
@@ -1116,15 +1555,121 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
   };
 
+  const buildMatchSnapshot = (status: 'em_andamento' | 'encerrado'): MatchRecord => {
+    const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
+    savedMatch.status = status;
+    savedMatch.collectionPhase = !isMatchStarted ? 0 : currentPeriod === '1T' ? 1 : 2;
+
+    const squadIds = [
+      ...new Set(
+        [
+          ...lineupPlayers.map((id) => String(id).trim()),
+          ...benchPlayers.map((id) => String(id).trim()),
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
+        ].filter(Boolean)
+      ),
+    ];
+
+    if (!isPostmatch) {
+      if (lineupPlayers.length > 0 && ballPossessionStart) {
+        savedMatch.lineup = {
+          players: lineupPlayers,
+          bench: benchPlayers,
+          ballPossessionStart,
+          ...(squadIds.length > 0 ? { selectedPlayerIds: squadIds } : {}),
+        };
+      } else if (squadIds.length > 0) {
+        savedMatch.lineup = {
+          players: [],
+          bench: [],
+          ballPossessionStart: 'us',
+          selectedPlayerIds: squadIds,
+        };
+      }
+      savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
+      savedMatch.possessionSecondsWith = possessionSecondsWith;
+      savedMatch.possessionSecondsWithout = possessionSecondsWithout;
+    } else if (squadIds.length > 0) {
+      savedMatch.lineup = {
+        players: lineupPlayers,
+        bench: benchPlayers,
+        ballPossessionStart: ballPossessionStart ?? 'us',
+        selectedPlayerIds: squadIds,
+      };
+    }
+
+    return savedMatch;
+  };
+
+  const saveSilently = async () => {
+    if (!onSave || !isOpen || autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    const hasEvents = matchEvents.length > 0;
+    const hasRealtimeLineupDraft =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    const squadIdsForPost = [
+      ...new Set(
+        [
+          ...lineupPlayers.map((id) => String(id).trim()),
+          ...benchPlayers.map((id) => String(id).trim()),
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
+        ].filter(Boolean)
+      ),
+    ];
+    const hasPostmatchSquad = isPostmatch && squadIdsForPost.length > 0;
+    if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
+
+    const snapshot = buildMatchSnapshot('em_andamento');
+    const signature = JSON.stringify(snapshot);
+    if (signature === lastAutosaveSignatureRef.current) return;
+
+    if (autosaveInFlightRef.current) {
+      autosaveQueuedRef.current = true;
+      return;
+    }
+
+    autosaveInFlightRef.current = true;
+    try {
+      const saveResult = await onSave(snapshot, { source: 'autosave' });
+      applySaveResult(saveResult);
+      lastAutosaveSignatureRef.current = signature;
+    } catch (error) {
+      console.warn('[autosave] falhou ao salvar partida em andamento:', error);
+    } finally {
+      autosaveInFlightRef.current = false;
+      if (autosaveQueuedRef.current) {
+        autosaveQueuedRef.current = false;
+        void saveSilently();
+      }
+    }
+  };
+
+  /** Espera o autosave em curso terminar para evitar corrida com save manual (duplicata / last-write). */
+  const waitForAutosaveIdle = useCallback(async (maxMs = 8000) => {
+    const t0 = Date.now();
+    while (autosaveInFlightRef.current) {
+      if (Date.now() - t0 > maxMs) break;
+      await new Promise<void>((r) => setTimeout(r, 50));
+    }
+  }, []);
+
   // Finalizar coleta (status = encerrado, mas editável depois)
-  const handleEndCollection = () => {
+  const handleEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
+    if (!window.confirm('Tem certeza que deseja finalizar a coleta?')) return;
+
+    autosaveSkipRef.current = true;
+    await waitForAutosaveIdle();
 
     if (isPostmatch && onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'encerrado';
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('encerrado');
+      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
       onClose();
       return;
     }
@@ -1133,35 +1678,109 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       updateSubstitutionFrequency(substitutionHistory);
     }
     if (onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'encerrado';
-      savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
-        ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
-        : undefined;
-      savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('encerrado');
+      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
     }
     onClose();
   };
 
-  // Salvar rascunho para finalizar depois (status = em_andamento)
-  const handleSaveLater = () => {
-    if (matchEvents.length === 0 && !isPostmatch) {
+  // Guardar como incompleto (status = em_andamento)
+  const handleSaveLater = async () => {
+    const hasRealtimeLineupOnly =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    if (matchEvents.length === 0 && !isPostmatch && !hasRealtimeLineupOnly) {
       onClose();
       return;
     }
 
+    autosaveSkipRef.current = true;
+    await waitForAutosaveIdle();
+
     if (onSave) {
-      const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-      savedMatch.status = 'em_andamento';
-      if (!isPostmatch) {
-        savedMatch.lineup = lineupPlayers.length > 0 && ballPossessionStart
-          ? { players: lineupPlayers, bench: benchPlayers, ballPossessionStart }
-          : undefined;
-        savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
-      }
-      onSave(savedMatch);
+      const savedMatch = buildMatchSnapshot('em_andamento');
+      applySaveResult(
+        await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
+      );
     }
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    const hasEvents = matchEvents.length > 0;
+    const hasRealtimeLineupDraft =
+      !isPostmatch &&
+      isMatchStarted &&
+      lineupPlayers.length === 5 &&
+      ballPossessionStart != null;
+    const squadIdsForPost = [
+      ...new Set(
+        [
+          ...lineupPlayers.map((id) => String(id).trim()),
+          ...benchPlayers.map((id) => String(id).trim()),
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
+        ].filter(Boolean)
+      ),
+    ];
+    const hasPostmatchSquad = isPostmatch && squadIdsForPost.length > 0;
+    if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
+
+    if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+    autosaveDebounceRef.current = setTimeout(() => {
+      void saveSilently();
+    }, 800);
+
+    return () => {
+      if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
+    };
+  }, [
+    isOpen,
+    isPostmatch,
+    isMatchStarted,
+    matchEvents,
+    lineupPlayers,
+    benchPlayers,
+    substitutionHistory,
+    possessionSecondsWith,
+    possessionSecondsWithout,
+    currentPeriod,
+    ballPossessionStart,
+    selectedPlayerIds,
+    match?.lineup?.selectedPlayerIds,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (autosaveSkipRef.current) return;
+    if (!isPostmatch && !isMatchStarted) return;
+    autosaveIntervalRef.current = setInterval(() => {
+      void saveSilently();
+    }, 30000);
+    return () => {
+      if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
+    };
+  }, [isOpen, isPostmatch, isMatchStarted, saveSilently]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      void saveSilently();
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isOpen, saveSilently]);
+
+  const handleCloseWithSilentSave = async () => {
+    if (!window.confirm('Tem certeza que deseja fechar? Dados não salvos podem ser perdidos.')) return;
+    await saveSilently();
     onClose();
   };
 
@@ -1188,15 +1807,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    setIsMatchStarted(true);
-    setShowLineupModal(false);
-    // Inicializar goleiro atual (primeiro da escalação)
-    if (lineupPlayers.length > 0) {
-      setCurrentGoalkeeperId(lineupPlayers[0]);
+    flushSync(() => {
+      setIsMatchStarted(true);
+      setShowLineupModal(false);
+      if (lineupPlayers.length > 0) {
+        setCurrentGoalkeeperId(lineupPlayers[0]);
+      }
+      setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
+    });
+    if (onSave) {
+      try {
+        autosaveSkipRef.current = false;
+        const snap = buildMatchSnapshot('em_andamento');
+        void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
+          applySaveResult(r);
+          lastAutosaveSignatureRef.current = JSON.stringify(snap);
+        });
+      } catch {
+        /* noop */
+      }
     }
-    // Inicializar posse conforme início
-    setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
-    // Cronômetro permanece zerado e parado; usuário clica em Iniciar para começar
   };
 
   // Adicionar jogador à escalação
@@ -1230,7 +1860,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setBenchPlayers(prev => [...prev, playerId]);
   };
 
-  // Selecionar ação — novo fluxo: ação → detalhes (popup) → jogador (popup) → tempo (popup se necessário)
+  // Selecionar ação — novo fluxo: ação → detalhes (popup) → jogador (lista lateral) → tempo (popup se necessário)
   const handleSelectAction = (action: string) => {
     if (!isMatchStarted) {
       alert('A partida ainda não foi iniciada. Complete a escalação primeiro.');
@@ -1253,14 +1883,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     
-    // Ações que usam fluxo próprio (GOL, PÊNALTI, TIRO LIVRE) — não usam actionFlow
+    // Ações com fluxo próprio (GOL, PÊNALTI, TIRO LIVRE) — agora também no padrão jogador-primeiro
     if (action === 'goal' || action === 'penalty' || action === 'freeKick') {
+      if (!hasSelectedPlayer && action !== 'goal') {
+        alert('Selecione um jogador primeiro.');
+        return;
+      }
       setSelectedAction(action);
       return;
     }
-    
-    // Novo fluxo action-first: iniciar actionFlow (sem exigir jogador pré-selecionado)
-    startActionFlow(action);
+
+    if (action === 'foul') {
+      startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
+      setSelectedAction(action);
+      return;
+    }
+    if (!hasSelectedPlayer) {
+      alert('Selecione um jogador primeiro.');
+      return;
+    }
+    startActionFlow(action, selectedPlayerId);
     setSelectedAction(action);
   };
   
@@ -1268,6 +1910,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
+
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
     
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('tackle', result);
@@ -1276,8 +1921,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'tackle',
       playerId: pid,
       playerName: player?.nickname || player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result,
       tipo,
       subtipo,
@@ -1299,11 +1944,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  // Registrar defesa (goleiro atual ou jogador selecionado): Simples ou Difícil
-  const handleRegisterSave = (difficulty: 'simple' | 'hard', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? currentGoalkeeperId ?? selectedPlayerId;
+  // Registrar defesa (goleiro na lista): Simples, Difícil ou Pra fora
+  const handleRegisterSave = (
+    difficulty: 'simple' | 'hard' | 'outside',
+    playerIdOverride?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T'
+  ) => {
+    const selectedSidebarGoalkeeperId =
+      selectedPlayerId &&
+      activePlayers.some(
+        (p) =>
+          String(p.id).trim() === String(selectedPlayerId).trim() &&
+          String(p.position || '').trim().toLowerCase() === 'goleiro'
+      )
+        ? String(selectedPlayerId).trim()
+        : null;
+    const pid = playerIdOverride ?? selectedSidebarGoalkeeperId ?? currentGoalkeeperId;
     if (!pid) return;
-    
+
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
+
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('save', difficulty);
     const newEvent: MatchEvent = {
@@ -1311,16 +1973,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'save',
       playerId: pid,
       playerName: player?.nickname?.trim() || player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result: difficulty,
       tipo,
       subtipo,
-      details: { saveDifficulty: difficulty },
+      details:
+        difficulty === 'outside' ? { saveOutcome: 'outside' as const } : { saveDifficulty: difficulty },
     };
-    
+
     setMatchEvents(prev => [...prev, newEvent]);
-    
+
     if (!isRunning) setIsRunning(true);
     setSelectedAction(null);
   };
@@ -1329,6 +1992,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
+
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
     
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('block');
@@ -1337,8 +2003,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'block',
       playerId: pid,
       playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       tipo,
       subtipo,
     };
@@ -1355,18 +2021,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Registrar falta: Nosso ou Adversário. Contagem continua após 5; a partir da 6ª o botão Tiro Livre fica disponível.
   const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
-    if (!pid) return;
+    const pid =
+      team === 'against'
+        ? (playerIdOverride ?? OPPONENT_FAKE_PLAYER_ID)
+        : (playerIdOverride ?? selectedPlayerId);
+    if (team === 'for' && !pid) return;
+    if (team === 'for' && pid === OPPONENT_FAKE_PLAYER_ID) return;
 
-    const player = activePlayers.find(p => String(p.id).trim() === pid);
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
+
+    const player = team === 'against' ? null : activePlayers.find(p => String(p.id).trim() === pid);
     const subtipoText = team === 'for' ? 'Nosso' : 'Adversário';
     const newEvent: MatchEvent = {
       id: `foul-${Date.now()}`,
       type: 'foul',
       playerId: pid,
-      playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      playerName: team === 'against' ? OPPONENT_FAKE_PLAYER_NAME : (player?.name || ''),
+      time: evtTime,
+      period: evtPeriod,
       tipo: 'Falta',
       subtipo: subtipoText,
       foulTeam: team,
@@ -1387,6 +2060,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', wrongPassGeneratedTransition?: boolean) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
+
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
     
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo: baseSubtipo } = getTipoSubtipo('pass', result);
@@ -1397,8 +2073,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'pass',
       playerId: pid,
       playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result,
       tipo,
       subtipo,
@@ -1409,6 +2085,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     // Se passe foi correto, aguardar próximo jogador selecionado como receptor
     if (result === 'correct') {
+      if (!requirePassReceiver) {
+        setPendingPassSenderId(null);
+        setPendingPassEventId(null);
+        setPendingPassResult(null);
+        setSelectedAction(null);
+        if (!isRunning) {
+          setIsRunning(true);
+        }
+        return;
+      }
       setPendingPassSenderId(pid);
       setPendingPassEventId(eventId);
       setPendingPassResult('correct');
@@ -1458,6 +2144,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
+
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
     
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('shot', result);
@@ -1466,8 +2155,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'shot',
       playerId: pid,
       playerName: player?.nickname?.trim() || player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result,
       tipo,
       subtipo,
@@ -1494,6 +2183,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!pid) return;
     setIsRunning(false);
 
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
+
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('corner', zone);
     const newEvent: MatchEvent = {
@@ -1501,8 +2193,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'corner',
       playerId: pid,
       playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       ...(zone && { result: zone }),
       tipo,
       subtipo,
@@ -1517,6 +2209,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
+
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo: subtipoText } = getTipoSubtipo('lateral', zone);
     const newEvent: MatchEvent = {
@@ -1524,8 +2219,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'lateral',
       playerId: pid,
       playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       ...(zone && { result: zone }),
       tipo,
       subtipo: subtipoText,
@@ -1556,8 +2251,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const player = playerId ? activePlayers.find(p => String(p.id).trim() === playerId) : null;
     const assistPlayer = assistPlayerId ? activePlayers.find(p => String(p.id).trim() === assistPlayerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('goal', goalType);
-    const goalTime = goalTimeOverride ?? pendingGoalTime ?? matchTime;
-    const goalPeriod = goalPeriodOverride ?? pendingGoalPeriod ?? currentPeriod;
+    const rawGoalT = goalTimeOverride ?? pendingGoalTime ?? matchTime;
+    let goalTime: number;
+    let goalPeriod: MatchHalf;
+    if (isPostmatch) {
+      if (goalPeriodOverride != null) {
+        const abs = rawGoalT ?? 0;
+        if (goalPeriodOverride === '1T') {
+          goalTime = abs;
+          goalPeriod = '1T';
+        } else {
+          goalTime = abs - 20 * 60;
+          goalPeriod = '2T';
+        }
+      } else {
+        const os = absoluteSecondsToStored(rawGoalT);
+        goalTime = os.time;
+        goalPeriod = os.period;
+      }
+    } else {
+      goalTime = rawGoalT;
+      goalPeriod = (goalPeriodOverride ?? currentPeriod) as MatchHalf;
+    }
     const method = goalMethod ?? pendingGoalMethod;
 
     const effectivePlayerId = isOpponent
@@ -1565,8 +2280,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       : (playerId || undefined);
 
     const effectivePlayerName = isOpponent
-      ? OPPONENT_FAKE_PLAYER_NAME
-      : (player?.name || 'Gol Contra');
+      ? (goalType === 'contra' ? 'Gol Contra' : OPPONENT_FAKE_PLAYER_NAME)
+      : (player?.name || 'Desconhecido');
 
     const newEvent: MatchEvent = {
       id: `goal-${Date.now()}`,
@@ -1615,27 +2330,64 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingGoalPlayerId(null);
     setPendingAssistPlayerId(null);
     setPendingGoalTime(null);
-    setPendingGoalPeriod(null);
-    setGoalConfirmEditingTime(false);
+    setPendingGoalMethod(null);
     setGoalStep(null);
-    // Em postmatch: resetar tempo manual para que o próximo evento peça o tempo novamente
+    // Em postmatch: resetar relógio para novo lance (mantém eixo do 2º tempo se o 1º já foi encerrado)
     if (isPostmatch) {
-      setManualMinute(0);
-      setManualSecond(0);
+      if (firstHalfLocked) {
+        setManualMinute(20);
+        setManualSecond(0);
+        setManualHalfPinned(true);
+      } else {
+        setManualMinute(0);
+        setManualSecond(0);
+        setManualHalfPinned(false);
+      }
     }
+  };
+
+  const completeGoalFromTimeStep = () => {
+    const period = currentPeriod;
+    const maxRel = period === '1T' ? HALF_RELATIVE_LAST_SECOND_1T : HALF_RELATIVE_LAST_SECOND_2T;
+    const rel = Math.max(0, Math.min(goalTimeRelSeconds, maxRel));
+    const rawT = isPostmatch ? (period === '1T' ? rel : 20 * 60 + rel) : rel;
+    const periodOv = period;
+    const assistPlayer = pendingAssistPlayerId
+      ? activePlayers.find((p) => String(p.id).trim() === pendingAssistPlayerId)
+      : null;
+    if (pendingGoalIsOpponent && pendingGoalMethod === 'Gol Contra') {
+      handleRegisterGoal('contra', true, null, 'Gol Contra', rawT, periodOv);
+      return;
+    }
+    if (pendingGoalIsOpponent) {
+      handleRegisterGoal('normal', true, null, pendingGoalMethod ?? undefined, rawT, periodOv);
+      return;
+    }
+    handleRegisterGoal(
+      pendingGoalType || 'normal',
+      false,
+      pendingGoalPlayerId,
+      pendingGoalMethod,
+      rawT,
+      periodOv,
+      pendingAssistPlayerId,
+      assistPlayer?.name
+    );
   };
   
   // Registrar tiro livre
   const handleRegisterFreeKick = (team: 'for' | 'against', kickerId: string | null, result: 'goal' | 'saved' | 'outside' | 'post' | 'noGoal') => {
     const kicker = kickerId ? activePlayers.find(p => String(p.id).trim() === kickerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('freeKick', result);
+    const rawT = getTimeForEvent() ?? matchTime;
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT);
     const newEvent: MatchEvent = {
       id: `freekick-${Date.now()}`,
       type: 'freeKick',
       playerId: kickerId || undefined,
       playerName: kicker?.name || (team === 'against' ? 'Adversário' : 'Nossa Equipe'),
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result,
       tipo,
       subtipo,
@@ -1673,6 +2425,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setShowFreeKickResult(false);
     setPendingFreeKickTeam(null);
     setPendingFreeKickKickerId(null);
+    setPendingFreeKickResultToRegister(null);
     setFreeKickStep(null);
     setSelectedAction(null);
   };
@@ -1681,13 +2434,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterPenalty = (team: 'for' | 'against', kickerId: string | null, result: 'goal' | 'saved' | 'outside' | 'post' | 'noGoal') => {
     const kicker = kickerId ? activePlayers.find(p => String(p.id).trim() === kickerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('penalty', result);
+    const rawT = getTimeForEvent() ?? matchTime;
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT);
     const newEvent: MatchEvent = {
       id: `penalty-${Date.now()}`,
       type: 'penalty',
       playerId: kickerId || undefined,
       playerName: kicker?.name || (team === 'against' ? 'Adversário' : 'Nossa Equipe'),
-      time: (getTimeForEvent() ?? matchTime),
-      period: currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       result,
       tipo,
       subtipo,
@@ -1728,6 +2483,57 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
+  /** Fluxos que pediam jogador no centro passam a usar só os números à esquerda. */
+  const handleLateralPlayerClick = (clickedPlayerId: string) => {
+    if (goalStep === 'author' && !pendingGoalIsOpponent) {
+      setPendingGoalPlayerId(clickedPlayerId);
+      setPendingAssistPlayerId(null);
+      setGoalStep('method');
+      return;
+    }
+    if (goalStep === 'assist' && !pendingGoalIsOpponent) {
+      if (clickedPlayerId === pendingGoalPlayerId) return;
+      setPendingAssistPlayerId(clickedPlayerId);
+      enterGoalTimeStep('assist');
+      return;
+    }
+    if (!isMatchStarted) return;
+
+    if (freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister) {
+      const res = pendingFreeKickResultToRegister;
+      handleRegisterFreeKick('for', clickedPlayerId, res);
+      return;
+    }
+    if (penaltyStep === 'kicker' && pendingPenaltyTeam === 'for') {
+      setPendingPenaltyKickerId(clickedPlayerId);
+      setPenaltyStep('result');
+      return;
+    }
+    if (actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save') {
+      if (saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === clickedPlayerId)) {
+        completeSaveAfterGoalkeeperPick(actionFlow, clickedPlayerId);
+      }
+      return;
+    }
+    if (actionFlow?.step === 'player' && actionFlow?.action) {
+      handleActionFlowPlayerPick(clickedPlayerId);
+      return;
+    }
+
+    if (pendingPassEventId && pendingPassSenderId && clickedPlayerId !== pendingPassSenderId) {
+      handleConfirmPassReceiver(clickedPlayerId);
+      return;
+    }
+    setSelectedPlayerId(clickedPlayerId);
+    if (pendingPassEventId) {
+      setMatchEvents((prev) => prev.filter((e) => e.id !== pendingPassEventId));
+      setPendingPassEventId(null);
+      setPendingPassSenderId(null);
+      setPendingPassResult(null);
+      setSelectedAction(null);
+    }
+  };
+
   // Verificar se jogador deve ser expulso
   const checkPlayerExpulsion = (playerId: string): boolean => {
     const cards = playerCards[playerId] || [];
@@ -1743,6 +2549,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
+    const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
+
     const player = activePlayers.find(p => String(p.id).trim() === pid);
     const { tipo, subtipo } = getTipoSubtipo('card', undefined, cardType);
     const newEvent: MatchEvent = {
@@ -1750,8 +2559,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       type: 'card',
       playerId: pid,
       playerName: player?.name || '',
-      time: timeOverride ?? (getTimeForEvent() ?? matchTime),
-      period: periodOverride ?? currentPeriod,
+      time: evtTime,
+      period: evtPeriod,
       cardType,
       tipo,
       subtipo,
@@ -1912,7 +2721,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return remaining <= 0 ? 0 : remaining;
   }, [expulsionState, matchTime, currentPeriod, canReplaceAfterExpulsion]);
 
-  // Estatísticas do 1º tempo (apenas eventos com period === '1T')
+  // Estatísticas pré-intervalo (apenas eventos com period === '1T')
   const firstHalfStats = useMemo(() => {
     const e1t = matchEvents.filter(e => e.period === '1T');
     const shotsAll = e1t.filter(e => e.type === 'shot');
@@ -1925,12 +2734,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       saves: savesAll.length,
       savesSimple: savesAll.filter(e => e.result === 'simple' || e.details?.saveDifficulty === 'simple').length,
       savesHard: savesAll.filter(e => e.result === 'hard' || e.details?.saveDifficulty === 'hard').length,
+      savesOutside: savesAll.filter(e => e.result === 'outside' || e.details?.saveOutcome === 'outside').length,
       fouls: e1t.filter(e => e.type === 'foul').length,
       cards: e1t.filter(e => e.type === 'card').length,
     };
   }, [matchEvents]);
 
-  // Relação entre jogadores e passes no 1º tempo (duplas, jogadores, certo/errado)
+  // Relação entre jogadores e passes pré-intervalo (duplas, jogadores, certo/errado)
   const firstHalfPassData = useMemo(() => {
     const e1t = matchEvents.filter(e => e.period === '1T');
     const passesCorrect = e1t.filter(e => e.type === 'pass' && e.result === 'correct').length;
@@ -2006,13 +2816,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       useFullViewport ? 'inset-0 h-dvh min-h-dvh' : `${leftOffset} top-0 right-0 bottom-0`
     }`}>
       <div className="w-full h-full min-h-0 bg-black flex flex-col relative overflow-hidden">
+        {topRightNotice && (
+          <div
+            role="alert"
+            className="absolute top-3 right-3 z-[250] max-w-[min(92vw,22rem)] rounded-lg border border-amber-500/80 bg-zinc-950/95 px-3 py-2.5 shadow-xl shadow-amber-500/10 pointer-events-none"
+          >
+            <p className="text-amber-100 text-xs font-bold leading-snug text-right">{topRightNotice}</p>
+          </div>
+        )}
 
         {/* DADOS DA PARTIDA - placar centralizado e botão sair na mesma box */}
         <div className="bg-zinc-950 border-b border-zinc-800 p-1.5 shrink-0">
           <div className="flex items-center justify-between mb-1">
             <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
             <button
-              onClick={onClose}
+              onClick={handleCloseWithSilentSave}
               className="bg-zinc-900 hover:bg-zinc-800 text-white p-1.5 rounded-full transition-colors border border-zinc-700"
               title="Fechar"
             >
@@ -2058,23 +2876,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <List size={14} /> Logs
               </button>
               <div className="flex flex-col items-end gap-1">
-                <button
-                  onClick={handleEndCollection}
-                  disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                  className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
-                    (isPostmatch && matchEvents.length >= 1) || isMatchEnded
-                      ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
-                      : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                  }`}
-                >
-                  Finalizar Coleta
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleEndCollection}
+                    disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
+                    className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
+                      (isPostmatch && matchEvents.length >= 1) || isMatchEnded
+                        ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
+                    }`}
+                  >
+                    Finalizar Coleta
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={handleSaveLater}
-                  className="text-[10px] text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+                  className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
                 >
-                  finalizar depois
+                  Guardar como incompleto
                 </button>
               </div>
             </div>
@@ -2122,7 +2942,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <thead className="sticky top-0 bg-zinc-900 border-b-2 border-zinc-700 z-10">
                   <tr>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Tempo</th>
-                    <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Período</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Jogador</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Ação</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Subtipo / Resultado</th>
@@ -2149,25 +2968,38 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 className="w-16 px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm font-mono"
                               />
                             ) : (
-                              <span className="text-zinc-300 font-mono text-sm">{formatTime(event.time)}</span>
+                              <span className="text-zinc-300 font-mono text-sm">{formatTime(storedToAbsoluteSeconds(event.period, event.time))}</span>
                             )}
                           </td>
                           <td className="p-2">
                             {isEditing && draft ? (
-                              <select
-                                value={draft.period}
-                                onChange={(e) => setEditDraft(prev => prev ? { ...prev, period: e.target.value as '1T' | '2T' } : null)}
-                                className="px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm"
-                              >
-                                <option value="1T">1T</option>
-                                <option value="2T">2T</option>
-                              </select>
+                              event.isOpponentGoal || event.playerId === OPPONENT_FAKE_PLAYER_ID ? (
+                                <span className="text-zinc-400 text-sm">{OPPONENT_FAKE_PLAYER_NAME}</span>
+                              ) : (
+                                <select
+                                  value={draft.playerId ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                      setEditDraft(prev => prev ? { ...prev, playerId: null, playerName: null } : null);
+                                    } else {
+                                      const p = players.find(x => String(x.id).trim() === val);
+                                      setEditDraft(prev => prev ? { ...prev, playerId: val, playerName: p?.name ?? null } : null);
+                                    }
+                                  }}
+                                  className="px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm min-w-[120px]"
+                                >
+                                  <option value="">—</option>
+                                  {players.map((p) => (
+                                    <option key={p.id} value={String(p.id).trim()}>
+                                      #{p.jerseyNumber ?? '?'} {p.nickname || p.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )
                             ) : (
-                              <span className="text-zinc-300 text-sm">{event.period}</span>
+                              <span className="text-white text-sm">{event.playerName ?? '—'}</span>
                             )}
-                          </td>
-                          <td className="p-2">
-                            <span className="text-white text-sm">{event.playerName ?? '—'}</span>
                           </td>
                           <td className="p-2">
                             {isEditing && draft ? (
@@ -2271,21 +3103,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const sec = parseManualTimeToSeconds(editTimeInput);
-                                    if (sec === null || !editDraft) return;
+                                    const absSec = parseManualTimeToSeconds(editTimeInput);
+                                    if (absSec === null || !editDraft) return;
+                                    const { time: newTime, period: newPeriod } = absoluteSecondsToStored(absSec);
                                     const tipo = editDraft.type === 'foul' ? 'Falta' : getTipoSubtipo(editDraft.type, editDraft.result, editDraft.cardType).tipo;
                                     const subtipo = editDraft.type === 'foul' ? (editDraft.foulTeam === 'against' ? 'Adversário' : 'Nosso') : getTipoSubtipo(editDraft.type, editDraft.result, editDraft.cardType).subtipo;
+                                    const isOpponentGoal = editDraft.type === 'goal' && (editDraft.result === 'contra' || editDraft.isOpponentGoal);
+                                    const isContra = editDraft.type === 'goal' && editDraft.result === 'contra';
                                     const updatedEvents = matchEvents.map(e => e.id === editingEventId ? {
                                       ...e,
-                                      time: sec,
-                                      period: editDraft.period,
+                                      time: newTime,
+                                      period: newPeriod,
                                       type: editDraft.type,
                                       result: editDraft.result,
                                       cardType: editDraft.cardType,
                                       foulTeam: editDraft.foulTeam,
                                       tipo,
                                       subtipo,
-                                      isOpponentGoal: editDraft.type === 'goal' && editDraft.result === 'contra',
+                                      isOpponentGoal,
+                                      playerId: isOpponentGoal ? OPPONENT_FAKE_PLAYER_ID : (editDraft.playerId || undefined),
+                                      playerName: isOpponentGoal ? (isContra ? 'Gol Contra' : OPPONENT_FAKE_PLAYER_NAME) : (editDraft.playerName ?? undefined),
                                       ...(editDraft.type === 'goal' && {
                                         assistPlayerId: editDraft.assistPlayerId ?? undefined,
                                         assistPlayerName: editDraft.assistPlayerName ?? undefined,
@@ -2321,10 +3158,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                       result: event.result,
                                       cardType: event.cardType,
                                       foulTeam: event.type === 'foul' ? (event.foulTeam ?? 'for') : undefined,
+                                      playerId: event.playerId ?? null,
+                                      playerName: event.playerName ?? null,
                                       assistPlayerId: event.type === 'goal' ? (event.assistPlayerId ?? null) : undefined,
                                       assistPlayerName: event.type === 'goal' ? (event.assistPlayerName ?? null) : undefined,
                                     });
-                                    setEditTimeInput(formatTime(event.time));
+                                    setEditTimeInput(formatTime(storedToAbsoluteSeconds(event.period, event.time)));
                                   }}
                                   className="px-2 py-1 rounded bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] hover:bg-[#00f0ff]/30 text-xs font-bold"
                                 >
@@ -2361,165 +3200,89 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}
         <div className="flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
           {/* Painel Esquerdo - Seleção de Jogador (ocupa toda a altura; lista + substituição preenchem o card) */}
-          <div className={`w-52 min-w-[7rem] max-w-[14rem] rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black ${actionFlow?.step === 'player' ? 'border-[#00f0ff]/70' : goalStep === 'author' ? 'border-green-500/70' : goalStep === 'assist' ? 'border-amber-500/70' : 'border-zinc-800'}`}>
-            <h3 className="text-white font-bold uppercase text-sm mb-2 text-center shrink-0">
-              {goalStep === 'author' ? 'AUTOR DO GOL' : goalStep === 'assist' ? 'ASSISTÊNCIA' : 'SELECIONAR JOGADOR'}
+          <div className={`rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
+            shouldHighlightPlayerPanel ? 'w-64 min-w-[10rem] max-w-[17rem] animate-pulse' : 'w-52 min-w-[7rem] max-w-[14rem]'
+          } ${
+            goalStep === 'time'
+              ? 'border-cyan-500/70'
+              : goalStep === 'assist' && !pendingGoalIsOpponent
+              ? 'border-amber-500/70'
+              : goalStep === 'author' && !pendingGoalIsOpponent
+                ? 'border-green-500/70'
+                : actionFlow?.step === 'player'
+                  ? 'border-[#00f0ff]/50'
+                  : actionFlow?.step === 'goalkeeper'
+                    ? 'border-purple-500/70'
+                    : freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister
+                      ? 'border-violet-500/70'
+                      : penaltyStep === 'kicker' && pendingPenaltyTeam === 'for'
+                        ? 'border-fuchsia-500/70'
+                        : 'border-zinc-800'
+          }`}>
+            <h3 className={`font-bold uppercase mb-2 text-center shrink-0 ${shouldHighlightPlayerPanel ? 'text-[#00f0ff] text-base' : 'text-white text-sm'}`}>
+              {goalStep === 'time'
+                ? 'GOL — tempo'
+                : (goalStep === 'author' || goalStep === 'assist') && !pendingGoalIsOpponent
+                ? goalStep === 'assist'
+                  ? 'GOL — assistência'
+                  : 'GOL — autor'
+                : freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister
+                  ? 'Tiro livre — cobrador'
+                  : penaltyStep === 'kicker' && pendingPenaltyTeam === 'for'
+                    ? 'Pênalti — cobrador'
+                    : actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save'
+                      ? 'Defesa — goleiro'
+                      : actionFlow?.step === 'player' && !goalStep
+                        ? 'Ação — jogador'
+                        : pendingPassEventId && requirePassReceiver
+                          ? 'PASSE — recebedor'
+                          : selectedPlayer
+                            ? `JOGADOR ${selectedPlayer.jerseyNumber ?? '?'}`
+                        : 'SELECIONAR JOGADOR'}
             </h3>
-            {goalStep === 'author' && (
+            {selectedPlayer && !goalStep && !actionFlow && !pendingPassEventId && (
+              <p className="text-emerald-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
+                {(selectedPlayer.nickname?.trim() || selectedPlayer.name || '').trim()} selecionado
+              </p>
+            )}
+            {shouldHighlightPlayerPanel && (
+              <p className="text-[#00f0ff] text-xs font-black uppercase text-center mb-2 shrink-0">
+                Selecione um jogador
+              </p>
+            )}
+            {goalStep === 'author' && !pendingGoalIsOpponent && (
               <>
-                <p className="text-green-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Selecione na lista abaixo</p>
-                <button type="button" onClick={() => { setGoalStep('team'); setPendingGoalPlayerId(null); setPendingAssistPlayerId(null); setPendingGoalType(null); setPendingGoalMethod(null); setGoalConfirmEditingTime(false); }} className="mb-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors shrink-0">Voltar</button>
+                <p className="text-green-400/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no autor do gol</p>
+                <button type="button" onClick={() => { setGoalStep('team'); setPendingGoalPlayerId(null); setPendingAssistPlayerId(null); setPendingGoalType(null); setPendingGoalMethod(null); }} className="mb-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors shrink-0">Voltar</button>
               </>
             )}
-            {goalStep === 'assist' && (
+            {goalStep === 'assist' && !pendingGoalIsOpponent && (
               <>
-                <p className="text-amber-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Quem deu a assistência?</p>
-                <button type="button" onClick={() => { setGoalStep('author'); setPendingAssistPlayerId(null); }} className="mb-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors shrink-0">Voltar</button>
+                <p className="text-amber-400/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no assistente</p>
+                <button type="button" onClick={() => { setGoalStep('method'); setPendingAssistPlayerId(null); }} className="mb-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors shrink-0">Voltar</button>
               </>
             )}
             {actionFlow?.step === 'player' && !goalStep && (
-              <p className="text-[#00f0ff] text-[10px] font-bold uppercase text-center mb-2 shrink-0">Selecione na lista abaixo</p>
+              <p className="text-[#00f0ff]/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no número do jogador</p>
             )}
-            
+            {actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save' && !goalStep && (
+              <p className="text-purple-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no goleiro</p>
+            )}
+            {freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister && (
+              <p className="text-violet-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no cobrador</p>
+            )}
+            {penaltyStep === 'kicker' && pendingPenaltyTeam === 'for' && (
+              <p className="text-fuchsia-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no cobrador</p>
+            )}
+            {pendingPassEventId && requirePassReceiver && (
+              <p className="text-yellow-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no recebedor do passe</p>
+            )}
+
             <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
               {!isMatchStarted ? (
                 <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-lg p-2 text-center">
                   <p className="text-yellow-400 text-xs font-bold">Complete a escalação para iniciar</p>
                 </div>
-              ) : showSubstitutions ? (
-                // Modo Substituição: lista única com banco primeiro, depois quadra
-                <>
-                  <p className="text-zinc-400 text-xs font-bold uppercase mb-3 text-center">
-                    {selectedPlayerId ? 'Selecione jogador do banco para entrar' : 'Clique no jogador em quadra para sair'}
-                  </p>
-                  <div className="space-y-1 flex-1 overflow-y-auto">
-                    {/* Jogadores do banco (primeiro) - ordenados por frequência */}
-                    {sortedBenchPlayers.map((playerId) => {
-                      const player = players.find(p => String(p.id).trim() === playerId);
-                      if (!player) return null;
-                      const frequency = loadSubstitutionFrequency();
-                      const subCount = frequency[playerId] || 0;
-                      return (
-                        <button
-                          key={playerId}
-                          onClick={() => {
-                            if (selectedPlayerId && lineupPlayers.includes(selectedPlayerId)) {
-                              // Fazer substituição
-                              const playerOutId = selectedPlayerId;
-                              const playerInId = playerId;
-                              
-                              // Verificar se goleiro está saindo
-                              const isGoalkeeperOut = playerOutId === currentGoalkeeperId;
-                              
-                              // Registrar substituição no histórico
-                              const substitution = {
-                                playerOutId,
-                                playerInId,
-                                time: (getTimeForEvent() ?? matchTime),
-                                period: currentPeriod,
-                              };
-                              setSubstitutionHistory(prev => [...prev, substitution]);
-                              
-                              // Atualizar contadores
-                              setSubstitutionCounts(prev => ({
-                                ...prev,
-                                [playerOutId]: (prev[playerOutId] || 0) + 1,
-                                [playerInId]: (prev[playerInId] || 0) + 1,
-                              }));
-                              
-                              // Atualizar escalação
-                              setLineupPlayers(prev => prev.map(id => id === playerOutId ? playerInId : id));
-                              setBenchPlayers(prev => {
-                                const newBench = [...prev.filter(id => id !== playerInId), playerOutId];
-                                return newBench;
-                              });
-                              
-                              // Se goleiro saiu, o jogador que entrou vira goleiro linha
-                              if (isGoalkeeperOut) {
-                                setCurrentGoalkeeperId(playerInId);
-                              }
-                              
-                              // Limpar seleção e sair do modo substituição
-                              setSelectedPlayerId(null);
-                              setShowSubstitutions(false);
-                            } else {
-                              alert('Selecione primeiro um jogador em quadra para sair.');
-                            }
-                          }}
-                          className={`w-full rounded-lg p-2 text-left transition-all ${
-                            selectedPlayerId && lineupPlayers.includes(selectedPlayerId)
-                              ? 'bg-green-500/20 border border-green-500/90 hover:border-green-400'
-                              : 'bg-green-500/10 border border-green-500/70 hover:border-green-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="text-white font-normal text-sm">
-                              {player.nickname?.trim() || player.name} · {player.jerseyNumber}
-                              {selectedPlayerId && lineupPlayers.includes(selectedPlayerId) && ' (ENTRANDO)'}
-                            </p>
-                            {subCount > 0 && (
-                              <span className="text-green-400 text-[10px] font-bold bg-green-500/20 px-2 py-0.5 rounded">
-                                {subCount}x
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    
-                    {/* Separador visual */}
-                    {benchPlayers.length > 0 && lineupPlayers.length > 0 && (
-                      <div className="border-t border-zinc-800 my-3">
-                        <p className="text-zinc-600 text-xs font-bold uppercase text-center py-2">EM QUADRA</p>
-                      </div>
-                    )}
-                    
-                    {/* Jogadores em quadra (depois) */}
-                    {lineupPlayers.map((playerId) => {
-                      const player = players.find(p => String(p.id).trim() === playerId);
-                      if (!player) return null;
-                      const isGoalkeeper = playerId === currentGoalkeeperId;
-                      const displayName = player.nickname?.trim() || player.name;
-                      return (
-                        <button
-                          key={playerId}
-                          onClick={() => setSelectedPlayerId(playerId)}
-                          className={`w-full rounded-lg p-2 text-left transition-all flex items-center gap-3 ${
-                            selectedPlayerId === playerId
-                              ? 'bg-red-500/20 border-4 border-red-500'
-                              : 'bg-zinc-900 border-2 border-zinc-700 hover:border-red-500'
-                          }`}
-                        >
-                          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
-                            {player.photoUrl ? (
-                              <img src={player.photoUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-medium">
-                                {displayName.substring(0, 2).toUpperCase() || '?'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-normal text-sm truncate">
-                              {isGoalkeeper && '🥅 '}{displayName} · {player.jerseyNumber}
-                              {selectedPlayerId === playerId && ' (SAINDO)'}
-                            </p>
-                            <p className="text-zinc-500 text-[10px]">QUADRA</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowSubstitutions(false);
-                      setSelectedPlayerId(null);
-                    }}
-                    className="mt-2 w-full bg-zinc-800 hover:bg-zinc-700 border-2 border-zinc-700 text-white font-bold uppercase text-xs rounded-lg p-2 transition-colors"
-                  >
-                    Cancelar Substituição
-                  </button>
-                </>
               ) : showExpulsionReplacementSelection && expulsionState ? (
                 <>
                   <p className="text-zinc-400 text-xs font-bold uppercase mb-3 text-center">
@@ -2561,81 +3324,43 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </>
               ) : expulsionState ? (
                 <>
+                  <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
                   {activePlayers.map((player) => {
                     const isSelected = selectedPlayerId === String(player.id).trim();
                     const isGoalkeeper = String(player.id).trim() === currentGoalkeeperId;
+                    const isGk = player.position === 'Goleiro' || isGoalkeeper;
+                    const displayNum = player.jerseyNumber ?? '?';
+                    const labelName = player.nickname?.trim() || player.name || '';
                     return (
                       <button
                         key={player.id}
+                        type="button"
+                        title={isGk ? `${labelName} — Goleiro` : labelName}
                         onClick={() => {
-                          const clickedPlayerId = String(player.id).trim();
-                          if (goalStep === 'author') {
-                            setPendingGoalPlayerId(clickedPlayerId);
-                            setPendingAssistPlayerId(null);
-                            setGoalStep('assist');
-                            return;
-                          }
-                          if (goalStep === 'assist') {
-                            setPendingAssistPlayerId(clickedPlayerId);
-                            if (pendingGoalMethod) setGoalStep('confirm'); else { setGoalStep('method'); setPendingGoalMethod(null); }
-                            return;
-                          }
-                          if (!isMatchStarted) return;
-                          if (actionFlow?.step === 'player' && actionFlow?.action) {
-                            if (needsTimePopup()) {
-                              setActionFlow(prev => prev ? { ...prev, step: 'time' as const, selectedPlayerId: clickedPlayerId, details: prev.details || undefined, wrongPassTransition: prev.wrongPassTransition } : null);
-                            } else {
-                              completeActionFlowWithPlayer(clickedPlayerId);
-                            }
-                            return;
-                          }
-                          if (pendingPassEventId && pendingPassSenderId && clickedPlayerId !== pendingPassSenderId) {
-                            handleConfirmPassReceiver(clickedPlayerId);
-                          } else {
-                            setSelectedPlayerId(clickedPlayerId);
-                            if (pendingPassEventId) {
-                              setMatchEvents(prev => prev.filter(e => e.id !== pendingPassEventId));
-                              setPendingPassEventId(null);
-                              setPendingPassSenderId(null);
-                              setPendingPassResult(null);
-                              setSelectedAction(null);
-                            }
-                          }
+                          handleLateralPlayerClick(String(player.id).trim());
                         }}
                         disabled={!isMatchStarted && !goalStep}
-                        className={`w-full rounded-lg p-2 text-left transition-all ${
-                          goalStep === 'author'
-                            ? 'bg-green-500/15 border-2 border-green-500/80 hover:border-green-500 hover:bg-green-500/20 cursor-pointer'
-                            : goalStep === 'assist'
-                            ? 'bg-amber-500/15 border-2 border-amber-500/80 hover:border-amber-500 hover:bg-amber-500/20 cursor-pointer'
-                            : !isMatchStarted
-                            ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed'
+                        className={`relative flex aspect-square w-full max-h-[2.6rem] items-center justify-center rounded-full text-base font-black transition-all ${
+                          !isMatchStarted
+                            ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
                             : isSelected
-                            ? 'bg-[#00f0ff]/20 border-2 border-[#00f0ff]'
+                            ? 'bg-[#00f0ff]/25 border-2 border-[#00f0ff] text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
                             : pendingPassEventId && String(player.id).trim() !== pendingPassSenderId
-                            ? 'bg-yellow-500/20 border border-yellow-500 hover:border-yellow-400'
-                            : 'bg-green-500/10 border border-green-500/80 hover:border-green-400'
+                            ? 'bg-yellow-500/25 border-2 border-yellow-500 text-yellow-100 hover:bg-yellow-500/35'
+                            : 'bg-green-500/15 border-2 border-green-500/70 text-white hover:bg-green-500/25 hover:border-green-400'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
-                            {player.photoUrl ? (
-                              <img src={player.photoUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-medium">
-                                {(player.nickname?.trim() || player.name).substring(0, 2).toUpperCase() || '?'}
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-white font-normal text-sm truncate flex-1 min-w-0">
-                            {(player.position === 'Goleiro' || isGoalkeeper) && '🥅 '}{player.nickname?.trim() || player.name} · #{player.jerseyNumber}
-                            {player.position && <span className="text-zinc-400 text-[10px] ml-1">· {player.position}</span>}
-                            {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
-                          </p>
-                        </div>
+                        <span className="tabular-nums leading-none">{displayNum}</span>
+                        {isGk && (
+                          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
+                        )}
+                        {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && (
+                          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
+                        )}
                       </button>
                     );
                   })}
+                  </div>
                   <div className="rounded-lg p-2 border-2 border-red-500 bg-red-500/10 text-left">
                     <p className="text-red-400 font-bold text-sm">
                       🟥 Expulso: {(players.find(p => String(p.id).trim() === expulsionState.expelledPlayerId)?.nickname?.trim() || players.find(p => String(p.id).trim() === expulsionState.expelledPlayerId)?.name) ?? 'Jogador'}
@@ -2656,111 +3381,71 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     )}
                   </div>
                 </>
-              ) : activePlayers && activePlayers.length > 0 ? (
-                <div className="flex flex-col min-h-full gap-1">
-                  {[...activePlayers]
-                    .sort((a, b) => {
-                      const aId = String(a.id).trim();
-                      const bId = String(b.id).trim();
-                      const aGK = a.position === 'Goleiro' || aId === currentGoalkeeperId;
-                      const bGK = b.position === 'Goleiro' || bId === currentGoalkeeperId;
-                      if (aGK && !bGK) return -1;
-                      if (!aGK && bGK) return 1;
-                      if (aGK && bGK && currentGoalkeeperId) {
-                        if (aId === currentGoalkeeperId) return -1;
-                        if (bId === currentGoalkeeperId) return 1;
-                      }
-                      return 0;
-                    })
-                    .map((player) => {
-                  const isSelected = selectedPlayerId === String(player.id).trim();
-                  const isGoalkeeper = String(player.id).trim() === currentGoalkeeperId;
+              ) : allSquadPlayers.length > 0 ? (
+                <>
+                  {lockerOpen && (
+                    <p className="text-amber-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
+                      Ativos: {lockerDraftIds.length}/5 — no máx. 1 goleiro; toque nos números; Ativos para trancar
+                    </p>
+                  )}
+                <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
+                  {allSquadPlayers.map((player) => {
+                  const pid = String(player.id).trim();
+                  const isSelected = selectedPlayerId === pid;
+                  const isGoalkeeper = pid === currentGoalkeeperId;
                   const isGk = player.position === 'Goleiro' || isGoalkeeper;
+                  const displayNum = player.jerseyNumber ?? '?';
+                  const labelName = player.nickname?.trim() || player.name || '';
+                  const isInactiveLocked =
+                    !lockerOpen &&
+                    isMatchStarted &&
+                    (squadActiveIds.length === 0 || !squadActiveIds.includes(pid));
+                  const inLockerSelection = lockerOpen ? lockerDraftIds.includes(pid) : squadActiveIds.includes(pid);
                   return (
                     <button
                       key={player.id}
+                      type="button"
+                      title={isGk ? `${labelName} — Goleiro` : labelName}
                       onClick={() => {
-                        const clickedPlayerId = String(player.id).trim();
-                        if (goalStep === 'author') {
-                          setPendingGoalPlayerId(clickedPlayerId);
-                          setPendingAssistPlayerId(null);
-                          setGoalStep('assist');
+                        if (lockerOpen) {
+                          toggleLockerDraft(pid);
                           return;
                         }
-                        if (goalStep === 'assist') {
-                          setPendingAssistPlayerId(clickedPlayerId);
-                          if (pendingGoalMethod) setGoalStep('confirm'); else { setGoalStep('method'); setPendingGoalMethod(null); }
-                          return;
-                        }
-                        if (!isMatchStarted) return;
-
-                        // Se o fluxo de ação está aguardando jogador, usar clique da aba lateral (sem pop-up)
-                        if (actionFlow?.step === 'player' && actionFlow?.action) {
-                          if (needsTimePopup()) {
-                            setActionFlow(prev => prev ? { ...prev, step: 'time' as const, selectedPlayerId: clickedPlayerId, details: prev.details || undefined, wrongPassTransition: prev.wrongPassTransition } : null);
-                          } else {
-                            completeActionFlowWithPlayer(clickedPlayerId);
-                          }
-                          return;
-                        }
-
-                        // Se há passe pendente, completar o passe
-                        if (pendingPassEventId && pendingPassSenderId && clickedPlayerId !== pendingPassSenderId) {
-                          handleConfirmPassReceiver(clickedPlayerId);
-                        } else {
-                          // Seleção normal de jogador
-                          setSelectedPlayerId(clickedPlayerId);
-                          // Se havia passe pendente e clicou no mesmo jogador ou cancelou, limpar
-                          if (pendingPassEventId) {
-                            setMatchEvents(prev => prev.filter(e => e.id !== pendingPassEventId));
-                            setPendingPassEventId(null);
-                            setPendingPassSenderId(null);
-                            setPendingPassResult(null);
-                            setSelectedAction(null);
-                          }
-                        }
+                        if (isInactiveLocked) return;
+                        handleLateralPlayerClick(pid);
                       }}
-                      disabled={!isMatchStarted && !goalStep}
-                      className={`w-full rounded-lg p-1.5 text-left transition-all ${
-                        goalStep === 'author'
-                          ? 'bg-green-500/15 border-2 border-green-500/80 hover:border-green-500 hover:bg-green-500/20 cursor-pointer'
-                          : goalStep === 'assist'
-                          ? 'bg-amber-500/15 border-2 border-amber-500/80 hover:border-amber-500 hover:bg-amber-500/20 cursor-pointer'
-                          : !isMatchStarted
-                          ? 'bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed'
-                          : actionFlow?.step === 'player'
-                          ? 'bg-[#00f0ff]/15 border-2 border-[#00f0ff]/80 hover:border-[#00f0ff] hover:bg-[#00f0ff]/20'
+                      disabled={
+                        (!isMatchStarted && !goalStep && !lockerOpen)
+                        || (lockerOpen ? false : isInactiveLocked)
+                      }
+                      className={`relative flex aspect-square w-full max-h-[2.6rem] items-center justify-center rounded-full text-base font-black transition-all ${
+                        !isMatchStarted && !lockerOpen
+                          ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
+                          : lockerOpen
+                          ? inLockerSelection
+                            ? 'bg-emerald-500/30 border-2 border-emerald-400 text-white shadow-[0_0_10px_rgba(52,211,153,0.35)]'
+                            : 'bg-zinc-800/50 border-2 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-800'
+                          : isInactiveLocked
+                          ? 'bg-zinc-800/90 border-2 border-zinc-700 text-zinc-500 cursor-not-allowed opacity-55'
                           : isSelected
-                          ? 'bg-[#00f0ff]/20 border-2 border-[#00f0ff]'
-                          : pendingPassEventId && String(player.id).trim() !== pendingPassSenderId
-                          ? 'bg-yellow-500/20 border border-yellow-500 hover:border-yellow-400'
-                          : 'bg-green-500/10 border border-green-500/80 hover:border-green-400'
+                          ? 'bg-[#00f0ff]/25 border-2 border-[#00f0ff] text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+                          : pendingPassEventId && pid !== pendingPassSenderId
+                          ? 'bg-yellow-500/25 border-2 border-yellow-500 text-yellow-100 hover:bg-yellow-500/35'
+                          : 'bg-green-500/15 border-2 border-green-500/70 text-white hover:bg-green-500/25 hover:border-green-400'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
-                          {player.photoUrl ? (
-                            <img src={player.photoUrl} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-500 text-[10px] font-medium">
-                              {(player.nickname?.trim() || player.name).substring(0, 2).toUpperCase() || '?'}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium text-[11px] truncate leading-tight">
-                            {player.nickname?.trim() || player.name} · #{player.jerseyNumber}
-                            {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && ' (receber passe)'}
-                          </p>
-                          <p className={`text-[9px] leading-tight mt-0.5 ${isGk ? 'text-amber-400' : 'text-zinc-400'}`}>
-                            {isGk ? '🥅 Goleiro' : (player.position || '—')}
-                          </p>
-                        </div>
-                      </div>
+                      <span className="tabular-nums leading-none">{displayNum}</span>
+                      {isGk && (
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
+                      )}
+                      {pendingPassEventId && pid !== pendingPassSenderId && !lockerOpen && !isInactiveLocked && (
+                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
+                      )}
                     </button>
                   );
                   })}
                 </div>
+                </>
               ) : (
                 <div className="bg-green-500/10 border border-green-500/80 rounded-lg p-2 text-center">
                   <p className="text-zinc-500 text-xs">Nenhum jogador ativo</p>
@@ -2768,52 +3453,164 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               )}
             </div>
 
-            {/* Botão Substituições - ocupa o fim do card à esquerda */}
             <button
-              onClick={() => setShowSubstitutions(true)}
-              className="mt-2 w-full rounded-lg p-2 font-bold uppercase text-xs transition-colors flex items-center justify-center gap-2 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 hover:bg-yellow-500/30 shrink-0"
+              type="button"
+              onClick={() => {
+                const next = !requirePassReceiver;
+                setRequirePassReceiver(next);
+                try {
+                  localStorage.setItem('scout21_requirePassReceiver', next ? 'true' : 'false');
+                } catch {
+                  // ignore localStorage errors
+                }
+              }}
+              className={`mt-2 w-full rounded-lg p-2 font-bold uppercase text-[10px] transition-colors shrink-0 border ${
+                requirePassReceiver
+                  ? 'bg-yellow-500/25 border-yellow-500 text-yellow-200'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+              }`}
             >
-              <ArrowRightLeft size={16} />
-              SUBSTITUIÇÕES
+              Exigir recebedor: {requirePassReceiver ? 'ON' : 'OFF'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (lockerOpen) {
+                  if (lockerDraftIds.length === 5) {
+                    setSquadActiveIds([...lockerDraftIds]);
+                    setLockerOpen(false);
+                  } else {
+                    setLockerOpen(false);
+                    setLockerDraftIds([]);
+                  }
+                } else {
+                  const raw = squadActiveIds.length > 0 ? [...squadActiveIds] : [];
+                  let gkKept = false;
+                  const sanitized = raw.filter((id) => {
+                    if (!isLineupGoalkeeperId(id)) return true;
+                    if (gkKept) return false;
+                    gkKept = true;
+                    return true;
+                  });
+                  setLockerDraftIds(sanitized);
+                  setLockerOpen(true);
+                }
+              }}
+              className={`mt-2 w-full rounded-lg p-2 font-bold uppercase text-xs transition-colors flex items-center justify-center gap-2 shrink-0 border-2 ${
+                lockerOpen
+                  ? 'bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30'
+                  : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 hover:bg-yellow-500/30'
+              }`}
+            >
+              {lockerOpen ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
+              Ativos
             </button>
           </div>
 
           {/* Painel Direito - Ações/Eventos (flex-1 + min-w-0 para responsivo) */}
           <div className="flex-1 min-w-0 bg-black border-2 border-blue-500 rounded-lg p-2 flex flex-col min-h-0">
-            {/* Indicação quando a ação aguarda seleção de jogador na aba lateral */}
-            {actionFlow?.step === 'player' && !goalStep && (
-              <div className="mb-2 p-2 bg-[#00f0ff]/10 border border-[#00f0ff]/50 rounded-lg">
-                <p className="text-[#00f0ff] text-xs font-bold text-center">
-                  Selecione o jogador na aba lateral
-                </p>
-              </div>
-            )}
-            {/* Indicação quando aguarda autor do gol na aba lateral */}
-            {goalStep === 'author' && (
+            {goalStep === 'author' && !pendingGoalIsOpponent && (
               <div className="mb-2 p-2 bg-green-500/10 border border-green-500/50 rounded-lg">
-                <p className="text-green-400 text-xs font-bold text-center">
-                  Selecione o autor do gol na aba lateral
-                </p>
+                <p className="text-green-300 text-xs font-bold text-center">Toque no autor do gol na lista à esquerda</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoalStep('team');
+                    setPendingGoalPlayerId(null);
+                    setPendingAssistPlayerId(null);
+                    setPendingGoalType(null);
+                    setPendingGoalMethod(null);
+                  }}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
               </div>
             )}
-            {goalStep === 'assist' && (
-              <div className="mb-2 p-2 bg-amber-500/10 border border-amber-500/50 rounded-lg flex flex-col gap-2">
-                <p className="text-amber-400 text-xs font-bold text-center">
-                  Selecione quem deu a assistência na aba lateral ou
-                </p>
+            {goalStep === 'assist' && !pendingGoalIsOpponent && (
+              <div className="mb-2 p-2 bg-amber-500/10 border border-amber-500/50 rounded-lg">
+                <p className="text-amber-300 text-xs font-bold text-center">Assistência: toque num jogador à esquerda ou sem assistência</p>
                 <button
                   type="button"
                   onClick={() => {
                     setPendingAssistPlayerId(null);
-                    if (pendingGoalMethod) setGoalStep('confirm'); else { setGoalStep('method'); setPendingGoalMethod(null); }
+                    enterGoalTimeStep('assist');
                   }}
-                  className="w-full py-2.5 bg-zinc-700 hover:bg-zinc-600 border-2 border-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg transition-colors"
+                  className="mt-2 w-full py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
                 >
                   Sem assistência
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoalStep('method');
+                    setPendingAssistPlayerId(null);
+                  }}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
               </div>
             )}
-
+            {/* Indicação quando a ação aguarda seleção na lista à esquerda */}
+            {actionFlow?.step === 'player' && !goalStep && (
+              <div className="mb-2 p-2 bg-[#00f0ff]/10 border border-[#00f0ff]/50 rounded-lg">
+                <p className="text-[#00f0ff] text-xs font-bold text-center">Escolha o jogador na lista à esquerda</p>
+                <button
+                  type="button"
+                  onClick={handleActionFlowPlayerModalBack}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            )}
+            {actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save' && !goalStep && (
+              <div className="mb-2 p-2 bg-purple-500/10 border border-purple-500/50 rounded-lg">
+                <p className="text-purple-300 text-xs font-bold text-center">Toque no goleiro que defendeu (lista à esquerda)</p>
+                {saveGoalkeeperOptions.isFallback && (
+                  <p className="text-zinc-500 text-[10px] text-center mt-1">Nenhum goleiro titular na lista — escolha quem estava no gol.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setActionFlow((prev) => (prev && prev.action === 'save' ? { ...prev, step: 'details', details: null } : prev))}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            )}
+            {freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister && (
+              <div className="mb-2 p-2 bg-violet-500/10 border border-violet-500/50 rounded-lg">
+                <p className="text-violet-300 text-xs font-bold text-center">Toque no cobrador na lista à esquerda</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFreeKickStep('result');
+                    setPendingFreeKickResultToRegister(null);
+                  }}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            )}
+            {penaltyStep === 'kicker' && pendingPenaltyTeam === 'for' && (
+              <div className="mb-2 p-2 bg-fuchsia-500/10 border border-fuchsia-500/50 rounded-lg">
+                <p className="text-fuchsia-300 text-xs font-bold text-center">Toque no cobrador na lista à esquerda</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPenaltyStep('team');
+                    setPendingPenaltyKickerId(null);
+                  }}
+                  className="mt-2 w-full py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-[10px] rounded-lg border border-zinc-600 transition-colors"
+                >
+                  Voltar
+                </button>
+              </div>
+            )}
             {/* Área Principal de Ações */}
             <div className="flex-1 border-2 border-zinc-800 rounded-lg p-2 flex flex-col min-h-0">
               {/* Parte superior (~20%): zona reservada para opções de Passe/Chute/Falta/Cartão */}
@@ -2823,7 +3620,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setGoalConfirmEditingTime(false); }}
+                    onClick={() => { setGoalStep(null); setPendingGoalTime(null); }}
                     aria-hidden="true"
                   />
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
@@ -2838,23 +3635,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         onClick={() => {
                           setPendingGoalIsOpponent(false);
                           setPendingGoalType('normal');
-                          setGoalStep('author');
+                          setPendingGoalMethod(null);
+                          if (!hasSelectedPlayer) {
+                            alert('Selecione o autor do gol primeiro.');
+                            return;
+                          }
+                          setPendingGoalPlayerId(String(selectedPlayerId).trim());
+                          setPendingAssistPlayerId(null);
+                          setGoalStep('method');
                         }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
                       >
                         Gol Nosso
-                      </button>
-                      <button
-                        onClick={() => {
-                          setPendingGoalIsOpponent(false);
-                          setPendingGoalType('contra');
-                          setPendingGoalPlayerId(null);
-                          setGoalStep('method');
-                          setPendingGoalMethod(null);
-                        }}
-                        className="w-full px-4 py-4 bg-amber-500/20 border-2 border-amber-500 text-amber-400 font-bold uppercase text-sm rounded-xl hover:bg-amber-500/30 transition-colors"
-                      >
-                        Gol Contra
                       </button>
                       <button
                         onClick={() => {
@@ -2868,7 +3660,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         Gol Adversário
                       </button>
                       <button
-                        onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalPeriod(null); setGoalConfirmEditingTime(false); }}
+                        onClick={() => { setGoalStep(null); setPendingGoalTime(null); setPendingGoalMethod(null); setPendingGoalType(null); setPendingGoalIsOpponent(false); setPendingGoalPlayerId(null); setPendingAssistPlayerId(null); }}
                         className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors"
                       >
                         Cancelar
@@ -2877,12 +3669,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
                 </div>
               )}
-              {/* Popup Método do gol - overlay em cima, seleciona e fecha */}
+              {/* Popup Método do gol - após método, gol adversário ou métodos sem assistência registram na hora */}
               {goalStep === 'method' && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => { setGoalStep((pendingGoalIsOpponent || pendingGoalType === 'contra') ? 'team' : 'assist'); setPendingGoalMethod(null); }}
+                    onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
                     aria-hidden="true"
                   />
                   <div className="relative w-full max-w-lg bg-zinc-950 border-2 border-[#00f0ff]/40 rounded-2xl shadow-2xl shadow-[#00f0ff]/10 overflow-hidden">
@@ -2909,8 +3701,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   <button
                                     key={method}
                                     onClick={() => {
-                                      setPendingGoalMethod(method);
-                                      setGoalStep('confirm');
+                                      if (pendingGoalIsOpponent) {
+                                        setPendingGoalMethod(method);
+                                        enterGoalTimeStep('method');
+                                      } else if (GOAL_METHODS_NO_ASSIST.includes(method)) {
+                                        setPendingAssistPlayerId(null);
+                                        setPendingGoalMethod(method);
+                                        enterGoalTimeStep('method');
+                                      } else {
+                                        setPendingGoalMethod(method);
+                                        setGoalStep('assist');
+                                      }
                                     }}
                                     className={`flex items-center gap-3 px-4 py-4 ${ui.bg} ${ui.border} border-2 ${ui.text} ${ui.hover} font-black uppercase text-[11px] rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98] group`}
                                   >
@@ -2934,8 +3735,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   <button
                                     key={method}
                                     onClick={() => {
-                                      setPendingGoalMethod(method);
-                                      setGoalStep('confirm');
+                                      if (pendingGoalIsOpponent) {
+                                        setPendingGoalMethod(method);
+                                        enterGoalTimeStep('method');
+                                      } else if (GOAL_METHODS_NO_ASSIST.includes(method)) {
+                                        setPendingAssistPlayerId(null);
+                                        setPendingGoalMethod(method);
+                                        enterGoalTimeStep('method');
+                                      } else {
+                                        setPendingGoalMethod(method);
+                                        setGoalStep('assist');
+                                      }
                                     }}
                                     className={`flex items-center gap-3 px-4 py-4 ${ui.bg} ${ui.border} border-2 ${ui.text} ${ui.hover} font-black uppercase text-[11px] rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98] group`}
                                   >
@@ -2947,10 +3757,32 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           </div>
                         </div>
                       </div>
+                      {pendingGoalIsOpponent && (
+                        <div className="col-span-2 mt-2 space-y-3">
+                          <h4 className="text-zinc-500 font-bold uppercase text-[10px] tracking-widest border-b border-zinc-800 pb-1 mb-3">Gol Contra</h4>
+                          <div className="flex flex-col gap-2">
+                            {(() => {
+                              const ui = GOAL_METHOD_UI['Gol Contra'];
+                              return (
+                                <button
+                                  onClick={() => {
+                                    setPendingGoalMethod('Gol Contra');
+                                    enterGoalTimeStep('method');
+                                  }}
+                                  className={`flex items-center gap-3 px-4 py-4 ${ui.bg} ${ui.border} border-2 ${ui.text} ${ui.hover} font-black uppercase text-[11px] rounded-xl transition-all duration-200 shadow-lg hover:scale-[1.02] active:scale-[0.98] group`}
+                                >
+                                  <span className="shrink-0 group-hover:scale-110 transition-transform">{ui.icon}</span>
+                                  <span className="text-left leading-tight">Gol Contra</span>
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
                       <button
-                        onClick={() => { setGoalStep((pendingGoalIsOpponent || pendingGoalType === 'contra') ? 'team' : 'assist'); setPendingGoalMethod(null); }}
+                        onClick={() => { setGoalStep(pendingGoalIsOpponent ? 'team' : 'author'); setPendingGoalMethod(null); }}
                         className="flex items-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
                       >
                         <ArrowLeft size={14} /> Voltar
@@ -2959,155 +3791,88 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
                 </div>
               )}
-              {goalStep === 'confirm' && (
+
+              {/* Passo tempo do gol — período = tempo de coleta (`currentPeriod`); só minuto/segundo relativos */}
+              {goalStep === 'time' && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => {
-                      setGoalStep(null);
-                      setPendingGoalType(null);
-                      setPendingGoalIsOpponent(false);
-                      setPendingGoalPlayerId(null);
-                      setPendingAssistPlayerId(null);
-                      setPendingGoalTime(null);
-                      setPendingGoalPeriod(null);
-                      setGoalConfirmEditingTime(false);
-                    }}
+                    onClick={() => setGoalStep(goalTimeReturnStep)}
                     aria-hidden="true"
                   />
-                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
+                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-cyan-500/40 rounded-2xl shadow-2xl shadow-cyan-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
-                      <h3 className="text-green-400 font-black uppercase text-sm tracking-wider flex items-center gap-2">
-                        <Goal size={18} />
-                        Confirmar Gol
+                      <h3 className="text-cyan-400 font-black uppercase text-sm tracking-wider flex items-center gap-2">
+                        <Clock size={18} />
+                        Tempo do gol
                       </h3>
-                      <p className="text-zinc-500 text-xs mt-1">Revise os dados antes de confirmar</p>
-                    </div>
-                    <div className="p-5 space-y-3">
-                      <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                        <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Equipe</span>
-                        <span className={`text-sm font-bold ${pendingGoalIsOpponent ? 'text-red-400' : 'text-green-400'}`}>
-                          {pendingGoalIsOpponent ? 'Adversário' : pendingGoalType === 'contra' ? 'Gol Contra' : 'Nosso Time'}
-                        </span>
-                      </div>
-                      {pendingGoalPlayerId && (() => {
-                        const p = players.find((x) => String(x.id).trim() === pendingGoalPlayerId);
-                        return (
-                          <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                            <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Autor</span>
-                            <span className="text-white text-sm font-bold">
-                              {p?.jerseyNumber ? `#${p.jerseyNumber} ` : ''}{p?.nickname || p?.name || '—'}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                      {!pendingGoalIsOpponent && pendingGoalType !== 'contra' && (
-                        <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                          <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Assistência</span>
-                          <span className="text-white text-sm font-bold">
-                            {pendingAssistPlayerId
-                              ? (() => {
-                                  const a = players.find((x) => String(x.id).trim() === pendingAssistPlayerId);
-                                  return a ? `${a.jerseyNumber ? `#${a.jerseyNumber} ` : ''}${a.nickname || a.name || '—'}` : '—';
-                                })()
-                              : 'Sem assistência'}
-                          </span>
-                        </div>
-                      )}
-                      {pendingGoalMethod && (() => {
-                        const ui = GOAL_METHOD_UI[pendingGoalMethod] || { icon: <Goal size={16} />, bg: 'bg-zinc-600', text: 'text-white' };
-                        return (
-                          <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                            <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Método</span>
-                            <span className={`flex items-center gap-2 text-sm font-bold ${ui.text}`}>
-                              {ui.icon} {pendingGoalMethod}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                      {pendingGoalTime !== null && (
-                        <div className="flex items-center gap-3 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-                          <span className="text-zinc-500 text-xs font-bold uppercase w-20 shrink-0">Tempo</span>
-                          {goalConfirmEditingTime ? (
-                            <div className="flex items-center gap-2 flex-1">
-                              <select
-                                value={Math.floor(pendingGoalTime / 60)}
-                                onChange={(e) => setPendingGoalTime(parseInt(e.target.value, 10) * 60 + (pendingGoalTime % 60))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
-                              >
-                                {Array.from({ length: 41 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
-                              <span className="text-zinc-500 font-bold">:</span>
-                              <select
-                                value={pendingGoalTime % 60}
-                                onChange={(e) => setPendingGoalTime(Math.floor(pendingGoalTime / 60) * 60 + parseInt(e.target.value, 10))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
-                              >
-                                {Array.from({ length: 60 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => setGoalConfirmEditingTime(false)}
-                                className="ml-auto px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs font-bold rounded"
-                              >
-                                Ok
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="text-[#00f0ff] text-sm font-bold">
-                                {Math.floor(pendingGoalTime / 60)}&apos;{String(pendingGoalTime % 60).padStart(2, '0')}&quot;
-                                {Math.floor(pendingGoalTime / 60) > 20 && ' (2º tempo)'}
-                              </span>
-                              <button
-                                onClick={() => setGoalConfirmEditingTime(true)}
-                                className="ml-auto px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-400 text-xs font-bold rounded transition-colors"
-                              >
-                                Editar tempo
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex gap-3">
-                      <button
-                        onClick={() => {
-                          const minutes = pendingGoalTime != null ? Math.floor(pendingGoalTime / 60) : 0;
-                          const derivedPeriod: '1T' | '2T' = minutes > 20 ? '2T' : '1T';
-                          const assistName = pendingAssistPlayerId ? (players.find((x) => String(x.id).trim() === pendingAssistPlayerId)?.name) : null;
-                          handleRegisterGoal(
-                            pendingGoalType || 'normal',
-                            pendingGoalIsOpponent,
-                            pendingGoalPlayerId,
-                            pendingGoalMethod,
-                            pendingGoalTime,
-                            derivedPeriod,
-                            pendingAssistPlayerId ?? undefined,
-                            assistName ?? undefined
-                          );
-                        }}
-                        className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-500/20"
+                      <p
+                        className={`mt-2 text-sm font-black uppercase tracking-wide ${
+                          currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
+                        }`}
                       >
-                        Confirmar Gol
+                        {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
+                      </p>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-zinc-400 text-xs font-bold uppercase">Tempo (minuto e segundo)</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          spellCheck={false}
+                          placeholder={currentPeriod === '2T' ? '20:00' : '00:00'}
+                          value={formatGoalTimeDigitsMask(goalTimeDigits)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            if (currentPeriod === '2T') {
+                              const unclamped =
+                                goalAbsoluteDigitsToRelativeSecondsSecondHalfUnclamped(raw);
+                              const rel = goalAbsoluteDigitsToRelativeSecondsSecondHalf(raw);
+                              setGoalTimeRelSeconds(rel);
+                              const needsClamp =
+                                raw.length === 4
+                                  ? unclamped !== rel
+                                  : unclamped > HALF_RELATIVE_LAST_SECOND_2T;
+                              if (needsClamp) {
+                                setGoalTimeDigits(secondHalfRelativeToGoalDigits(rel));
+                              } else {
+                                setGoalTimeDigits(raw);
+                              }
+                            } else {
+                              const maxRel = HALF_RELATIVE_LAST_SECOND_1T;
+                              const rel = goalDigitsToRelativeSeconds(raw, maxRel);
+                              setGoalTimeRelSeconds(rel);
+                              const { mm, ss } = parseGoalTimeDigits(raw);
+                              const unconstrained = mm * 60 + ss;
+                              if (unconstrained !== rel) {
+                                const cm = Math.floor(rel / 60);
+                                const cs = rel % 60;
+                                setGoalTimeDigits(`${String(cm).padStart(2, '0')}${String(cs).padStart(2, '0')}`);
+                              } else {
+                                setGoalTimeDigits(raw);
+                              }
+                            }
+                          }}
+                          className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-3 text-white text-lg font-mono font-bold outline-none focus:border-cyan-500 placeholder:text-zinc-600"
+                        />
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={completeGoalFromTimeStep}
+                        className="w-full px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase text-xs rounded-xl transition-all"
+                      >
+                        Confirmar gol
                       </button>
                       <button
-                        onClick={() => {
-                          setGoalStep(null);
-                          setPendingGoalType(null);
-                          setPendingGoalIsOpponent(false);
-                          setPendingGoalPlayerId(null);
-                          setPendingAssistPlayerId(null);
-                          setPendingGoalTime(null);
-                          setPendingGoalPeriod(null);
-                          setGoalConfirmEditingTime(false);
-                        }}
-                        className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors"
+                        type="button"
+                        onClick={() => setGoalStep(goalTimeReturnStep)}
+                        className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
                       >
-                        Cancelar
+                        <ArrowLeft size={14} /> Voltar
                       </button>
                     </div>
                   </div>
@@ -3171,12 +3936,58 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       )}
                       {actionFlow.action === 'save' && (
                         <div className="space-y-3">
-                          {!currentGoalkeeperId && !selectedPlayerId && (
-                            <p className="text-zinc-400 text-xs">Selecione o goleiro na lista à esquerda antes de registrar.</p>
-                          )}
                           <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => { handleRegisterSave('simple', currentGoalkeeperId ?? selectedPlayerId ?? undefined); cancelActionFlow(); }} className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors">Defesa fácil</button>
-                            <button onClick={() => { handleRegisterSave('hard', currentGoalkeeperId ?? selectedPlayerId ?? undefined); cancelActionFlow(); }} className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors">Defesa difícil</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const selectedId = selectedPlayerId != null ? String(selectedPlayerId).trim() : '';
+                                const canUseSelectedGoalkeeper =
+                                  selectedId.length > 0 &&
+                                  saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
+                                if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'simple' }, selectedId);
+                                  return;
+                                }
+                                setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'simple' } : prev));
+                              }}
+                              className="px-4 py-3 bg-purple-500/20 border border-purple-500 text-purple-400 font-medium uppercase text-xs rounded-lg hover:bg-purple-500/30 transition-colors"
+                            >
+                              DEFESA SIMPLES
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const selectedId = selectedPlayerId != null ? String(selectedPlayerId).trim() : '';
+                                const canUseSelectedGoalkeeper =
+                                  selectedId.length > 0 &&
+                                  saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
+                                if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'hard' }, selectedId);
+                                  return;
+                                }
+                                setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'hard' } : prev));
+                              }}
+                              className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors"
+                            >
+                              Defesa difícil
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const selectedId = selectedPlayerId != null ? String(selectedPlayerId).trim() : '';
+                                const canUseSelectedGoalkeeper =
+                                  selectedId.length > 0 &&
+                                  saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
+                                if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'outside' }, selectedId);
+                                  return;
+                                }
+                                setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'outside' } : prev));
+                              }}
+                              className="col-span-2 px-4 py-3 bg-slate-500/20 border border-slate-500 text-slate-300 font-medium uppercase text-xs rounded-lg hover:bg-slate-500/30 transition-colors"
+                            >
+                              Pra fora
+                            </button>
                           </div>
                         </div>
                       )}
@@ -3233,25 +4044,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           ))}
                         </select>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-zinc-400 text-xs font-bold uppercase w-20">Período</label>
-                        <select
-                          value={actionFlow.pendingPeriod ?? '1T'}
-                          onChange={(e) => setActionFlow(prev => prev ? { ...prev, pendingPeriod: e.target.value as '1T' | '2T' } : null)}
-                          className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-bold outline-none focus:border-[#00f0ff]"
-                        >
-                          <option value="1T">1º tempo</option>
-                          <option value="2T">2º tempo</option>
-                        </select>
-                      </div>
                     </div>
                     <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex gap-3">
                       <button
                         onClick={() => {
                           const pid = actionFlow.selectedPlayerId!;
                           const time = (actionFlow.pendingTime ?? 0);
-                          const period = actionFlow.pendingPeriod ?? '1T';
-                          completeActionFlowWithPlayer(pid, time, period);
+                          completeActionFlowWithPlayer(pid, time);
                         }}
                         className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all"
                       >
@@ -3268,14 +4067,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               {/* Popup Tiro Livre - 1: Contra ou A favor */}
               {freeKickStep === 'team' && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); }} aria-hidden="true" />
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickResultToRegister(null); }} aria-hidden="true" />
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Tiro Livre - Contra ou A favor?</h3>
                     </div>
                     <div className="p-4 flex flex-col gap-3">
                       <button
-                        onClick={() => { setPendingFreeKickTeam('for'); setFreeKickStep('result'); }}
+                        onClick={() => {
+                          if (!hasSelectedPlayer) {
+                            alert('Selecione o cobrador primeiro.');
+                            return;
+                          }
+                          setPendingFreeKickTeam('for');
+                          setPendingFreeKickKickerId(String(selectedPlayerId).trim());
+                          setFreeKickStep('result');
+                        }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
                       >
                         A Favor (Nossa Equipe)
@@ -3286,7 +4093,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       >
                         Contra (Adversário)
                       </button>
-                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
+                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickResultToRegister(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
                         Cancelar
                       </button>
                     </div>
@@ -3296,7 +4103,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               {/* Popup Tiro Livre - 2: Resultado (Gol / Defesa / Pra fora) */}
               {freeKickStep === 'result' && pendingFreeKickTeam && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); }} aria-hidden="true" />
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); setPendingFreeKickResultToRegister(null); }} aria-hidden="true" />
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Resultado do Tiro Livre</h3>
@@ -3308,18 +4115,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setFreeKickStep(null);
                           setPendingFreeKickTeam(null);
                           setPendingFreeKickKickerId(null);
+                          setPendingFreeKickResultToRegister(null);
                           setPendingGoalMethod('Tiro Livre');
                           setPendingGoalTime(getTimeForEvent() ?? matchTime);
-                          setPendingGoalPeriod(currentPeriod);
                           if (team === 'for') {
                             setPendingGoalIsOpponent(false);
                             setPendingGoalType('normal');
-                            setGoalStep('author');
+                            if (!hasSelectedPlayer) {
+                              alert('Selecione o autor do gol primeiro.');
+                              return;
+                            }
+                            setPendingGoalPlayerId(String(selectedPlayerId).trim());
+                            setGoalStep('method');
                           } else {
-                            setPendingGoalIsOpponent(true);
-                            setPendingGoalType('contra');
-                            setPendingGoalPlayerId(OPPONENT_FAKE_PLAYER_ID);
-                            setGoalStep('confirm');
+                            const tGk = getTimeForEvent() ?? matchTime;
+                            handleRegisterGoal('normal', true, null, 'Tiro Livre', tGk);
                           }
                         }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
@@ -3328,8 +4138,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          const kickerId = pendingFreeKickTeam === 'for' ? (selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null)) : null;
-                          handleRegisterFreeKick(pendingFreeKickTeam, kickerId, 'saved');
+                          if (pendingFreeKickTeam === 'for') {
+                            if (pendingFreeKickKickerId) {
+                              handleRegisterFreeKick('for', pendingFreeKickKickerId, 'saved');
+                            } else {
+                              alert('Selecione o cobrador primeiro.');
+                            }
+                          } else {
+                            handleRegisterFreeKick('against', null, 'saved');
+                          }
                         }}
                         className="w-full px-4 py-4 bg-purple-500/20 border-2 border-purple-500 text-purple-400 font-bold uppercase text-sm rounded-xl hover:bg-purple-500/30 transition-colors"
                       >
@@ -3337,14 +4154,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          const kickerId = pendingFreeKickTeam === 'for' ? (selectedPlayerId ?? (activePlayers.length > 0 ? String(activePlayers[0].id).trim() : null)) : null;
-                          handleRegisterFreeKick(pendingFreeKickTeam, kickerId, pendingFreeKickTeam === 'against' ? 'noGoal' : 'outside');
+                          if (pendingFreeKickTeam === 'for') {
+                            if (pendingFreeKickKickerId) {
+                              handleRegisterFreeKick('for', pendingFreeKickKickerId, 'outside');
+                            } else {
+                              alert('Selecione o cobrador primeiro.');
+                            }
+                          } else {
+                            handleRegisterFreeKick('against', null, 'noGoal');
+                          }
                         }}
                         className="w-full px-4 py-4 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-sm rounded-xl hover:bg-red-500/30 transition-colors"
                       >
                         Pra fora
                       </button>
-                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
+                      <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickKickerId(null); setPendingFreeKickResultToRegister(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
                         Cancelar
                       </button>
                     </div>
@@ -3366,7 +4190,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                     <div className="p-4 flex flex-col gap-3">
                       <button
-                        onClick={() => { setPendingPenaltyTeam('for'); setPenaltyStep('kicker'); }}
+                        onClick={() => {
+                          if (!hasSelectedPlayer) {
+                            alert('Selecione o cobrador primeiro.');
+                            return;
+                          }
+                          setPendingPenaltyTeam('for');
+                          setPendingPenaltyKickerId(String(selectedPlayerId).trim());
+                          setPenaltyStep('result');
+                        }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
                       >
                         A Favor (Nossa Equipe)
@@ -3382,48 +4214,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors"
                       >
                         Cancelar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Popup Pênalti - Cobrador */}
-              {penaltyStep === 'kicker' && pendingPenaltyTeam === 'for' && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
-                  <div
-                    className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                    onClick={() => { setPenaltyStep('team'); setPendingPenaltyKickerId(null); }}
-                    aria-hidden="true"
-                  />
-                  <div className="relative w-full max-w-md bg-zinc-950 border-2 border-purple-500/40 rounded-2xl shadow-2xl shadow-purple-500/10 overflow-hidden">
-                    <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
-                      <h3 className="text-purple-400 font-black uppercase text-sm tracking-wider">Selecionar cobrador</h3>
-                    </div>
-                    <div className="p-4 max-h-[50vh] overflow-y-auto">
-                      <div className="grid grid-cols-2 gap-2">
-                        {activePlayers?.length ? activePlayers.map((player) => (
-                          <button
-                            key={player.id}
-                            onClick={() => {
-                              setPendingPenaltyKickerId(String(player.id).trim());
-                              setPenaltyStep('result');
-                            }}
-                            className="px-4 py-3 bg-zinc-900 border border-zinc-800 text-white font-bold text-xs rounded-lg hover:border-purple-500 hover:bg-purple-500/10 transition-colors text-left"
-                          >
-                            <span>#{player.jerseyNumber} {player.nickname?.trim() || player.name}</span>
-                            {player.position && <span className="block text-[10px] text-zinc-400 mt-0.5">{player.position === 'Goleiro' ? '🥅 Goleiro' : player.position}</span>}
-                          </button>
-                        )) : (
-                          <p className="col-span-2 text-zinc-500 text-xs text-center py-2">Nenhum jogador ativo</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-zinc-800 bg-zinc-900/50 flex justify-end">
-                      <button
-                        onClick={() => { setPenaltyStep('team'); setPendingPenaltyKickerId(null); }}
-                        className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 font-bold uppercase text-xs rounded-lg border border-zinc-600 transition-colors"
-                      >
-                        Voltar
                       </button>
                     </div>
                   </div>
@@ -3501,16 +4291,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       Sem posse
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         if (!isMatchStarted || isBlockedByPenalty) return;
-                        const t = getTimeForEvent();
-                        if (isPostmatch && t === null) {
-                          alert('Informe o tempo antes de registrar o gol (ex.: 0100 para 01:00).');
+                        if (!hasSelectedPlayer) {
+                          setTopRightNotice('Selecione um jogador em quadra na lista à esquerda antes de marcar o gol.');
                           return;
                         }
                         if (!isPostmatch) setIsRunning(false);
-                        setPendingGoalTime(isPostmatch ? t! : matchTime);
-                        setPendingGoalPeriod(currentPeriod);
+                        setPendingGoalTime(null);
                         setGoalStep('team');
                         setPendingGoalIsOpponent(false);
                         setPendingGoalType(null);
@@ -3519,7 +4308,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       disabled={!isMatchStarted || isBlockedByPenalty}
                       className={`flex-1 min-h-[48px] px-4 py-4 rounded-lg border-2 font-black uppercase text-base transition-all flex items-center justify-center gap-1 active:scale-95 ${
                         isMatchStarted && !isBlockedByPenalty
-                          ? 'bg-green-500/20 text-green-400 border-green-500 hover:bg-green-500/30'
+                          ? hasSelectedPlayer
+                            ? 'bg-green-500/20 text-green-400 border-green-500 hover:bg-green-500/30'
+                            : 'bg-zinc-900/80 text-zinc-500 border-zinc-600 opacity-80'
                           : 'bg-zinc-800 text-zinc-600 cursor-not-allowed border-zinc-700'
                       }`}
                     >
@@ -3549,13 +4340,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
                         <button
                           onClick={() => {
-                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5) return;
+                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
                             if (!isPostmatch && selectedAction !== 'foul') setIsRunning(false);
                             handleSelectAction('foul');
                           }}
-                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5}
+                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
                           className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            (!isPostmatch && !isRunning) || isBlockedByPenalty || foulsForCurrentPeriod >= 5
+                            (!isPostmatch && !isRunning) || isBlockedByPenalty
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : selectedAction === 'foul'
                               ? 'bg-orange-500/30 border-orange-500 text-orange-400'
@@ -3585,40 +4376,46 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
                       <div className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
                         {isPostmatch ? (
-                          <div className="w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
-                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo (min:seg)</label>
-                            <div className="flex items-center gap-1">
-                              <select
-                                value={manualMinute}
-                                onChange={(e) => setManualMinute(parseInt(e.target.value, 10))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
-                              >
-                                {Array.from({ length: 41 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
-                              <span className="text-zinc-500 font-bold">:</span>
-                              <select
-                                value={manualSecond}
-                                onChange={(e) => setManualSecond(parseInt(e.target.value, 10))}
-                                className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
-                              >
-                                {Array.from({ length: 60 }, (_, i) => (
-                                  <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <select
-                              value={currentPeriod}
-                              onChange={(e) => setCurrentPeriod(e.target.value as '1T' | '2T')}
-                              className="bg-zinc-950 border border-zinc-700 rounded-lg px-2 py-1 text-white text-[10px] font-bold uppercase outline-none focus:border-[#00f0ff]"
+                          <div className="w-full h-full min-h-[80px] py-3 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
+                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo de coleta</label>
+                            <p
+                              className={`text-base sm:text-lg font-black uppercase tracking-wide ${
+                                currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
+                              }`}
                             >
-                              <option value="1T">1º tempo</option>
-                              <option value="2T">2º tempo</option>
-                            </select>
+                              {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
+                            </p>
+                            {currentPeriod === '1T' && (
+                              <button
+                                type="button"
+                                onClick={handleEndFirstHalfCollection}
+                                className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-amber-500/70 bg-amber-500/15 text-amber-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-amber-500/25 transition-colors"
+                              >
+                                Encerrar coleta do 1º tempo
+                              </button>
+                            )}
+                            {currentPeriod === '2T' && (
+                              <button
+                                type="button"
+                                onClick={handleReturnToFirstHalfCollection}
+                                className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-sky-500/70 bg-sky-500/15 text-sky-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-sky-500/25 transition-colors"
+                              >
+                                Voltar ao 1º tempo
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <>
+                            <div className="w-full flex flex-col items-center gap-0.5 shrink-0">
+                              <span className="text-zinc-500 text-[10px] font-bold uppercase">Tempo</span>
+                              <span
+                                className={`text-xs font-black uppercase tracking-wide ${
+                                  currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
+                                }`}
+                              >
+                                {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
+                              </span>
+                            </div>
                             <button
                               onClick={handleToggleTimer}
                               className={`w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 font-black font-mono text-3xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
@@ -3638,6 +4435,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 Encerrar Tempo
                               </button>
                             )}
+                            {currentPeriod === '1T' && !isMatchEnded && (
+                              <button
+                                type="button"
+                                onClick={handleEndFirstHalfCollection}
+                                className="w-full px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/70 text-amber-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                              >
+                                Encerrar coleta do 1º tempo
+                              </button>
+                            )}
+                            {currentPeriod === '2T' && !isMatchEnded && (
+                              <button
+                                type="button"
+                                onClick={handleReturnToFirstHalfCollection}
+                                className="w-full px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/70 text-sky-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                              >
+                                Voltar ao 1º tempo
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -3652,6 +4467,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : !hasSelectedPlayer
+                                  ? 'bg-zinc-900/70 border-zinc-700 text-zinc-500 opacity-70'
                                   : selectedAction === 'pass'
                                   ? 'bg-zinc-100 border-white text-black'
                                   : 'bg-zinc-900 border-zinc-700/50 text-zinc-500 hover:bg-zinc-800 hover:border-white hover:text-white'
@@ -3665,6 +4482,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : !hasSelectedPlayer
+                                  ? 'bg-zinc-900/70 border-red-500/20 text-red-500/50 opacity-70'
                                   : selectedAction === 'shot'
                                   ? 'bg-red-500/30 border-red-500 text-red-400'
                                   : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
@@ -3681,6 +4500,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : !hasSelectedPlayer
+                                  ? 'bg-zinc-900/70 border-blue-500/20 text-blue-500/50 opacity-70'
                                   : selectedAction === 'tackle'
                                   ? 'bg-blue-500/30 border-blue-500 text-blue-400'
                                   : 'bg-zinc-900 border-blue-500/30 text-blue-500/70 hover:bg-blue-500/20 hover:border-blue-500 hover:text-blue-400'
@@ -3694,12 +4515,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : !hasSelectedPlayer
+                                  ? 'bg-zinc-900/70 border-purple-500/20 text-purple-500/50 opacity-70'
                                   : selectedAction === 'save'
                                   ? 'bg-purple-500/30 border-purple-500 text-purple-400'
                                   : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
                               }`}
                             >
-                              DEFESA
+                              CHUTE (ADVERSARIO)
                             </button>
                             <button
                               onClick={() => handleSelectAction('block')}
@@ -3707,6 +4530,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                                  : !hasSelectedPlayer
+                                  ? 'bg-zinc-900/70 border-yellow-500/20 text-yellow-500/50 opacity-70'
                                   : selectedAction === 'block'
                                   ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
                                   : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
@@ -3774,6 +4599,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         onClick={() => {
                           if (!isMatchStarted) return;
                           if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
+                          if (!hasSelectedPlayer) {
+                            alert('Selecione um jogador primeiro.');
+                            return;
+                          }
                           if (!isPostmatch) setIsRunning(false);
                           handleSelectAction('lateral');
                         }}
@@ -3781,6 +4610,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className={`min-h-[48px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                            : !hasSelectedPlayer
+                            ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-500/40 opacity-70'
                             : 'bg-cyan-500/10 border-cyan-500/40 text-cyan-500/70 hover:bg-cyan-500/20 hover:border-cyan-500 hover:text-cyan-400 shadow-sm'
                         }`}
                       >
@@ -3790,12 +4621,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         onClick={() => {
                           if (!isMatchStarted) return;
                           if (isBlockedByPenalty) return;
+                          if (!hasSelectedPlayer) {
+                            alert('Selecione um jogador primeiro.');
+                            return;
+                          }
                           handleSelectAction('card');
                         }}
                         disabled={!isMatchStarted || isBlockedByPenalty}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || isBlockedByPenalty
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                            : !hasSelectedPlayer
+                            ? 'bg-yellow-500/5 border-yellow-500/20 text-yellow-500/40 opacity-70'
                             : selectedAction === 'card'
                             ? 'bg-yellow-500/40 border-yellow-500 text-white'
                             : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
@@ -4015,7 +4852,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <div className="flex items-center justify-between p-6 border-b border-zinc-800">
                 <h3 className="text-xl font-black text-white uppercase tracking-wide flex items-center gap-3">
                   <Clock className="text-yellow-500" size={24} />
-                  Análise para Intervalo - 1º Tempo
+                  Resumo (pré-intervalo)
                 </h3>
                 <button
                   onClick={() => setShowIntervalAnalysis(false)}
@@ -4042,7 +4879,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                   </div>
 
-                  {/* Estatísticas do 1º tempo */}
+                  {/* Estatísticas (pré-intervalo, period === 1T) */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
                       <p className="text-zinc-400 text-xs font-bold uppercase mb-2">Chutes</p>
@@ -4065,6 +4902,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <p className="text-purple-500 text-2xl font-black">{firstHalfStats.savesHard}</p>
                     </div>
                     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
+                      <p className="text-zinc-400 text-xs font-bold uppercase mb-2">Defesa pra fora</p>
+                      <p className="text-slate-400 text-2xl font-black">{firstHalfStats.savesOutside}</p>
+                    </div>
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
                       <p className="text-zinc-400 text-xs font-bold uppercase mb-2">Faltas</p>
                       <p className="text-orange-400 text-2xl font-black">{firstHalfStats.fouls}</p>
                     </div>
@@ -4078,9 +4919,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                   </div>
 
-                  {/* Chutes dentro/fora e posse de bola no 1º tempo */}
+                  {/* Chutes dentro/fora e posse de bola (antes do intervalo) */}
                   <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4">
-                    <p className="text-zinc-400 text-xs font-bold uppercase mb-3">Chutes e posse de bola (1º tempo)</p>
+                    <p className="text-zinc-400 text-xs font-bold uppercase mb-3">Chutes e posse de bola (até o intervalo)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                       <div>
                         <p className="text-zinc-500 text-[10px] font-bold uppercase mb-1">Chutes dentro</p>
@@ -4113,9 +4954,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                   </div>
 
-                  {/* Relação entre jogadores - Passes no 1º tempo */}
+                  {/* Relação entre jogadores — passes antes do intervalo */}
                   <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-4">
-                    <p className="text-zinc-400 text-xs font-bold uppercase">Relação entre jogadores (passes no 1º tempo)</p>
+                    <p className="text-zinc-400 text-xs font-bold uppercase">Relação entre jogadores (passes até o intervalo)</p>
                     <div className="flex flex-wrap gap-4 text-sm">
                       <span className="text-zinc-300">Passes certos: <strong className="text-green-400">{firstHalfPassData.passesCorrect}</strong></span>
                       <span className="text-zinc-300">Passes errados: <strong className="text-red-400">{firstHalfPassData.passesWrong}</strong></span>
@@ -4128,7 +4969,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <p className="text-zinc-500 text-xs font-bold uppercase mb-2">Duplas com mais troca de passes</p>
                         <div className="space-y-1 max-h-40 overflow-y-auto">
                           {firstHalfPassData.duplasTop.length === 0 ? (
-                            <p className="text-zinc-600 text-xs">Nenhuma dupla com passes no 1º tempo</p>
+                            <p className="text-zinc-600 text-xs">Nenhuma dupla com passes neste trecho</p>
                           ) : (
                             firstHalfPassData.duplasTop.map((d, i) => (
                               <div key={`${d.id1}-${d.id2}`} className="flex justify-between items-center py-1 px-2 bg-zinc-900 rounded text-xs">
@@ -4143,7 +4984,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <p className="text-zinc-500 text-xs font-bold uppercase mb-2">Jogadores que mais trocaram passes</p>
                         <div className="space-y-1 max-h-40 overflow-y-auto">
                           {firstHalfPassData.playersTop.length === 0 ? (
-                            <p className="text-zinc-600 text-xs">Nenhum passe no 1º tempo</p>
+                            <p className="text-zinc-600 text-xs">Nenhum passe neste trecho</p>
                           ) : (
                             firstHalfPassData.playersTop.map((p) => (
                               <div key={p.playerId} className="flex justify-between items-center py-1 px-2 bg-zinc-900 rounded text-xs">
@@ -4232,7 +5073,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   onClick={handleStartSecondHalf}
                   className="px-6 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-sm rounded-xl transition-colors"
                 >
-                  Iniciar 2º Tempo
+                  Retomar após o intervalo
                 </button>
               </div>
             </div>

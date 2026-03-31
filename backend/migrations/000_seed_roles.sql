@@ -4,9 +4,9 @@
 -- Inserir roles apenas se não existirem
 INSERT INTO roles (id, name, description, created_at)
 VALUES 
-  (gen_random_uuid(), 'ADMIN', 'Administrador do sistema', NOW()),
-  (gen_random_uuid(), 'TECNICO', 'Técnico/Treinador', NOW()),
-  (gen_random_uuid(), 'CLUBE', 'Clube', NOW()),
-  (gen_random_uuid(), 'ATLETA', 'Atleta', NOW())
+  (gen_random_uuid(), 'ADMINISTRADOR', 'Administrador - Acesso total', NOW()),
+  (gen_random_uuid(), 'ESSENCIAL', 'Plano Essencial', NOW()),
+  (gen_random_uuid(), 'COMPETICAO', 'Plano Competicao', NOW()),
+  (gen_random_uuid(), 'PERFORMANCE', 'Plano Performance', NOW())
 ON CONFLICT (name) DO NOTHING;
 

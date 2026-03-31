@@ -3,6 +3,10 @@ import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
+import { upsertMatchRecord } from '../utils/matchUpsert';
+
+// Recurso legado: tempo real está isolado/desativado na UI principal.
+// Este componente permanece para possível reativação futura controlada.
 
 interface RealtimeScoutData {
   matchId?: string;
@@ -23,50 +27,70 @@ export const RealtimeScoutPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Carregar dados do localStorage
-    try {
-      const storedData = localStorage.getItem('realtimeScoutData');
-      if (!storedData) {
-        setError('Nenhum dado de partida encontrado. Por favor, selecione uma partida novamente.');
+    const loadRealtimeMatch = async () => {
+      try {
+        const storedData = localStorage.getItem('realtimeScoutData');
+        if (!storedData) {
+          setError('Nenhum dado de partida encontrado. Por favor, selecione uma partida novamente.');
+          setIsLoading(false);
+          return;
+        }
+
+        const data: RealtimeScoutData = JSON.parse(storedData);
+        setScoutData(data);
+
+        // Base local (fallback)
+        let matchRecord: MatchRecord = {
+          id: data.matchId || `temp-${Date.now()}`,
+          date: data.date,
+          opponent: data.opponent,
+          competition: data.competition,
+          status: 'disponivel',
+          result: 'E',
+          goalsFor: 0,
+          goalsAgainst: 0,
+          teamStats: {
+            goals: 0,
+            assists: 0,
+            passesCorrect: 0,
+            passesWrong: 0,
+            shotsOnTarget: 0,
+            shotsOffTarget: 0,
+            tacklesWithBall: 0,
+            tacklesWithoutBall: 0,
+            tacklesCounterAttack: 0,
+            transitionErrors: 0,
+          },
+          playerStats: {},
+        };
+
+        if (data.matchId) {
+          try {
+            const dbMatch = await matchesApi.getById(data.matchId);
+            if (
+              dbMatch?.id &&
+              (dbMatch.status === 'em_andamento' ||
+                dbMatch.status === 'disponivel' ||
+                dbMatch.status === 'nao_executado' ||
+                (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
+            ) {
+              matchRecord = dbMatch;
+            }
+          } catch (fetchErr) {
+            console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
+          }
+        }
+
+        setMatch(matchRecord);
         setIsLoading(false);
-        return;
+      } catch (err) {
+        console.error('Erro ao carregar dados da partida:', err);
+        setError('Erro ao carregar dados da partida. Por favor, tente novamente.');
+        setIsLoading(false);
       }
+    };
 
-      const data: RealtimeScoutData = JSON.parse(storedData);
-      setScoutData(data);
-
-      // Criar MatchRecord a partir dos dados
-      const matchRecord: MatchRecord = {
-        id: data.matchId || `temp-${Date.now()}`,
-        date: data.date,
-        opponent: data.opponent,
-        competition: data.competition,
-        status: 'not_executed',
-        result: 'E',
-        goalsFor: 0,
-        goalsAgainst: 0,
-        teamStats: {
-          goals: 0,
-          assists: 0,
-          passesCorrect: 0,
-          passesWrong: 0,
-          shotsOnTarget: 0,
-          shotsOffTarget: 0,
-          tacklesWithBall: 0,
-          tacklesWithoutBall: 0,
-          tacklesCounterAttack: 0,
-          transitionErrors: 0,
-        },
-        playerStats: [],
-      };
-
-      setMatch(matchRecord);
-      setIsLoading(false);
-    } catch (err) {
-      console.error('Erro ao carregar dados da partida:', err);
-      setError('Erro ao carregar dados da partida. Por favor, tente novamente.');
-      setIsLoading(false);
-    }
+    void loadRealtimeMatch();
   }, []);
 
   // Manter URL sempre em /scout-realtime: não permitir voltar para /dashboard nesta aba
@@ -83,24 +107,40 @@ export const RealtimeScoutPage: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const handleSave = async (savedMatch: MatchRecord) => {
+  const handleSave = async (
+    savedMatch: MatchRecord,
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+  ) => {
+    const isAutosave = options?.source === 'autosave';
+    const saveAsIncomplete = options?.saveAsIncomplete === true;
     try {
       if (!savedMatch || !savedMatch.teamStats) {
-        alert('Dados da partida incompletos. Não foi possível salvar.');
+        if (!isAutosave) alert('Dados da partida incompletos. Não foi possível salvar.');
         return;
       }
-      const saved = await matchesApi.create(savedMatch);
-      if (saved) {
+      const { saved } = await upsertMatchRecord(savedMatch);
+      if (saved?.id) {
+        setMatch((prev) => (prev ? { ...prev, ...saved, id: saved.id } : saved));
+      }
+      if (saved && !isAutosave) {
         localStorage.removeItem('realtimeScoutData');
-        alert('Partida salva com sucesso! Os dados foram gravados no sistema.');
+        alert(
+          saveAsIncomplete
+            ? 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.'
+            : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
+        );
         window.close();
-      } else {
+      } else if (!saved && !isAutosave) {
         alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
       }
+      return saved;
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
-      alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
+      if (!isAutosave) {
+        alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
+      }
     }
+    return undefined;
   };
 
   const handleClose = () => {

@@ -59,7 +59,7 @@ export async function authMiddleware(
       throw new UnauthorizedError('Usuário não encontrado ou inativo');
     }
 
-    const roleName = user.role?.name ?? 'TECNICO';
+    const roleName = user.role?.name ?? 'ESSENCIAL';
 
     // Adicionar user ao request
     req.user = {

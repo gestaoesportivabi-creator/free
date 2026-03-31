@@ -64,7 +64,7 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
                 <div className="mb-10 text-center">
                     {/* Logo Oficial */}
                     <div className="flex justify-center mb-8">
-                        <div className="relative w-40 h-40 flex items-center justify-center border-[3px] border-[#00f0ff] bg-black/60 shadow-[0_0_40px_rgba(0,240,255,0.3)] rounded-2xl transform rotate-3 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_50px_rgba(0,240,255,0.5)] overflow-hidden">
+                        <div className="relative w-40 h-40 flex items-center justify-center border-[3px] border-[#00f0ff] bg-black/60 shadow-[0_0_40px_rgba(0,240,255,0.3)] rounded-2xl overflow-hidden">
                             <img
                                 src={LOGO_IMAGE}
                                 alt="SCOUT21"
