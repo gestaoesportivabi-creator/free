@@ -1951,7 +1951,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     timeOverride?: number,
     periodOverride?: '1T' | '2T'
   ) => {
-    const pid = playerIdOverride ?? currentGoalkeeperId ?? selectedPlayerId;
+    const selectedSidebarGoalkeeperId =
+      selectedPlayerId &&
+      activePlayers.some(
+        (p) =>
+          String(p.id).trim() === String(selectedPlayerId).trim() &&
+          String(p.position || '').trim().toLowerCase() === 'goleiro'
+      )
+        ? String(selectedPlayerId).trim()
+        : null;
+    const pid = playerIdOverride ?? selectedSidebarGoalkeeperId ?? currentGoalkeeperId;
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);

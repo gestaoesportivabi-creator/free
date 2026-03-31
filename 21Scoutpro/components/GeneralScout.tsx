@@ -552,6 +552,31 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     [filteredMatches]
   );
 
+  const goalkeeperDefenseRows = useMemo(() => {
+    const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
+    for (const match of filteredMatches) {
+      const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+      for (const e of log as any[]) {
+        if (e?.action !== 'save') continue;
+        const playerId = String(e?.playerId ?? '').trim();
+        if (!playerId) continue;
+        const raw = String(e?.subtipo ?? e?.details?.saveDifficulty ?? e?.result ?? '').trim().toLowerCase();
+        const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!map.has(playerId)) {
+          const p = players.find((x) => String(x.id).trim() === playerId);
+          map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
+        }
+        const row = map.get(playerId)!;
+        if (norm === 'simple') row.easy += 1;
+        if (norm === 'dificil' || norm === 'hard') row.hard += 1;
+        if (norm === 'simple' || norm === 'dificil' || norm === 'hard') row.total += 1;
+      }
+    }
+    return Array.from(map.values())
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [filteredMatches, players]);
+
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
   const CHART_FONT_SIZE = 12;
@@ -1004,6 +1029,36 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   </Bar>
                </BarChart>
              </ResponsiveContainer>
+           </div>
+           <div className="mt-4 overflow-x-auto">
+             <table className="w-full text-xs">
+               <thead>
+                 <tr className="border-b border-zinc-800">
+                   <th className="text-left py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Goleiro</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Fácil</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Difícil</th>
+                   <th className="text-right py-2 text-zinc-400 uppercase" style={legendLabelStyle}>Total</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {goalkeeperDefenseRows.length > 0 ? (
+                   goalkeeperDefenseRows.map((row, idx) => (
+                     <tr key={`def-gk-${idx}`} className="border-b border-zinc-900/50">
+                       <td className="py-2 text-white" style={legendLabelStyle}>{row.name}</td>
+                       <td className="py-2 text-right text-blue-300" style={legendLabelStyle}>{row.easy}</td>
+                       <td className="py-2 text-right text-blue-500" style={legendLabelStyle}>{row.hard}</td>
+                       <td className="py-2 text-right text-zinc-300" style={legendLabelStyle}>{row.total}</td>
+                     </tr>
+                   ))
+                 ) : (
+                   <tr>
+                     <td colSpan={4} className="py-3 text-center text-zinc-500" style={legendLabelStyle}>
+                       Nenhuma defesa registrada no período filtrado.
+                     </td>
+                   </tr>
+                 )}
+               </tbody>
+             </table>
            </div>
         </ExpandableCard>
       </div>
