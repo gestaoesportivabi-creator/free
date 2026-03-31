@@ -4513,7 +4513,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
                               }`}
                             >
-                              DEFESA
+                              CHUTE (ADVERSARIO)
                             </button>
                             <button
                               onClick={() => handleSelectAction('block')}

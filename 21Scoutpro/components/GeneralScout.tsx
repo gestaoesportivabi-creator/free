@@ -46,6 +46,32 @@ const MONTHS = [
   { value: '11', label: 'Dezembro' },
 ];
 
+function getOpponentShotsFromLog(match: MatchRecord): {
+  shotsOnTarget: number;
+  shotsOffTarget: number;
+  savesSimple: number;
+  savesHard: number;
+} {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let simple = 0;
+  let hard = 0;
+  let outside = 0;
+  for (const e of log as any[]) {
+    if (e?.action !== 'save') continue;
+    const difficulty = e?.details?.saveDifficulty ?? e?.result;
+    const outcome = e?.details?.saveOutcome;
+    if (difficulty === 'simple') simple += 1;
+    else if (difficulty === 'hard') hard += 1;
+    else if (difficulty === 'outside' || outcome === 'outside') outside += 1;
+  }
+  return {
+    shotsOnTarget: simple + hard,
+    shotsOffTarget: outside,
+    savesSimple: simple,
+    savesHard: hard,
+  };
+}
+
 export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
@@ -151,6 +177,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.shotsOn += curr.teamStats.shotsOnTarget || 0;
       acc.shotsOff += curr.teamStats.shotsOffTarget || 0;
       acc.shotsShootZone += curr.teamStats.shotsShootZone || 0;
+      const oppShots = getOpponentShotsFromLog(curr);
+      acc.opponentShotsOn += oppShots.shotsOnTarget;
+      acc.opponentShotsOff += oppShots.shotsOffTarget;
+      acc.savesSimple += oppShots.savesSimple;
+      acc.savesHard += oppShots.savesHard;
       
       acc.wrongPassesTransition += curr.teamStats.transitionErrors ?? (curr.teamStats as any).wrongPassesTransition ?? 0;
       const tacklesCounter = curr.teamStats.tacklesCounterAttack || 0;
@@ -207,6 +238,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     }, {
       totalGames: 0, wins: 0, losses: 0, draws: 0, totalMinutes: 0, goalsConceded: 0, goalsScored: 0,
       passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0, shotsShootZone: 0,
+      opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
@@ -354,6 +386,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
   const chartData = useMemo(() => {
     return filteredMatches.map(match => ({
+      ...(() => {
+        const opp = getOpponentShotsFromLog(match);
+        return {
+          opponentShotsOn: opp.shotsOnTarget,
+          opponentShotsOff: opp.shotsOffTarget,
+          savesSimple: opp.savesSimple,
+          savesHard: opp.savesHard,
+        };
+      })(),
       name: match.opponent,
       transitionErrors: match.teamStats.transitionErrors ?? (match.teamStats as any).wrongPassesTransition ?? 0,
       tacklesCounterAttack: match.teamStats.tacklesCounterAttack ?? 0,
@@ -830,55 +871,44 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
 
         <ExpandableCard
-          title="Finalizações"
+          title="Defesas"
           icon={BarChart3}
           headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
             <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total:{' '}
-              <span className="text-white">
-                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
-              </span>
+              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                    <YAxis hide />
-                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
-                    <Legend
-                      wrapperStyle={legendLabelStyle}
-                      formatter={(value: string) => {
-                        if (value === 'No Gol') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
-                        }
-                        if (value === 'Pra Fora') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
-                        }
-                        if (value === 'Bloqueado') {
-                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
-                        }
-                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
-                      }}
-                    />
-                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
-                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
-                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
-                    </Bar>
-                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
-                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
-                    </Bar>
-                </BarChart>
+               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                  <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                  <YAxis hide />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                  <Legend
+                    wrapperStyle={legendLabelStyle}
+                    formatter={(value: string) => {
+                      if (value === 'Fácil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Fácil ({stats.savesSimple || 0})</span>;
+                      }
+                      if (value === 'Difícil') {
+                        return <span className="text-zinc-300" style={legendLabelStyle}>Difícil ({stats.savesHard || 0})</span>;
+                      }
+                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                    }}
+                  />
+                  <Bar dataKey="savesSimple" name="Fácil" fill={COLORS.blueCyan}>
+                      <LabelList dataKey="savesSimple" position="inside" {...labelStyle} />
+                  </Bar>
+                  <Bar dataKey="savesHard" name="Difícil" fill={COLORS.blueDarker}>
+                      <LabelList dataKey="savesHard" position="inside" {...labelStyle} />
+                  </Bar>
+               </BarChart>
              </ResponsiveContainer>
            </div>
-           {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={filteredMatches} statType="shots" players={players} />
         </ExpandableCard>
       </div>
 
@@ -973,6 +1003,101 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            <PlayerStatsTable matches={filteredMatches} statType="criticalErrors" players={players} />
+        </ExpandableCard>
+      </div>
+
+      {/* Finalizações (nossas) + Finalizações do adversário */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <ExpandableCard
+          title="Finalizações"
+          icon={BarChart3}
+          headerColor="text-purple-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total:{' '}
+              <span className="text-white">
+                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
+              </span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.shotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.shotsOff || 0})</span>;
+                        }
+                        if (value === 'Bloqueado') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Bloqueado ({stats.shotsShootZone || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="shotsOn" name="No Gol" stackId="shots" fill={COLORS.blueMedium}>
+                        <LabelList dataKey="shotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsOff" name="Pra Fora" stackId="shots" fill={COLORS.slate}>
+                        <LabelList dataKey="shotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="shotsShootZone" name="Bloqueado" stackId="shots" fill="#f59e0b">
+                        <LabelList dataKey="shotsShootZone" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
+           <PlayerStatsTable matches={filteredMatches} statType="shots" players={players} />
+        </ExpandableCard>
+
+        <ExpandableCard
+          title="Finalizações Adversário"
+          icon={BarChart3}
+          headerColor="text-red-400"
+          scoutTitleStyle
+          headerRight={
+            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Total: <span className="text-white">{(stats.opponentShotsOn || 0) + (stats.opponentShotsOff || 0)}</span>
+            </span>
+          }
+        >
+           <div className="h-64 w-full">
+             <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
+                    <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={tooltipStyle} />
+                    <Legend
+                      wrapperStyle={legendLabelStyle}
+                      formatter={(value: string) => {
+                        if (value === 'No Gol') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>No Gol ({stats.opponentShotsOn || 0})</span>;
+                        }
+                        if (value === 'Pra Fora') {
+                          return <span className="text-zinc-300" style={legendLabelStyle}>Pra Fora ({stats.opponentShotsOff || 0})</span>;
+                        }
+                        return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                      }}
+                    />
+                    <Bar dataKey="opponentShotsOn" name="No Gol" fill="#ef4444">
+                        <LabelList dataKey="opponentShotsOn" position="inside" {...labelStyle} />
+                    </Bar>
+                    <Bar dataKey="opponentShotsOff" name="Pra Fora" fill={COLORS.slate}>
+                        <LabelList dataKey="opponentShotsOff" position="inside" {...labelStyle} />
+                    </Bar>
+                </BarChart>
+             </ResponsiveContainer>
+           </div>
         </ExpandableCard>
       </div>
 
