@@ -129,21 +129,34 @@ function getFoulsSplitFromLog(match: MatchRecord): { committed: number; suffered
 /** Mesmo ID usado em MatchScoutingWindow para lances do adversário */
 const OPPONENT_FAKE_PLAYER_ID = 'OPPONENT_TEAM';
 
-/** Cartões nossos (jogadores do elenco) vs cartões atribuídos ao adversário no playerStats */
-function getCardsReceivedVsOpponent(match: MatchRecord): { received: number; opponent: number } {
+/** Amarelos/vermelhos nosso time vs adversário (playerStats; adversário em OPPONENT_TEAM) */
+function getCardsYellowRedSplit(match: MatchRecord): {
+  oursYellow: number;
+  oursRed: number;
+  oppYellow: number;
+  oppRed: number;
+} {
   const ps = match.playerStats;
-  if (!ps || typeof ps !== 'object') return { received: 0, opponent: 0 };
-  let received = 0;
-  let opponent = 0;
+  if (!ps || typeof ps !== 'object') {
+    return { oursYellow: 0, oursRed: 0, oppYellow: 0, oppRed: 0 };
+  }
+  let oursYellow = 0;
+  let oursRed = 0;
+  let oppYellow = 0;
+  let oppRed = 0;
   for (const [id, st] of Object.entries(ps)) {
     const pid = String(id).trim();
     const y = (st as MatchStats).yellowCards ?? 0;
     const r = (st as MatchStats).redCards ?? 0;
-    const n = y + r;
-    if (pid === OPPONENT_FAKE_PLAYER_ID) opponent += n;
-    else received += n;
+    if (pid === OPPONENT_FAKE_PLAYER_ID) {
+      oppYellow += y;
+      oppRed += r;
+    } else {
+      oursYellow += y;
+      oursRed += r;
+    }
   }
-  return { received, opponent };
+  return { oursYellow, oursRed, oppYellow, oppRed };
 }
 
 function emptyScopedStats(): MatchStats {
@@ -421,9 +434,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.foulsCommitted += foulSplit.committed;
       acc.foulsSuffered += foulSplit.suffered;
 
-      const cardSplit = getCardsReceivedVsOpponent(curr);
-      acc.cardsOurs += cardSplit.received;
-      acc.cardsOpponent += cardSplit.opponent;
+      const cx = getCardsYellowRedSplit(curr);
+      acc.cardsOursYellow += cx.oursYellow;
+      acc.cardsOursRed += cx.oursRed;
+      acc.cardsOppYellow += cx.oppYellow;
+      acc.cardsOppRed += cx.oppRed;
       
       acc.yellowCards += curr.teamStats.yellowCards || 0;
       acc.redCards += curr.teamStats.redCards || 0;
@@ -473,7 +488,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       foulsCommitted: 0, foulsSuffered: 0,
-      cardsOurs: 0, cardsOpponent: 0,
+      cardsOursYellow: 0, cardsOursRed: 0, cardsOppYellow: 0, cardsOppRed: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
       goalsConcededOpen: 0, goalsConcededSet: 0,
@@ -644,8 +659,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         return { foulsCommitted: f.committed, foulsSuffered: f.suffered };
       })(),
       ...(() => {
-        const c = getCardsReceivedVsOpponent(match);
-        return { cardsOurs: c.received, cardsOpponent: c.opponent };
+        const c = getCardsYellowRedSplit(match);
+        return {
+          cardsOursYellow: c.oursYellow,
+          cardsOursRed: c.oursRed,
+          cardsOppYellow: c.oppYellow,
+          cardsOppRed: c.oppRed,
+        };
       })(),
       result: match.result
     }));
@@ -687,10 +707,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const foulsTotal = fc + fs;
     const foulsCommittedPct = foulsTotal > 0 ? (fc / foulsTotal) * 100 : 0;
 
-    const co = stats.cardsOurs || 0;
-    const cadv = stats.cardsOpponent || 0;
-    const cardsTotal = co + cadv;
-    const cardsOursPct = cardsTotal > 0 ? (co / cardsTotal) * 100 : 0;
+    const cy = stats.cardsOursYellow || 0;
+    const cr = stats.cardsOursRed || 0;
+    /** Total apenas dos cartões do nosso time (recebidos) */
+    const cardsOursTotal = cy + cr;
+    /** % de vermelhos em relação ao total de cartões do nosso time */
+    const cardsOursRedPct = cardsOursTotal > 0 ? (cr / cardsOursTotal) * 100 : 0;
 
     return {
       passAccuracyPct,
@@ -707,8 +729,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       oppTotal,
       foulsCommittedPct,
       foulsTotal,
-      cardsOursPct,
-      cardsTotal,
+      cardsOursRedPct,
+      cardsOursTotal,
     };
   }, [stats]);
   
@@ -1626,10 +1648,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                   }}
                 />
-                <Bar dataKey="foulsCommitted" name="Cometidas" fill="#00f0ff">
+                <Bar dataKey="foulsCommitted" name="Cometidas" fill="#0e7490">
                   <LabelList dataKey="foulsCommitted" position="inside" {...labelStyle} />
                 </Bar>
-                <Bar dataKey="foulsSuffered" name="Sofridas" fill="#f59e0b">
+                <Bar dataKey="foulsSuffered" name="Sofridas" fill="#b45309">
                   <LabelList dataKey="foulsSuffered" position="inside" {...labelStyle} />
                 </Bar>
               </BarChart>
@@ -1649,12 +1671,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
               <span className="text-[#eab308] font-semibold tabular-nums normal-case">
-                {distributionChartPercentages.cardsOursPct.toFixed(1)}%
+                {distributionChartPercentages.cardsOursRedPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
-              <span>
-                Total:{' '}
-                <span className="text-white tabular-nums">{distributionChartPercentages.cardsTotal}</span>
+              <span className="normal-case">
+                Vermelhos / total nosso:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.cardsOursTotal}</span>
               </span>
             </span>
           }
@@ -1669,28 +1691,52 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 <Legend
                   wrapperStyle={legendLabelStyle}
                   formatter={(value: string) => {
-                    if (value === 'Recebidos') {
+                    const sy = stats.cardsOursYellow || 0;
+                    const sr = stats.cardsOursRed || 0;
+                    const oy = stats.cardsOppYellow || 0;
+                    const or_ = stats.cardsOppRed || 0;
+                    if (value === 'Nosso Amarelo') {
                       return (
                         <span className="text-zinc-300" style={legendLabelStyle}>
-                          Recebidos ({stats.cardsOurs || 0})
+                          Nosso Amarelo ({sy})
                         </span>
                       );
                     }
-                    if (value === 'Adversário') {
+                    if (value === 'Nosso Vermelho') {
                       return (
                         <span className="text-zinc-300" style={legendLabelStyle}>
-                          Adversário ({stats.cardsOpponent || 0})
+                          Nosso Vermelho ({sr})
+                        </span>
+                      );
+                    }
+                    if (value === 'Adv. Amarelo') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Adv. Amarelo ({oy})
+                        </span>
+                      );
+                    }
+                    if (value === 'Adv. Vermelho') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Adv. Vermelho ({or_})
                         </span>
                       );
                     }
                     return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                   }}
                 />
-                <Bar dataKey="cardsOurs" name="Recebidos" fill="#eab308">
-                  <LabelList dataKey="cardsOurs" position="inside" {...labelStyle} />
+                <Bar dataKey="cardsOursYellow" name="Nosso Amarelo" fill="#eab308">
+                  <LabelList dataKey="cardsOursYellow" position="inside" {...labelStyle} />
                 </Bar>
-                <Bar dataKey="cardsOpponent" name="Adversário" fill="#dc2626">
-                  <LabelList dataKey="cardsOpponent" position="inside" {...labelStyle} />
+                <Bar dataKey="cardsOursRed" name="Nosso Vermelho" fill="#b91c1c">
+                  <LabelList dataKey="cardsOursRed" position="inside" {...labelStyle} />
+                </Bar>
+                <Bar dataKey="cardsOppYellow" name="Adv. Amarelo" fill="#a16207">
+                  <LabelList dataKey="cardsOppYellow" position="inside" {...labelStyle} />
+                </Bar>
+                <Bar dataKey="cardsOppRed" name="Adv. Vermelho" fill="#7f1d1d">
+                  <LabelList dataKey="cardsOppRed" position="inside" {...labelStyle} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2009,6 +2055,34 @@ const PlayerStatsTable: React.FC<{
   players: Player[];
 }> = ({ matches, statType, players }) => {
   const playerStats = useMemo(() => {
+    /** Top 10 faltas cometidas pelo nosso time: lê postMatchEventLog (falta + foulTeam !== against + playerId). */
+    if (statType === 'fouls') {
+      const statsMap = new Map<string, { name: string; correct: number; wrong: number; total: number }>();
+      matches.forEach((match) => {
+        const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+        for (const e of log as any[]) {
+          const action = String(e?.action ?? '').trim().toLowerCase();
+          const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+          if (action !== 'falta' && tipo !== 'falta') continue;
+          if (e?.foulTeam === 'against') continue;
+          const pid = String(e?.playerId ?? '').trim();
+          if (!pid || pid === OPPONENT_FAKE_PLAYER_ID) continue;
+          const player = players.find((p) => String(p.id).trim() === pid);
+          const playerName = player?.name ?? e?.playerName?.trim() || pid;
+          if (!statsMap.has(pid)) {
+            statsMap.set(pid, { name: playerName, correct: 0, wrong: 0, total: 0 });
+          }
+          const row = statsMap.get(pid)!;
+          row.correct += 1;
+          row.total += 1;
+        }
+      });
+      return Array.from(statsMap.values())
+        .filter((s) => s.total > 0)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 10);
+    }
+
     const statsMap = new Map<string, { name: string; correct: number; wrong: number; blocked?: number; total: number }>();
 
     matches.forEach((match) => {
@@ -2016,10 +2090,7 @@ const PlayerStatsTable: React.FC<{
 
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
         const normalizedPlayerId = String(playerId).trim();
-        if (
-          (statType === 'fouls' || statType === 'cards') &&
-          normalizedPlayerId === OPPONENT_FAKE_PLAYER_ID
-        ) {
+        if (statType === 'cards' && normalizedPlayerId === OPPONENT_FAKE_PLAYER_ID) {
           return;
         }
 
@@ -2055,10 +2126,6 @@ const PlayerStatsTable: React.FC<{
           stats.correct += totalWrong;
           stats.wrong += transition;
           stats.total += transition;
-        } else if (statType === 'fouls') {
-          const f = pStats.fouls || 0;
-          stats.correct += f;
-          stats.total += f;
         } else if (statType === 'cards') {
           const y = pStats.yellowCards || 0;
           const r = pStats.redCards || 0;
