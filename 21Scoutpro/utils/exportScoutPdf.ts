@@ -11,6 +11,9 @@ export interface PlayerTablesPdf {
   shots: PlayerTop10RowPdf[];
   tackles: PlayerTop10RowPdf[];
   criticalErrors: PlayerTop10RowPdf[];
+  saves: PlayerTop10RowPdf[];
+  fouls: PlayerTop10RowPdf[];
+  cards: PlayerTop10RowPdf[];
 }
 
 const LOGO_URL = '/public-logo.png.png';
@@ -530,6 +533,9 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       ];
       const hdrTackles = ['JOGADOR', 'C/SEM POSSE', 'C.-ATQ.', 'TOTAL'] as [string, string, string, string];
       const hdrCrit = ['JOGADOR', 'P. ERRADOS', 'GER. TRANS.', 'TOTAL'] as [string, string, string, string];
+      const hdrSaves = ['JOGADOR', 'SIMPLES', 'DIFÍCIL', 'TOTAL'] as [string, string, string, string];
+      const hdrFouls = ['JOGADOR', 'FALTAS', '-', 'TOTAL'] as [string, string, string, string];
+      const hdrCards = ['JOGADOR', 'AMARELO', 'VERMELHO', 'TOTAL'] as [string, string, string, string];
 
       // Pág 3: Passes certos vs errados
       newPageWithWatermark(doc, logoBase64, logoDims);
@@ -569,6 +575,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         { key: 'savesHard', label: 'Difícil', color: COLORS.blueDark },
       ], data.stats.savesSimple + data.stats.savesHard, {
         ...compactOpts,
+        playerTable: pt?.saves?.length ? { headers: hdrSaves, rows: pt.saves, title: 'GOLEIROS' } : undefined,
       });
 
       // Pág 7: Finalizações (no gol, fora, bloqueado)
@@ -605,6 +612,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         { key: 'foulsSuffered', label: 'Sofridas', color: COLORS.foulsSuffered },
       ], fc + fs, {
         ...compactOpts,
+        playerTable: pt?.fouls?.length ? { headers: hdrFouls, rows: pt.fouls } : undefined,
       });
 
       newPageWithWatermark(doc, logoBase64, logoDims);
@@ -615,6 +623,7 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         { key: 'cardsOppRed', label: 'Adv. Vermelho', color: COLORS.cardOppRed },
       ], cy + cr + oy + orv, {
         ...compactOpts,
+        playerTable: pt?.cards?.length ? { headers: hdrCards, rows: pt.cards } : undefined,
       });
 
       // Gols por período (uma página cada)
@@ -859,14 +868,15 @@ function drawPlayerTableBlock(
   doc: jsPDF,
   startY: number,
   headers: [string, string, string, string] | [string, string, string, string, string],
-  rows: PlayerTop10RowPdf[]
+  rows: PlayerTop10RowPdf[],
+  title = 'TOP 10 JOGADORES'
 ): void {
   if (!rows.length) return;
   const five = headers.length === 5;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...COLORS.cyan);
-  doc.text('TOP 10 JOGADORES', MARGIN, startY);
+  doc.text(title, MARGIN, startY);
   startY += 5;
   const colW = five ? ([48, 17, 17, 17, 17] as const) : ([72, 22, 22, 18] as const);
   let x = MARGIN;
@@ -910,6 +920,7 @@ function drawBarChartSection(
     playerTable?: {
       headers: [string, string, string, string] | [string, string, string, string, string];
       rows: PlayerTop10RowPdf[];
+      title?: string;
     };
   }
 ): void {
@@ -982,7 +993,8 @@ function drawBarChartSection(
       doc,
       chartTop + chartHeight + 20,
       opts.playerTable.headers,
-      opts.playerTable.rows
+      opts.playerTable.rows,
+      opts.playerTable.title
     );
   }
 }

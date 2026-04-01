@@ -1021,6 +1021,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   shots: buildPlayerTop10ForPdf(scopedMatches, pl, 'shots'),
                   tackles: buildPlayerTop10ForPdf(scopedMatches, pl, 'tackles'),
                   criticalErrors: buildPlayerTop10ForPdf(scopedMatches, pl, 'criticalErrors'),
+                  saves: buildPlayerTop10ForPdf(scopedMatches, pl, 'saves'),
+                  fouls: buildPlayerTop10ForPdf(scopedMatches, pl, 'fouls'),
+                  cards: buildPlayerTop10ForPdf(scopedMatches, pl, 'cards'),
                 },
                 stats,
                 timePeriodData: {
@@ -1059,9 +1062,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             type="button"
             onClick={() => setCompareMode(true)}
             className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
-            title="Ativar modo comparação"
+            title="Ativar RAIO-X"
           >
-            Comparação
+            RAIO-X
           </button>
         )}
         </div>

@@ -100,10 +100,10 @@ function getGoalPeriod(period: '1T' | '2T', timeSeconds: number): number {
 }
 
 const GOAL_METHODS_OUR = [
-  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'MARCAÇÃO ALTA',
+  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Vantagem Numérica - Goleiro', 'Vantagem Numérica - Expulsão', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'MARCAÇÃO ALTA',
 ];
 const GOAL_METHODS_CONCEDED = [
-  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'Perda de bola na primeira linha da defesa',
+  'Ataque', 'Contra Ataque', 'Defesa de goleiro linha', 'Ataque de Goleiro Linha', 'Vantagem Numérica - Goleiro', 'Vantagem Numérica - Expulsão', 'Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti', 'Perda de bola na primeira linha da defesa',
 ];
 
 const BOLA_PARADA_METHODS = ['Escanteio', 'Laterais', 'Faltas', 'Tiro Livre', 'Pênalti'];
@@ -117,6 +117,8 @@ const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border
   'Contra Ataque': { icon: <Zap size={16} />, bg: 'bg-amber-500/20', border: 'border-amber-500/50', hover: 'hover:bg-amber-500', text: 'text-amber-400 hover:text-black' },
   'Defesa de goleiro linha': { icon: <Shield size={16} />, bg: 'bg-indigo-500/20', border: 'border-indigo-500/50', hover: 'hover:bg-indigo-600', text: 'text-indigo-400 hover:text-white' },
   'Ataque de Goleiro Linha': { icon: <UserRound size={16} />, bg: 'bg-cyan-500/20', border: 'border-cyan-500/50', hover: 'hover:bg-cyan-600', text: 'text-cyan-400 hover:text-black' },
+  'Vantagem Numérica - Goleiro': { icon: <UserRound size={16} />, bg: 'bg-sky-500/20', border: 'border-sky-500/50', hover: 'hover:bg-sky-600', text: 'text-sky-300 hover:text-white' },
+  'Vantagem Numérica - Expulsão': { icon: <Zap size={16} />, bg: 'bg-fuchsia-500/20', border: 'border-fuchsia-500/50', hover: 'hover:bg-fuchsia-600', text: 'text-fuchsia-300 hover:text-white' },
   'Escanteio': { icon: <CornerDownRight size={16} />, bg: 'bg-orange-500/20', border: 'border-orange-500/50', hover: 'hover:bg-orange-600', text: 'text-orange-400 hover:text-white' },
   'Laterais': { icon: <MoveHorizontal size={16} />, bg: 'bg-lime-500/20', border: 'border-lime-500/50', hover: 'hover:bg-lime-600', text: 'text-lime-400 hover:text-black' },
   'Faltas': { icon: <Flag size={16} />, bg: 'bg-red-500/20', border: 'border-red-500/50', hover: 'hover:bg-red-600', text: 'text-red-400 hover:text-white' },
@@ -402,8 +404,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [lockerOpen, setLockerOpen] = useState<boolean>(false);
   const [lockerDraftIds, setLockerDraftIds] = useState<string[]>([]);
   
-  // Estado de expulsão: time joga com um a menos até 2 min (cronometrados) ou gol adversário; então pode repor no slot
-  const EXPULSION_WAIT_SECONDS = 120; // 2 minutos cronometrados
+  // Estado de expulsão: usado apenas para sinalização visual (sem regra de espera para reposição).
   const [expulsionState, setExpulsionState] = useState<{
     expelledPlayerId: string;
     expelledAtTime: number;
@@ -943,6 +944,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   /** Locker lateral: no máximo 1 jogador com posição Goleiro; ao escolher outro goleiro, substitui o anterior. */
   const toggleLockerDraft = (playerId: string) => {
+    if (checkPlayerExpulsion(playerId)) return;
     setLockerDraftIds((prev) => {
       if (prev.includes(playerId)) return prev.filter((x) => x !== playerId);
       const addingGk = isLineupGoalkeeperId(playerId);
@@ -2589,7 +2591,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (lineupPlayers.includes(pid)) {
         const newLineup = lineupPlayers.filter(id => id !== pid);
         setLineupPlayers(newLineup);
-        // Não adicionar expulso ao banco: slot de expulsão até 2 min (cronômetro) ou gol adversário
+        // Mantém o número na lateral (bloqueado) para visibilidade de expulsão.
+        setBenchPlayers((prev) => (prev.includes(pid) ? prev : [...prev, pid]));
         
         // Se goleiro foi expulso, atualizar currentGoalkeeperId
         if (pid === currentGoalkeeperId) {
@@ -2600,17 +2603,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           }
         }
         
-        // Registrar slot de expulsão: pode repor após 2 min (cronômetro) ou gol do adversário
-        setExpulsionState({
-          expelledPlayerId: pid,
-          expelledAtTime: matchTime,
-          period: currentPeriod,
-        });
+        // Após expulsão, manter painel de ativos com a quantidade atual em quadra.
+        setSquadActiveIds(newLineup);
+
+        // Não abre fluxo de reposição automática: recomposição é manual pelo botão "Ativos".
+        setExpulsionState(null);
       }
       
       // activePlayers é derivado de lineupPlayers no useEffect, então já reflete 4 em quadra
       
-      alert(`⚠️ ${player?.name || 'Jogador'} foi expulso. Time joga com um a menos até 2 min ou gol adversário.`);
+      alert(`⚠️ ${player?.name || 'Jogador'} foi expulso. Ajuste os Ativos quando quiser (máx. 5 em quadra).`);
     }
     
     setSelectedAction(null);
@@ -2696,30 +2698,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     });
   }, [benchPlayers]);
 
-  // Pode repor no slot de expulsão: 2 min cronometrados (no mesmo período) ou gol do adversário após expulsão
+  // Após expulsão, a reposição é livre (sem espera de 2 minutos).
   const canReplaceAfterExpulsion = useMemo(() => {
-    if (!expulsionState) return false;
-    const twoMinutesElapsed =
-      currentPeriod === expulsionState.period &&
-      matchTime >= expulsionState.expelledAtTime + EXPULSION_WAIT_SECONDS;
-    const opponentScoredAfterExpulsion = matchEvents.some(
-      (e) =>
-        e.type === 'goal' &&
-        e.isOpponentGoal &&
-        ((e.period === expulsionState.period && e.time >= expulsionState.expelledAtTime) ||
-          (expulsionState.period === '1T' && e.period === '2T'))
-    );
-    return twoMinutesElapsed || opponentScoredAfterExpulsion;
-  }, [expulsionState, matchTime, currentPeriod, matchEvents]);
+    return !!expulsionState;
+  }, [expulsionState]);
 
-  // Segundos restantes para poder repor (no mesmo período); null se já pode ou outro critério
+  // Sem contagem regressiva para reposição após expulsão.
   const expulsionCountdownSeconds = useMemo(() => {
-    if (!expulsionState || canReplaceAfterExpulsion) return null;
-    if (currentPeriod !== expulsionState.period) return null;
-    const elapsed = matchTime - expulsionState.expelledAtTime;
-    const remaining = EXPULSION_WAIT_SECONDS - elapsed;
-    return remaining <= 0 ? 0 : remaining;
-  }, [expulsionState, matchTime, currentPeriod, canReplaceAfterExpulsion]);
+    return null;
+  }, []);
+
+  const expelledPlayerIds = useMemo(() => {
+    return Object.entries(playerCards)
+      .filter(([, cards]) => {
+        const yellowCount = cards.filter((c) => c === 'yellow').length;
+        const hasSecondYellow = cards.some((c) => c === 'secondYellow');
+        const hasRed = cards.some((c) => c === 'red');
+        return yellowCount >= 2 || hasSecondYellow || hasRed;
+      })
+      .map(([pid]) => pid);
+  }, [playerCards]);
 
   // Estatísticas pré-intervalo (apenas eventos com period === '1T')
   const firstHalfStats = useMemo(() => {
@@ -3400,6 +3398,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     !lockerOpen &&
                     isMatchStarted &&
                     (squadActiveIds.length === 0 || !squadActiveIds.includes(pid));
+                  const isExpelled = expelledPlayerIds.includes(pid);
                   const inLockerSelection = lockerOpen ? lockerDraftIds.includes(pid) : squadActiveIds.includes(pid);
                   return (
                     <button
@@ -3408,19 +3407,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       title={isGk ? `${labelName} — Goleiro` : labelName}
                       onClick={() => {
                         if (lockerOpen) {
+                          if (isExpelled) return;
                           toggleLockerDraft(pid);
                           return;
                         }
-                        if (isInactiveLocked) return;
+                        if (isInactiveLocked || isExpelled) return;
                         handleLateralPlayerClick(pid);
                       }}
                       disabled={
                         (!isMatchStarted && !goalStep && !lockerOpen)
-                        || (lockerOpen ? false : isInactiveLocked)
+                        || (lockerOpen ? isExpelled : isInactiveLocked || isExpelled)
                       }
                       className={`relative flex aspect-square w-full max-h-[2.6rem] items-center justify-center rounded-full text-base font-black transition-all ${
                         !isMatchStarted && !lockerOpen
                           ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
+                          : isExpelled
+                          ? 'bg-red-500/15 border-2 border-red-500 text-red-300 cursor-not-allowed opacity-85'
                           : lockerOpen
                           ? inLockerSelection
                             ? 'bg-emerald-500/30 border-2 border-emerald-400 text-white shadow-[0_0_10px_rgba(52,211,153,0.35)]'
@@ -3437,6 +3439,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <span className="tabular-nums leading-none">{displayNum}</span>
                       {isGk && (
                         <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
+                      )}
+                      {isExpelled && (
+                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-red-600/90 px-1 py-px text-[7px] font-bold uppercase text-white">expulso</span>
                       )}
                       {pendingPassEventId && pid !== pendingPassSenderId && !lockerOpen && !isInactiveLocked && (
                         <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
@@ -3477,7 +3482,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               type="button"
               onClick={() => {
                 if (lockerOpen) {
-                  if (lockerDraftIds.length === 5) {
+                  if (lockerDraftIds.length > 0 && lockerDraftIds.length <= 5) {
                     setSquadActiveIds([...lockerDraftIds]);
                     setLockerOpen(false);
                   } else {
