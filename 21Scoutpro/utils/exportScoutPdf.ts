@@ -58,6 +58,14 @@ const COLORS = {
   slate: [113, 113, 122] as [number, number, number],
   /** Bloqueado (finalizações) — alinhado ao gráfico web */
   amber: [245, 158, 11] as [number, number, number],
+  /** Faltas (UI #0e7490 / #b45309) */
+  foulsCommitted: [14, 116, 144] as [number, number, number],
+  foulsSuffered: [180, 83, 9] as [number, number, number],
+  /** Cartões — alinhados aos fills do BarChart em GeneralScout */
+  cardOursYellow: [234, 179, 8] as [number, number, number],
+  cardOursRed: [185, 28, 28] as [number, number, number],
+  cardOppYellow: [161, 98, 7] as [number, number, number],
+  cardOppRed: [127, 29, 29] as [number, number, number],
   black: [0, 0, 0] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
   gray: [100, 100, 100] as [number, number, number],
@@ -135,6 +143,13 @@ export interface ScoutPdfData {
     wrongPassesTransition: number;
     yellowCards: number;
     redCards: number;
+    /** Agregados (mesma lógica do scout na tela — log / split) */
+    foulsCommitted?: number;
+    foulsSuffered?: number;
+    cardsOursYellow?: number;
+    cardsOursRed?: number;
+    cardsOppYellow?: number;
+    cardsOppRed?: number;
     goalsScoredOpen: number;
     goalsScoredSet: number;
     goalsConcededOpen: number;
@@ -163,6 +178,12 @@ export interface ScoutPdfData {
     tacklesWithoutBall: number;
     tacklesCounterAttack: number;
     transitionErrors: number;
+    foulsCommitted: number;
+    foulsSuffered: number;
+    cardsOursYellow: number;
+    cardsOursRed: number;
+    cardsOppYellow: number;
+    cardsOppRed: number;
   }>;
   goalMethodsScoredData: Array<{ name: string; value: number; percentage: string }>;
   goalMethodsConcededData: Array<{ name: string; value: number; percentage: string }>;
@@ -570,7 +591,33 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         ...compactOpts,
       });
 
-      // Pág 9–10: Gols por período (uma página cada)
+      const fc = data.stats.foulsCommitted ?? 0;
+      const fs = data.stats.foulsSuffered ?? 0;
+      const cy = data.stats.cardsOursYellow ?? 0;
+      const cr = data.stats.cardsOursRed ?? 0;
+      const oy = data.stats.cardsOppYellow ?? 0;
+      const orv = data.stats.cardsOppRed ?? 0;
+
+      // Faltas e cartões — mesma ordem da UI (após Finalizações Adversário, antes dos gols por período)
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Faltas cometidas vs Faltas sofridas', data.chartData, [
+        { key: 'foulsCommitted', label: 'Cometidas', color: COLORS.foulsCommitted },
+        { key: 'foulsSuffered', label: 'Sofridas', color: COLORS.foulsSuffered },
+      ], fc + fs, {
+        ...compactOpts,
+      });
+
+      newPageWithWatermark(doc, logoBase64, logoDims);
+      drawBarChartSection(doc, TOP_CHART_Y, 'Cartões recebidos vs Cartões adversários', data.chartData, [
+        { key: 'cardsOursYellow', label: 'Nosso Amarelo', color: COLORS.cardOursYellow },
+        { key: 'cardsOursRed', label: 'Nosso Vermelho', color: COLORS.cardOursRed },
+        { key: 'cardsOppYellow', label: 'Adv. Amarelo', color: COLORS.cardOppYellow },
+        { key: 'cardsOppRed', label: 'Adv. Vermelho', color: COLORS.cardOppRed },
+      ], cy + cr + oy + orv, {
+        ...compactOpts,
+      });
+
+      // Gols por período (uma página cada)
       newPageWithWatermark(doc, logoBase64, logoDims);
       drawTimePeriodChart(doc, TOP_CHART_Y, 'Gols Feitos por Período', data.timePeriodData.scoredDist, COLORS.green,
         `${data.timePeriodData.maxScoredPeriod.percentage}% dos gols feitos saíram no período de ${data.timePeriodData.maxScoredPeriod.period}`,

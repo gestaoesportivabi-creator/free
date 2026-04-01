@@ -1313,10 +1313,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
-                 <YAxis hide />
+                <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                    <YAxis hide />
                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
                  <Legend
                    wrapperStyle={legendLabelStyle}
@@ -1332,11 +1332,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  />
                  <Bar dataKey="passesWrong" name="Passes Errados" fill={COLORS.slate}>
                    <LabelList dataKey="passesWrong" position="inside" {...labelStyle} />
-                 </Bar>
+                    </Bar>
                  <Bar dataKey="transitionErrors" name="Geraram transição" fill={COLORS.rose}>
                    <LabelList dataKey="transitionErrors" position="inside" {...labelStyle} />
-                 </Bar>
-               </BarChart>
+                    </Bar>
+                </BarChart>
              </ResponsiveContainer>
            </div>
            <PlayerStatsTable matches={scopedMatches} statType="criticalErrors" players={players} />
@@ -1484,7 +1484,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </table>
           </div>
         </ExpandableCard>
-          </div>
+      </div>
 
       {/* Finalizações (nossas) + Finalizações do adversário */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
@@ -1542,7 +1542,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     </Bar>
                 </BarChart>
              </ResponsiveContainer>
-           </div>
+      </div>
            <PlayerStatsTable matches={scopedMatches} statType="shots" players={players} />
         </ExpandableCard>
 
@@ -1594,9 +1594,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                     </Bar>
                 </BarChart>
              </ResponsiveContainer>
-           </div>
+          </div>
         </ExpandableCard>
-      </div>
+          </div>
 
       {/* Faltas e cartões — mesma largura dos demais (grid 2 colunas); acima dos gols por período */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
@@ -2068,7 +2068,7 @@ const PlayerStatsTable: React.FC<{
           const pid = String(e?.playerId ?? '').trim();
           if (!pid || pid === OPPONENT_FAKE_PLAYER_ID) continue;
           const player = players.find((p) => String(p.id).trim() === pid);
-          const playerName = player?.name ?? e?.playerName?.trim() || pid;
+          const playerName = player?.name ?? (e?.playerName?.trim() || pid);
           if (!statsMap.has(pid)) {
             statsMap.set(pid, { name: playerName, correct: 0, wrong: 0, total: 0 });
           }
@@ -2087,21 +2087,21 @@ const PlayerStatsTable: React.FC<{
 
     matches.forEach((match) => {
       if (!match.playerStats) return;
-
+      
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
         const normalizedPlayerId = String(playerId).trim();
         if (statType === 'cards' && normalizedPlayerId === OPPONENT_FAKE_PLAYER_ID) {
           return;
         }
-
+        
         const player = players.find((p) => String(p.id).trim() === normalizedPlayerId);
         const playerName = player ? player.name : normalizedPlayerId;
-
+        
         if (!statsMap.has(normalizedPlayerId)) {
           statsMap.set(normalizedPlayerId, { name: playerName, correct: 0, wrong: 0, total: 0 });
         }
         const stats = statsMap.get(normalizedPlayerId)!;
-
+        
         if (statType === 'passes') {
           stats.correct += pStats.passesCorrect || 0;
           stats.wrong += pStats.passesWrong || 0;
@@ -2135,7 +2135,7 @@ const PlayerStatsTable: React.FC<{
         }
       });
     });
-
+    
     return Array.from(statsMap.values())
       .filter((s) => s.total > 0)
       .sort((a, b) => b.total - a.total)
@@ -2159,26 +2159,26 @@ const PlayerStatsTable: React.FC<{
               : 'Cartões (recebidos)';
 
   if (statType === 'fouls') {
-    return (
-      <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
+  return (
+    <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
         <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
           Top 10 Jogadores - {title}
-        </h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-zinc-800">
+      </h4>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-zinc-800">
                 <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>
                   Jogador
-                </th>
+              </th>
                 <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                   Faltas
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {playerStats.map((stat, idx) => (
-                <tr key={idx} className="border-b border-zinc-900/50">
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {playerStats.map((stat, idx) => (
+              <tr key={idx} className="border-b border-zinc-900/50">
                   <td className="py-2 text-white" style={legendStyle}>
                     {stat.name}
                   </td>
