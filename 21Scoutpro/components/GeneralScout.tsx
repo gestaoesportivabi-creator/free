@@ -584,6 +584,54 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       result: match.result
     }));
   }, [scopedMatches]);
+
+  /** Percentuais exibidos à esquerda do total nos gráficos da seção Distribuição */
+  const distributionChartPercentages = useMemo(() => {
+    const pc = stats.passesCorrect || 0;
+    const pw = stats.passesWrong || 0;
+    const passTotal = pc + pw;
+    const passAccuracyPct = passTotal > 0 ? (pc / passTotal) * 100 : 0;
+
+    const trans = stats.wrongPassesTransition || 0;
+    const transOfWrongPct = pw > 0 ? (trans / pw) * 100 : 0;
+
+    const tw = stats.tacklesWithBall || 0;
+    const tc = stats.tacklesCounterAttack || 0;
+    const tt = stats.tacklesTotal || 0;
+    const tackleWithPossessionPct = tt > 0 ? ((tw + tc) / tt) * 100 : 0;
+
+    const ss = stats.savesSimple || 0;
+    const sh = stats.savesHard || 0;
+    const savesTotal = ss + sh;
+    const hardSavesPct = savesTotal > 0 ? (sh / savesTotal) * 100 : 0;
+
+    const so = stats.shotsOn || 0;
+    const sff = stats.shotsOff || 0;
+    const sb = stats.shotsShootZone || 0;
+    const shotsTotal = so + sff + sb;
+    const shotsOnPct = shotsTotal > 0 ? (so / shotsTotal) * 100 : 0;
+
+    const oo = stats.opponentShotsOn || 0;
+    const of = stats.opponentShotsOff || 0;
+    const oppTotal = oo + of;
+    const oppOnPct = oppTotal > 0 ? (oo / oppTotal) * 100 : 0;
+
+    return {
+      passAccuracyPct,
+      transOfWrongPct,
+      tackleWithPossessionPct,
+      hardSavesPct,
+      shotsOnPct,
+      oppOnPct,
+      passTotal,
+      passesWrong: pw,
+      transitionCount: trans,
+      tacklesTotal: tt,
+      savesTotal,
+      shotsTotal,
+      oppTotal,
+    };
+  }, [stats]);
   
   // Dados de métodos de gol (usando goalMethodsScored/Conceded)
   const goalMethodsScoredData = useMemo(() => {
@@ -1094,8 +1142,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-green-400"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{(stats.passesCorrect || 0) + (stats.passesWrong || 0)}</span>
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-green-400 font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.passAccuracyPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.passTotal}</span>
+              </span>
             </span>
           }
         >
@@ -1137,8 +1195,23 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-[#ff0055]"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{stats.wrongPassesTransition || 0}</span>
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-[#ff0055] font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.transOfWrongPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="normal-case">
+                Errados:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.passesWrong}</span>
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span className="normal-case">
+                Transição:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.transitionCount}</span>
+              </span>
             </span>
           }
         >
@@ -1182,8 +1255,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-emerald-400"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{stats.tacklesTotal || 0}</span>
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-emerald-400 font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.tackleWithPossessionPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.tacklesTotal}</span>
+              </span>
             </span>
           }
         >
@@ -1231,8 +1314,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{(stats.savesSimple || 0) + (stats.savesHard || 0)}</span>
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-purple-400 font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.hardSavesPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.savesTotal}</span>
+              </span>
             </span>
           }
         >
@@ -1305,10 +1398,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-purple-400"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total:{' '}
-              <span className="text-white">
-                {(stats.shotsOn || 0) + (stats.shotsOff || 0) + (stats.shotsShootZone || 0)}
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-purple-400 font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.shotsOnPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.shotsTotal}</span>
               </span>
             </span>
           }
@@ -1356,8 +1456,18 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           headerColor="text-red-400"
           scoutTitleStyle
           headerRight={
-            <span className="text-zinc-400 text-xs uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-              Total: <span className="text-white">{(stats.opponentShotsOn || 0) + (stats.opponentShotsOff || 0)}</span>
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-red-400 font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.oppOnPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.oppTotal}</span>
+              </span>
             </span>
           }
         >
