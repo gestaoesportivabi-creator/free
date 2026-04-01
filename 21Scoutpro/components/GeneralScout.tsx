@@ -374,7 +374,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       // Classificação manual de Origem do Gol baseada nos métodos (mais confiável no front)
       const SET_PIECE_METHODS = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
-
+      
       // Agregar métodos de gols e calcular origem
       if (curr.teamStats.goalMethodsScored) {
         Object.entries(curr.teamStats.goalMethodsScored).forEach(([method, count]) => {
@@ -446,7 +446,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const cleanTime = timeStr.split('(')[0].trim();
     const parts = cleanTime.split(':');
     if (parts.length === 2) {
-      const minutes = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[0], 10);
       if (!isNaN(minutes)) return minutes;
     }
     const minutesOnly = parseInt(cleanTime, 10);
@@ -487,7 +487,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const periods = [...GOAL_BY_PERIOD_LABELS];
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
-
+    
     scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
       match.teamStats.goalTimes.forEach(goalTime => {
@@ -497,7 +497,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         if (periodIndex !== null) scoredCounts[periodIndex]++;
       });
     });
-
+    
     scopedMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
@@ -625,7 +625,6 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       oppOnPct,
       passTotal,
       passesWrong: pw,
-      transitionCount: trans,
       tacklesTotal: tt,
       savesTotal,
       shotsTotal,
@@ -702,7 +701,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     });
     const hasTarget = targetSum > 0;
     const pct = hasTarget ? (tacklesSum / targetSum) * 100 : 0;
-    return {
+      return {
       TACKLE_TARGET: targetSum,
       totalTackles: tacklesSum,
       hasTackleTarget: hasTarget,
@@ -717,7 +716,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const percentage = gaugeMeta.percentage;
   const percentageDisplay = gaugeMeta.percentageDisplay;
   const percentageDisplayNum = parseFloat(percentageDisplay);
-
+  
   // Logic for Speedometer Color - Tons de Azul
   let gaugeColor = COLORS.blue;
   if (percentageDisplayNum < 75) gaugeColor = '#ef4444'; // Red (mantido para erro)
@@ -815,7 +814,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const labelStyle = { fill: '#fff', fontSize: CHART_FONT_SIZE, fontWeight: 'normal', fontFamily: CHART_FONT };
 
   if (!comparisonChild && compareMode) {
-    return (
+  return (
       <div className="space-y-4 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
         <div className="bg-black p-4 rounded-2xl border border-zinc-900 shadow-lg flex items-center justify-between">
           <div>
@@ -1087,43 +1086,43 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 ) : (
                   <>
                     <p className="text-xs text-zinc-500 mb-4" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>
-                    {hasPossessionData && possessionDonutData ? (
-                      <div className="flex flex-col md:flex-row items-center gap-6">
+                {hasPossessionData && possessionDonutData ? (
+                  <div className="flex flex-col md:flex-row items-center gap-6">
                         <div className="h-56 w-56 max-w-full flex-shrink-0">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={possessionDonutData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius="50%"
-                                outerRadius="85%"
-                                paddingAngle={2}
-                                dataKey="value"
-                                nameKey="name"
-                                stroke="none"
-                                label={({ name, value }) => `${name} ${value}%`}
-                              >
-                                {possessionDonutData.map((entry, index) => (
-                                  <Cell key={`posse-${index}`} fill={entry.fill} />
-                                ))}
-                              </Pie>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={possessionDonutData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius="50%"
+                            outerRadius="85%"
+                            paddingAngle={2}
+                            dataKey="value"
+                            nameKey="name"
+                            stroke="none"
+                            label={({ name, value }) => `${name} ${value}%`}
+                          >
+                            {possessionDonutData.map((entry, index) => (
+                              <Cell key={`posse-${index}`} fill={entry.fill} />
+                            ))}
+                          </Pie>
                               <Tooltip formatter={(value: number) => [`${value}%`, '']} contentStyle={tooltipStyle} itemStyle={{ color: '#ffffff' }} labelStyle={{ color: '#ffffff' }} />
-                              <Legend />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <div className="flex flex-col gap-2 text-sm">
-                          {possessionDonutData.map((entry, i) => (
-                            <div key={entry.name} className="flex items-center gap-2">
-                              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-col gap-2 text-sm">
+                      {possessionDonutData.map((entry, i) => (
+                        <div key={entry.name} className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill }} />
                               <span className="text-zinc-300" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.name}</span>
                               <span className="text-white" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>{entry.value}%</span>
-                            </div>
-                          ))}
                         </div>
-                      </div>
-                    ) : (
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                       <p className="text-zinc-500 text-sm py-8 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Nenhum dado de posse disponível. A posse é registrada na coleta em tempo real (Dados do Jogo) e aparece aqui após a partida encerrada.</p>
                     )}
                   </>
@@ -1146,7 +1145,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-green-400 font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.passAccuracyPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
@@ -1199,34 +1198,29 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-[#ff0055] font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.transOfWrongPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
-              <span className="normal-case">
-                Errados:{' '}
+              <span>
+                Total:{' '}
                 <span className="text-white tabular-nums">{distributionChartPercentages.passesWrong}</span>
-              </span>
-              <span className="text-zinc-600">·</span>
-              <span className="normal-case">
-                Transição:{' '}
-                <span className="text-white tabular-nums">{distributionChartPercentages.transitionCount}</span>
               </span>
             </span>
           }
         >
            <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-               <BarChart data={chartData} margin={{ top: 25, right: 0, left: 0, bottom: 0 }} barCategoryGap="15%" barGap={8}>
+               <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} interval={0} />
+                 <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
                  <YAxis hide />
                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
                  <Legend
                    wrapperStyle={legendLabelStyle}
                    formatter={(value: string) => {
-                     if (value === 'Passes errados') {
-                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes errados ({stats.passesWrong || 0})</span>;
+                     if (value === 'Passes Errados') {
+                       return <span className="text-zinc-300" style={legendLabelStyle}>Passes Errados ({stats.passesWrong || 0})</span>;
                      }
                      if (value === 'Geraram transição') {
                        return <span className="text-zinc-300" style={legendLabelStyle}>Geraram transição ({stats.wrongPassesTransition || 0})</span>;
@@ -1234,11 +1228,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                      return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
                    }}
                  />
-                 <Bar dataKey="passesWrong" name="Passes errados" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.slate} fillOpacity={0.9}>
-                   <LabelList dataKey="passesWrong" position="top" {...labelStyle} dy={-10} />
+                 <Bar dataKey="passesWrong" name="Passes Errados" fill={COLORS.slate}>
+                   <LabelList dataKey="passesWrong" position="inside" {...labelStyle} />
                  </Bar>
-                 <Bar dataKey="transitionErrors" name="Geraram transição" radius={[6, 6, 0, 0]} barSize={32} fill={COLORS.rose}>
-                   <LabelList dataKey="transitionErrors" position="top" {...labelStyle} dy={-10} />
+                 <Bar dataKey="transitionErrors" name="Geraram transição" fill={COLORS.rose}>
+                   <LabelList dataKey="transitionErrors" position="inside" {...labelStyle} />
                  </Bar>
                </BarChart>
              </ResponsiveContainer>
@@ -1259,7 +1253,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-emerald-400 font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.tackleWithPossessionPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
@@ -1318,7 +1312,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-purple-400 font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.hardSavesPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
@@ -1356,7 +1350,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                   </Bar>
                </BarChart>
              </ResponsiveContainer>
-           </div>
+      </div>
            <div className="mt-4 overflow-x-auto">
              <table className="w-full text-xs">
                <thead>
@@ -1386,9 +1380,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                  )}
                </tbody>
              </table>
-           </div>
+          </div>
         </ExpandableCard>
-      </div>
+          </div>
 
       {/* Finalizações (nossas) + Finalizações do adversário */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
@@ -1402,7 +1396,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-purple-400 font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.shotsOnPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
@@ -1460,7 +1454,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
               style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
             >
-              <span className="text-red-400 font-semibold tabular-nums normal-case">
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
                 {distributionChartPercentages.oppOnPct.toFixed(1)}%
               </span>
               <span className="text-zinc-600">·</span>
@@ -1591,31 +1585,31 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
                <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                      <Pie
+                    <Pie
                           data={goalMethodsScoredData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_SCORED_DARK[i % PIE_COLORS_SCORED_DARK.length] }))}
-                          cx="50%"
+                        cx="50%"
                           cy="50%"
                           innerRadius={60}
-                          outerRadius={100}
+                        outerRadius={100}
                           paddingAngle={4}
-                          dataKey="value"
+                        dataKey="value"
                           isAnimationActive={true}
-                      >
+                    >
                           {goalMethodsScoredData.map((entry, index) => (
                               <Cell key={`cell-scored-${index}`} fill={PIE_COLORS_SCORED_DARK[index % PIE_COLORS_SCORED_DARK.length]} stroke="#fff" strokeWidth={1} />
-                          ))}
+                        ))}
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
-                      </Pie>
-                      <Tooltip
+                    </Pie>
+                    <Tooltip 
                         contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
                         itemStyle={{ color: '#ffffff' }}
                         labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
-                  </PieChart>
-                 </ResponsiveContainer>
+                </PieChart>
+             </ResponsiveContainer>
                </div>
                <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
                  {goalMethodsScoredData.map((entry, index) => (
@@ -1688,31 +1682,31 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              <div className="flex-1 flex flex-col min-h-[280px] lg:min-h-[320px] bg-zinc-900/30 rounded-2xl border border-zinc-800/50 p-4">
                <h4 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-4 text-center shrink-0 scout-card-title">Métodos Detalhados</h4>
                <div className="flex-1 min-h-[200px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="100%" height="100%">
                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                      <Pie
+                    <Pie
                           data={goalMethodsConcededData.map((entry, i) => ({ ...entry, fill: PIE_COLORS_CONCEDED[i % PIE_COLORS_CONCEDED.length] }))}
-                          cx="50%"
+                        cx="50%"
                           cy="50%"
                           innerRadius={60}
-                          outerRadius={100}
+                        outerRadius={100}
                           paddingAngle={4}
-                          dataKey="value"
+                        dataKey="value"
                           isAnimationActive={true}
-                      >
+                    >
                           {goalMethodsConcededData.map((entry, index) => (
                               <Cell key={`cell-conceded-${index}`} fill={PIE_COLORS_CONCEDED[index % PIE_COLORS_CONCEDED.length]} stroke="#fff" strokeWidth={1} />
-                          ))}
+                        ))}
                           <LabelList dataKey="percentage" position="outside" fill="#ffffff" stroke="none" fontSize={10} fontFamily={CHART_FONT} formatter={(v: string) => `${v}%`} />
-                      </Pie>
-                      <Tooltip
+                    </Pie>
+                    <Tooltip 
                         contentStyle={{ ...tooltipStyle, color: '#ffffff', border: '1px solid #52525b' }}
                         itemStyle={{ color: '#ffffff' }}
                         labelStyle={{ color: '#ffffff' }}
                         formatter={(value: number, name: string, props: any) => [`${value} (${props.payload.percentage}%)`, name]}
                       />
-                  </PieChart>
-                 </ResponsiveContainer>
+                </PieChart>
+             </ResponsiveContainer>
                </div>
                <div className="shrink-0 mt-4 grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 items-center">
                  {goalMethodsConcededData.map((entry, index) => (
@@ -1809,23 +1803,23 @@ const KPICard: React.FC<{title: string, value: number | string, subtitle?: strin
 const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors', players: Player[]}> = ({matches, statType, players}) => {
   const playerStats = useMemo(() => {
     const statsMap = new Map<string, { name: string; correct: number; wrong: number; blocked?: number; total: number }>();
-
+    
     matches.forEach(match => {
       if (!match.playerStats) return;
-
+      
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
         // Normalizar ID para comparação (string, trim)
         const normalizedPlayerId = String(playerId).trim();
-
+        
         // Buscar nome do jogador (comparar IDs normalizados)
         const player = players.find(p => String(p.id).trim() === normalizedPlayerId);
         const playerName = player ? player.name : normalizedPlayerId;
-
+        
         if (!statsMap.has(normalizedPlayerId)) {
           statsMap.set(normalizedPlayerId, { name: playerName, correct: 0, wrong: 0, total: 0 });
         }
         const stats = statsMap.get(normalizedPlayerId)!;
-
+        
         if (statType === 'passes') {
           stats.correct += pStats.passesCorrect || 0;
           stats.wrong += pStats.passesWrong || 0;
