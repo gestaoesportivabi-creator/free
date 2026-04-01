@@ -98,6 +98,34 @@ function getBlockedShotsFromLog(match: MatchRecord): number {
   return blocked;
 }
 
+/** Faltas cometidas (nossa equipe) vs sofridas (adversário) — prioriza postMatchEventLog; fallback teamStats + playerStats. */
+function getFoulsSplitFromLog(match: MatchRecord): { committed: number; suffered: number } {
+  const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+  let committed = 0;
+  let suffered = 0;
+  let foulRows = 0;
+  for (const e of log as any[]) {
+    const action = String(e?.action ?? '').trim().toLowerCase();
+    const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+    if (action !== 'falta' && tipo !== 'falta') continue;
+    foulRows += 1;
+    if (e?.foulTeam === 'against') suffered += 1;
+    else committed += 1;
+  }
+  if (foulRows > 0) return { committed, suffered };
+
+  const ts = match.teamStats;
+  if (!ts) return { committed: 0, suffered: 0 };
+  let sumPlayerFouls = 0;
+  if (match.playerStats) {
+    for (const p of Object.values(match.playerStats)) {
+      sumPlayerFouls += (p as MatchStats).fouls || 0;
+    }
+  }
+  const total = ts.fouls || 0;
+  return { committed: sumPlayerFouls, suffered: Math.max(0, total - sumPlayerFouls) };
+}
+
 function emptyScopedStats(): MatchStats {
   return {
     goals: 0,
@@ -368,6 +396,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       acc.tacklesWithoutBall += tacklesWithout;
       
       acc.tacklesTotal += (tacklesWith + tacklesWithout + tacklesCounter);
+
+      const foulSplit = getFoulsSplitFromLog(curr);
+      acc.foulsCommitted += foulSplit.committed;
+      acc.foulsSuffered += foulSplit.suffered;
       
       acc.yellowCards += curr.teamStats.yellowCards || 0;
       acc.redCards += curr.teamStats.redCards || 0;
@@ -416,6 +448,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       passesCorrect: 0, passesWrong: 0, shotsOn: 0, shotsOff: 0, shotsShootZone: 0,
       opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
+      foulsCommitted: 0, foulsSuffered: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
       goalsConcededOpen: 0, goalsConcededSet: 0,
@@ -581,6 +614,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       shotsOn: match.teamStats.shotsOnTarget ?? 0,
       shotsOff: match.teamStats.shotsOffTarget ?? 0,
       shotsShootZone: match.teamStats.shotsShootZone ?? getBlockedShotsFromLog(match),
+      ...(() => {
+        const f = getFoulsSplitFromLog(match);
+        return { foulsCommitted: f.committed, foulsSuffered: f.suffered };
+      })(),
       result: match.result
     }));
   }, [scopedMatches]);
@@ -616,6 +653,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const oppTotal = oo + of;
     const oppOnPct = oppTotal > 0 ? (oo / oppTotal) * 100 : 0;
 
+    const fc = stats.foulsCommitted || 0;
+    const fs = stats.foulsSuffered || 0;
+    const foulsTotal = fc + fs;
+    const foulsCommittedPct = foulsTotal > 0 ? (fc / foulsTotal) * 100 : 0;
+
     return {
       passAccuracyPct,
       transOfWrongPct,
@@ -629,6 +671,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       savesTotal,
       shotsTotal,
       oppTotal,
+      foulsCommittedPct,
+      foulsTotal,
     };
   }, [stats]);
   
@@ -1493,6 +1537,68 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </BarChart>
              </ResponsiveContainer>
            </div>
+        </ExpandableCard>
+      </div>
+
+      {/* Faltas cometidas vs sofridas — abaixo das finalizações, acima dos gols por período */}
+      <div className="grid grid-cols-1 gap-6">
+        <ExpandableCard
+          title="Faltas cometidas vs Faltas sofridas"
+          icon={BarChart3}
+          headerColor="text-orange-400"
+          scoutTitleStyle
+          headerRight={
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.foulsCommittedPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.foulsTotal}</span>
+              </span>
+            </span>
+          }
+        >
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                <YAxis hide />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
+                <Legend
+                  wrapperStyle={legendLabelStyle}
+                  formatter={(value: string) => {
+                    if (value === 'Cometidas') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Cometidas ({stats.foulsCommitted || 0})
+                        </span>
+                      );
+                    }
+                    if (value === 'Sofridas') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Sofridas ({stats.foulsSuffered || 0})
+                        </span>
+                      );
+                    }
+                    return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                  }}
+                />
+                <Bar dataKey="foulsCommitted" name="Cometidas" fill="#00f0ff">
+                  <LabelList dataKey="foulsCommitted" position="inside" {...labelStyle} />
+                </Bar>
+                <Bar dataKey="foulsSuffered" name="Sofridas" fill="#f59e0b">
+                  <LabelList dataKey="foulsSuffered" position="inside" {...labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </ExpandableCard>
       </div>
 
