@@ -126,6 +126,26 @@ function getFoulsSplitFromLog(match: MatchRecord): { committed: number; suffered
   return { committed: sumPlayerFouls, suffered: Math.max(0, total - sumPlayerFouls) };
 }
 
+/** Mesmo ID usado em MatchScoutingWindow para lances do adversário */
+const OPPONENT_FAKE_PLAYER_ID = 'OPPONENT_TEAM';
+
+/** Cartões nossos (jogadores do elenco) vs cartões atribuídos ao adversário no playerStats */
+function getCardsReceivedVsOpponent(match: MatchRecord): { received: number; opponent: number } {
+  const ps = match.playerStats;
+  if (!ps || typeof ps !== 'object') return { received: 0, opponent: 0 };
+  let received = 0;
+  let opponent = 0;
+  for (const [id, st] of Object.entries(ps)) {
+    const pid = String(id).trim();
+    const y = (st as MatchStats).yellowCards ?? 0;
+    const r = (st as MatchStats).redCards ?? 0;
+    const n = y + r;
+    if (pid === OPPONENT_FAKE_PLAYER_ID) opponent += n;
+    else received += n;
+  }
+  return { received, opponent };
+}
+
 function emptyScopedStats(): MatchStats {
   return {
     goals: 0,
@@ -400,6 +420,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       const foulSplit = getFoulsSplitFromLog(curr);
       acc.foulsCommitted += foulSplit.committed;
       acc.foulsSuffered += foulSplit.suffered;
+
+      const cardSplit = getCardsReceivedVsOpponent(curr);
+      acc.cardsOurs += cardSplit.received;
+      acc.cardsOpponent += cardSplit.opponent;
       
       acc.yellowCards += curr.teamStats.yellowCards || 0;
       acc.redCards += curr.teamStats.redCards || 0;
@@ -449,6 +473,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       opponentShotsOn: 0, opponentShotsOff: 0, savesSimple: 0, savesHard: 0,
       wrongPassesTransition: 0, tacklesCounterAttack: 0, tacklesWithBall: 0, tacklesWithoutBall: 0, tacklesTotal: 0,
       foulsCommitted: 0, foulsSuffered: 0,
+      cardsOurs: 0, cardsOpponent: 0,
       yellowCards: 0, redCards: 0,
       goalsScoredOpen: 0, goalsScoredSet: 0,
       goalsConcededOpen: 0, goalsConcededSet: 0,
@@ -618,6 +643,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         const f = getFoulsSplitFromLog(match);
         return { foulsCommitted: f.committed, foulsSuffered: f.suffered };
       })(),
+      ...(() => {
+        const c = getCardsReceivedVsOpponent(match);
+        return { cardsOurs: c.received, cardsOpponent: c.opponent };
+      })(),
       result: match.result
     }));
   }, [scopedMatches]);
@@ -658,6 +687,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const foulsTotal = fc + fs;
     const foulsCommittedPct = foulsTotal > 0 ? (fc / foulsTotal) * 100 : 0;
 
+    const co = stats.cardsOurs || 0;
+    const cadv = stats.cardsOpponent || 0;
+    const cardsTotal = co + cadv;
+    const cardsOursPct = cardsTotal > 0 ? (co / cardsTotal) * 100 : 0;
+
     return {
       passAccuracyPct,
       transOfWrongPct,
@@ -673,6 +707,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       oppTotal,
       foulsCommittedPct,
       foulsTotal,
+      cardsOursPct,
+      cardsTotal,
     };
   }, [stats]);
   
@@ -1540,8 +1576,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Faltas cometidas vs sofridas — abaixo das finalizações, acima dos gols por período */}
-      <div className="grid grid-cols-1 gap-6">
+      {/* Faltas e cartões — mesma largura dos demais (grid 2 colunas); acima dos gols por período */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         <ExpandableCard
           title="Faltas cometidas vs Faltas sofridas"
           icon={BarChart3}
@@ -1599,6 +1635,67 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <PlayerStatsTable matches={scopedMatches} statType="fouls" players={players} />
+        </ExpandableCard>
+
+        <ExpandableCard
+          title="Cartões recebidos vs Cartões adversários"
+          icon={BarChart3}
+          headerColor="text-yellow-500"
+          scoutTitleStyle
+          headerRight={
+            <span
+              className="flex items-center gap-2 flex-wrap justify-end text-zinc-400 text-xs uppercase tracking-wider"
+              style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}
+            >
+              <span className="text-[#eab308] font-semibold tabular-nums normal-case">
+                {distributionChartPercentages.cardsOursPct.toFixed(1)}%
+              </span>
+              <span className="text-zinc-600">·</span>
+              <span>
+                Total:{' '}
+                <span className="text-white tabular-nums">{distributionChartPercentages.cardsTotal}</span>
+              </span>
+            </span>
+          }
+        >
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="name" stroke="#71717a" tick={axisStyle} />
+                <YAxis hide />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={tooltipStyle} />
+                <Legend
+                  wrapperStyle={legendLabelStyle}
+                  formatter={(value: string) => {
+                    if (value === 'Recebidos') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Recebidos ({stats.cardsOurs || 0})
+                        </span>
+                      );
+                    }
+                    if (value === 'Adversário') {
+                      return (
+                        <span className="text-zinc-300" style={legendLabelStyle}>
+                          Adversário ({stats.cardsOpponent || 0})
+                        </span>
+                      );
+                    }
+                    return <span className="text-zinc-300" style={legendLabelStyle}>{value}</span>;
+                  }}
+                />
+                <Bar dataKey="cardsOurs" name="Recebidos" fill="#eab308">
+                  <LabelList dataKey="cardsOurs" position="inside" {...labelStyle} />
+                </Bar>
+                <Bar dataKey="cardsOpponent" name="Adversário" fill="#dc2626">
+                  <LabelList dataKey="cardsOpponent" position="inside" {...labelStyle} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <PlayerStatsTable matches={scopedMatches} statType="cards" players={players} />
         </ExpandableCard>
       </div>
 
@@ -1906,26 +2003,34 @@ const KPICard: React.FC<{title: string, value: number | string, subtitle?: strin
 );
 
 // Componente de tabela de estatísticas por jogador
-const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors', players: Player[]}> = ({matches, statType, players}) => {
+const PlayerStatsTable: React.FC<{
+  matches: MatchRecord[];
+  statType: 'passes' | 'shots' | 'tackles' | 'criticalErrors' | 'fouls' | 'cards';
+  players: Player[];
+}> = ({ matches, statType, players }) => {
   const playerStats = useMemo(() => {
     const statsMap = new Map<string, { name: string; correct: number; wrong: number; blocked?: number; total: number }>();
-    
-    matches.forEach(match => {
+
+    matches.forEach((match) => {
       if (!match.playerStats) return;
-      
+
       Object.entries(match.playerStats).forEach(([playerId, pStats]) => {
-        // Normalizar ID para comparação (string, trim)
         const normalizedPlayerId = String(playerId).trim();
-        
-        // Buscar nome do jogador (comparar IDs normalizados)
-        const player = players.find(p => String(p.id).trim() === normalizedPlayerId);
+        if (
+          (statType === 'fouls' || statType === 'cards') &&
+          normalizedPlayerId === OPPONENT_FAKE_PLAYER_ID
+        ) {
+          return;
+        }
+
+        const player = players.find((p) => String(p.id).trim() === normalizedPlayerId);
         const playerName = player ? player.name : normalizedPlayerId;
-        
+
         if (!statsMap.has(normalizedPlayerId)) {
           statsMap.set(normalizedPlayerId, { name: playerName, correct: 0, wrong: 0, total: 0 });
         }
         const stats = statsMap.get(normalizedPlayerId)!;
-        
+
         if (statType === 'passes') {
           stats.correct += pStats.passesCorrect || 0;
           stats.wrong += pStats.passesWrong || 0;
@@ -1941,46 +2046,147 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
         } else if (statType === 'tackles') {
           stats.correct += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0);
           stats.wrong += pStats.tacklesCounterAttack || 0;
-          stats.total += (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0) + (pStats.tacklesCounterAttack || 0);
+          stats.total +=
+            (pStats.tacklesWithBall || 0) + (pStats.tacklesWithoutBall || 0) + (pStats.tacklesCounterAttack || 0);
         } else if (statType === 'criticalErrors') {
-          // Comparativo: total de passes errados vs quantos geraram transição
           const totalWrong = pStats.passesWrong || 0;
           const transition =
-            (pStats as any).wrongPassesTransition ??
-            (pStats as any).transitionErrors ??
-            0;
-
-          // Coluna verde: passes errados (comparativo)
+            (pStats as any).wrongPassesTransition ?? (pStats as any).transitionErrors ?? 0;
           stats.correct += totalWrong;
-
-          // Coluna vermelha: passes errados que geraram transição
           stats.wrong += transition;
-
-          // Total/ordenação: apenas erros que geraram transição
           stats.total += transition;
+        } else if (statType === 'fouls') {
+          const f = pStats.fouls || 0;
+          stats.correct += f;
+          stats.total += f;
+        } else if (statType === 'cards') {
+          const y = pStats.yellowCards || 0;
+          const r = pStats.redCards || 0;
+          stats.correct += y;
+          stats.wrong += r;
+          stats.total += y + r;
         }
       });
     });
-    
+
     return Array.from(statsMap.values())
-      .filter(s => s.total > 0)
+      .filter((s) => s.total > 0)
       .sort((a, b) => b.total - a.total)
-      .slice(0, 10); // Top 10
+      .slice(0, 10);
   }, [matches, statType, players]);
 
   if (playerStats.length === 0) return null;
 
   const legendStyle = { fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' };
+  const title =
+    statType === 'passes'
+      ? 'Passes'
+      : statType === 'shots'
+        ? 'Finalizações'
+        : statType === 'tackles'
+          ? 'Desarmes'
+          : statType === 'criticalErrors'
+            ? 'Erros Críticos'
+            : statType === 'fouls'
+              ? 'Faltas cometidas'
+              : 'Cartões (recebidos)';
+
+  if (statType === 'fouls') {
+    return (
+      <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
+        <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
+          Top 10 Jogadores - {title}
+        </h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-zinc-800">
+                <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Jogador
+                </th>
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Faltas
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {playerStats.map((stat, idx) => (
+                <tr key={idx} className="border-b border-zinc-900/50">
+                  <td className="py-2 text-white" style={legendStyle}>
+                    {stat.name}
+                  </td>
+                  <td className="py-2 text-right text-orange-300" style={legendStyle}>
+                    {stat.correct}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  if (statType === 'cards') {
+    return (
+      <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
+        <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
+          Top 10 Jogadores - {title}
+        </h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-zinc-800">
+                <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Jogador
+                </th>
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Amarelo
+                </th>
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Vermelho
+                </th>
+                <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {playerStats.map((stat, idx) => (
+                <tr key={idx} className="border-b border-zinc-900/50">
+                  <td className="py-2 text-white" style={legendStyle}>
+                    {stat.name}
+                  </td>
+                  <td className="py-2 text-right text-yellow-400" style={legendStyle}>
+                    {stat.correct}
+                  </td>
+                  <td className="py-2 text-right text-red-400" style={legendStyle}>
+                    {stat.wrong}
+                  </td>
+                  <td className="py-2 text-right text-zinc-300" style={legendStyle}>
+                    {stat.total}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4 p-4 bg-zinc-950/50 rounded-xl border border-zinc-800">
       <h4 className="text-white text-xs uppercase mb-3 tracking-wider" style={legendStyle}>
-        Top 10 Jogadores - {statType === 'passes' ? 'Passes' : statType === 'shots' ? 'Finalizações' : statType === 'tackles' ? 'Desarmes' : 'Erros Críticos'}
+        Top 10 Jogadores - {title}
       </h4>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-zinc-800">
-              <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>Jogador</th>
+              <th className="text-left py-2 text-zinc-400 uppercase" style={legendStyle}>
+                Jogador
+              </th>
               <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
                 {statType === 'passes'
                   ? 'Certos'
@@ -2004,19 +2210,31 @@ const PlayerStatsTable: React.FC<{matches: MatchRecord[], statType: 'passes' | '
                   Bloqueado
                 </th>
               )}
-              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>Total</th>
+              <th className="text-right py-2 text-zinc-400 uppercase" style={legendStyle}>
+                Total
+              </th>
             </tr>
           </thead>
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                <td className="py-2 text-white" style={legendStyle}>{stat.name}</td>
-                <td className="py-2 text-right text-[#10b981]" style={legendStyle}>{stat.correct}</td>
-                <td className="py-2 text-right text-[#ff0055]" style={legendStyle}>{stat.wrong}</td>
+                <td className="py-2 text-white" style={legendStyle}>
+                  {stat.name}
+                </td>
+                <td className="py-2 text-right text-[#10b981]" style={legendStyle}>
+                  {stat.correct}
+                </td>
+                <td className="py-2 text-right text-[#ff0055]" style={legendStyle}>
+                  {stat.wrong}
+                </td>
                 {statType === 'shots' && (
-                  <td className="py-2 text-right text-amber-400" style={legendStyle}>{stat.blocked ?? 0}</td>
+                  <td className="py-2 text-right text-amber-400" style={legendStyle}>
+                    {stat.blocked ?? 0}
+                  </td>
                 )}
-                <td className="py-2 text-right text-zinc-300" style={legendStyle}>{stat.total}</td>
+                <td className="py-2 text-right text-zinc-300" style={legendStyle}>
+                  {stat.total}
+                </td>
               </tr>
             ))}
           </tbody>
