@@ -404,13 +404,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [lockerOpen, setLockerOpen] = useState<boolean>(false);
   const [lockerDraftIds, setLockerDraftIds] = useState<string[]>([]);
   
-  // Estado de expulsão: usado apenas para sinalização visual (sem regra de espera para reposição).
-  const [expulsionState, setExpulsionState] = useState<{
-    expelledPlayerId: string;
-    expelledAtTime: number;
-    period: '1T' | '2T';
-  } | null>(null);
-  const [showExpulsionReplacementSelection, setShowExpulsionReplacementSelection] = useState<boolean>(false);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autosaveInFlightRef = useRef<boolean>(false);
@@ -942,6 +935,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const isLineupGoalkeeperId = (id: string) =>
     players.find((p) => String(p.id).trim() === id)?.position === 'Goleiro';
 
+  /** Rascunho do locker: dedupe e no máx. 1 goleiro (mesma regra do botão Ativos). */
+  const sanitizeLockerDraftIds = useCallback((raw: string[]) => {
+    const deduped = [...new Set(raw.map((id) => String(id).trim()).filter(Boolean))];
+    let gkKept = false;
+    return deduped.filter((id) => {
+      if (!isLineupGoalkeeperId(id)) return true;
+      if (gkKept) return false;
+      gkKept = true;
+      return true;
+    });
+  }, [players]);
+
   /** Locker lateral: no máximo 1 jogador com posição Goleiro; ao escolher outro goleiro, substitui o anterior. */
   const toggleLockerDraft = (playerId: string) => {
     if (checkPlayerExpulsion(playerId)) return;
@@ -1106,7 +1111,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         } else if (hasLog) {
           setIsMatchStarted(true);
           setShowLineupModal(false);
-          setSquadActiveIds(tit.length === 5 ? tit : []);
+          setSquadActiveIds(tit.length > 0 && tit.length <= 5 ? tit : []);
           if (tit[0]) setCurrentGoalkeeperId(tit[0]);
         } else {
           setIsMatchStarted(false);
@@ -1123,7 +1128,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setIsMatchStarted(true);
         setShowLineupModal(false);
         const titFb = (L.players ?? []).filter(Boolean);
-        setSquadActiveIds(titFb.length === 5 ? titFb : []);
+        setSquadActiveIds(titFb.length > 0 && titFb.length <= 5 ? titFb : []);
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
@@ -1812,6 +1817,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     flushSync(() => {
       setIsMatchStarted(true);
       setShowLineupModal(false);
+      setSquadActiveIds([...lineupPlayers]);
       if (lineupPlayers.length > 0) {
         setCurrentGoalkeeperId(lineupPlayers[0]);
       }
@@ -2605,9 +2611,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         
         // Após expulsão, manter painel de ativos com a quantidade atual em quadra.
         setSquadActiveIds(newLineup);
-
-        // Não abre fluxo de reposição automática: recomposição é manual pelo botão "Ativos".
-        setExpulsionState(null);
       }
       
       // activePlayers é derivado de lineupPlayers no useEffect, então já reflete 4 em quadra
@@ -2617,26 +2620,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     setSelectedAction(null);
     setSelectedPlayerId(null); // Limpar seleção após registrar cartão
-  };
-
-  // Repor slot de expulsão: jogador do banco entra no lugar do expulso (após 2 min ou gol adversário)
-  const handleReplaceExpulsionSlot = (playerInId: string) => {
-    if (!expulsionState) return;
-    const playerOutId = expulsionState.expelledPlayerId;
-    setSubstitutionHistory((prev) => [
-      ...prev,
-      { playerOutId, playerInId, time: getTimeForEvent() ?? matchTime, period: currentPeriod },
-    ]);
-    setSubstitutionCounts((prev) => ({
-      ...prev,
-      [playerOutId]: (prev[playerOutId] || 0) + 1,
-      [playerInId]: (prev[playerInId] || 0) + 1,
-    }));
-    updateSubstitutionFrequency([{ playerOutId, playerInId }]);
-    setLineupPlayers((prev) => [...prev, playerInId]);
-    setBenchPlayers((prev) => prev.filter((id) => id !== playerInId));
-    setExpulsionState(null);
-    setShowExpulsionReplacementSelection(false);
   };
 
   // Mapeamento LateralResult -> rótulo zona (AT ESQ, AT DIR, DF ESQ, DF DIR)
@@ -2686,27 +2669,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return lines;
   }, [lastThreeEvents]);
 
-  // Jogadores do banco ordenados por frequência de substituições
   const isBlockedByPenalty = !!penaltyStep;
-
-  const sortedBenchPlayers = useMemo(() => {
-    const frequency = loadSubstitutionFrequency();
-    return [...benchPlayers].sort((a, b) => {
-      const freqA = frequency[a] || 0;
-      const freqB = frequency[b] || 0;
-      return freqB - freqA; // Mais frequentes primeiro
-    });
-  }, [benchPlayers]);
-
-  // Após expulsão, a reposição é livre (sem espera de 2 minutos).
-  const canReplaceAfterExpulsion = useMemo(() => {
-    return !!expulsionState;
-  }, [expulsionState]);
-
-  // Sem contagem regressiva para reposição após expulsão.
-  const expulsionCountdownSeconds = useMemo(() => {
-    return null;
-  }, []);
 
   const expelledPlayerIds = useMemo(() => {
     return Object.entries(playerCards)
@@ -2718,6 +2681,41 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       })
       .map(([pid]) => pid);
   }, [playerCards]);
+
+  /** Mantém squadActiveIds dentro do elenco, sem expulsos, e com todos em quadra quando há desvantagem numérica. */
+  useEffect(() => {
+    if (!isOpen || isPostmatch || !isMatchStarted || lockerOpen) return;
+    const roster = new Set([...lineupPlayers, ...benchPlayers].map((id) => String(id).trim()));
+    const expelled = new Set(expelledPlayerIds.map((id) => String(id).trim()));
+    setSquadActiveIds((prev) => {
+      const next = [
+        ...new Set(
+          prev
+            .map((id) => String(id).trim())
+            .filter((id) => roster.has(id) && !expelled.has(id))
+        ),
+      ];
+      const lineupNorm = lineupPlayers.map((id) => String(id).trim()).filter(Boolean);
+      let out = next;
+      if (lineupNorm.length > 0 && lineupNorm.length < 5) {
+        const missingFromLineup = lineupNorm.filter((id) => !out.includes(id));
+        if (missingFromLineup.length > 0) {
+          out = sanitizeLockerDraftIds([...lineupNorm, ...out]);
+        }
+      }
+      if (out.length === prev.length && out.every((id, i) => id === String(prev[i] ?? ''))) return prev;
+      return out;
+    });
+  }, [
+    isOpen,
+    isPostmatch,
+    isMatchStarted,
+    lockerOpen,
+    lineupPlayers,
+    benchPlayers,
+    expelledPlayerIds,
+    sanitizeLockerDraftIds,
+  ]);
 
   // Estatísticas pré-intervalo (apenas eventos com period === '1T')
   const firstHalfStats = useMemo(() => {
@@ -3281,109 +3279,31 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-lg p-2 text-center">
                   <p className="text-yellow-400 text-xs font-bold">Complete a escalação para iniciar</p>
                 </div>
-              ) : showExpulsionReplacementSelection && expulsionState ? (
-                <>
-                  <p className="text-zinc-400 text-xs font-bold uppercase mb-3 text-center">
-                    Quem entra no lugar do expulso?
-                  </p>
-                  <div className="space-y-1 flex-1 overflow-y-auto">
-                    {sortedBenchPlayers.map((playerId) => {
-                      const player = players.find(p => String(p.id).trim() === playerId);
-                      if (!player) return null;
-                      return (
-                        <button
-                          key={playerId}
-                          onClick={() => handleReplaceExpulsionSlot(playerId)}
-                          className="w-full rounded-lg p-2 text-left bg-green-500/20 border border-green-500/90 hover:border-green-400 transition-all flex items-center gap-3"
-                        >
-                          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 border border-zinc-600 bg-zinc-800">
-                            {player.photoUrl ? (
-                              <img src={player.photoUrl} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs font-medium">
-                                {(player.nickname?.trim() || player.name).substring(0, 2).toUpperCase() || '?'}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-normal text-sm truncate">{player.nickname?.trim() || player.name} · {player.jerseyNumber}</p>
-                            <p className="text-zinc-500 text-[10px]">BANCO (ENTRANDO)</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    onClick={() => setShowExpulsionReplacementSelection(false)}
-                    className="mt-2 w-full bg-zinc-800 hover:bg-zinc-700 border-2 border-zinc-700 text-white font-bold uppercase text-xs rounded-lg p-2 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </>
-              ) : expulsionState ? (
-                <>
-                  <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
-                  {activePlayers.map((player) => {
-                    const isSelected = selectedPlayerId === String(player.id).trim();
-                    const isGoalkeeper = String(player.id).trim() === currentGoalkeeperId;
-                    const isGk = player.position === 'Goleiro' || isGoalkeeper;
-                    const displayNum = player.jerseyNumber ?? '?';
-                    const labelName = player.nickname?.trim() || player.name || '';
-                    return (
-                      <button
-                        key={player.id}
-                        type="button"
-                        title={isGk ? `${labelName} — Goleiro` : labelName}
-                        onClick={() => {
-                          handleLateralPlayerClick(String(player.id).trim());
-                        }}
-                        disabled={!isMatchStarted && !goalStep}
-                        className={`relative flex aspect-square w-full max-h-[2.6rem] items-center justify-center rounded-full text-base font-black transition-all ${
-                          !isMatchStarted
-                            ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                            : isSelected
-                            ? 'bg-[#00f0ff]/25 border-2 border-[#00f0ff] text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
-                            : pendingPassEventId && String(player.id).trim() !== pendingPassSenderId
-                            ? 'bg-yellow-500/25 border-2 border-yellow-500 text-yellow-100 hover:bg-yellow-500/35'
-                            : 'bg-green-500/15 border-2 border-green-500/70 text-white hover:bg-green-500/25 hover:border-green-400'
-                        }`}
-                      >
-                        <span className="tabular-nums leading-none">{displayNum}</span>
-                        {isGk && (
-                          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
-                        )}
-                        {pendingPassEventId && String(player.id).trim() !== pendingPassSenderId && (
-                          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                  </div>
-                  <div className="rounded-lg p-2 border-2 border-red-500 bg-red-500/10 text-left">
-                    <p className="text-red-400 font-bold text-sm">
-                      🟥 Expulso: {(players.find(p => String(p.id).trim() === expulsionState.expelledPlayerId)?.nickname?.trim() || players.find(p => String(p.id).trim() === expulsionState.expelledPlayerId)?.name) ?? 'Jogador'}
-                    </p>
-                    {canReplaceAfterExpulsion ? (
-                      <button
-                        onClick={() => setShowExpulsionReplacementSelection(true)}
-                        className="mt-2 w-full py-2 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors"
-                      >
-                        Substituir – escolher jogador
-                      </button>
-                    ) : (
-                      <p className="text-zinc-400 text-xs mt-2">
-                        {expulsionCountdownSeconds !== null && currentPeriod === expulsionState.period
-                          ? `Pode substituir em ${Math.floor(expulsionCountdownSeconds / 60)}:${String(expulsionCountdownSeconds % 60).padStart(2, '0')}`
-                          : 'Aguarde 2 min ou gol adversário'}
-                      </p>
-                    )}
-                  </div>
-                </>
               ) : allSquadPlayers.length > 0 ? (
                 <>
+                  {expelledPlayerIds.length > 0 && (
+                    <div className="rounded-lg p-2 border border-red-500/70 bg-red-950/40 text-left shrink-0 mb-1">
+                      <p className="text-red-300 text-[10px] font-bold uppercase">Expulsão</p>
+                      <p className="text-zinc-300 text-xs leading-snug">
+                        {expelledPlayerIds
+                          .map((eid) => {
+                            const p = players.find((x) => String(x.id).trim() === eid);
+                            return p ? (p.nickname?.trim() || p.name) : eid;
+                          })
+                          .join(', ')}
+                        . Use Ativos para marcar quem está em quadra (máx. 5).
+                      </p>
+                    </div>
+                  )}
                   {lockerOpen && (
                     <p className="text-amber-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
-                      Ativos: {lockerDraftIds.length}/5 — no máx. 1 goleiro; toque nos números; Ativos para trancar
+                      {lineupPlayers.length < 5 ? (
+                        <>
+                          Em quadra ({lineupPlayers.length}) · Rascunho: {lockerDraftIds.length}/5 — máx. 1 goleiro; toque nos números; Ativos para trancar
+                        </>
+                      ) : (
+                        <>Ativos: {lockerDraftIds.length}/5 — máx. 1 goleiro; toque nos números; Ativos para trancar</>
+                      )}
                     </p>
                   )}
                 <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
@@ -3490,15 +3410,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     setLockerDraftIds([]);
                   }
                 } else {
-                  const raw = squadActiveIds.length > 0 ? [...squadActiveIds] : [];
-                  let gkKept = false;
-                  const sanitized = raw.filter((id) => {
-                    if (!isLineupGoalkeeperId(id)) return true;
-                    if (gkKept) return false;
-                    gkKept = true;
-                    return true;
-                  });
-                  setLockerDraftIds(sanitized);
+                  const fromLineup = lineupPlayers.map((id) => String(id).trim()).filter(Boolean);
+                  const raw =
+                    fromLineup.length > 0
+                      ? fromLineup
+                      : squadActiveIds.length > 0
+                        ? [...squadActiveIds]
+                        : [];
+                  setLockerDraftIds(sanitizeLockerDraftIds(raw));
                   setLockerOpen(true);
                 }
               }}
