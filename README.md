@@ -16,6 +16,7 @@ Sistema completo de scout, análise e gestão para equipes esportivas com backen
 - **GitHub Pages**: Veja instruções em docs/setup/DEPLOY.md
 
 O sistema está configurado para deploy único no Vercel (frontend + backend no mesmo domínio).
+Último disparo manual de deploy na branch `versoes`: 2026-03-30.
 
 ## 💻 Executar Localmente
 

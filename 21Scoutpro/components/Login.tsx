@@ -73,7 +73,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
             email: result.data.user.email,
             role: result.data.user.role === 'TECNICO' ? 'Treinador' : result.data.user.role,
             planName: result.data.user.planName as SubscriptionPlanName | undefined,
-            isPlatformAdmin: result.data.user.isPlatformAdmin ?? false,
+            isPlatformAdmin:
+              result.data.user.isPlatformAdmin ??
+              (result.data.user.planName === 'ADMINISTRADOR'),
           };
           
           console.log('👤 Usuário criado:', user);

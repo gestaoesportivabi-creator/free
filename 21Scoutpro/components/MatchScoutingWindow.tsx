@@ -132,6 +132,8 @@ const GOAL_METHOD_UI: Record<string, { icon: React.ReactNode; bg: string; border
 // Jogador "fake" para o adversário — usado apenas para contabilizar gols sofridos e métodos de gols do adversário
 const OPPONENT_FAKE_PLAYER_ID = 'OPPONENT_TEAM';
 const OPPONENT_FAKE_PLAYER_NAME = 'Adversário';
+const TEAM_EVENT_FAKE_PLAYER_ID = 'TEAM_EVENT';
+const TEAM_EVENT_FAKE_PLAYER_NAME = 'Equipe';
 
 interface MatchEvent {
   id: string;
@@ -142,6 +144,7 @@ interface MatchEvent {
   period: '1T' | '2T'; // Período em que ocorreu
   result?: 'correct' | 'wrong' | 'inside' | 'outside' | 'post' | 'blocked' | 'normal' | 'contra' | 'withBall' | 'withoutBall' | 'counter' | 'goal' | 'saved' | 'noGoal' | 'simple' | 'hard' | LateralResult;
   cardType?: 'yellow' | 'secondYellow' | 'red';
+  cardTeam?: 'for' | 'against';
   isOpponentGoal?: boolean; // true se for gol do adversário
   passToPlayerId?: string; // ID do jogador que recebeu o passe
   passToPlayerName?: string; // Nome do jogador que recebeu o passe
@@ -594,7 +597,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setActionFlow(flow as any);
   };
 
-  const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
+  const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
     if (!actionFlow) return;
     // Falta do adversário: só contabiliza; não abre popup com lista dos nossos jogadores
     if (actionFlow.action === 'foul' && extra?.foulTeam === 'against') {
@@ -602,6 +605,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         { ...actionFlow, step: 'details', details, foulTeam: 'against', ...extra },
         OPPONENT_FAKE_PLAYER_ID
       );
+      return;
+    }
+    if (actionFlow.action === 'card' && extra?.cardTeam === 'against') {
+      executeActionFlow(
+        { ...actionFlow, step: 'details', details, cardTeam: 'against', ...extra },
+        OPPONENT_FAKE_PLAYER_ID
+      );
+      return;
+    }
+    if (
+      ballPossessionNow === 'sem' &&
+      (actionFlow.action === 'tackle' || actionFlow.action === 'save') &&
+      (actionFlow.selectedPlayerId == null || String(actionFlow.selectedPlayerId).trim().length === 0)
+    ) {
+      executeActionFlow({ ...actionFlow, step: 'details', details, ...extra }, TEAM_EVENT_FAKE_PLAYER_ID);
       return;
     }
     const pid = actionFlow.selectedPlayerId != null ? String(actionFlow.selectedPlayerId).trim() : '';
@@ -693,7 +711,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride);
           break;
         case 'card':
-          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride);
+          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride, flow.cardTeam ?? 'for');
           break;
         case 'save':
           handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride);
@@ -1362,6 +1380,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     for (const e of events) {
       // Cartões: atualizar yellowCards/redCards em playerStats (não têm PostMatchAction)
       if (e.type === 'card' && e.playerId) {
+        if (e.cardTeam === 'against' || String(e.playerId).trim() === OPPONENT_FAKE_PLAYER_ID) {
+          continue;
+        }
         const playerId = String(e.playerId).trim();
         if (!playerStats[playerId]) playerStats[playerId] = emptyStats();
         const ps = playerStats[playerId];
@@ -1906,6 +1927,27 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setSelectedAction(action);
       return;
     }
+    if (action === 'cardAgainst') {
+      setActionFlow({
+        step: 'details',
+        action: 'card',
+        details: null,
+        cardTeam: 'against',
+      });
+      setSelectedAction(action);
+      return;
+    }
+    if (ballPossessionNow === 'sem' && (action === 'tackle' || action === 'save')) {
+      startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
+      setSelectedAction(action);
+      return;
+    }
+    if (ballPossessionNow === 'sem' && action === 'block') {
+      if (!isPostmatch) setIsRunning(false);
+      handleRegisterBlock(hasSelectedPlayer ? selectedPlayerId : TEAM_EVENT_FAKE_PLAYER_ID);
+      setSelectedAction(action);
+      return;
+    }
     if (!hasSelectedPlayer) {
       alert('Selecione um jogador primeiro.');
       return;
@@ -1916,7 +1958,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   // Registrar desarme
   const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+    const pid =
+      playerIdOverride ??
+      selectedPlayerId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -1928,7 +1973,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `tackle-${Date.now()}`,
       type: 'tackle',
       playerId: pid,
-      playerName: player?.nickname || player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.nickname || player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       result,
@@ -1968,7 +2016,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       )
         ? String(selectedPlayerId).trim()
         : null;
-    const pid = playerIdOverride ?? selectedSidebarGoalkeeperId ?? currentGoalkeeperId;
+    const pid =
+      playerIdOverride ??
+      selectedSidebarGoalkeeperId ??
+      currentGoalkeeperId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -1980,7 +2032,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `save-${Date.now()}`,
       type: 'save',
       playerId: pid,
-      playerName: player?.nickname?.trim() || player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.nickname?.trim() || player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       result: difficulty,
@@ -1998,7 +2053,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   // Registrar bloqueio
   const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+    const pid =
+      playerIdOverride ??
+      selectedPlayerId ??
+      (ballPossessionNow === 'sem' ? TEAM_EVENT_FAKE_PLAYER_ID : null);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -2010,7 +2068,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `block-${Date.now()}`,
       type: 'block',
       playerId: pid,
-      playerName: player?.name || '',
+      playerName:
+        pid === TEAM_EVENT_FAKE_PLAYER_ID
+          ? TEAM_EVENT_FAKE_PLAYER_NAME
+          : (player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       tipo,
@@ -2553,8 +2614,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar cartão
-  const handleRegisterCard = (cardType: 'yellow' | 'secondYellow' | 'red', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid = playerIdOverride ?? selectedPlayerId;
+  const handleRegisterCard = (
+    cardType: 'yellow' | 'secondYellow' | 'red',
+    playerIdOverride?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T',
+    cardTeam: 'for' | 'against' = 'for'
+  ) => {
+    const pid =
+      cardTeam === 'against'
+        ? OPPONENT_FAKE_PLAYER_ID
+        : (playerIdOverride ?? selectedPlayerId);
     if (!pid) return;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
@@ -2566,15 +2636,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: `card-${Date.now()}`,
       type: 'card',
       playerId: pid,
-      playerName: player?.name || '',
+      playerName: cardTeam === 'against' ? OPPONENT_FAKE_PLAYER_NAME : (player?.name || ''),
       time: evtTime,
       period: evtPeriod,
       cardType,
+      cardTeam,
       tipo,
       subtipo,
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
+    if (cardTeam === 'against') {
+      setSelectedAction(null);
+      setSelectedPlayerId(null);
+      return;
+    }
     
     // Adicionar cartão ao histórico do jogador
     setPlayerCards(prev => {
@@ -3852,11 +3928,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </div>
                       )}
                       {actionFlow.action === 'card' && (
-                        <div className="grid grid-cols-3 gap-3">
-                          <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow' }); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Amarelo</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('secondYellow', { cardType: 'secondYellow' }); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">2º Amarelo</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
-                        </div>
+                        actionFlow.cardTeam === 'against' ? (
+                          <div className="grid grid-cols-2 gap-3">
+                            <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow', cardTeam: 'against' }); }} className="px-4 py-3 bg-yellow-500/10 border-2 border-yellow-700 text-yellow-300 font-bold uppercase text-[11px] rounded-lg hover:bg-yellow-500/20 transition-colors">Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red', cardTeam: 'against' }); }} className="px-4 py-3 bg-red-500/10 border-2 border-red-700 text-red-300 font-bold uppercase text-[11px] rounded-lg hover:bg-red-500/20 transition-colors">Vermelho</button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-3">
+                            <button onClick={() => { advanceActionFlowToPlayer('yellow', { cardType: 'yellow' }); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('secondYellow', { cardType: 'secondYellow' }); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">2º Amarelo</button>
+                            <button onClick={() => { advanceActionFlowToPlayer('red', { cardType: 'red' }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Vermelho</button>
+                          </div>
+                        )
                       )}
                       {actionFlow.action === 'save' && (
                         <div className="space-y-3">
@@ -3870,6 +3953,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
                                 if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'simple' }, selectedId);
+                                  return;
+                                }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'simple' }, TEAM_EVENT_FAKE_PLAYER_ID);
                                   return;
                                 }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'simple' } : prev));
@@ -3889,6 +3976,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'hard' }, selectedId);
                                   return;
                                 }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'hard' }, TEAM_EVENT_FAKE_PLAYER_ID);
+                                  return;
+                                }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'hard' } : prev));
                               }}
                               className="px-4 py-3 bg-purple-600/20 border border-purple-600 text-purple-300 font-medium uppercase text-xs rounded-lg hover:bg-purple-600/30 transition-colors"
@@ -3904,6 +3995,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   saveGoalkeeperOptions.players.some((p) => String(p.id).trim() === selectedId);
                                 if (canUseSelectedGoalkeeper && actionFlow?.action === 'save') {
                                   completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'outside' }, selectedId);
+                                  return;
+                                }
+                                if (ballPossessionNow === 'sem' && actionFlow?.action === 'save') {
+                                  completeSaveAfterGoalkeeperPick({ ...actionFlow, step: 'goalkeeper', details: 'outside' }, TEAM_EVENT_FAKE_PLAYER_ID);
                                   return;
                                 }
                                 setActionFlow(prev => (prev && prev.action === 'save' ? { ...prev, step: 'goalkeeper', details: 'outside' } : prev));
@@ -4424,8 +4519,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-blue-500/20 text-blue-500/50 opacity-70'
                                   : selectedAction === 'tackle'
                                   ? 'bg-blue-500/30 border-blue-500 text-blue-400'
                                   : 'bg-zinc-900 border-blue-500/30 text-blue-500/70 hover:bg-blue-500/20 hover:border-blue-500 hover:text-blue-400'
@@ -4439,8 +4532,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-purple-500/20 text-purple-500/50 opacity-70'
                                   : selectedAction === 'save'
                                   ? 'bg-purple-500/30 border-purple-500 text-purple-400'
                                   : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
@@ -4454,8 +4545,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 (!isPostmatch && !isRunning) || isBlockedByPenalty
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                                  : !hasSelectedPlayer
-                                  ? 'bg-zinc-900/70 border-yellow-500/20 text-yellow-500/50 opacity-70'
                                   : selectedAction === 'block'
                                   ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
                                   : 'bg-zinc-900 border-yellow-500/30 text-yellow-500/70 hover:bg-yellow-500/20 hover:border-yellow-500 hover:text-yellow-400'
@@ -4468,8 +4557,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
                     </div>
 
-                    {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO - tamanhos similares */}
-                    <div className="grid grid-cols-4 gap-1 shrink-0 min-h-[56px]">
+                    {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO, CARTÃO ADVERSÁRIO */}
+                    <div className="grid grid-cols-5 gap-1 shrink-0 min-h-[56px]">
                       <button
                         onClick={() => {
                           if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
@@ -4563,6 +4652,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         }`}
                       >
                         CARTÃO
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!isMatchStarted) return;
+                          if (isBlockedByPenalty) return;
+                          handleSelectAction('cardAgainst');
+                        }}
+                        disabled={!isMatchStarted || isBlockedByPenalty}
+                        className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
+                          !isMatchStarted || isBlockedByPenalty
+                            ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                            : selectedAction === 'cardAgainst'
+                            ? 'bg-amber-500/40 border-amber-500 text-white'
+                            : 'bg-zinc-900 border-amber-500/30 text-amber-500/70 hover:bg-amber-500/20 hover:border-amber-500 hover:text-amber-400'
+                        }`}
+                      >
+                        CARTÃO ADVERSÁRIO
                       </button>
                     </div>
                   </div>

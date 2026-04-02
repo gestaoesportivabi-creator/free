@@ -38,6 +38,9 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false }) => {
+  const canAccessAdminPanel = Boolean(
+    currentUser?.isPlatformAdmin || currentUser?.planName === 'ADMINISTRADOR'
+  );
   const isAthlete = currentUser?.role === 'Atleta';
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['gestao', 'performance']));
 
@@ -299,7 +302,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
             </div>
         </div>
         )}
-        {currentUser?.isPlatformAdmin && (
+        {canAccessAdminPanel && (
         <button 
           onClick={() => { setActiveTab('admin'); onNavigate?.(); }}
           title={retracted ? 'Todos os Usuários' : undefined}

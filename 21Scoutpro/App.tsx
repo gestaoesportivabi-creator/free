@@ -841,7 +841,10 @@ export default function App() {
                       photoUrl: d.photoUrl,
                       role: (d.role === 'TECNICO' ? 'Treinador' : d.role) ?? currentUser.role,
                       planName: (d.planName as SubscriptionPlanName | undefined) ?? currentUser.planName,
-                      isPlatformAdmin: d.isPlatformAdmin ?? currentUser.isPlatformAdmin,
+                      isPlatformAdmin:
+                        d.isPlatformAdmin ??
+                        (d.planName === 'ADMINISTRADOR') ??
+                        currentUser.isPlatformAdmin,
                       teamDisplayName: d.teamDisplayName,
                       teamShieldUrl: d.teamShieldUrl,
                   };
@@ -1282,7 +1285,7 @@ export default function App() {
             email: u.email,
             role: u.role === 'TECNICO' ? 'Treinador' : u.role,
             planName: u.planName as SubscriptionPlanName | undefined,
-            isPlatformAdmin: u.isPlatformAdmin ?? false,
+            isPlatformAdmin: u.isPlatformAdmin ?? (u.planName === 'ADMINISTRADOR'),
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
             teamShieldUrl: u.teamShieldUrl,
