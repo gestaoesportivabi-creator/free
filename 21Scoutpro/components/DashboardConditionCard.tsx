@@ -5,6 +5,7 @@ import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { QUALIDADE_SONO_STORAGE_KEY } from './QualidadeSonoTab';
 
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
+const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
 const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
 
@@ -52,20 +53,34 @@ export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
   }
   const [sonoStored, setSonoStored] = useState<StoredSono>({});
   const [pseTreinos, setPseTreinos] = useState<StoredPse>({});
+  const [pseJogos, setPseJogos] = useState<StoredPse>({});
   const [psrTreinos, setPsrTreinos] = useState<StoredPsr>({});
   const [psrJogos, setPsrJogos] = useState<StoredPsr>({});
 
-  useEffect(() => {
+  const reloadFromStorage = () => {
     try {
       const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
       if (s) setSonoStored(JSON.parse(s));
-      const p = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (p) setPseTreinos(JSON.parse(p));
+      const pt = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+      if (pt) setPseTreinos(JSON.parse(pt));
+      const pj = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
+      if (pj) setPseJogos(JSON.parse(pj));
       const pr = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
       if (pr) setPsrTreinos(JSON.parse(pr));
-      const pj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-      if (pj) setPsrJogos(JSON.parse(pj));
+      const prj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
+      if (prj) setPsrJogos(JSON.parse(prj));
     } catch (_) {}
+  };
+
+  useEffect(() => {
+    reloadFromStorage();
+    const handleRefresh = () => reloadFromStorage();
+    window.addEventListener('wellness-updated', handleRefresh);
+    window.addEventListener('storage', handleRefresh);
+    return () => {
+      window.removeEventListener('wellness-updated', handleRefresh);
+      window.removeEventListener('storage', handleRefresh);
+    };
   }, []);
 
   const vigentSonoKeys = useMemo(() => {
@@ -135,20 +150,37 @@ export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
       const avg = teamAvg(values);
       if (avg != null) pseAverages.push(avg);
     });
+    vigentSonoKeys.forEach((eventKey) => {
+      if (!eventKey.startsWith('jogo_')) return;
+      const matchDate = eventKey.replace('jogo_', '');
+      const matchIds = Object.keys(pseJogos);
+      for (const id of matchIds) {
+        const data = pseJogos[id];
+        if (!data) continue;
+        const values = Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 0 && v <= 10);
+        const avg = teamAvg(values);
+        if (avg != null) { pseAverages.push(avg); break; }
+      }
+    });
     const avgPse = pseAverages.length > 0 ? teamAvg(pseAverages) : null;
 
-    const psrValues: number[] = [];
-    Object.values(psrTreinos).forEach((data) => {
-      Object.values(data).forEach((v) => {
-        if (typeof v === 'number' && v >= 0 && v <= 10) psrValues.push(v);
+    const psrAverages: number[] = [];
+    vigentPseKeys.forEach((sessionKey) => {
+      const data = psrTreinos[sessionKey];
+      if (!data) return;
+      const values = Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 0 && v <= 10);
+      const avg = teamAvg(values);
+      if (avg != null) psrAverages.push(avg);
+    });
+    vigentSonoKeys.forEach((eventKey) => {
+      if (!eventKey.startsWith('jogo_')) return;
+      Object.values(psrJogos).forEach((data) => {
+        const values = Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 0 && v <= 10);
+        const avg = teamAvg(values);
+        if (avg != null) psrAverages.push(avg);
       });
     });
-    Object.values(psrJogos).forEach((data) => {
-      Object.values(data).forEach((v) => {
-        if (typeof v === 'number' && v >= 0 && v <= 10) psrValues.push(v);
-      });
-    });
-    const avgPsr = psrValues.length > 0 ? teamAvg(psrValues) : null;
+    const avgPsr = psrAverages.length > 0 ? teamAvg(psrAverages) : null;
 
     let status = 'Sem dados recentes';
     let alertKind: 'success' | 'warning' | 'info' | 'neutral' = 'neutral';
@@ -178,7 +210,7 @@ export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
     }
 
     return { avgPse, avgPsr, avgSono, status, alertKind };
-  }, [vigentSonoKeys, vigentPseKeys, sonoStored, pseTreinos, psrTreinos, psrJogos]);
+  }, [vigentSonoKeys, vigentPseKeys, sonoStored, pseTreinos, pseJogos, psrTreinos, psrJogos]);
 
   const alertBg = alertKind === 'success' ? 'bg-emerald-500/10 border-emerald-500/30' : alertKind === 'warning' ? 'bg-amber-500/10 border-amber-500/30' : alertKind === 'info' ? 'bg-sky-500/10 border-sky-500/30' : 'bg-white/[0.04] border-white/[0.08]';
 

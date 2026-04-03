@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Activity, ChevronDown, ChevronRight, Calendar, Trophy } from 'lucide-react';
+import { Activity, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { wellnessApi } from '../services/api';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
@@ -44,17 +45,64 @@ export const PseTab: React.FC<PseTabProps> = ({
   const [pseJogos, setPseJogos] = useState<StoredPseJogos>({});
   const [pseTreinos, setPseTreinos] = useState<StoredPseTreinos>({});
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [playerSearch, setPlayerSearch] = useState('');
 
   useEffect(() => {
-    try {
-      const j = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (j) setPseJogos(JSON.parse(j));
-      const t = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (t) setPseTreinos(JSON.parse(t));
-    } catch (_) {}
+    let mounted = true;
+    const load = async () => {
+      try {
+        const rawJ = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
+        if (rawJ && mounted) setPseJogos(JSON.parse(rawJ));
+        const rawT = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+        if (rawT && mounted) setPseTreinos(JSON.parse(rawT));
+
+        const [apiJogos, apiTreinos] = await Promise.all([
+          wellnessApi.getAll('pse-jogo'),
+          wellnessApi.getAll('pse-treino'),
+        ]);
+        if (!mounted) return;
+
+        if (Array.isArray(apiJogos) && apiJogos.length > 0) {
+          const jogosData: StoredPseJogos = {};
+          apiJogos.forEach((item: any) => {
+            if (!jogosData[item.jogoId]) jogosData[item.jogoId] = {};
+            jogosData[item.jogoId][item.jogadorId] = item.valor;
+          });
+          setPseJogos(jogosData);
+          try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(jogosData)); } catch (_) {}
+        }
+
+        if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
+          const treinosApi: StoredPseTreinos = {};
+          apiTreinos.forEach((item: any) => {
+            const yyyyMmDd = new Date(item.data).toISOString().split('T')[0];
+            if (!treinosApi[yyyyMmDd]) treinosApi[yyyyMmDd] = {};
+            treinosApi[yyyyMmDd][item.jogadorId] = item.valor;
+          });
+          const localRaw = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+          if (localRaw) {
+            const local = JSON.parse(localRaw) as StoredPseTreinos;
+            for (const key of Object.keys(local)) {
+              const dt = key.split('_')[0];
+              if (treinosApi[dt]) local[key] = { ...local[key], ...treinosApi[dt] };
+            }
+            setPseTreinos(local);
+            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(local)); } catch (_) {}
+          } else {
+            setPseTreinos(treinosApi);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar PSE:', err);
+      }
+    };
+    load();
+    return () => { mounted = false; };
   }, []);
 
-  const saveJogo = (matchId: string, playerId: string, value: number | '') => {
+  const saveJogo = async (matchId: string, playerId: string, value: number | '') => {
     setPseJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
@@ -62,9 +110,15 @@ export const PseTab: React.FC<PseTabProps> = ({
       try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+    window.dispatchEvent(new Event('wellness-updated'));
+    if (value !== '') {
+      try {
+        await wellnessApi.saveBulk('pse-jogo', [{ jogoId: matchId, jogadorId: playerId, value }]);
+      } catch (err) { console.error('Erro ao salvar PSE Jogo:', err); }
+    }
   };
 
-  const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
+  const saveTreino = async (sessionKey: string, playerId: string, value: number | '') => {
     setPseTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
@@ -72,6 +126,18 @@ export const PseTab: React.FC<PseTabProps> = ({
       try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+    window.dispatchEvent(new Event('wellness-updated'));
+    if (value !== '') {
+      try {
+        const datePart = sessionKey.split('_')[0];
+        await wellnessApi.saveBulk('pse-treino', [{
+          equipeId: schedules[0]?.equipeId || 'default-equipe',
+          data: datePart,
+          jogadorId: playerId,
+          value,
+        }]);
+      } catch (err) { console.error('Erro ao salvar PSE Treino:', err); }
+    }
   };
 
   const events = useMemo((): PseEvent[] => {
@@ -137,7 +203,20 @@ export const PseTab: React.FC<PseTabProps> = ({
     else saveTreino(ev.eventKey, playerId, value);
   };
 
-  const activePlayers = useMemo(() => (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred), [players]);
+  const activePlayers = useMemo(() => {
+    const list = (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred);
+    if (!playerSearch.trim()) return list;
+    const q = playerSearch.toLowerCase();
+    return list.filter(p => (p.nickname || p.name).toLowerCase().includes(q));
+  }, [players, playerSearch]);
+
+  const filteredEvents = useMemo(() => {
+    return events.filter(ev => {
+      if (dateFrom && ev.date < dateFrom) return false;
+      if (dateTo && ev.date > dateTo) return false;
+      return true;
+    });
+  }, [events, dateFrom, dateTo]);
 
   if (events.length === 0) {
     return (
@@ -160,16 +239,38 @@ export const PseTab: React.FC<PseTabProps> = ({
     <div className="space-y-6 animate-fade-in pb-12">
       <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg">
         <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide mb-2">
-          <Activity className="text-[#10b981]" /> PSE (Treinos e Jogos)
+          <Activity className="text-[#00f0ff]" /> PSE (Treinos e Jogos)
         </h2>
-        <p className="text-zinc-500 text-xs font-bold mb-6">
-          Preencha a PSE (0-10) por atleta em cada treino ou jogo. Treinos vêm da programação ativa; jogos da tabela de campeonato. A média da equipe aparece no Monitoramento Fisiológico.
+        <p className="text-zinc-500 text-xs font-bold mb-4">
+          Preencha a PSE (0-10) por atleta em cada treino ou jogo. A média da equipe aparece no Monitoramento Fisiológico.
         </p>
 
+        <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-zinc-500" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" placeholder="De" />
+            <span className="text-zinc-600 text-xs">até</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" placeholder="Até" />
+          </div>
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input type="text" value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} placeholder="Buscar atleta..." className="bg-zinc-800 border border-zinc-700 rounded pl-6 pr-2 py-1 text-white text-xs w-32" />
+          </div>
+          <button onClick={() => setExpandedKey(expandedKey ? null : filteredEvents[0]?.eventKey || null)} className="ml-auto flex items-center gap-1 bg-zinc-800 text-zinc-400 px-2 py-1 rounded text-[10px] font-bold uppercase hover:bg-zinc-700">
+            <ChevronsUpDown size={12} /> Expandir
+          </button>
+        </div>
+
         <div className="space-y-2">
-          {events.map(ev => {
+          {filteredEvents.map(ev => {
             const isExpanded = expandedKey === ev.eventKey;
             const avg = teamAverage(ev);
+            const totalPlayers = (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred).length;
+            const filledCount = (() => {
+              const d = ev.type === 'jogo' ? pseJogos[ev.eventKey] : pseTreinos[ev.eventKey];
+              if (!d) return 0;
+              return Object.values(d).filter(v => typeof v === 'number' && v >= 0 && v <= 10).length;
+            })();
             return (
               <div
                 key={ev.eventKey}
@@ -204,6 +305,7 @@ export const PseTab: React.FC<PseTabProps> = ({
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${ev.type === 'treino' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                     {ev.type === 'treino' ? 'Treino' : 'Jogo'}
                   </span>
+                  <span className="text-[10px] text-zinc-600 font-bold flex-shrink-0">{filledCount}/{totalPlayers}</span>
                   <div className="flex-shrink-0">
                     {avg != null ? (
                       <span className={`font-black text-lg ${ev.type === 'treino' ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -219,7 +321,11 @@ export const PseTab: React.FC<PseTabProps> = ({
                   <div className="p-4 pt-0 border-t border-zinc-800">
                     <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3">PSE por atleta (0-10)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {activePlayers.map(player => (
+                      {activePlayers.map(player => {
+                        const val = getStoredValue(ev, player.id);
+                        const valNum = typeof val === 'number' ? val : -1;
+                        const inputBg = valNum >= 0 && valNum <= 3 ? 'bg-emerald-900/50 border-emerald-700' : valNum > 3 && valNum <= 6 ? 'bg-amber-900/40 border-amber-700' : valNum > 6 ? 'bg-red-900/40 border-red-700' : 'bg-zinc-800 border-zinc-600';
+                        return (
                         <div
                           key={player.id}
                           className="flex items-center gap-2 bg-black/50 rounded-xl px-3 py-2 border border-zinc-800"
@@ -232,7 +338,7 @@ export const PseTab: React.FC<PseTabProps> = ({
                             min={0}
                             max={10}
                             step={0.5}
-                            value={getStoredValue(ev, player.id)}
+                            value={val}
                             onChange={e => {
                               const raw = e.target.value;
                               if (raw === '') saveValue(ev, player.id, '');
@@ -242,11 +348,12 @@ export const PseTab: React.FC<PseTabProps> = ({
                               }
                             }}
                             onClick={e => e.stopPropagation()}
-                            className="w-14 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-white text-xs text-center"
+                            className={`w-14 ${inputBg} rounded px-2 py-1 text-white text-xs text-center`}
                             placeholder="PSE"
                           />
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

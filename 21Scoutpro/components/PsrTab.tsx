@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
@@ -45,6 +45,9 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   const [psrJogos, setPsrJogos] = useState<StoredPsrJogos>({});
   const [psrTreinos, setPsrTreinos] = useState<StoredPsrTreinos>({});
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [playerSearch, setPlayerSearch] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -111,6 +114,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
       try { localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+    window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
       try {
@@ -133,6 +137,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
       try { localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
+    window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
       try {
@@ -212,7 +217,20 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     else saveTreino(ev.eventKey, playerId, value);
   };
 
-  const activePlayers = useMemo(() => (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred), [players]);
+  const activePlayers = useMemo(() => {
+    const list = (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred);
+    if (!playerSearch.trim()) return list;
+    const q = playerSearch.toLowerCase();
+    return list.filter(p => (p.nickname || p.name).toLowerCase().includes(q));
+  }, [players, playerSearch]);
+
+  const filteredEvents = useMemo(() => {
+    return events.filter(ev => {
+      if (dateFrom && ev.date < dateFrom) return false;
+      if (dateTo && ev.date > dateTo) return false;
+      return true;
+    });
+  }, [events, dateFrom, dateTo]);
 
   if (events.length === 0) {
     return (
@@ -235,16 +253,35 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     <div className="space-y-6 animate-fade-in pb-12">
       <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg">
         <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide mb-2">
-          <RefreshCw className="text-sky-500" /> PSR (Treinos e Jogos)
+          <RefreshCw className="text-[#00f0ff]" /> PSR (Treinos e Jogos)
         </h2>
-        <p className="text-zinc-500 text-xs font-bold mb-6">
-          Preencha a PSR (Percepção Subjetiva de Recuperação) de 0 a 10 por atleta em cada treino ou jogo. Quanto mais perto de 10, melhor recuperado está o atleta. A média da equipe aparece no Monitoramento Fisiológico.
+        <p className="text-zinc-500 text-xs font-bold mb-4">
+          PSR (0-10) por atleta. Quanto mais perto de 10, melhor a recuperação.
         </p>
 
+        <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-zinc-500" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" />
+            <span className="text-zinc-600 text-xs">até</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" />
+          </div>
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input type="text" value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} placeholder="Buscar atleta..." className="bg-zinc-800 border border-zinc-700 rounded pl-6 pr-2 py-1 text-white text-xs w-32" />
+          </div>
+        </div>
+
         <div className="space-y-2">
-          {events.map(ev => {
+          {filteredEvents.map(ev => {
             const isExpanded = expandedKey === ev.eventKey;
             const avg = teamAverage(ev);
+            const totalPlayers = (Array.isArray(players) ? players : []).filter(p => p && !p.isTransferred).length;
+            const filledCount = (() => {
+              const d = ev.type === 'jogo' ? psrJogos[ev.eventKey] : psrTreinos[ev.eventKey];
+              if (!d) return 0;
+              return Object.values(d).filter(v => typeof v === 'number' && v >= 0 && v <= 10).length;
+            })();
             return (
               <div
                 key={ev.eventKey}
@@ -279,6 +316,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${ev.type === 'treino' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                     {ev.type === 'treino' ? 'Treino' : 'Jogo'}
                   </span>
+                  <span className="text-[10px] text-zinc-600 font-bold flex-shrink-0">{filledCount}/{totalPlayers}</span>
                   <div className="flex-shrink-0">
                     {avg != null ? (
                       <span className={`font-black text-lg ${ev.type === 'treino' ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -294,7 +332,11 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                   <div className="p-4 pt-0 border-t border-zinc-800">
                     <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3">PSR por atleta (0-10, mais perto de 10 = melhor recuperado)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {activePlayers.map(player => (
+                      {activePlayers.map(player => {
+                        const val = getStoredValue(ev, player.id);
+                        const valNum = typeof val === 'number' ? val : -1;
+                        const inputBg = valNum >= 7 ? 'bg-emerald-900/50 border-emerald-700' : valNum >= 4 ? 'bg-amber-900/40 border-amber-700' : valNum >= 0 ? 'bg-red-900/40 border-red-700' : 'bg-zinc-800 border-zinc-600';
+                        return (
                         <div
                           key={player.id}
                           className="flex items-center gap-2 bg-black/50 rounded-xl px-3 py-2 border border-zinc-800"
@@ -307,7 +349,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                             min={0}
                             max={10}
                             step={0.5}
-                            value={getStoredValue(ev, player.id)}
+                            value={val}
                             onChange={e => {
                               const raw = e.target.value;
                               if (raw === '') saveValue(ev, player.id, '');
@@ -317,11 +359,12 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                               }
                             }}
                             onClick={e => e.stopPropagation()}
-                            className="w-14 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-white text-xs text-center"
+                            className={`w-14 ${inputBg} rounded px-2 py-1 text-white text-xs text-center`}
                             placeholder="PSR"
                           />
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

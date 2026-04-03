@@ -47,14 +47,23 @@ export const DashboardInterpretiveAlerts: React.FC<DashboardInterpretiveAlertsPr
   const [pseTreinos, setPseTreinos] = useState<StoredPse>({});
 
   useEffect(() => {
-    try {
-      const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-      if (s) setSonoStored(JSON.parse(s));
-      const j = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (j) setPseJogos(JSON.parse(j));
-      const t = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (t) setPseTreinos(JSON.parse(t));
-    } catch (_) {}
+    const load = () => {
+      try {
+        const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
+        if (s) setSonoStored(JSON.parse(s));
+        const j = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
+        if (j) setPseJogos(JSON.parse(j));
+        const t = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+        if (t) setPseTreinos(JSON.parse(t));
+      } catch (_) {}
+    };
+    load();
+    window.addEventListener('wellness-updated', load);
+    window.addEventListener('storage', load);
+    return () => {
+      window.removeEventListener('wellness-updated', load);
+      window.removeEventListener('storage', load);
+    };
   }, []);
 
   const vigentSonoKeys = useMemo(() => {
@@ -195,6 +204,70 @@ export const DashboardInterpretiveAlerts: React.FC<DashboardInterpretiveAlertsPr
         phrase: 'Sono baixo com PSE alto: priorizar recuperação e evitar sobrecarga.',
         risk: 'red',
         icon: 'general',
+      });
+    }
+
+    // P6: ACWR alerts per athlete
+    const today = new Date();
+    const d7 = new Date(today); d7.setDate(d7.getDate() - 7);
+    const d28 = new Date(today); d28.setDate(d28.getDate() - 28);
+
+    const allPseDates: { date: string; data: Record<string, number> }[] = [];
+    Object.entries(pseTreinos).forEach(([key, data]) => {
+      const dt = key.split('_')[0];
+      if (dt) allPseDates.push({ date: dt, data });
+    });
+    Object.entries(pseJogos).forEach(([, data]) => {
+      allPseDates.push({ date: today.toISOString().split('T')[0], data });
+    });
+
+    const acwrRiskPlayers: string[] = [];
+    players.filter(p => !p.isTransferred).forEach(p => {
+      let acute = 0, ac = 0, chronic = 0, cc = 0;
+      allPseDates.forEach(({ date, data }) => {
+        const d = new Date(date);
+        const v = data[p.id];
+        if (typeof v !== 'number') return;
+        if (d >= d7) { acute += v; ac++; }
+        if (d >= d28) { chronic += v; cc++; }
+      });
+      const acuteAvg = ac > 0 ? acute / ac : 0;
+      const chronicAvg = cc > 0 ? chronic / cc : 0;
+      if (chronicAvg > 0) {
+        const acwr = acuteAvg / chronicAvg;
+        if (acwr > 1.5) acwrRiskPlayers.push(p.nickname || p.name);
+      }
+    });
+
+    if (acwrRiskPlayers.length > 0) {
+      list.push({
+        phrase: `ACWR elevado (>1.5) em: ${acwrRiskPlayers.slice(0, 3).join(', ')}${acwrRiskPlayers.length > 3 ? ` +${acwrRiskPlayers.length - 3}` : ''}. Risco de lesão aumentado.`,
+        risk: 'red',
+        icon: 'injury',
+      });
+    }
+
+    // Monotonia alert: if PSE std deviation < 0.5 over 5+ sessions
+    if (pseAverages.length >= 5) {
+      const mean = pseAverages.reduce((a, b) => a + b, 0) / pseAverages.length;
+      const variance = pseAverages.reduce((acc, v) => acc + Math.pow((v || 0) - mean, 2), 0) / pseAverages.length;
+      const stdDev = Math.sqrt(variance);
+      if (stdDev < 0.5) {
+        list.push({
+          phrase: `Monotonia de treino detectada (variação PSE < 0.5). Diversificar intensidades.`,
+          risk: 'yellow',
+          icon: 'pse',
+        });
+      }
+    }
+
+    // Chronic sleep alert: last 3 sono averages < 3
+    const lastSonoAvgs = sonoAverages.slice(-3);
+    if (lastSonoAvgs.length >= 3 && lastSonoAvgs.every(v => v < 3)) {
+      list.push({
+        phrase: `Sono crônico insuficiente (média <3 nas últimas 3 sessões). Intervenção necessária.`,
+        risk: 'red',
+        icon: 'sleep',
       });
     }
 

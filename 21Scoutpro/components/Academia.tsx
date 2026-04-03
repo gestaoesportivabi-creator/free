@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Player, WeeklySchedule, ScheduleDay, MaxLoad, LoadType } from '../types';
 import { EXERCISES } from '../constants';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
-import { Dumbbell, User, ChevronDown, ChevronRight, CheckCircle } from 'lucide-react';
+import { Dumbbell, User, ChevronDown, ChevronRight, CheckCircle, Search, Save } from 'lucide-react';
+
+const LOAD_LOG_KEY = 'scout21_load_log';
+type LoadLogEntry = { playerId: string; exerciseId: string; date: string; actual: number; reps?: number };
+type LoadLog = LoadLogEntry[];
 
 interface AcademiaProps {
     schedules?: WeeklySchedule[];
@@ -11,7 +15,27 @@ interface AcademiaProps {
 
 export const Academia: React.FC<AcademiaProps> = ({ schedules = [], players = [] }) => {
     const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
-    const [expandedScheduleId, setExpandedScheduleId] = useState<string | null>(null);
+    const [searchFilter, setSearchFilter] = useState('');
+    const [loadLog, setLoadLog] = useState<LoadLog>([]);
+
+    useEffect(() => {
+        try { const raw = localStorage.getItem(LOAD_LOG_KEY); if (raw) setLoadLog(JSON.parse(raw)); } catch (_) {}
+    }, []);
+
+    const saveLoadEntry = (entry: LoadLogEntry) => {
+        setLoadLog(prev => {
+            const next = [...prev.filter(e => !(e.playerId === entry.playerId && e.exerciseId === entry.exerciseId && e.date === entry.date)), entry];
+            try { localStorage.setItem(LOAD_LOG_KEY, JSON.stringify(next)); } catch (_) {}
+            return next;
+        });
+    };
+
+    const activePlayers = useMemo(() => {
+        const nonTransferred = players.filter(p => !p.isTransferred);
+        if (!searchFilter.trim()) return nonTransferred;
+        const q = searchFilter.toLowerCase();
+        return nonTransferred.filter(p => (p.nickname || p.name).toLowerCase().includes(q));
+    }, [players, searchFilter]);
 
     // Eventos de Academia das programações ativas
     const academiaEvents = useMemo(() => {
@@ -145,11 +169,17 @@ export const Academia: React.FC<AcademiaProps> = ({ schedules = [], players = []
 
                 {/* Seletor de Atletas */}
                 <div className="mb-6">
-                    <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <User size={16} /> Selecione os atletas
-                    </h3>
+                    <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                            <User size={16} /> Selecione os atletas
+                        </h3>
+                        <div className="relative ml-auto">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                            <input type="text" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} placeholder="Buscar atleta..." className="bg-zinc-900 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-white text-xs outline-none w-40" />
+                        </div>
+                    </div>
                     <div className="flex flex-wrap gap-2">
-                        {players.map(p => (
+                        {activePlayers.map(p => (
                             <button
                                 key={p.id}
                                 onClick={() => togglePlayer(p.id)}
@@ -181,10 +211,14 @@ export const Academia: React.FC<AcademiaProps> = ({ schedules = [], players = []
                                         <th className="p-4 border-b border-zinc-800 text-center">% Carga</th>
                                         <th className="p-4 border-b border-zinc-800">Carga Máx. Cadastrada</th>
                                         <th className="p-4 border-b border-zinc-800 font-bold text-[#00f0ff]">Peso / Reps a fazer</th>
+                                        <th className="p-4 border-b border-zinc-800 text-center text-emerald-400">Realizado</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {athleteLoads.map((row, idx) => (
+                                    {athleteLoads.map((row, idx) => {
+                                        const today = new Date().toISOString().split('T')[0];
+                                        const logEntry = loadLog.find(e => e.playerId === row.playerId && e.exerciseId === row.exerciseId && e.date === today);
+                                        return (
                                         <tr key={`${row.playerId}-${row.exerciseId}-${idx}`} className="border-b border-zinc-800/50 hover:bg-zinc-900/50">
                                             <td className="p-4 font-bold text-white">{row.playerName}</td>
                                             <td className="p-4 text-zinc-300">{row.exerciseName}</td>
@@ -201,8 +235,21 @@ export const Academia: React.FC<AcademiaProps> = ({ schedules = [], players = []
                                                     : <span className="text-zinc-600 italic">—</span>
                                                 }
                                             </td>
+                                            <td className="p-4 text-center">
+                                                <input
+                                                    type="number" min="0" step="0.5"
+                                                    defaultValue={logEntry?.actual ?? ''}
+                                                    onBlur={e => {
+                                                        const v = parseFloat(e.target.value);
+                                                        if (!isNaN(v) && v > 0) saveLoadEntry({ playerId: row.playerId, exerciseId: row.exerciseId, date: today, actual: v });
+                                                    }}
+                                                    className="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs text-center"
+                                                    placeholder="—"
+                                                />
+                                            </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

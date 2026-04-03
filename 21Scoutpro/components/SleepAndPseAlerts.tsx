@@ -35,12 +35,21 @@ export const SleepAndPseAlerts: React.FC<SleepAndPseAlertsProps> = ({
   const [pseTreinosStored, setPseTreinosStored] = useState<StoredPseTreinos>({});
 
   useEffect(() => {
-    try {
-      const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-      if (s) setSonoStored(JSON.parse(s));
-      const p = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (p) setPseTreinosStored(JSON.parse(p));
-    } catch (_) {}
+    const load = () => {
+      try {
+        const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
+        if (s) setSonoStored(JSON.parse(s));
+        const p = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
+        if (p) setPseTreinosStored(JSON.parse(p));
+      } catch (_) {}
+    };
+    load();
+    window.addEventListener('wellness-updated', load);
+    window.addEventListener('storage', load);
+    return () => {
+      window.removeEventListener('wellness-updated', load);
+      window.removeEventListener('storage', load);
+    };
   }, []);
 
   const vigentSonoKeys = useMemo(() => {

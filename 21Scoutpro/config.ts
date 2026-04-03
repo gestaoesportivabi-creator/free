@@ -46,6 +46,13 @@ export function isEssentialPlanUser(user: User | null): boolean {
   return IS_FREE_PLAN;
 }
 
+/** Telas de Fisiologia e cadeados do menu: apenas Performance ou admin da plataforma */
+export function isPerformanceTierUser(user: User | null): boolean {
+  if (!user) return false;
+  if (user.isPlatformAdmin || user.planName === 'ADMINISTRADOR') return true;
+  return user.planName === 'PERFORMANCE';
+}
+
 // Mapeamento de recursos para rotas da API
 // Mantido para compatibilidade com services/api.ts
 export const API_RESOURCES = {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock, ShieldCheck, Zap } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -35,9 +35,11 @@ interface SidebarProps {
   onToggleRetract?: () => void;
   /** Plano free: Scout Individual mostra cadeado */
   isFreePlan?: boolean;
+  /** Performance / admin: Fisiologia sem ícone de cadeado no menu */
+  fisiologiaUnlocked?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false, fisiologiaUnlocked = false }) => {
   const canAccessAdminPanel = Boolean(
     currentUser?.isPlatformAdmin || currentUser?.planName === 'ADMINISTRADOR'
   );
@@ -65,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         { id: 'general', label: 'Scout Coletivo', icon: Users, restricted: isAthlete },
         { id: 'individual', label: 'Scout Individual', icon: UserIcon, restricted: false },
         { id: 'ranking', label: 'Ranking', icon: Trophy, restricted: false },
-        { id: 'quarteto', label: 'Quarteto Alta Performance', icon: Lock, restricted: false },
+        { id: 'quarteto', label: 'Quarteto Alta Performance', icon: Zap, restricted: false },
       ]
     },
     {
@@ -74,9 +76,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       icon: HeartPulse,
       items: [
         { id: 'physical', label: 'Monitoramento Fisiológico', icon: HeartPulse, restricted: false },
+        { id: 'athletes-physio', label: 'Atletas', icon: Users, restricted: false },
         { id: 'pse', label: 'PSE (Treinos e Jogos)', icon: Activity, restricted: false },
         { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: false },
         { id: 'qualidade-sono', label: 'Qualidade de sono', icon: Moon, restricted: false },
+        { id: 'wellness', label: 'Bem-Estar Diário', icon: HeartPulse, restricted: false },
         { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: false },
         { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: false },
       ]
@@ -197,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
               category.items.map((item) => {
                 const ItemIcon = item.icon || category.icon;
                 const isActive = isItemActive(item.id);
-                const showLock = category.id === 'fisiologia' || (item.id === 'individual' && isFreePlan);
+                const showLock = (category.id === 'fisiologia' && !fisiologiaUnlocked) || (item.id === 'individual' && isFreePlan);
                 return (
                   <button
                     key={item.id}
@@ -251,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                       {category.items.map((item) => {
                         const ItemIcon = item.icon || CategoryIcon;
                         const isActive = isItemActive(item.id);
-                        const showLock = category.id === 'fisiologia' || (item.id === 'individual' && isFreePlan);
+                        const showLock = (category.id === 'fisiologia' && !fisiologiaUnlocked) || (item.id === 'individual' && isFreePlan);
                         return (
                           <button
                             key={item.id}

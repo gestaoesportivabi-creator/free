@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Moon, ChevronDown, ChevronRight, Calendar, Trophy } from 'lucide-react';
+import { Moon, ChevronDown, ChevronRight, Calendar, Trophy, Search } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
@@ -40,6 +40,9 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
 }) => {
   const [stored, setStored] = useState<StoredQualidadeSono>({});
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [playerSearch, setPlayerSearch] = useState('');
 
   const safeSchedules = Array.isArray(schedules) ? schedules : [];
   const safeChampionshipMatches = Array.isArray(championshipMatches) ? championshipMatches : [];
@@ -95,6 +98,7 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
       } catch (_) {}
       return next;
     });
+    window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
       try {
@@ -171,7 +175,20 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
     return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
   };
 
-  const activePlayers = useMemo(() => safePlayers.filter(p => p && !p.isTransferred), [safePlayers]);
+  const activePlayers = useMemo(() => {
+    const list = safePlayers.filter(p => p && !p.isTransferred);
+    if (!playerSearch.trim()) return list;
+    const q = playerSearch.toLowerCase();
+    return list.filter(p => (p.nickname || p.name).toLowerCase().includes(q));
+  }, [safePlayers, playerSearch]);
+
+  const filteredEvents = useMemo(() => {
+    return events.filter(ev => {
+      if (dateFrom && ev.date < dateFrom) return false;
+      if (dateTo && ev.date > dateTo) return false;
+      return true;
+    });
+  }, [events, dateFrom, dateTo]);
 
   if (events.length === 0) {
     return (
@@ -196,17 +213,35 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
     <div className="space-y-6 animate-fade-in pb-12">
       <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg">
         <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide mb-2">
-          <Moon className="text-indigo-400" /> Qualidade de sono
+          <Moon className="text-[#00f0ff]" /> Qualidade de sono
         </h2>
-        <p className="text-zinc-500 text-xs font-bold mb-6">
-          Avalie a noite de sono anterior ao treino (manhã) ou ao jogo. Escala 1 a 5 emojis — quanto maior, melhor a noite.
-          A média da equipe aparece no Monitoramento Fisiológico.
+        <p className="text-zinc-500 text-xs font-bold mb-4">
+          Escala 1–5 emojis — quanto maior, melhor a noite.
         </p>
 
+        <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-zinc-500" />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" />
+            <span className="text-zinc-600 text-xs">até</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs" />
+          </div>
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500" />
+            <input type="text" value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} placeholder="Buscar atleta..." className="bg-zinc-800 border border-zinc-700 rounded pl-6 pr-2 py-1 text-white text-xs w-32" />
+          </div>
+        </div>
+
         <div className="space-y-2">
-          {events.map(ev => {
+          {filteredEvents.map(ev => {
             const isExpanded = expandedKey === ev.eventKey;
             const avg = teamAverage(ev.eventKey);
+            const totalPlayers = safePlayers.filter(p => p && !p.isTransferred).length;
+            const filledCount = (() => {
+              const d = stored[ev.eventKey];
+              if (!d) return 0;
+              return Object.values(d).filter(v => typeof v === 'number' && v >= 1 && v <= 5).length;
+            })();
             return (
               <div
                 key={ev.eventKey}
@@ -233,6 +268,7 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
                       <p className="text-zinc-500 text-xs truncate">{ev.sublabel}</p>
                     )}
                   </div>
+                  <span className="text-[10px] text-zinc-600 font-bold flex-shrink-0">{filledCount}/{totalPlayers}</span>
                   <div className="flex-shrink-0">
                     {avg != null ? (
                       <span

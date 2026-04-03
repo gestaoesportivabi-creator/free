@@ -16,6 +16,8 @@ import { Academia } from './components/Academia';
 import { PseTab } from './components/PseTab';
 import { PsrTab } from './components/PsrTab';
 import { QualidadeSonoTab } from './components/QualidadeSonoTab';
+import { WellnessTab } from './components/WellnessTab';
+import { AthletesTab } from './components/AthletesTab';
 import { LoadingMessage } from './components/LoadingMessage';
 import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipTable';
 import { SuspensionsAlert } from './components/SuspensionsAlert';
@@ -38,7 +40,7 @@ import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
-import { isEssentialPlanUser } from './config';
+import { isEssentialPlanUser, isPerformanceTierUser } from './config';
 
 const SLIDES = [
     {
@@ -93,9 +95,11 @@ const TAB_LABELS: Record<string, string> = {
   individual: 'Scout Individual',
   ranking: 'Ranking',
   physical: 'Monitoramento Fisiológico',
+  'athletes-physio': 'Atletas',
   pse: 'PSE',
   psr: 'PSR',
   'qualidade-sono': 'Qualidade de sono',
+  wellness: 'Bem-Estar Diário',
   assessment: 'Avaliação Física',
   academia: 'Musculação',
   settings: 'Configurações',
@@ -112,13 +116,15 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   general: ['matches', 'players', 'championshipMatches'],
   individual: ['matches', 'players', 'timeControls'],
   ranking: [],
-  physical: [],
-  assessment: [],
+  physical: ['players', 'matches', 'schedules', 'championshipMatches'],
+  'athletes-physio': ['players', 'assessments'],
+  assessment: ['players', 'assessments'],
   video: ['matches', 'players'],
-  pse: [],
-  psr: [],
-  'qualidade-sono': [],
-  academia: [],
+  pse: ['schedules', 'championshipMatches', 'players'],
+  psr: ['schedules', 'championshipMatches', 'players'],
+  'qualidade-sono': ['schedules', 'championshipMatches', 'players'],
+  wellness: ['players'],
+  academia: ['schedules', 'players'],
   'management-report': ['players', 'matches', 'assessments', 'timeControls'],
   admin: [],
   settings: [],
@@ -146,7 +152,9 @@ export default function App() {
 
   /** Cadeados / “Em breve” só para plano Essencial (ou fallback VITE_PLAN sem planName) */
   const essentialRestricted = useMemo(() => isEssentialPlanUser(currentUser), [currentUser]);
-  
+  /** Fisiologia: telas reais só Performance / admin */
+  const performanceTier = useMemo(() => isPerformanceTierUser(currentUser), [currentUser]);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
   const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
@@ -1101,6 +1109,15 @@ export default function App() {
       }
   };
 
+  const handleDeleteAssessment = async (id: string) => {
+    try {
+      const ok = await assessmentsApi.delete(id);
+      if (ok) setAssessments(prev => prev.filter(a => a.id !== id));
+    } catch (error) {
+      console.error('Erro ao excluir avaliação:', error);
+    }
+  };
+
   const handleAddTeam = async (newTeam: Omit<Team, 'id' | 'createdAt'>) => {
     try {
       const saved = await teamsApi.create(newTeam);
@@ -1458,13 +1475,31 @@ export default function App() {
       case 'physical':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <PhysicalScout
+                matches={matches}
+                players={players}
+                schedules={schedules}
+                championshipMatches={championshipMatches}
+              />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
-      case 'assessment': 
+      case 'assessment':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <PhysicalAssessmentTab
+                players={players}
+                assessments={assessments}
+                onSaveAssessment={handleSaveAssessment}
+                onDeleteAssessment={handleDeleteAssessment}
+              />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
       case 'video':
@@ -1600,25 +1635,61 @@ export default function App() {
       case 'pse':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <PseTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
       case 'psr':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <PsrTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
       case 'qualidade-sono':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <QualidadeSonoTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
+            ) : (
+              <EmBreve />
+            )}
+          </TabBackgroundWrapper>
+        );
+      case 'athletes-physio':
+        return (
+          <TabBackgroundWrapper>
+            {performanceTier ? (
+              <AthletesTab players={players} assessments={assessments} />
+            ) : (
+              <EmBreve />
+            )}
+          </TabBackgroundWrapper>
+        );
+      case 'wellness':
+        return (
+          <TabBackgroundWrapper>
+            {performanceTier ? (
+              <WellnessTab players={players} />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
       case 'academia':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            {performanceTier ? (
+              <Academia schedules={schedules} players={players} />
+            ) : (
+              <EmBreve />
+            )}
           </TabBackgroundWrapper>
         );
       case 'management-report':
@@ -1777,6 +1848,7 @@ export default function App() {
             retracted={sidebarRetracted}
             onToggleRetract={() => setSidebarRetracted((r) => !r)}
             isFreePlan={essentialRestricted}
+            fisiologiaUnlocked={performanceTier}
           />
         </>
       )}

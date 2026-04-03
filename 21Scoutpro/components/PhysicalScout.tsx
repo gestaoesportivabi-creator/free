@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { LineChart, Line, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, Filter, UserMinus, Moon, RefreshCw } from 'lucide-react';
+import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, Filter, UserMinus, Moon, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiologyPdf';
 
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -421,7 +422,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     const counts: Record<string, number> = {};
     filteredInjuries.forEach(i => { counts[i.type] = (counts[i.type] || 0) + 1; });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [monthFilter]);
+  }, [filteredInjuries]);
 
   // Contagem por lado do corpo: usa o campo side do cadastro de atleta (Direito | Esquerdo | Bilateral | N/A)
   const injurySideData = useMemo(() => {
@@ -449,8 +450,121 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     return { direito, esquerdo };
   }, [filteredInjuries]);
 
-  const handlePrint = () => {
-    window.print();
+  // P1: ACWR (Acute:Chronic Workload Ratio) per athlete
+  type AcwrEntry = { playerId: string; name: string; nickname: string; position: string; acwr: number | null; acute: number; chronic: number; risk: 'green' | 'yellow' | 'red' | 'none' };
+
+  const acwrData = useMemo((): AcwrEntry[] => {
+    const today = new Date();
+    const d7ago = new Date(today); d7ago.setDate(d7ago.getDate() - 7);
+    const d28ago = new Date(today); d28ago.setDate(d28ago.getDate() - 28);
+
+    const allDates: { date: string; data: Record<string, number> }[] = [];
+    Object.entries(pseTreinosStored).forEach(([key, data]) => {
+      const datePart = key.split('_')[0];
+      if (datePart) allDates.push({ date: datePart, data });
+    });
+    Object.entries(pseJogosStored).forEach(([_matchId, data]) => {
+      const match = championshipMatches.find(m => m.id === _matchId);
+      if (match) allDates.push({ date: match.date, data });
+    });
+
+    const activePlayers = players.filter(p => !p.isTransferred);
+    return activePlayers.map(p => {
+      let acute = 0, acuteCount = 0, chronic = 0, chronicCount = 0;
+      allDates.forEach(({ date, data }) => {
+        const d = new Date(date);
+        const val = data[p.id];
+        if (typeof val !== 'number' || val < 0) return;
+        if (d >= d7ago && d <= today) { acute += val; acuteCount++; }
+        if (d >= d28ago && d <= today) { chronic += val; chronicCount++; }
+      });
+      const acuteAvg = acuteCount > 0 ? acute / acuteCount : 0;
+      const chronicAvg = chronicCount > 0 ? chronic / chronicCount : 0;
+      const acwr = chronicAvg > 0 ? Math.round((acuteAvg / chronicAvg) * 100) / 100 : null;
+      let risk: AcwrEntry['risk'] = 'none';
+      if (acwr !== null) {
+        if (acwr >= 0.8 && acwr <= 1.3) risk = 'green';
+        else if (acwr > 1.3 && acwr <= 1.5) risk = 'yellow';
+        else risk = 'red';
+      }
+      return { playerId: p.id, name: p.name, nickname: p.nickname, position: p.position, acwr, acute: Math.round(acuteAvg * 10) / 10, chronic: Math.round(chronicAvg * 10) / 10, risk };
+    }).sort((a, b) => {
+      const riskOrder = { red: 0, yellow: 1, green: 2, none: 3 };
+      return riskOrder[a.risk] - riskOrder[b.risk];
+    });
+  }, [players, pseTreinosStored, pseJogosStored, championshipMatches]);
+
+  const [acwrExpanded, setAcwrExpanded] = useState(true);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+
+  // P10: Dynamic competition filter
+  const competitionOptions = useMemo(() => {
+    const comps = new Set<string>();
+    championshipMatches.forEach(m => { if (m.competition) comps.add(m.competition); });
+    return Array.from(comps).sort();
+  }, [championshipMatches]);
+
+  // P7: CSV export helper
+  const handleExportCSV = () => {
+    const rows: string[][] = [['Atleta', 'Data', 'Tipo', 'PSE', 'PSR', 'Sono']];
+    const activePlayers = players.filter(p => !p.isTransferred);
+    const allSessionKeys = Object.keys(pseTreinosStored);
+    const allMatchIds = Object.keys(pseJogosStored);
+
+    activePlayers.forEach(p => {
+      allSessionKeys.forEach(key => {
+        const datePart = key.split('_')[0];
+        const pse = pseTreinosStored[key]?.[p.id];
+        const psr = psrTreinosStored[key]?.[p.id];
+        const sono = qualidadeSonoStored[`treino_${datePart}`]?.[p.id];
+        if (pse != null || psr != null || sono != null) {
+          rows.push([p.nickname || p.name, datePart, 'Treino', pse?.toString() ?? '', psr?.toString() ?? '', sono?.toString() ?? '']);
+        }
+      });
+      allMatchIds.forEach(matchId => {
+        const match = championshipMatches.find(m => m.id === matchId);
+        const pse = pseJogosStored[matchId]?.[p.id];
+        const psr = psrJogosStored[matchId]?.[p.id];
+        const sono = match ? qualidadeSonoStored[`jogo_${match.date}`]?.[p.id] : undefined;
+        if (pse != null || psr != null || sono != null) {
+          rows.push([p.nickname || p.name, match?.date ?? '', 'Jogo', pse?.toString() ?? '', psr?.toString() ?? '', sono?.toString() ?? '']);
+        }
+      });
+    });
+
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `fisiologia_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = async () => {
+    try {
+      const pdfData: PhysiologyPdfData = {
+        filters: { competition: compFilter, month: monthFilter === 'Todos' ? 'Todos os meses' : (MONTHS.find(m => m.value === monthFilter)?.label ?? monthFilter), injuryType: injuryFilter },
+        kpis: {
+          avgPseMatch: stats.avgRpeMatch,
+          injuriesByOrigin: stats.injuriesByOrigin,
+          totalInjuries: stats.totalInjuries,
+          matchesWithAbsence: stats.matchesWithAbsence,
+        },
+        pseMatchData: rpeMatchData,
+        pseTrainingData: rpeTrainingData,
+        psrMatchData,
+        psrTrainingData,
+        sleepChartData,
+        injuryTypeData,
+        injurySideData,
+      };
+      await exportPhysiologyPdf(pdfData);
+    } catch (err) {
+      console.error('Erro ao gerar PDF de fisiologia:', err);
+      window.print();
+    }
   };
   
   const handleBarClick = (data: any) => {
@@ -464,119 +578,147 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   return (
     <div className="space-y-8 animate-fade-in pb-12 print:p-0 print:space-y-4">
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-black p-6 rounded-3xl shadow-lg border border-zinc-800 print:border-none print:shadow-none print:p-0 print:mb-4 gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2 print:text-black italic uppercase tracking-tighter">
-            <HeartPulse className="text-[#10b981] print:text-black" /> 
-            Departamento de Fisiologia
-          </h2>
-          <p className="text-zinc-500 text-sm mt-1 print:text-gray-600 font-medium">Relatório de Carga & Mapa de Lesões</p>
-        </div>
-        
-        <div className="flex gap-4 print:hidden">
-            <div className="flex items-center bg-zinc-950/50 border border-zinc-800 px-3 rounded-xl">
-                 <Filter size={16} className="text-zinc-500 mr-2"/>
-                 
-                 <select 
-                    value={compFilter}
-                    onChange={(e) => setCompFilter(e.target.value)}
-                    className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-4 border-r border-zinc-800 pr-4"
-                >
-                    <option value="Todas">Todas Competições</option>
-                    <option value="Copa Santa Catarina">Copa SC</option>
-                    <option value="Série Prata">Série Prata</option>
-                    <option value="JASC">JASC</option>
-                </select>
-
-                 <select 
-                    value={monthFilter}
-                    onChange={(e) => setMonthFilter(e.target.value)}
-                    className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-4 border-r border-zinc-800 pr-4"
-                >
-                    {MONTHS.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                </select>
-
-                <select 
-                    value={injuryFilter}
-                    onChange={(e) => setInjuryFilter(e.target.value)}
-                    className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium"
-                >
-                    {injuryTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+      <div id="physiology-export-content" className="sticky top-0 z-20 bg-zinc-950/80 backdrop-blur-md rounded-3xl border border-zinc-900 shadow-lg p-5 print:static print:bg-white print:border-none print:shadow-none print:p-0 print:mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-white flex items-center gap-3 print:text-black uppercase tracking-wide">
+              <HeartPulse className="text-[#00f0ff] print:text-black" /> 
+              Departamento de Fisiologia
+            </h2>
+            <p className="text-zinc-500 text-xs mt-1 print:text-gray-600 font-bold uppercase tracking-wider">
+              {stats.totalInjuries} lesões · {filteredMatches.length} jogos · {players.length} atletas
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap gap-3 print:hidden">
+            <div className="flex items-center bg-black/50 border border-zinc-800 px-3 rounded-xl">
+              <Filter size={16} className="text-[#00f0ff] mr-2"/>
+              <select 
+                value={compFilter}
+                onChange={(e) => setCompFilter(e.target.value)}
+                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-3 border-r border-zinc-800 pr-3"
+              >
+                <option value="Todas">Todas Competições</option>
+                {competitionOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select 
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-3 border-r border-zinc-800 pr-3"
+              >
+                {MONTHS.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              <select 
+                value={injuryFilter}
+                onChange={(e) => setInjuryFilter(e.target.value)}
+                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium"
+              >
+                {injuryTypes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
             <button 
-            onClick={handlePrint}
-            className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-4 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl"
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl text-xs"
             >
-            <Printer size={20} />
-            PDF
+              <Download size={16} />
+              CSV
             </button>
+            <button 
+              onClick={handlePrint}
+              className="flex items-center gap-2 bg-[#00f0ff] hover:bg-[#00d4e0] text-black px-4 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl"
+            >
+              <Printer size={18} />
+              PDF
+            </button>
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 print:grid-cols-4 print:gap-4">
-        <ExpandableCard noPadding headerColor='text-[#ccff00]'>
-            <KPICardInner 
-                title="Média PSE (Jogos)" 
-                value={stats.avgRpeMatch} 
-                icon={Activity} 
-                color="text-[#ccff00]" 
-                sub="Escala 0-10"
-            />
-        </ExpandableCard>
-        <ExpandableCard noPadding headerColor='text-[#10b981]'>
-            <div className="p-6 h-full flex flex-col justify-center bg-black/50">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex-1">
-                        <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest print:text-gray-500 mb-3">Lesões por Origem</p>
-                        <div className="flex items-center gap-4 flex-wrap">
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                                <span className="text-white text-lg font-black print:text-black">Treino: {stats.injuriesByOrigin.treino}</span>
-                            </div>
-                            <span className="text-zinc-600 text-xl font-bold">|</span>
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                                <span className="text-white text-lg font-black print:text-black">Jogo: {stats.injuriesByOrigin.jogo}</span>
-                            </div>
-                            <span className="text-zinc-600 text-xl font-bold">|</span>
-                            <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                                <span className="text-white text-lg font-black print:text-black">Outros: {stats.injuriesByOrigin.outros}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className={`p-4 bg-black border border-zinc-800 rounded-xl print:bg-gray-100 shadow-sm ml-4`}>
-                        <AlertTriangle size={28} className="text-[#10b981]" />
-                    </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 print:grid-cols-4 print:gap-4">
+        <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#ccff00] p-5 print:border-gray-200">
+          <KPICardInner title="Média PSE (Jogos)" value={stats.avgRpeMatch} icon={Activity} color="text-[#ccff00]" sub="Escala 0-10" />
+        </div>
+        <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#00f0ff] p-5 print:border-gray-200">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest print:text-gray-500 mb-3">Lesões por Origem</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span className="text-white text-base font-black print:text-black">Treino: {stats.injuriesByOrigin.treino}</span>
                 </div>
+                <span className="text-zinc-700">·</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-white text-base font-black print:text-black">Jogo: {stats.injuriesByOrigin.jogo}</span>
+                </div>
+                <span className="text-zinc-700">·</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-orange-500" />
+                  <span className="text-white text-base font-black print:text-black">Outros: {stats.injuriesByOrigin.outros}</span>
+                </div>
+              </div>
             </div>
-        </ExpandableCard>
-        <ExpandableCard noPadding headerColor='text-[#ff0055]'>
-            <KPICardInner 
-                title="Lesões (Filtro)" 
-                value={stats.totalInjuries} 
-                icon={AlertTriangle} 
-                color="text-[#ff0055]" 
-                sub={injuryFilter === 'Todos' ? 'Total Temporada' : `Tipo: ${injuryFilter}`}
-            />
-        </ExpandableCard>
-        <ExpandableCard noPadding headerColor='text-[#7000ff]'>
-            <KPICardInner 
-                title="Jogos com Desfalque" 
-                value={stats.matchesWithAbsence} 
-                icon={UserMinus} 
-                color="text-orange-500" 
-                sub="Time desfalcado por lesão"
-            />
-        </ExpandableCard>
+            <div className="p-3 bg-[#00f0ff]/10 border border-[#00f0ff]/20 rounded-xl ml-3">
+              <AlertTriangle size={24} className="text-[#00f0ff]" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#ff0055] p-5 print:border-gray-200">
+          <KPICardInner title="Lesões (Filtro)" value={stats.totalInjuries} icon={AlertTriangle} color="text-[#ff0055]" sub={injuryFilter === 'Todos' ? 'Total Temporada' : `Tipo: ${injuryFilter}`} />
+        </div>
+        <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-orange-500 p-5 print:border-gray-200">
+          <KPICardInner title="Jogos com Desfalque" value={stats.matchesWithAbsence} icon={UserMinus} color="text-orange-500" sub="Time desfalcado por lesão" />
+        </div>
       </div>
 
+      {/* P1: ACWR - Risco de Lesão */}
+      <ExpandableCard title="ACWR — Risco de Lesão por Atleta" icon={Shield} headerColor="text-[#00f0ff]">
+        <p className="text-xs text-zinc-500 mb-4 font-medium">
+          Razão Carga Aguda (7d) / Crônica (28d). <strong>Verde</strong> 0.8–1.3 (seguro), <strong>Amarelo</strong> 1.3–1.5 (atenção), <strong>Vermelho</strong> &gt;1.5 ou &lt;0.8 (risco elevado).
+        </p>
+        {acwrData.filter(a => a.acwr !== null).length === 0 ? (
+          <p className="text-zinc-500 text-sm py-6 text-center">Preencha PSE em treinos e jogos para calcular o ACWR dos atletas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Atleta</th>
+                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Posição</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Aguda (7d)</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Crônica (28d)</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">ACWR</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Risco</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acwrData.filter(a => a.acwr !== null).map(a => (
+                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setSelectedAthleteId(prev => prev === a.playerId ? null : a.playerId)}>
+                    <td className="py-2.5 px-3 text-white font-bold">{a.nickname || a.name}</td>
+                    <td className="py-2.5 px-3 text-zinc-400">{a.position}</td>
+                    <td className="py-2.5 px-3 text-center text-white">{a.acute}</td>
+                    <td className="py-2.5 px-3 text-center text-white">{a.chronic}</td>
+                    <td className="py-2.5 px-3 text-center font-black text-lg">{a.acwr}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`inline-block w-3 h-3 rounded-full ${a.risk === 'green' ? 'bg-emerald-500' : a.risk === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} />
+                      <span className={`ml-2 text-xs font-bold ${a.risk === 'green' ? 'text-emerald-400' : a.risk === 'yellow' ? 'text-amber-400' : 'text-red-400'}`}>
+                        {a.risk === 'green' ? 'Seguro' : a.risk === 'yellow' ? 'Atenção' : 'Risco'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ExpandableCard>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
-        <ExpandableCard title="Evolução PSE (Jogos)" icon={Activity} headerColor="text-[#ccff00]">
+        <ExpandableCard title="Evolução PSE (Jogos)" icon={Activity} headerColor="text-[#00f0ff]">
            <p className="text-xs text-zinc-500 mb-2 font-medium">Média geral da equipe por jogo. Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.</p>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
@@ -605,7 +747,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
            </div>
         </ExpandableCard>
 
-        <ExpandableCard title="Média PSE (Treinos)" icon={Activity} headerColor="text-[#10b981]">
+        <ExpandableCard title="Média PSE (Treinos)" icon={Activity} headerColor="text-[#00f0ff]">
            <p className="text-xs text-zinc-500 mb-2 font-medium">Média geral da equipe por sessão (Treino ou Musculação). Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.</p>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
@@ -634,7 +776,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
-        <ExpandableCard title="Evolução PSR (Jogos)" icon={RefreshCw} headerColor="text-sky-400">
+        <ExpandableCard title="Evolução PSR (Jogos)" icon={RefreshCw} headerColor="text-[#00f0ff]">
           <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por jogo. Quanto mais perto de 10, melhor a recuperação. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
           {psrMatchData.length > 0 ? (
             <div className="h-64">
@@ -656,7 +798,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           )}
         </ExpandableCard>
 
-        <ExpandableCard title="Média PSR (Treinos)" icon={RefreshCw} headerColor="text-sky-500">
+        <ExpandableCard title="Média PSR (Treinos)" icon={RefreshCw} headerColor="text-[#00f0ff]">
           <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por sessão (Treino ou Musculação). Mais perto de 10 = melhor recuperado. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
           {psrTrainingData.length > 0 ? (
             <div className="h-64">
@@ -680,7 +822,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       </div>
 
       {sleepChartData.length > 0 && (
-        <ExpandableCard title="Média qualidade de sono da equipe" icon={Moon} headerColor="text-indigo-400">
+        <ExpandableCard title="Média qualidade de sono da equipe" icon={Moon} headerColor="text-[#00f0ff]">
           <p className="text-xs text-zinc-500 mb-2 font-medium">Noites anteriores a treino (manhã) e a jogos. Preencha na aba <strong>Qualidade de sono</strong>. Escala 1-5.</p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -706,7 +848,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
-        <ExpandableCard title="Distribuição por Tipo" icon={AlertTriangle} headerColor="text-[#ff0055]">
+        <ExpandableCard title="Distribuição por Tipo" icon={AlertTriangle} headerColor="text-[#00f0ff]">
            <p className="text-xs text-zinc-500 mb-4 font-medium">Clique na barra para filtrar o mapa corporal.</p>
            <div className="h-96 min-h-[400px]">
              <ResponsiveContainer width="100%" height="100%">
@@ -765,7 +907,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
            </div>
         </ExpandableCard>
 
-        <ExpandableCard title="Mapa de Calor (Heatmap)" icon={AlertTriangle} headerColor="text-red-600">
+        <ExpandableCard title="Mapa de Calor (Heatmap)" icon={AlertTriangle} headerColor="text-[#00f0ff]">
            <div className="flex flex-col h-full">
                <div className="mb-4 flex justify-end">
                     <span className="text-xs text-white font-black tracking-wider bg-red-600 px-3 py-1 rounded-full uppercase">
@@ -780,21 +922,188 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </ExpandableCard>
       </div>
 
+      {/* P2: Painel Individual do Atleta */}
+      {selectedAthleteId && (() => {
+        const athlete = players.find(p => p.id === selectedAthleteId);
+        if (!athlete) return null;
+        const acwrInfo = acwrData.find(a => a.playerId === selectedAthleteId);
+        const athleteInjuries = (athlete.injuryHistory || []).sort((a, b) => new Date(b.date || b.startDate).getTime() - new Date(a.date || a.startDate).getTime());
+        const activeInjuries = athleteInjuries.filter(i => !i.endDate || new Date(i.endDate) >= new Date());
+
+        const pseHistory: { date: string; value: number }[] = [];
+        const psrHistory: { date: string; value: number }[] = [];
+        const sonoHistory: { date: string; value: number }[] = [];
+
+        Object.entries(pseTreinosStored).forEach(([key, data]) => {
+          const v = data[selectedAthleteId];
+          if (typeof v === 'number') pseHistory.push({ date: key.split('_')[0], value: v });
+        });
+        Object.entries(pseJogosStored).forEach(([matchId, data]) => {
+          const v = data[selectedAthleteId];
+          const m = championshipMatches.find(cm => cm.id === matchId);
+          if (typeof v === 'number' && m) pseHistory.push({ date: m.date, value: v });
+        });
+        pseHistory.sort((a, b) => a.date.localeCompare(b.date));
+
+        Object.entries(psrTreinosStored).forEach(([key, data]) => {
+          const v = data[selectedAthleteId];
+          if (typeof v === 'number') psrHistory.push({ date: key.split('_')[0], value: v });
+        });
+        Object.entries(psrJogosStored).forEach(([matchId, data]) => {
+          const v = data[selectedAthleteId];
+          const m = championshipMatches.find(cm => cm.id === matchId);
+          if (typeof v === 'number' && m) psrHistory.push({ date: m.date, value: v });
+        });
+        psrHistory.sort((a, b) => a.date.localeCompare(b.date));
+
+        Object.entries(qualidadeSonoStored).forEach(([key, data]) => {
+          const v = data[selectedAthleteId];
+          if (typeof v === 'number') sonoHistory.push({ date: key.split(/_(.*)/)[1] || key, value: v });
+        });
+        sonoHistory.sort((a, b) => a.date.localeCompare(b.date));
+
+        const lastPse = pseHistory.length > 0 ? pseHistory[pseHistory.length - 1].value : null;
+        const lastPsr = psrHistory.length > 0 ? psrHistory[psrHistory.length - 1].value : null;
+        const lastSono = sonoHistory.length > 0 ? sonoHistory[sonoHistory.length - 1].value : null;
+        const last7Pse = pseHistory.slice(-7);
+        const avg7Pse = last7Pse.length > 0 ? Math.round((last7Pse.reduce((a, b) => a + b.value, 0) / last7Pse.length) * 10) / 10 : null;
+
+        const chartData = pseHistory.slice(-14).map(p => {
+          const lbl = new Date(p.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+          const psr = psrHistory.find(r => r.date === p.date);
+          return { date: lbl, pse: p.value, psr: psr?.value ?? null };
+        });
+
+        return (
+          <div className="bg-black rounded-3xl border border-zinc-800 p-6 shadow-xl animate-fade-in print:hidden">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                {athlete.photoUrl ? (
+                  <img src={athlete.photoUrl} alt={athlete.name} className="w-14 h-14 rounded-xl object-cover border-2 border-[#00f0ff]/30" />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white font-black text-xl">{(athlete.nickname || athlete.name).charAt(0)}</div>
+                )}
+                <div>
+                  <h3 className="text-white font-black text-xl uppercase tracking-wide">{athlete.nickname || athlete.name}</h3>
+                  <p className="text-zinc-500 text-xs font-bold">{athlete.position} · #{athlete.jerseyNumber} · {athlete.age} anos</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedAthleteId(null)} className="text-zinc-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-zinc-800 text-xs font-bold uppercase">Fechar ✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">ACWR</p>
+                <p className={`text-2xl font-black mt-1 ${acwrInfo?.risk === 'green' ? 'text-emerald-400' : acwrInfo?.risk === 'yellow' ? 'text-amber-400' : acwrInfo?.risk === 'red' ? 'text-red-400' : 'text-zinc-500'}`}>{acwrInfo?.acwr ?? '—'}</p>
+              </div>
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">PSE (7d)</p>
+                <p className="text-2xl font-black text-[#ccff00] mt-1">{avg7Pse ?? '—'}</p>
+              </div>
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">Último PSR</p>
+                <p className="text-2xl font-black text-sky-400 mt-1">{lastPsr ?? '—'}</p>
+              </div>
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">Último Sono</p>
+                <p className="text-2xl font-black text-amber-400 mt-1">{lastSono ?? '—'}</p>
+              </div>
+              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">Lesões Ativas</p>
+                <p className={`text-2xl font-black mt-1 ${activeInjuries.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{activeInjuries.length}</p>
+              </div>
+            </div>
+
+            {chartData.length > 0 && (
+              <div className="mb-6">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Evolução PSE / PSR (últimas 14 sessões)</p>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 10 }} />
+                      <YAxis domain={[0, 10]} stroke="#666" hide />
+                      <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} />
+                      <Line type="monotone" dataKey="pse" stroke="#ccff00" strokeWidth={2} dot={{ fill: '#ccff00', r: 3 }} name="PSE" />
+                      <Line type="monotone" dataKey="psr" stroke="#38bdf8" strokeWidth={2} dot={{ fill: '#38bdf8', r: 3 }} name="PSR" connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {athleteInjuries.length > 0 && (
+              <div>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">Histórico de Lesões & Return-to-Play</p>
+                <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+                  {athleteInjuries.map(inj => {
+                    const isActive = !inj.endDate || new Date(inj.endDate) >= new Date();
+                    const startD = new Date(inj.date || inj.startDate);
+                    const daysElapsed = Math.floor((Date.now() - startD.getTime()) / 86400000);
+                    const totalDays = inj.daysOut || 14;
+                    const rtpPhases = ['Repouso', 'Exercícios leves', 'Treino parcial', 'Treino completo', 'Liberado'];
+                    let currentPhase = 4;
+                    if (isActive) {
+                      const progress = daysElapsed / totalDays;
+                      if (progress < 0.2) currentPhase = 0;
+                      else if (progress < 0.4) currentPhase = 1;
+                      else if (progress < 0.7) currentPhase = 2;
+                      else if (progress < 1.0) currentPhase = 3;
+                      else currentPhase = 4;
+                    }
+                    const estReturn = new Date(startD);
+                    estReturn.setDate(estReturn.getDate() + totalDays);
+
+                    return (
+                      <div key={inj.id} className="bg-zinc-900/50 rounded-xl px-4 py-3 border border-zinc-800">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-xs font-bold">{inj.type} — {inj.location} ({inj.side})</p>
+                            <p className="text-zinc-500 text-[10px]">{startD.toLocaleDateString('pt-BR')} · {inj.origin} · {inj.severity} · {inj.daysOut ?? '?'} dias previstos</p>
+                          </div>
+                          {!isActive && <span className="text-[10px] text-emerald-400 font-bold uppercase px-2 py-0.5 bg-emerald-500/10 rounded">Recuperado</span>}
+                          {isActive && <span className="text-[10px] text-red-400 font-bold uppercase px-2 py-0.5 bg-red-500/10 rounded">Ativa</span>}
+                        </div>
+                        {isActive && (
+                          <div className="mt-2">
+                            <div className="flex items-center gap-1 mb-1.5">
+                              {rtpPhases.map((phase, idx) => (
+                                <div key={phase} className="flex-1 flex flex-col items-center">
+                                  <div className={`w-full h-1.5 rounded-full ${idx <= currentPhase ? (idx < currentPhase ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-zinc-800'}`} />
+                                  <span className={`text-[8px] mt-0.5 ${idx === currentPhase ? 'text-amber-400 font-bold' : 'text-zinc-600'}`}>{idx + 1}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] text-amber-400 font-bold">Fase {currentPhase + 1}: {rtpPhases[currentPhase]}</span>
+                              <span className="text-[10px] text-zinc-500">Retorno est.: {estReturn.toLocaleDateString('pt-BR')}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     </div>
   );
 };
 
 const KPICardInner: React.FC<{ title: string; value: string | number; icon: any; color: string; sub: string }> = ({ title, value, icon: Icon, color, sub }) => (
-    <div className="p-6 h-full flex flex-col justify-center bg-black/50">
-        <div className="flex items-center justify-between">
-            <div>
-                <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest print:text-gray-500">{title}</p>
-                <p className="text-4xl font-bold text-white mt-2 print:text-black">{value}</p>
-                <p className="text-zinc-600 text-[10px] mt-1 print:text-gray-400 font-medium uppercase">{sub}</p>
-            </div>
-            <div className={`p-4 bg-black border border-zinc-800 rounded-xl print:bg-gray-100 shadow-sm`}>
-                <Icon size={28} className={color.replace('text-', 'text-')} />
-            </div>
+    <div className="flex items-center justify-between">
+        <div>
+            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest print:text-gray-500">{title}</p>
+            <p className="text-3xl font-bold text-white mt-2 print:text-black">{value}</p>
+            <p className="text-zinc-600 text-[10px] mt-1 print:text-gray-400 font-medium uppercase">{sub}</p>
+        </div>
+        <div className={`p-3 rounded-xl`} style={{ background: 'rgba(0,0,0,0.3)' }}>
+            <Icon size={24} className={color} />
         </div>
     </div>
 );
@@ -1088,7 +1397,7 @@ const MuscleBodyMap: React.FC<InjuryBodyMapProps> = ({ injuries }) => {
                 </div>
             </div>
             <div className="absolute bottom-4 left-4 right-4 flex justify-center gap-4 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                <span className="text-red-500">Intensidade por raio e cor</span>
+                <span className="text-red-500">Frequência de lesões por região</span>
             </div>
         </div>
     );
