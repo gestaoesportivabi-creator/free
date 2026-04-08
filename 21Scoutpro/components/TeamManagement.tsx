@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
-import { Shirt, Save, Plus, User, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
+import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
 const BIRTH_DATE_MIN_ISO = '1950-01-01';
@@ -151,7 +151,15 @@ interface TeamManagementProps {
     isFreePlan?: boolean;
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPlayer, onUpdatePlayer, onDeletePlayer, onClearDemoData, config, isFreePlan = false }) => {
+export const TeamManagement: React.FC<TeamManagementProps> = ({
+    players,
+    onAddPlayer,
+    onUpdatePlayer,
+    onDeletePlayer,
+    onClearDemoData,
+    config,
+    isFreePlan = false,
+}) => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editMode, setEditMode] = useState(false);
     const [editPlayerId, setEditPlayerId] = useState<string | null>(null);
@@ -811,7 +819,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
             <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
-                        <Shirt className="text-[#10b981]" /> Cadastro de Atletas
+                        <Shirt className="text-[#10b981]" /> Elenco
                     </h2>
                     <p className="text-zinc-500 text-xs font-bold mt-1">Cadastro, edição e status dos atletas.</p>
                 </div>
@@ -838,7 +846,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({ players, onAddPl
                             <Trash2 size={14} /> Limpar dados de demonstração
                         </button>
                     )}
-                    <button 
+                    <button
+                        type="button"
                         onClick={() => {
                             if (!isFormOpen) {
                                 resetForm();

@@ -10,6 +10,7 @@ import { VideoScout } from './components/VideoScout';
 import { Settings } from './components/Settings';
 import { ScoutTable } from './components/ScoutTable';
 import { TeamManagement } from './components/TeamManagement';
+import { ManagementReport } from './components/ManagementReport';
 import { StatsRanking } from './components/StatsRanking';
 import { Schedule } from './components/Schedule';
 import { Academia } from './components/Academia';
@@ -23,7 +24,6 @@ import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipT
 import { SuspensionsAlert } from './components/SuspensionsAlert';
 import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
-import { ManagementReport } from './components/ManagementReport';
 import { EmBreve } from './components/EmBreve';
 import { AdminPanel } from './components/AdminPanel';
 import { NextMatchAlert } from './components/NextMatchAlert';
@@ -32,7 +32,7 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, FileText, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
+import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
 import { QuartetAnalysis } from './components/QuartetAnalysis';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
@@ -90,6 +90,7 @@ const TAB_LABELS: Record<string, string> = {
   team: 'Elenco',
   schedule: 'Programação',
   championship: 'Tabela de Campeonato',
+  'management-report': 'Relatório gerencial',
   table: 'Dados do Jogo',
   general: 'Scout Coletivo',
   individual: 'Scout Individual',
@@ -1698,7 +1699,7 @@ export default function App() {
             <TabBackgroundWrapper>
               <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
                 <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
-                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Relatório Gerencial</h2>
+                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Relatório gerencial</h2>
                 <p className="text-zinc-400 text-sm max-w-md">
                   Em breve, estamos desenvolvendo. Entre em contato para mais informações.
                 </p>
@@ -1708,9 +1709,9 @@ export default function App() {
         }
         return (
           <TabBackgroundWrapper>
-            <ManagementReport 
-              players={players} 
-              matches={matchesFinalizedForScout} 
+            <ManagementReport
+              players={players}
+              matches={matchesFinalizedForScout}
               assessments={assessments}
               timeControls={timeControls}
             />
@@ -1795,16 +1796,6 @@ export default function App() {
                 <StatCard label="Lesões no ano" value={essentialRestricted ? 'Em breve' : overviewStats.injuriesThisYear} helper={essentialRestricted ? '—' : String(overviewStats.currentYear)} />
               </section>
 
-              {/* 5. Ações principais no rodapé */}
-              <footer className="flex flex-wrap gap-3 pt-4 border-t border-zinc-700 shrink-0">
-                <button
-                  onClick={() => handleTabChange('management-report')}
-                  className="flex items-center gap-2 rounded-lg border border-[#0d2137] bg-[#0d2137] px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-[#1e3a5f]"
-                >
-                  <FileText size={14} />
-                  Relatório Gerencial
-                </button>
-              </footer>
             </div>
           </div>
         );

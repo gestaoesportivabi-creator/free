@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock, ShieldCheck, Zap } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, Moon, RefreshCw, X, Lock, ShieldCheck, Zap, FileText } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -56,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         { id: 'team', label: 'Elenco', icon: Shirt, restricted: isAthlete },
         { id: 'schedule', label: 'Programação', icon: CalendarClock, restricted: isAthlete },
         { id: 'championship', label: 'Tabela de Campeonato', icon: Trophy, restricted: isAthlete },
+        { id: 'management-report', label: 'Relatório gerencial', icon: FileText, restricted: isAthlete },
       ]
     },
     {
