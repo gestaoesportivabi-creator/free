@@ -26,6 +26,7 @@ import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiolog
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
+import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -679,6 +680,25 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
   const hasWellnessRadarData = wellnessRadarPeriod.some(r => r.avg !== null);
 
+  const wellnessEngagementAlerts = useMemo(
+    () =>
+      buildWellnessEngagementAlerts(
+        wellnessRadarPeriod.map(r => ({ key: r.key, subject: r.subject, avg: r.avg }))
+      ),
+    [wellnessRadarPeriod]
+  );
+
+  const wellnessEngagementSummary = useMemo(() => {
+    if (!hasWellnessRadarData) return null;
+    const n = wellnessEngagementAlerts.length;
+    if (n === 0) return 'Indicadores alinhados ao engajamento ideal da equipe no período.';
+    const c = wellnessEngagementAlerts.filter(a => a.severity === 'critical').length;
+    const w = wellnessEngagementAlerts.filter(a => a.severity === 'warning').length;
+    if (c > 0) return `${c} indicador(es) com desvio forte em relação ao engajamento ideal.`;
+    if (w > 0) return `${w} indicador(es) requerem atenção em relação ao engajamento ideal.`;
+    return `${n} indicador(es) com leve desvio em relação ao engajamento ideal.`;
+  }, [hasWellnessRadarData, wellnessEngagementAlerts]);
+
   const avgOf = (values: number[]): number | null => {
     if (values.length === 0) return null;
     return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
@@ -1104,12 +1124,70 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           <Brain className="text-[#00f0ff] print:text-black" /> Bem-estar diário
         </h3>
         <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
-          <strong className="text-zinc-400">Modelo ideal</strong> (verde): metas de referência. <strong className="text-zinc-400">Realidade</strong>: médias do
-          período (escala 1–5); a cor vai do vermelho ao verde conforme a proximidade ao ideal. Fonte: aba{' '}
-          <strong className="text-zinc-400">Bem-Estar Diário</strong>.
+          <strong className="text-zinc-400">Modelo ideal</strong> (verde): metas de <strong className="text-zinc-400">engajamento ideal</strong> da equipe.{' '}
+          <strong className="text-zinc-400">Realidade</strong>: médias do período (1–5); quanto mais distante do ideal, mais{' '}
+          <strong className="text-zinc-400">avermelhado</strong> o radar. Fonte: <strong className="text-zinc-400">Bem-Estar Diário</strong>.
         </p>
         <ExpandableCard title="Radar — médias do período" icon={Brain} headerColor="text-fuchsia-400">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start w-full max-w-5xl mx-auto">
+          <div className="relative w-full">
+            {hasWellnessRadarData && (
+              <div className="print:hidden mb-4 lg:mb-0 lg:absolute lg:top-0 lg:right-0 z-20 w-full lg:max-w-[300px] lg:pl-2">
+                <div
+                  className={`rounded-xl border p-3 shadow-lg ${
+                    wellnessEngagementAlerts.length === 0
+                      ? 'border-emerald-600/45 bg-emerald-950/40'
+                      : 'border-zinc-600/50 bg-zinc-950/95'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <AlertTriangle
+                      size={15}
+                      className={
+                        wellnessEngagementAlerts.some(a => a.severity === 'critical')
+                          ? 'text-red-400 shrink-0'
+                          : wellnessEngagementAlerts.length > 0
+                            ? 'text-amber-400 shrink-0'
+                            : 'text-emerald-400 shrink-0'
+                      }
+                    />
+                    <span className="text-[10px] font-black uppercase tracking-wide text-zinc-100 leading-tight">
+                      Alertas · real vs engajamento ideal
+                    </span>
+                  </div>
+                  {wellnessEngagementSummary && (
+                    <p className="text-[10px] text-zinc-400 font-medium mb-2 leading-snug">{wellnessEngagementSummary}</p>
+                  )}
+                  {wellnessEngagementAlerts.length > 0 ? (
+                    <ul className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                      {wellnessEngagementAlerts.map(a => (
+                        <li
+                          key={a.key}
+                          className={`text-[10px] leading-snug rounded-lg px-2 py-1.5 border ${
+                            a.severity === 'critical'
+                              ? 'border-red-500/40 bg-red-950/35 text-red-100'
+                              : a.severity === 'warning'
+                                ? 'border-amber-500/40 bg-amber-950/30 text-amber-50'
+                                : 'border-yellow-500/30 bg-yellow-950/20 text-yellow-50'
+                          }`}
+                        >
+                          {a.message}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[10px] text-emerald-200/95 font-medium leading-snug">
+                      Stress e dor muscular no ideal (baixo); sono, humor e satisfação no patamar meta — sem alertas negativos.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div
+              className={`grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start w-full max-w-5xl mx-auto ${
+                hasWellnessRadarData ? 'lg:pr-[min(300px,32%)]' : ''
+              }`}
+            >
             <WellnessRadarPanel
               title="Modelo ideal"
               titleClassName="text-emerald-400"
@@ -1198,17 +1276,21 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               )}
             </div>
           </div>
+          </div>
           <div className="mt-6 flex flex-col items-center gap-2 max-w-md mx-auto print:hidden">
-            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Proximidade ao modelo ideal (realidade)</span>
+            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide text-center px-2">
+              Proximidade ao engajamento ideal da equipe (realidade)
+            </span>
             <div
               className="h-2.5 w-full max-w-sm rounded-full border border-zinc-700"
               style={{
-                background: 'linear-gradient(90deg, hsl(0,82%,54%) 0%, hsl(28,90%,52%) 25%, hsl(48,95%,52%) 50%, hsl(95,75%,48%) 100%)',
+                background:
+                  'linear-gradient(90deg, hsl(0,92%,48%) 0%, hsl(24,90%,50%) 18%, hsl(42,92%,52%) 40%, hsl(88,78%,48%) 72%, hsl(125,72%,46%) 100%)',
               }}
             />
             <div className="flex justify-between w-full max-w-sm text-[9px] text-zinc-500 font-medium px-0.5">
               <span>Mais distante</span>
-              <span>Igual ao ideal</span>
+              <span>Igual ao engajamento ideal</span>
             </div>
           </div>
           {hasWellnessRadarData && (
