@@ -115,6 +115,66 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({
         };
     }, [filteredMatches, selectedPlayerId]);
 
+    /** Dualidades gol↔assistência: só lances em que há autor do golo e assistente (log pós-jogo). */
+    const goalAssistDualities = useMemo(() => {
+        if (!selectedPlayerId) return [];
+        const sid = String(selectedPlayerId).trim();
+        const OPPONENT_ID = 'OPPONENT_TEAM';
+        const map = new Map<
+            string,
+            {
+                goalsScoredWithPartnerAssist: number;
+                goalsPartnerScoredWithMyAssist: number;
+                fallbackName?: string;
+            }
+        >();
+
+        for (const match of filteredMatches) {
+            const log = match.postMatchEventLog;
+            if (!log?.length) continue;
+            for (const ev of log) {
+                if (ev.action !== 'goal' || ev.isOpponentGoal) continue;
+                const assistId = ev.assistPlayerId ? String(ev.assistPlayerId).trim() : '';
+                if (!assistId) continue;
+                const scorer = String(ev.playerId).trim();
+                if (scorer === OPPONENT_ID || assistId === OPPONENT_ID) continue;
+                if (scorer === assistId) continue;
+
+                if (scorer === sid) {
+                    const cur = map.get(assistId) ?? {
+                        goalsScoredWithPartnerAssist: 0,
+                        goalsPartnerScoredWithMyAssist: 0,
+                    };
+                    cur.goalsScoredWithPartnerAssist += 1;
+                    if (!cur.fallbackName && ev.assistPlayerName) cur.fallbackName = ev.assistPlayerName;
+                    map.set(assistId, cur);
+                } else if (assistId === sid) {
+                    const cur = map.get(scorer) ?? {
+                        goalsScoredWithPartnerAssist: 0,
+                        goalsPartnerScoredWithMyAssist: 0,
+                    };
+                    cur.goalsPartnerScoredWithMyAssist += 1;
+                    if (!cur.fallbackName && ev.playerName) cur.fallbackName = ev.playerName;
+                    map.set(scorer, cur);
+                }
+            }
+        }
+
+        const rows = Array.from(map.entries()).map(([partnerId, c]) => {
+            const pl = players.find((p) => String(p.id).trim() === partnerId);
+            const partnerName = pl?.name ?? c.fallbackName ?? 'Jogador';
+            return {
+                partnerId,
+                partnerName,
+                goalsScoredWithPartnerAssist: c.goalsScoredWithPartnerAssist,
+                goalsPartnerScoredWithMyAssist: c.goalsPartnerScoredWithMyAssist,
+                total: c.goalsScoredWithPartnerAssist + c.goalsPartnerScoredWithMyAssist,
+            };
+        });
+        rows.sort((a, b) => b.total - a.total);
+        return rows;
+    }, [filteredMatches, selectedPlayerId, players]);
+
     // Calcular informações de lesões
     const injuryInfo = useMemo(() => {
         if (!selectedPlayer || !selectedPlayer.injuryHistory) return null;
@@ -562,100 +622,41 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({
                         </div>
                     )}
 
-                    {/* Dualidades - Relacionamentos entre Jogadores */}
-                    {filteredMatches.length > 0 && (() => {
-                        // Agregar relacionamentos de todas as partidas
-                        const allRelationships: Array<{
-                            player1Id: string;
-                            player1Name: string;
-                            player2Id: string;
-                            player2Name: string;
-                            totalPasses: number;
-                            totalAssists: number;
-                        }> = [];
-
-                        filteredMatches.forEach(match => {
-                            if (match.playerRelationships) {
-                                Object.entries(match.playerRelationships).forEach(([player1Id, relationships]) => {
-                                    Object.entries(relationships).forEach(([player2Id, stats]) => {
-                                        const player1 = players.find(p => String(p.id).trim() === player1Id);
-                                        const player2 = players.find(p => String(p.id).trim() === player2Id);
-                                        
-                                        if (player1 && player2) {
-                                            // Verificar se já existe relacionamento (ordem pode variar)
-                                            const existing = allRelationships.find(r => 
-                                                (r.player1Id === player1Id && r.player2Id === player2Id) ||
-                                                (r.player1Id === player2Id && r.player2Id === player1Id)
-                                            );
-                                            
-                                            if (existing) {
-                                                existing.totalPasses += stats.passes;
-                                                existing.totalAssists += stats.assists;
-                                            } else {
-                                                allRelationships.push({
-                                                    player1Id,
-                                                    player1Name: player1.name,
-                                                    player2Id,
-                                                    player2Name: player2.name,
-                                                    totalPasses: stats.passes,
-                                                    totalAssists: stats.assists,
-                                                });
-                                            }
-                                        }
-                                    });
-                                });
-                            }
-                        });
-
-                        // Filtrar apenas relacionamentos que envolvem o jogador selecionado
-                        const playerRelationships = allRelationships.filter(r => 
-                            String(r.player1Id).trim() === selectedPlayerId || 
-                            String(r.player2Id).trim() === selectedPlayerId
-                        ).sort((a, b) => (b.totalPasses + b.totalAssists) - (a.totalPasses + a.totalAssists));
-
-                        if (playerRelationships.length > 0) {
-                            return (
-                                <div className="bg-black p-6 rounded-3xl border border-zinc-900 shadow-lg">
-                                    <h4 className="text-xl font-black text-white uppercase mb-4 flex items-center gap-2">
-                                        <Users className="text-[#00f0ff]" /> Dualidades
-                                    </h4>
-                                    <p className="text-zinc-400 text-xs mb-4">
-                                        Relacionamentos de passes e assistências com outros jogadores
-                                    </p>
-                                    <div className="space-y-3">
-                                        {playerRelationships.map((rel, index) => {
-                                            const otherPlayer = String(rel.player1Id).trim() === selectedPlayerId 
-                                                ? rel.player2Name 
-                                                : rel.player1Name;
-                                            return (
-                                                <div key={index} className="border border-zinc-900 rounded-xl p-4">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <p className="text-white font-bold text-sm">
-                                                            {selectedPlayer?.name} ↔ {otherPlayer}
-                                                        </p>
-                                                        <p className="text-[#00f0ff] font-black text-lg">
-                                                            {rel.totalPasses + rel.totalAssists} interações
-                                                        </p>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-zinc-900">
-                                                        <div>
-                                                            <p className="text-zinc-500 text-xs font-bold uppercase mb-1">Passes</p>
-                                                            <p className="text-green-400 font-black text-xl">{rel.totalPasses}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-zinc-500 text-xs font-bold uppercase mb-1">Assistências</p>
-                                                            <p className="text-blue-400 font-black text-xl">{rel.totalAssists}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                    {/* Dualidades: só gols com assistência registada (gol ↔ parceiro) */}
+                    {goalAssistDualities.length > 0 && (
+                        <div className="bg-black p-6 rounded-3xl border border-zinc-900 shadow-lg">
+                            <h4 className="text-xl font-black text-white uppercase mb-4 flex items-center gap-2">
+                                <Users className="text-[#00f0ff]" /> Dualidades
+                            </h4>
+                            <p className="text-zinc-400 text-xs mb-4">
+                                Ligações gol–assistência com cada parceiro: gols que você marcou com assistência dele(a) e gols que ele(a) marcou com a sua assistência. A pontuação é a soma dessas interações no período.
+                            </p>
+                            <div className="space-y-3">
+                                {goalAssistDualities.map((rel) => (
+                                    <div key={rel.partnerId} className="border border-zinc-900 rounded-xl p-4">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-white font-bold text-sm">
+                                                {selectedPlayer?.name} ↔ {rel.partnerName}
+                                            </p>
+                                            <p className="text-[#00f0ff] font-black text-lg">
+                                                {rel.total} interações
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-zinc-900">
+                                            <div>
+                                                <p className="text-zinc-500 text-xs font-bold uppercase mb-1">Seu gol (assist. do parceiro)</p>
+                                                <p className="text-green-400 font-black text-xl">{rel.goalsScoredWithPartnerAssist}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-zinc-500 text-xs font-bold uppercase mb-1">Gol do parceiro (sua assist.)</p>
+                                                <p className="text-blue-400 font-black text-xl">{rel.goalsPartnerScoredWithMyAssist}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        }
-                        return null;
-                    })()}
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
