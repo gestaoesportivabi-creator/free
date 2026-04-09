@@ -53,26 +53,50 @@ function loadImage(url: string): Promise<{ dataUrl: string; width: number; heigh
 }
 
 function drawWatermark(doc: jsPDF, logo: { dataUrl: string; width: number; height: number } | null) {
+  if (!logo) {
+    doc.setFontSize(34);
+    doc.setTextColor(35, 35, 42);
+    doc.text(BRAND, PAGE_WIDTH / 2, PAGE_HEIGHT / 2, { align: 'center', angle: -20 });
+    return;
+  }
+  const aspect = logo.width / Math.max(logo.height, 1);
+  const wmW = 115;
+  const wmH = wmW / aspect;
+  const x = PAGE_WIDTH / 2 - wmW / 2;
+  const y = PAGE_HEIGHT / 2 - wmH / 2;
+  try {
+    const anyDoc = doc as any;
+    if (typeof anyDoc.GState === 'function' && typeof anyDoc.setGState === 'function') {
+      anyDoc.setGState(new anyDoc.GState({ opacity: 0.08 }));
+      doc.addImage(logo.dataUrl, 'PNG', x, y, wmW, wmH, undefined, 'NONE', 0);
+      anyDoc.setGState(new anyDoc.GState({ opacity: 1 }));
+    } else {
+      doc.addImage(logo.dataUrl, 'PNG', x, y, wmW, wmH, undefined, 'NONE', 0);
+    }
+  } catch {}
+}
+
+function drawLogoBottomLeft(doc: jsPDF, logo: { dataUrl: string; width: number; height: number } | null) {
   if (!logo) return;
   const aspect = logo.width / Math.max(logo.height, 1);
-  const wm = 30;
-  const wmH = wm / aspect;
-  try { doc.addImage(logo.dataUrl, 'PNG', PAGE_WIDTH - MARGIN - wm, PAGE_HEIGHT - MARGIN - wmH, wm, wmH, undefined, 'NONE', 0); } catch {}
-  doc.setFontSize(6);
-  doc.setTextColor(...COLORS.zinc700);
-  doc.text(BRAND, PAGE_WIDTH - MARGIN - wm - 2, PAGE_HEIGHT - MARGIN, { align: 'right' });
+  const h = 12;
+  const w = h * aspect;
+  const x = 0;
+  const y = PAGE_HEIGHT - h;
+  try { doc.addImage(logo.dataUrl, 'PNG', x, y, w, h, undefined, 'NONE', 0); } catch {}
 }
 
 function drawFooter(doc: jsPDF) {
   doc.setFontSize(7);
   doc.setTextColor(...COLORS.zinc500);
-  doc.text(TAGLINE, MARGIN, PAGE_HEIGHT - 6);
+  doc.text(TAGLINE, MARGIN + 26, PAGE_HEIGHT - 5.5);
 }
 
 function newPage(doc: jsPDF, logo: { dataUrl: string; width: number; height: number } | null) {
   doc.addPage();
   fillBg(doc);
   drawWatermark(doc, logo);
+  drawLogoBottomLeft(doc, logo);
   drawFooter(doc);
 }
 
@@ -120,6 +144,13 @@ function drawLineChart(doc: jsPDF, data: { date: string; rpe: number }[], color:
 
   const maxVal = Math.max(10, ...data.map(d => d.rpe));
   const step = chartW / Math.max(data.length - 1, 1);
+  const avg = data.length > 0 ? Math.round((data.reduce((acc, d) => acc + d.rpe, 0) / data.length) * 10) / 10 : null;
+
+  if (avg != null) {
+    doc.setFontSize(9);
+    doc.setTextColor(...COLORS.cyan);
+    doc.text(`Média: ${avg}`, x + chartW, y + 0.5, { align: 'right' });
+  }
 
   doc.setDrawColor(...color);
   doc.setLineWidth(0.6);
@@ -136,6 +167,9 @@ function drawLineChart(doc: jsPDF, data: { date: string; rpe: number }[], color:
     const cx = x + i * step;
     const cy = chartY + chartH - (d.rpe / maxVal) * chartH;
     doc.circle(cx, cy, 1, 'F');
+    doc.setFontSize(7);
+    doc.setTextColor(...COLORS.white);
+    doc.text(String(Math.round(d.rpe * 10) / 10), cx, cy - 2, { align: 'center' });
   });
 
   doc.setFontSize(6);
@@ -171,19 +205,13 @@ function drawHorizontalBar(doc: jsPDF, data: { name: string; value: number }[], 
 
 function drawPageHeader(
   doc: jsPDF,
-  logo: { dataUrl: string; width: number; height: number } | null,
+  _logo: { dataUrl: string; width: number; height: number } | null,
   title: string
 ) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(...COLORS.cyan);
   doc.text(title, MARGIN, 18);
-  if (logo) {
-    const aspect = logo.width / Math.max(logo.height, 1);
-    const h = 11;
-    const w = h * aspect;
-    try { doc.addImage(logo.dataUrl, 'PNG', PAGE_WIDTH - MARGIN - w, 8, w, h); } catch {}
-  }
 }
 
 function drawRadarChart(
@@ -266,6 +294,7 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
     // --- PAGE 1: CAPA ---
     fillBg(doc);
     drawWatermark(doc, logo);
+    drawLogoBottomLeft(doc, logo);
     drawFooter(doc);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(30);
@@ -282,13 +311,6 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
       const sh = 20;
       const sw = sh * aspect;
       try { doc.addImage(shield.dataUrl, 'PNG', PAGE_WIDTH / 2 - sw / 2, 76, sw, sh); } catch {}
-    }
-
-    if (logo) {
-      const aspect = logo.width / Math.max(logo.height, 1);
-      const lh = 18;
-      const lw = lh * aspect;
-      try { doc.addImage(logo.dataUrl, 'PNG', PAGE_WIDTH / 2 - lw / 2, 115, lw, lh); } catch {}
     }
 
     doc.setFontSize(8);
