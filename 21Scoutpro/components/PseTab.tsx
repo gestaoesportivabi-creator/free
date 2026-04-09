@@ -48,6 +48,17 @@ function mergeNestedRecord(
   return out;
 }
 
+function buildSessionKeysByDate(store: StoredPseTreinos): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  Object.keys(store).forEach(key => {
+    const datePart = key.split('_')[0];
+    if (!datePart) return;
+    if (!out[datePart]) out[datePart] = [];
+    out[datePart].push(key);
+  });
+  return out;
+}
+
 export const PseTab: React.FC<PseTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -97,10 +108,19 @@ export const PseTab: React.FC<PseTabProps> = ({
           });
           if (Object.keys(localTreinos).length > 0) {
             const local = { ...localTreinos };
-            for (const key of Object.keys(local)) {
-              const dt = key.split('_')[0];
-              if (treinosApi[dt]) local[key] = { ...local[key], ...treinosApi[dt] };
-            }
+            const sessionKeysByDate = buildSessionKeysByDate(local);
+            // Evita duplicação entre múltiplas sessões no mesmo dia:
+            // quando há mais de uma sessão para a data, não espalhamos payload diário da API para todas.
+            Object.entries(treinosApi).forEach(([date, byPlayer]) => {
+              const sessionKeys = sessionKeysByDate[date] || [];
+              if (sessionKeys.length === 1) {
+                const onlyKey = sessionKeys[0];
+                local[onlyKey] = { ...(local[onlyKey] || {}), ...byPlayer };
+              } else if (sessionKeys.length === 0) {
+                // Sem sessão local correspondente: mantém bucket diário isolado (não exibido como sessão).
+                local[date] = { ...(local[date] || {}), ...byPlayer };
+              }
+            });
             setPseTreinos(local);
             try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(local)); } catch (_) {}
           } else {
@@ -200,14 +220,7 @@ export const PseTab: React.FC<PseTabProps> = ({
 
   const resolveEventData = (ev: PseEvent): Record<string, number> | undefined => {
     if (ev.type === 'jogo') return pseJogos[ev.eventKey];
-    const direct = pseTreinos[ev.eventKey];
-    if (direct) return direct;
-    const datePart = ev.eventKey.split('_')[0];
-    if (!datePart) return undefined;
-    const dateOnly = pseTreinos[datePart];
-    if (dateOnly) return dateOnly;
-    const fallbackKey = Object.keys(pseTreinos).find(k => k.startsWith(`${datePart}_`));
-    return fallbackKey ? pseTreinos[fallbackKey] : undefined;
+    return pseTreinos[ev.eventKey];
   };
 
   const teamAverage = (ev: PseEvent): number | null => {

@@ -48,6 +48,17 @@ function mergeNestedRecord(
   return out;
 }
 
+function buildSessionKeysByDate(store: StoredPsrTreinos): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  Object.keys(store).forEach(key => {
+    const datePart = key.split('_')[0];
+    if (!datePart) return;
+    if (!out[datePart]) out[datePart] = [];
+    out[datePart].push(key);
+  });
+  return out;
+}
+
 export const PsrTab: React.FC<PsrTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -101,10 +112,17 @@ export const PsrTab: React.FC<PsrTabProps> = ({
           
           if (Object.keys(localTreinos).length > 0) {
             const merged = { ...localTreinos };
-            for (const key of Object.keys(merged)) {
-              const dt = key.split('_')[0];
-              if (newTreinos[dt]) merged[key] = { ...merged[key], ...newTreinos[dt] };
-            }
+            const sessionKeysByDate = buildSessionKeysByDate(merged);
+            // Evita replicar valor diário em múltiplas sessões no mesmo dia.
+            Object.entries(newTreinos).forEach(([date, byPlayer]) => {
+              const sessionKeys = sessionKeysByDate[date] || [];
+              if (sessionKeys.length === 1) {
+                const onlyKey = sessionKeys[0];
+                merged[onlyKey] = { ...(merged[onlyKey] || {}), ...byPlayer };
+              } else if (sessionKeys.length === 0) {
+                merged[date] = { ...(merged[date] || {}), ...byPlayer };
+              }
+            });
             setPsrTreinos(merged);
             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(merged));
           } else {
@@ -215,14 +233,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
 
   const resolveEventData = (ev: PsrEvent): Record<string, number> | undefined => {
     if (ev.type === 'jogo') return psrJogos[ev.eventKey];
-    const direct = psrTreinos[ev.eventKey];
-    if (direct) return direct;
-    const datePart = ev.eventKey.split('_')[0];
-    if (!datePart) return undefined;
-    const dateOnly = psrTreinos[datePart];
-    if (dateOnly) return dateOnly;
-    const fallbackKey = Object.keys(psrTreinos).find(k => k.startsWith(`${datePart}_`));
-    return fallbackKey ? psrTreinos[fallbackKey] : undefined;
+    return psrTreinos[ev.eventKey];
   };
 
   const teamAverage = (ev: PsrEvent): number | null => {
