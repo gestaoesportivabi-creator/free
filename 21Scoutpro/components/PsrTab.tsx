@@ -37,6 +37,17 @@ interface PsrTabProps {
 type StoredPsrJogos = Record<string, Record<string, number>>;
 type StoredPsrTreinos = Record<string, Record<string, number>>;
 
+function mergeNestedRecord(
+  base: Record<string, Record<string, number>>,
+  incoming: Record<string, Record<string, number>>
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = { ...base };
+  Object.entries(incoming).forEach(([eventKey, playerMap]) => {
+    out[eventKey] = { ...(out[eventKey] || {}), ...playerMap };
+  });
+  return out;
+}
+
 export const PsrTab: React.FC<PsrTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -54,9 +65,11 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     const loadFromApi = async () => {
       try {
         const lpj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-        if (lpj && mounted) setPsrJogos(JSON.parse(lpj));
+        const localJogos: StoredPsrJogos = lpj ? JSON.parse(lpj) : {};
+        if (mounted && Object.keys(localJogos).length > 0) setPsrJogos(localJogos);
         const lpt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-        if (lpt && mounted) setPsrTreinos(JSON.parse(lpt));
+        const localTreinos: StoredPsrTreinos = lpt ? JSON.parse(lpt) : {};
+        if (mounted && Object.keys(localTreinos).length > 0) setPsrTreinos(localTreinos);
 
         const [apiJogos, apiTreinos] = await Promise.all([
           wellnessApi.getAll('psr-jogo'),
@@ -66,18 +79,19 @@ export const PsrTab: React.FC<PsrTabProps> = ({
         if (!mounted) return;
 
         // Jogos
-        if (Array.isArray(apiJogos)) {
+        if (Array.isArray(apiJogos) && apiJogos.length > 0) {
           const newJogos: StoredPsrJogos = {};
           apiJogos.forEach((item: any) => {
             if (!newJogos[item.jogoId]) newJogos[item.jogoId] = {};
             newJogos[item.jogoId][item.jogadorId] = item.valor;
           });
-          setPsrJogos(newJogos);
-          localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(newJogos));
+          const mergedJogos = mergeNestedRecord(newJogos, localJogos);
+          setPsrJogos(mergedJogos);
+          localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(mergedJogos));
         }
 
         // Treinos
-        if (Array.isArray(apiTreinos)) {
+        if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
           const newTreinos: StoredPsrTreinos = {};
           apiTreinos.forEach((item: any) => {
              const key = new Date(item.data).toISOString().split('T')[0];
@@ -85,8 +99,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
              newTreinos[key][item.jogadorId] = item.valor;
           });
           
-          if (lpt) {
-            const merged = JSON.parse(lpt);
+          if (Object.keys(localTreinos).length > 0) {
+            const merged = { ...localTreinos };
             for (const key of Object.keys(merged)) {
               const dt = key.split('_')[0];
               if (newTreinos[dt]) merged[key] = { ...merged[key], ...newTreinos[dt] };
@@ -95,6 +109,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(merged));
           } else {
              setPsrTreinos(newTreinos);
+             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(newTreinos));
           }
         }
 
@@ -198,8 +213,20 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     return list;
   }, [schedules, championshipMatches]);
 
+  const resolveEventData = (ev: PsrEvent): Record<string, number> | undefined => {
+    if (ev.type === 'jogo') return psrJogos[ev.eventKey];
+    const direct = psrTreinos[ev.eventKey];
+    if (direct) return direct;
+    const datePart = ev.eventKey.split('_')[0];
+    if (!datePart) return undefined;
+    const dateOnly = psrTreinos[datePart];
+    if (dateOnly) return dateOnly;
+    const fallbackKey = Object.keys(psrTreinos).find(k => k.startsWith(`${datePart}_`));
+    return fallbackKey ? psrTreinos[fallbackKey] : undefined;
+  };
+
   const teamAverage = (ev: PsrEvent): number | null => {
-    const data = ev.type === 'jogo' ? psrJogos[ev.eventKey] : psrTreinos[ev.eventKey];
+    const data = resolveEventData(ev);
     if (!data) return null;
     const values = Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 0 && v <= 10);
     if (values.length === 0) return null;
@@ -207,7 +234,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   };
 
   const getStoredValue = (ev: PsrEvent, playerId: string): number | '' => {
-    const data = ev.type === 'jogo' ? psrJogos[ev.eventKey] : psrTreinos[ev.eventKey];
+    const data = resolveEventData(ev);
     const v = data?.[playerId];
     return v != null && v >= 0 && v <= 10 ? v : '';
   };

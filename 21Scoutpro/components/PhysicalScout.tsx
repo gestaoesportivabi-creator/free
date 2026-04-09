@@ -1,6 +1,23 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { LineChart, Line, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, UserMinus, Moon, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LabelList,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+} from 'recharts';
+import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
@@ -12,10 +29,6 @@ const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
 const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
-const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
-
-type StoredQualidadeSono = Record<string, Record<string, number>>;
-
 type ChampionshipMatch = { id: string; date: string; time?: string; opponent: string; competition?: string };
 type StoredPseJogos = Record<string, Record<string, number>>;
 type StoredPseTreinos = Record<string, Record<string, number>>;
@@ -63,7 +76,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   const [pseTreinosStored, setPseTreinosStored] = useState<StoredPseTreinos>({});
   const [psrJogosStored, setPsrJogosStored] = useState<StoredPsrJogos>({});
   const [psrTreinosStored, setPsrTreinosStored] = useState<StoredPsrTreinos>({});
-  const [qualidadeSonoStored, setQualidadeSonoStored] = useState<StoredQualidadeSono>({});
   const [wellnessStored, setWellnessStored] = useState<StoredWellness>({});
 
   useEffect(() => {
@@ -97,13 +109,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   }, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-      if (raw) setQualidadeSonoStored(JSON.parse(raw));
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
     const loadWellness = () => {
       try {
         const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
@@ -115,7 +120,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     return () => window.removeEventListener('wellness-updated', loadWellness);
   }, []);
 
-  // Recarregar dados das abas PSE, PSR e Qualidade de sono quando a tab for exibida (para atualizar após preencher nas outras abas)
+  // Recarregar dados das abas PSE, PSR e Bem-estar quando a tab for exibida (para atualizar após preencher nas outras abas)
   useEffect(() => {
     const onStorage = () => {
       try {
@@ -127,8 +132,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         if (pj) setPsrJogosStored(JSON.parse(pj));
         const pt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
         if (pt) setPsrTreinosStored(JSON.parse(pt));
-        const q = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-        if (q) setQualidadeSonoStored(JSON.parse(q));
         const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
         if (w) setWellnessStored(JSON.parse(w));
       } catch (_) {}
@@ -445,104 +448,45 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
   const psrTrainingData = trainingSessionsForChart.length > 0 ? psrTrainingDataFromSessions : [];
 
-  // Qualidade de sono: eventos = noite anterior a treino (manhã) + noite anterior a jogo
-  const sleepChartData = useMemo(() => {
-    const list: { name: string; media: number; type: 'treino' | 'jogo'; eventKey: string }[] = [];
-    const seen = new Set<string>();
-
-    const active = schedules.filter(s => s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true');
-    active.forEach(s => {
-      const flat = normalizeScheduleDays(s);
-      flat.forEach(day => {
-        const act = (day.activity || '').trim();
-        if (act !== 'Treino' && act !== 'Musculação') return;
-        const date = day.date || '';
-        const time = day.time || '00:00';
-        const [h] = time.split(':').map(Number);
-        if (!date || (h ?? 0) >= 12) return;
-        const eventKey = `treino_${date}`;
-        if (seen.has(eventKey)) return;
-        seen.add(eventKey);
-        const data = qualidadeSonoStored[eventKey];
-        const values = data ? Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 1 && v <= 5) : [];
-        const media = values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0;
-        list.push({
-          name: `${new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} Treino`,
-          media,
-          type: 'treino',
-          eventKey,
-        });
-      });
-    });
-
-    championshipMatches.forEach(m => {
-      const eventKey = `jogo_${m.date}`;
-      if (seen.has(eventKey)) return;
-      seen.add(eventKey);
-      const data = qualidadeSonoStored[eventKey];
-      const values = data ? Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 1 && v <= 5) : [];
-      const media = values.length > 0 ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : 0;
-      list.push({
-        name: `${new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} Jogo`,
-        media,
-        type: 'jogo',
-        eventKey,
-      });
-    });
-
-    list.sort((a, b) => {
-      const dateA = a.eventKey.replace('treino_', '').replace('jogo_', '');
-      const dateB = b.eventKey.replace('treino_', '').replace('jogo_', '');
-      return dateA.localeCompare(dateB);
-    });
-
-    return list
-      .filter(item => {
-        const d = item.eventKey.replace('treino_', '').replace('jogo_', '');
-        return dateInRange(d);
-      })
-      .map(item => {
-        if (!playerFilterId) return item;
-        const v = qualidadeSonoStored[item.eventKey]?.[playerFilterId];
-        const media = typeof v === 'number' ? v : 0;
-        return { ...item, media };
-      })
-      .filter(item => !playerFilterId || item.media > 0);
-  }, [schedules, championshipMatches, qualidadeSonoStored, dateInRange, playerFilterId]);
-
-  const WELLNESS_LINE_COLORS = ['#e879f9', '#38bdf8', '#fbbf24', '#34d399', '#f472b6'];
-
-  const wellnessLineSeries = useMemo(() => {
+  /** Média por indicador no período (mesma lógica das linhas antigas: por dia, equipe ou atleta; depois média no período). */
+  const wellnessRadarPeriod = useMemo(() => {
     const roster = players.filter(p => !p.isTransferred);
     const dates = enumerateDatesInclusive(dateFrom, dateTo);
-    return WELLNESS_DIMENSIONS.map((dim, idx) => {
-      const data = dates
-        .map(dateStr => {
-          const dayMap = wellnessStored[dateStr];
-          let val: number | null = null;
-          if (dayMap) {
-            if (playerFilterId) {
-              const v = dayMap[playerFilterId]?.[dim.key];
-              val = typeof v === 'number' ? v : null;
-            } else {
-              const vals = roster
-                .map(p => dayMap[p.id]?.[dim.key])
-                .filter((x): x is number => typeof x === 'number');
-              val =
-                vals.length > 0
-                  ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
-                  : null;
-            }
+    return WELLNESS_DIMENSIONS.map(dim => {
+      const dailyValues: number[] = [];
+      for (const dateStr of dates) {
+        const dayMap = wellnessStored[dateStr];
+        if (!dayMap) continue;
+        if (playerFilterId) {
+          const v = dayMap[playerFilterId]?.[dim.key];
+          if (typeof v === 'number') dailyValues.push(v);
+        } else {
+          const vals = roster
+            .map(p => dayMap[p.id]?.[dim.key])
+            .filter((x): x is number => typeof x === 'number');
+          if (vals.length > 0) {
+            dailyValues.push(Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10);
           }
-          return {
-            date: new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-            value: val,
-          };
-        })
-        .filter((row): row is { date: string; value: number } => row.value !== null);
-      return { ...dim, data, stroke: WELLNESS_LINE_COLORS[idx % WELLNESS_LINE_COLORS.length] };
+        }
+      }
+      const avg =
+        dailyValues.length > 0
+          ? Math.round((dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length) * 10) / 10
+          : null;
+      const shortLabel = dim.label.length > 18 ? `${dim.label.slice(0, 16)}…` : dim.label;
+      return {
+        key: dim.key,
+        subject: dim.label,
+        shortLabel,
+        value: avg ?? 0,
+        avg,
+        avgLabel: avg != null ? `Ø ${avg}` : '—',
+        fullMark: 5,
+      };
     });
   }, [wellnessStored, dateFrom, dateTo, playerFilterId, players]);
+
+  const hasWellnessRadarData = wellnessRadarPeriod.some(r => r.avg !== null);
 
   const injuryTypeData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -657,7 +601,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         pseTrainingData: rpeTrainingData,
         psrMatchData,
         psrTrainingData,
-        sleepChartData,
         injuryTypeData,
         injurySideData,
       };
@@ -940,81 +883,88 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </ExpandableCard>
       </div>
 
-      {sleepChartData.length > 0 && (
-        <ExpandableCard title="Média qualidade de sono da equipe" icon={Moon} headerColor="text-[#00f0ff]">
-          <p className="text-xs text-zinc-500 mb-2 font-medium">
-            {playerFilterId ? 'Qualidade de sono do atleta nas noites do período. ' : 'Média da equipe por noite no período. '}
-            Noites anteriores a treino (manhã) e a jogos. Preencha na aba <strong>Qualidade de sono</strong>. Escala 1–5.
-          </p>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sleepChartData} margin={{ top: 20, right: 20, left: 10, bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="name" stroke="#71717a" tick={{ fontSize: 11, fontFamily: 'Calibri' }} angle={-35} textAnchor="end" interval={0} />
-                <YAxis domain={[0, 5]} stroke="#666" tick={{ fontSize: 12, fontFamily: 'Calibri' }} allowDecimals={false} />
-                <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} formatter={(value: number) => [value, 'Média']} />
-                <Bar dataKey="media" radius={[4, 4, 0, 0]} barSize={32} name="Média sono">
-                  {sleepChartData.map((entry, index) => (
-                    <Cell key={`sono-${index}`} fill={entry.type === 'treino' ? '#10b981' : '#eab308'} />
-                  ))}
-                  <LabelList dataKey="media" position="top" fill="#fff" fontSize={14} fontFamily="Calibri" fontWeight="bold" />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex gap-6 mt-3 text-xs">
-            <span className="flex items-center gap-2 text-zinc-400"><span className="w-3 h-3 rounded bg-emerald-500" /> Treino (manhã)</span>
-            <span className="flex items-center gap-2 text-zinc-400"><span className="w-3 h-3 rounded bg-amber-500" /> Jogo</span>
-          </div>
-        </ExpandableCard>
-      )}
-
       <div className="space-y-4 print:break-inside-avoid">
         <h3 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2 px-1 print:text-black">
           <HeartPulse className="text-[#00f0ff] print:text-black" /> Bem-estar diário
         </h3>
         <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
-          Cinco indicadores da aba <strong className="text-zinc-400">Bem-Estar Diário</strong>, filtrados pelo mesmo período e atleta desta página.
+          Radar com a <strong className="text-zinc-400">média de cada indicador</strong> no período (escala 1–5), alinhado aos filtros de data e atleta. Fonte: aba{' '}
+          <strong className="text-zinc-400">Bem-Estar Diário</strong>. Nos eixos: nome do indicador e média (Ø).
         </p>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {wellnessLineSeries.map(series => (
-            <ExpandableCard key={series.key} title={series.label} icon={HeartPulse} headerColor="text-fuchsia-400">
-              <p className="text-xs text-zinc-500 mb-2 font-medium">Escala 1–5 · só dias com registro no bem-estar.</p>
-              {series.data.length > 0 ? (
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={series.data} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                      <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 10, fontFamily: 'Calibri' }} />
-                      <YAxis domain={[0, 5.5]} stroke="#666" tick={{ fontSize: 10 }} allowDecimals />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#000',
-                          borderColor: '#27272a',
-                          color: '#fff',
-                          fontFamily: 'Calibri',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke={series.stroke}
-                        strokeWidth={2}
-                        dot={{ fill: series.stroke, r: 3 }}
-                        name={series.label}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <p className="text-zinc-500 text-sm py-6 text-center">
-                  Sem dados no período. Preencha na aba <strong>Bem-Estar Diário</strong> em dias com Treino, Jogo ou Musculação na programação.
-                </p>
-              )}
-            </ExpandableCard>
-          ))}
-        </div>
+        <ExpandableCard title="Radar — médias do período" icon={HeartPulse} headerColor="text-fuchsia-400">
+          {hasWellnessRadarData ? (
+            <div className="h-[min(420px,70vw)] w-full max-w-2xl mx-auto min-h-[360px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={wellnessRadarPeriod} cx="50%" cy="52%" outerRadius="68%">
+                  <PolarGrid stroke="#27272a" />
+                  <PolarRadiusAxis
+                    angle={30}
+                    domain={[0, 5]}
+                    tickCount={6}
+                    tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'Calibri' }}
+                    stroke="#3f3f46"
+                  />
+                  <PolarAngleAxis
+                    dataKey="shortLabel"
+                    tick={({ x, y, payload, textAnchor }) => {
+                      const row = wellnessRadarPeriod.find(r => r.shortLabel === payload.value);
+                      if (!row) return <g />;
+                      const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
+                      return (
+                        <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
+                          <tspan x={x} dy={0}>
+                            {row.shortLabel}
+                          </tspan>
+                          <tspan x={x} dy={12} fill="#00f0ff" fontWeight="bold" fontSize={10}>
+                            {row.avgLabel}
+                          </tspan>
+                        </text>
+                      );
+                    }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#000',
+                      borderColor: '#27272a',
+                      color: '#fff',
+                      fontFamily: 'Calibri',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                    }}
+                    formatter={(value: number, _name: string, item: { payload?: { subject?: string; avgLabel?: string } }) => [
+                      item?.payload?.avgLabel ?? String(value),
+                      item?.payload?.subject ?? 'Indicador',
+                    ]}
+                  />
+                  <Radar
+                    name="Média no período"
+                    dataKey="value"
+                    stroke="#00f0ff"
+                    fill="#00f0ff"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: '#00f0ff', strokeWidth: 0 }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : null}
+          {hasWellnessRadarData && (
+            <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-zinc-500 border-t border-zinc-800 pt-4 font-medium">
+              {wellnessRadarPeriod.map(r => (
+                <li key={r.key} className="flex justify-between gap-2 border-b border-zinc-800/60 pb-1.5 sm:border-0 sm:pb-0">
+                  <span className="text-zinc-300">{r.subject}</span>
+                  <span className="text-[#00f0ff] font-black tabular-nums">{r.avgLabel}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!hasWellnessRadarData && (
+            <p className="text-zinc-500 text-sm py-10 text-center">
+              Sem dados no período. Preencha na aba <strong>Bem-Estar Diário</strong> em dias com Treino, Jogo ou Musculação na programação.
+            </p>
+          )}
+        </ExpandableCard>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
@@ -1121,12 +1071,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         });
         psrHistory.sort((a, b) => a.date.localeCompare(b.date));
 
-        Object.entries(qualidadeSonoStored).forEach(([key, data]) => {
-          const raw = key.replace(/^treino_/, '').replace(/^jogo_/, '');
-          const d = raw.length >= 10 ? raw.slice(0, 10) : key.split(/_(.*)/)[1] || key;
-          if (!dateInRange(d)) return;
-          const v = data[playerFilterId];
-          if (typeof v === 'number') sonoHistory.push({ date: d, value: v });
+        Object.entries(wellnessStored).forEach(([dateStr, dayMap]) => {
+          if (!dateInRange(dateStr)) return;
+          const v = dayMap[playerFilterId]?.sono;
+          if (typeof v === 'number') sonoHistory.push({ date: dateStr, value: v });
         });
         sonoHistory.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1173,7 +1121,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                 <p className="text-2xl font-black text-sky-400 mt-1">{lastPsr ?? '—'}</p>
               </div>
               <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">Último Sono</p>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase">Sono (bem-estar)</p>
                 <p className="text-2xl font-black text-amber-400 mt-1">{lastSono ?? '—'}</p>
               </div>
               <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">

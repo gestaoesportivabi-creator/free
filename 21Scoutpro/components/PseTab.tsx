@@ -37,6 +37,17 @@ interface PseTabProps {
 type StoredPseJogos = Record<string, Record<string, number>>;
 type StoredPseTreinos = Record<string, Record<string, number>>;
 
+function mergeNestedRecord(
+  base: Record<string, Record<string, number>>,
+  incoming: Record<string, Record<string, number>>
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = { ...base };
+  Object.entries(incoming).forEach(([eventKey, playerMap]) => {
+    out[eventKey] = { ...(out[eventKey] || {}), ...playerMap };
+  });
+  return out;
+}
+
 export const PseTab: React.FC<PseTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -54,9 +65,11 @@ export const PseTab: React.FC<PseTabProps> = ({
     const load = async () => {
       try {
         const rawJ = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-        if (rawJ && mounted) setPseJogos(JSON.parse(rawJ));
+        const localJogos: StoredPseJogos = rawJ ? JSON.parse(rawJ) : {};
+        if (mounted && Object.keys(localJogos).length > 0) setPseJogos(localJogos);
         const rawT = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-        if (rawT && mounted) setPseTreinos(JSON.parse(rawT));
+        const localTreinos: StoredPseTreinos = rawT ? JSON.parse(rawT) : {};
+        if (mounted && Object.keys(localTreinos).length > 0) setPseTreinos(localTreinos);
 
         const [apiJogos, apiTreinos] = await Promise.all([
           wellnessApi.getAll('pse-jogo'),
@@ -70,8 +83,9 @@ export const PseTab: React.FC<PseTabProps> = ({
             if (!jogosData[item.jogoId]) jogosData[item.jogoId] = {};
             jogosData[item.jogoId][item.jogadorId] = item.valor;
           });
-          setPseJogos(jogosData);
-          try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(jogosData)); } catch (_) {}
+          const mergedJogos = mergeNestedRecord(jogosData, localJogos);
+          setPseJogos(mergedJogos);
+          try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(mergedJogos)); } catch (_) {}
         }
 
         if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
@@ -81,9 +95,8 @@ export const PseTab: React.FC<PseTabProps> = ({
             if (!treinosApi[yyyyMmDd]) treinosApi[yyyyMmDd] = {};
             treinosApi[yyyyMmDd][item.jogadorId] = item.valor;
           });
-          const localRaw = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-          if (localRaw) {
-            const local = JSON.parse(localRaw) as StoredPseTreinos;
+          if (Object.keys(localTreinos).length > 0) {
+            const local = { ...localTreinos };
             for (const key of Object.keys(local)) {
               const dt = key.split('_')[0];
               if (treinosApi[dt]) local[key] = { ...local[key], ...treinosApi[dt] };
@@ -92,6 +105,7 @@ export const PseTab: React.FC<PseTabProps> = ({
             try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(local)); } catch (_) {}
           } else {
             setPseTreinos(treinosApi);
+            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(treinosApi)); } catch (_) {}
           }
         }
       } catch (err) {
@@ -184,8 +198,20 @@ export const PseTab: React.FC<PseTabProps> = ({
     return list;
   }, [schedules, championshipMatches]);
 
+  const resolveEventData = (ev: PseEvent): Record<string, number> | undefined => {
+    if (ev.type === 'jogo') return pseJogos[ev.eventKey];
+    const direct = pseTreinos[ev.eventKey];
+    if (direct) return direct;
+    const datePart = ev.eventKey.split('_')[0];
+    if (!datePart) return undefined;
+    const dateOnly = pseTreinos[datePart];
+    if (dateOnly) return dateOnly;
+    const fallbackKey = Object.keys(pseTreinos).find(k => k.startsWith(`${datePart}_`));
+    return fallbackKey ? pseTreinos[fallbackKey] : undefined;
+  };
+
   const teamAverage = (ev: PseEvent): number | null => {
-    const data = ev.type === 'jogo' ? pseJogos[ev.eventKey] : pseTreinos[ev.eventKey];
+    const data = resolveEventData(ev);
     if (!data) return null;
     const values = Object.values(data).filter((v): v is number => typeof v === 'number' && v >= 0 && v <= 10);
     if (values.length === 0) return null;
@@ -193,7 +219,7 @@ export const PseTab: React.FC<PseTabProps> = ({
   };
 
   const getStoredValue = (ev: PseEvent, playerId: string): number | '' => {
-    const data = ev.type === 'jogo' ? pseJogos[ev.eventKey] : pseTreinos[ev.eventKey];
+    const data = resolveEventData(ev);
     const v = data?.[playerId];
     return v != null && v >= 0 && v <= 10 ? v : '';
   };

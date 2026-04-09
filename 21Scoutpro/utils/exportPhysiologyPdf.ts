@@ -90,7 +90,6 @@ export interface PhysiologyPdfData {
   pseTrainingData: { date: string; rpe: number }[];
   psrMatchData: { date: string; rpe: number }[];
   psrTrainingData: { date: string; rpe: number }[];
-  sleepChartData: { name: string; media: number; type: string }[];
   injuryTypeData: { name: string; value: number }[];
   injurySideData: { direito: number; esquerdo: number };
 }
@@ -260,38 +259,15 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
     drawLineChart(doc, data.pseMatchData, COLORS.lime, 'EVOLUÇÃO PSE (JOGOS)', MARGIN, chartY, halfW, 60);
     drawLineChart(doc, data.pseTrainingData, COLORS.emerald, 'MÉDIA PSE (TREINOS)', MARGIN + halfW + 8, chartY, halfW, 60);
 
-    // --- PAGE 3: PSR + Sleep ---
+    // --- PAGE 3: PSR ---
     newPage(doc, logo);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(16);
     doc.setTextColor(...COLORS.cyan);
-    doc.text('RECUPERAÇÃO & SONO', MARGIN, 18);
+    doc.text('RECUPERAÇÃO (PSR)', MARGIN, 18);
 
     drawLineChart(doc, data.psrMatchData, COLORS.sky, 'EVOLUÇÃO PSR (JOGOS)', MARGIN, 28, halfW, 60);
     drawLineChart(doc, data.psrTrainingData, [14, 165, 233], 'MÉDIA PSR (TREINOS)', MARGIN + halfW + 8, 28, halfW, 60);
-
-    if (data.sleepChartData.length > 0) {
-      const sleepY = 100;
-      doc.setFontSize(10);
-      doc.setTextColor(...COLORS.white);
-      doc.text('QUALIDADE DE SONO DA EQUIPE', MARGIN, sleepY);
-
-      const barW = CONTENT_W / Math.max(data.sleepChartData.length, 1);
-      const maxSleep = 5;
-      const barAreaH = 50;
-
-      data.sleepChartData.forEach((d, i) => {
-        const bx = MARGIN + i * barW + 2;
-        const bw = barW - 4;
-        const bh = (d.media / maxSleep) * barAreaH;
-        const by = sleepY + 6 + barAreaH - bh;
-        doc.setFillColor(...(d.type === 'treino' ? COLORS.emerald : [234, 179, 8] as [number, number, number]));
-        doc.roundedRect(bx, by, bw, bh, 1, 1, 'F');
-        doc.setFontSize(6);
-        doc.setTextColor(...COLORS.white);
-        doc.text(String(d.media), bx + bw / 2, by - 1, { align: 'center' });
-      });
-    }
 
     // --- PAGE 4: Injuries ---
     newPage(doc, logo);

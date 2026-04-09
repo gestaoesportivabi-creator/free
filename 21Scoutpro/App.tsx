@@ -15,7 +15,6 @@ import { StatsRanking } from './components/StatsRanking';
 import { Schedule } from './components/Schedule';
 import { PseTab } from './components/PseTab';
 import { PsrTab } from './components/PsrTab';
-import { QualidadeSonoTab } from './components/QualidadeSonoTab';
 import { WellnessTab } from './components/WellnessTab';
 import { LoadingMessage } from './components/LoadingMessage';
 import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipTable';
@@ -96,7 +95,6 @@ const TAB_LABELS: Record<string, string> = {
   'athletes-physio': 'Atletas',
   pse: 'PSE',
   psr: 'PSR',
-  'qualidade-sono': 'Qualidade de sono',
   wellness: 'Bem-Estar Diário',
   assessment: 'Avaliação Física',
   academia: 'Musculação',
@@ -120,8 +118,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   video: ['matches', 'players'],
   pse: ['schedules', 'championshipMatches', 'players'],
   psr: ['schedules', 'championshipMatches', 'players'],
-  'qualidade-sono': ['schedules', 'championshipMatches', 'players'],
-  wellness: ['players'],
+  wellness: ['players', 'schedules'],
   academia: ['schedules', 'players'],
   'management-report': ['players', 'matches', 'assessments', 'timeControls'],
   admin: [],
@@ -1645,16 +1642,6 @@ export default function App() {
           <TabBackgroundWrapper>
             {performanceTier ? (
               <PsrTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
-            ) : (
-              <EmBreve />
-            )}
-          </TabBackgroundWrapper>
-        );
-      case 'qualidade-sono':
-        return (
-          <TabBackgroundWrapper>
-            {performanceTier ? (
-              <QualidadeSonoTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
             ) : (
               <EmBreve />
             )}
