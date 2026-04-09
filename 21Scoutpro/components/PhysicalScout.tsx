@@ -142,14 +142,15 @@ function WellnessRadarPanel({
   radarName: string;
 }) {
   return (
-    <div className="flex flex-col w-full min-h-[300px]">
+    <div className="flex flex-col w-full">
       <p
         className={`text-center text-[11px] font-black uppercase tracking-wider mb-2 ${titleClassName ?? ''}`}
         style={titleStyle}
       >
         {title}
       </p>
-      <div className="w-full flex-1 min-h-[280px]">
+      {/* Altura fixa: ResponsiveContainer com height 100% exige pai com altura definida (min-h/flex-1 falha). */}
+      <div className="w-full h-[min(320px,55vw)] min-h-[260px]">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} cx="50%" cy="52%" outerRadius="68%">
             <PolarGrid stroke="#27272a" />
@@ -1120,7 +1121,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               valueTickColor="#4ade80"
               radarName="Modelo ideal"
             />
-            <div className="flex flex-col w-full min-h-[300px]">
+            <div className="flex flex-col w-full">
               <p
                 className="text-center text-[11px] font-black uppercase tracking-wider mb-2"
                 style={{ color: hasWellnessRadarData ? wellnessRealRadarStyle.stroke : '#a1a1aa' }}
@@ -1128,7 +1129,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                 Realidade (período)
               </p>
               {hasWellnessRadarData ? (
-                <div className="w-full flex-1 min-h-[280px]">
+                <div className="w-full h-[min(320px,55vw)] min-h-[260px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={wellnessRadarPeriod} cx="50%" cy="52%" outerRadius="68%">
                       <PolarGrid stroke="#27272a" />
