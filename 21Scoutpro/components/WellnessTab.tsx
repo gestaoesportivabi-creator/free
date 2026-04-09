@@ -8,6 +8,17 @@ export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 /** Chaves persistidas no localStorage (bem-estar diário) */
 export const WELLNESS_DIMENSION_KEYS = ['stress', 'sono', 'humor', 'dor', 'satisfacao'] as const;
 
+export type WellnessDimensionKey = (typeof WELLNESS_DIMENSION_KEYS)[number];
+
+/** Metas de bem-estar (escala 1–5) para comparação no radar de monitoramento fisiológico. */
+export const WELLNESS_IDEAL_VALUES: Record<WellnessDimensionKey, number> = {
+  stress: 1,
+  sono: 5,
+  humor: 5,
+  dor: 1,
+  satisfacao: 5,
+};
+
 export const WELLNESS_DIMENSIONS = [
   { key: 'stress' as const, label: 'Nível de stress', emoji: '🧠' },
   { key: 'sono' as const, label: 'Qualidade do sono', emoji: '😴' },

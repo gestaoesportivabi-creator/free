@@ -4,6 +4,7 @@
  */
 
 import { jsPDF } from 'jspdf';
+import { wellnessClosenessRgb } from './wellnessRadarColors';
 
 const LOGO_URL = '/public-logo.png.png';
 const BRAND = 'SCOUT21';
@@ -114,7 +115,11 @@ export interface PhysiologyPdfData {
   pseTrainingData: { date: string; rpe: number }[];
   psrMatchData: { date: string; rpe: number }[];
   psrTrainingData: { date: string; rpe: number }[];
+  /** Metas fixas (verde no PDF). */
+  wellnessIdealRadarData: { subject: string; avg: number }[];
   wellnessRadarData: { subject: string; avg: number | null }[];
+  /** 0–1 proximidade ao ideal; define cor do radar real no PDF. */
+  wellnessRadarCloseness: number | null;
   injuryTypeData: { name: string; value: number }[];
   injurySideData: { direito: number; esquerdo: number };
   acwrRows: { name: string; position: string; acute: number; chronic: number; acwr: number; risk: 'green' | 'yellow' | 'red' | 'none' }[];
@@ -214,22 +219,37 @@ function drawPageHeader(
   doc.text(title, MARGIN, 18);
 }
 
+function mixRgbWithWhite(rgb: [number, number, number], t: number): [number, number, number] {
+  return [
+    Math.round(rgb[0] * t + 255 * (1 - t)),
+    Math.round(rgb[1] * t + 255 * (1 - t)),
+    Math.round(rgb[2] * t + 255 * (1 - t)),
+  ];
+}
+
 function drawRadarChart(
   doc: jsPDF,
   data: { subject: string; avg: number | null }[],
   x: number,
   y: number,
-  size: number
+  size: number,
+  opts?: {
+    strokeRgb: [number, number, number];
+    valueLabelRgb?: [number, number, number];
+    emptyMessage?: string;
+  }
 ) {
+  const strokeRgb = opts?.strokeRgb ?? COLORS.cyan;
+  const valueRgb = opts?.valueLabelRgb ?? strokeRgb;
   const cx = x + size / 2;
   const cy = y + size / 2;
   const r = size * 0.38;
   const valid = data.filter(d => d.avg != null);
   const axisCount = Math.max(data.length, 3);
   if (valid.length === 0) {
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(...COLORS.zinc500);
-    doc.text('Sem dados de bem-estar no período', cx, cy, { align: 'center' });
+    doc.text(opts?.emptyMessage ?? 'Sem dados de bem-estar no período', cx, cy, { align: 'center' });
     return;
   }
 
@@ -257,14 +277,14 @@ function drawRadarChart(
     const avgLabel = item?.avg != null ? `Ø ${item.avg}` : '—';
     doc.setTextColor(...COLORS.zinc500);
     doc.text(label.length > 22 ? `${label.slice(0, 21)}…` : label, lx, ly, { align: 'center' });
-    doc.setTextColor(...COLORS.cyan);
+    doc.setTextColor(...valueRgb);
     doc.text(avgLabel, lx, ly + 4, { align: 'center' });
   }
 
-  // polígono radar
-  doc.setDrawColor(...COLORS.cyan);
+  const fillRgb = mixRgbWithWhite(strokeRgb, 0.35);
+  doc.setDrawColor(...strokeRgb);
   doc.setLineWidth(0.9);
-  doc.setFillColor(0, 240, 255);
+  doc.setFillColor(...fillRgb);
   const points = data.map((item, i) => {
     const a = (-Math.PI / 2) + (2 * Math.PI * i) / axisCount;
     const rv = ((item.avg ?? 0) / 5) * r;
@@ -275,6 +295,7 @@ function drawRadarChart(
     const p2 = points[(i + 1) % points.length];
     doc.line(p1.x, p1.y, p2.x, p2.y);
   }
+  doc.setFillColor(...strokeRgb);
   points.forEach(p => doc.circle(p.x, p.y, 1.1, 'F'));
 }
 
@@ -372,10 +393,29 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
     drawPageHeader(doc, logo, 'MÉDIA PSR (TREINOS)');
     drawLineChart(doc, data.psrTrainingData, [14, 165, 233], 'MÉDIA PSR (TREINOS)', MARGIN, 34, CONTENT_W, 90);
 
-    // --- PAGE 7: RADAR BEM-ESTAR ---
+    // --- PAGE 7: RADAR BEM-ESTAR (ideal + real) ---
     newPage(doc, logo);
     drawPageHeader(doc, logo, 'RADAR — MÉDIAS DO PERÍODO');
-    drawRadarChart(doc, data.wellnessRadarData || [], MARGIN + 34, 34, 165);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.emerald);
+    doc.text('Modelo ideal', MARGIN + 50, 30, { align: 'center' });
+    doc.setTextColor(...COLORS.zinc500);
+    doc.text('Realidade (periodo)', MARGIN + 155, 30, { align: 'center' });
+    const idealRadar = data.wellnessIdealRadarData || [];
+    const realRadar = data.wellnessRadarData || [];
+    const closeness = data.wellnessRadarCloseness;
+    const realRgb: [number, number, number] =
+      closeness != null && !Number.isNaN(closeness) ? wellnessClosenessRgb(closeness) : COLORS.zinc500;
+    drawRadarChart(doc, idealRadar.map(d => ({ subject: d.subject, avg: d.avg })), MARGIN + 2, 36, 118, {
+      strokeRgb: COLORS.emerald,
+      valueLabelRgb: COLORS.emerald,
+    });
+    drawRadarChart(doc, realRadar, MARGIN + 118, 36, 118, {
+      strokeRgb: realRgb,
+      valueLabelRgb: realRgb,
+      emptyMessage: 'Sem dados no periodo',
+    });
 
     // --- PAGE 8: DISTRIBUIÇÃO POR TIPO ---
     newPage(doc, logo);

@@ -24,7 +24,8 @@ import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiologyPdf';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
-import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS } from './WellnessTab';
+import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
+import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
 
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -105,6 +106,106 @@ function injuryWasOpenWithoutPredictedReturnOnMatchDay(inj: InjuryRecord, matchD
   const closed = (inj.returnDateActual || inj.endDate || '').trim().slice(0, 10);
   if (closed.length >= 10 && closed <= matchDay) return false;
   return true;
+}
+
+type WellnessRadarChartRow = {
+  key: string;
+  subject: string;
+  shortLabel: string;
+  value: number;
+  avg: number | null;
+  avgLabel: string;
+  fullMark: number;
+};
+
+function WellnessRadarPanel({
+  title,
+  titleClassName,
+  titleStyle,
+  data,
+  stroke,
+  fill,
+  fillOpacity,
+  dot,
+  valueTickColor,
+  radarName,
+}: {
+  title: string;
+  titleClassName?: string;
+  titleStyle?: React.CSSProperties;
+  data: WellnessRadarChartRow[];
+  stroke: string;
+  fill: string;
+  fillOpacity: number;
+  dot: string;
+  valueTickColor: string;
+  radarName: string;
+}) {
+  return (
+    <div className="flex flex-col w-full min-h-[300px]">
+      <p
+        className={`text-center text-[11px] font-black uppercase tracking-wider mb-2 ${titleClassName ?? ''}`}
+        style={titleStyle}
+      >
+        {title}
+      </p>
+      <div className="w-full flex-1 min-h-[280px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadarChart data={data} cx="50%" cy="52%" outerRadius="68%">
+            <PolarGrid stroke="#27272a" />
+            <PolarRadiusAxis
+              angle={30}
+              domain={[0, 5]}
+              tickCount={6}
+              tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'Calibri' }}
+              stroke="#3f3f46"
+            />
+            <PolarAngleAxis
+              dataKey="shortLabel"
+              tick={({ x, y, payload, textAnchor }) => {
+                const row = data.find(r => r.shortLabel === payload.value);
+                if (!row) return <g />;
+                const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
+                return (
+                  <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
+                    <tspan x={x} dy={0}>
+                      {row.shortLabel}
+                    </tspan>
+                    <tspan x={x} dy={12} fill={valueTickColor} fontWeight="bold" fontSize={10}>
+                      {row.avgLabel}
+                    </tspan>
+                  </text>
+                );
+              }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#000',
+                borderColor: '#27272a',
+                color: '#fff',
+                fontFamily: 'Calibri',
+                borderRadius: '8px',
+                fontSize: '11px',
+              }}
+              formatter={(value: number, _name: string, item: { payload?: { subject?: string; avgLabel?: string } }) => [
+                item?.payload?.avgLabel ?? String(value),
+                item?.payload?.subject ?? 'Indicador',
+              ]}
+            />
+            <Radar
+              name={radarName}
+              dataKey="value"
+              stroke={stroke}
+              fill={fill}
+              fillOpacity={fillOpacity}
+              strokeWidth={2}
+              dot={{ r: 4, fill: dot, strokeWidth: 0 }}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 }
 
 export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, schedules = [], championshipMatches = [] }) => {
@@ -547,6 +648,34 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     });
   }, [wellnessStored, dateFrom, dateTo, playerFilterId, players]);
 
+  const wellnessIdealRadarData = useMemo<WellnessRadarChartRow[]>(
+    () =>
+      WELLNESS_DIMENSIONS.map(dim => {
+        const ideal = WELLNESS_IDEAL_VALUES[dim.key];
+        const shortLabel = dim.label.length > 18 ? `${dim.label.slice(0, 16)}…` : dim.label;
+        return {
+          key: dim.key,
+          subject: dim.label,
+          shortLabel,
+          value: ideal,
+          avg: ideal,
+          avgLabel: `Meta ${ideal}`,
+          fullMark: 5,
+        };
+      }),
+    []
+  );
+
+  const wellnessRadarCloseness = useMemo(
+    () => wellnessClosenessScore(wellnessRadarPeriod.map(r => ({ key: r.key, avg: r.avg }))),
+    [wellnessRadarPeriod]
+  );
+
+  const wellnessRealRadarStyle = useMemo(
+    () => wellnessRealRadarColors(wellnessRadarCloseness ?? 0),
+    [wellnessRadarCloseness]
+  );
+
   const hasWellnessRadarData = wellnessRadarPeriod.some(r => r.avg !== null);
 
   const avgOf = (values: number[]): number | null => {
@@ -703,7 +832,9 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         pseTrainingData: rpeTrainingData,
         psrMatchData,
         psrTrainingData,
+        wellnessIdealRadarData: wellnessIdealRadarData.map(r => ({ subject: r.subject, avg: r.avg as number })),
         wellnessRadarData: wellnessRadarPeriod.map(r => ({ subject: r.subject, avg: r.avg })),
+        wellnessRadarCloseness: wellnessRadarCloseness,
         injuryTypeData,
         injurySideData,
         acwrRows: acwrData
@@ -972,81 +1103,129 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           <Brain className="text-[#00f0ff] print:text-black" /> Bem-estar diário
         </h3>
         <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
-          Radar com a <strong className="text-zinc-400">média de cada indicador</strong> no período (escala 1–5), alinhado aos filtros de data e atleta. Fonte: aba{' '}
-          <strong className="text-zinc-400">Bem-Estar Diário</strong>. Nos eixos: nome do indicador e média (Ø).
+          <strong className="text-zinc-400">Modelo ideal</strong> (verde): metas de referência. <strong className="text-zinc-400">Realidade</strong>: médias do
+          período (escala 1–5); a cor vai do vermelho ao verde conforme a proximidade ao ideal. Fonte: aba{' '}
+          <strong className="text-zinc-400">Bem-Estar Diário</strong>.
         </p>
         <ExpandableCard title="Radar — médias do período" icon={Brain} headerColor="text-fuchsia-400">
-          {hasWellnessRadarData ? (
-            <div className="h-[min(420px,70vw)] w-full max-w-2xl mx-auto min-h-[360px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={wellnessRadarPeriod} cx="50%" cy="52%" outerRadius="68%">
-                  <PolarGrid stroke="#27272a" />
-                  <PolarRadiusAxis
-                    angle={30}
-                    domain={[0, 5]}
-                    tickCount={6}
-                    tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'Calibri' }}
-                    stroke="#3f3f46"
-                  />
-                  <PolarAngleAxis
-                    dataKey="shortLabel"
-                    tick={({ x, y, payload, textAnchor }) => {
-                      const row = wellnessRadarPeriod.find(r => r.shortLabel === payload.value);
-                      if (!row) return <g />;
-                      const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
-                      return (
-                        <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
-                          <tspan x={x} dy={0}>
-                            {row.shortLabel}
-                          </tspan>
-                          <tspan x={x} dy={12} fill="#00f0ff" fontWeight="bold" fontSize={10}>
-                            {row.avgLabel}
-                          </tspan>
-                        </text>
-                      );
-                    }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#000',
-                      borderColor: '#27272a',
-                      color: '#fff',
-                      fontFamily: 'Calibri',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: number, _name: string, item: { payload?: { subject?: string; avgLabel?: string } }) => [
-                      item?.payload?.avgLabel ?? String(value),
-                      item?.payload?.subject ?? 'Indicador',
-                    ]}
-                  />
-                  <Radar
-                    name="Média no período"
-                    dataKey="value"
-                    stroke="#00f0ff"
-                    fill="#00f0ff"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                    dot={{ r: 4, fill: '#00f0ff', strokeWidth: 0 }}
-                  />
-                </RadarChart>
-              </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start w-full max-w-5xl mx-auto">
+            <WellnessRadarPanel
+              title="Modelo ideal"
+              titleClassName="text-emerald-400"
+              data={wellnessIdealRadarData}
+              stroke="#22c55e"
+              fill="#22c55e"
+              fillOpacity={0.22}
+              dot="#4ade80"
+              valueTickColor="#4ade80"
+              radarName="Modelo ideal"
+            />
+            <div className="flex flex-col w-full min-h-[300px]">
+              <p
+                className="text-center text-[11px] font-black uppercase tracking-wider mb-2"
+                style={{ color: hasWellnessRadarData ? wellnessRealRadarStyle.stroke : '#a1a1aa' }}
+              >
+                Realidade (período)
+              </p>
+              {hasWellnessRadarData ? (
+                <div className="w-full flex-1 min-h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={wellnessRadarPeriod} cx="50%" cy="52%" outerRadius="68%">
+                      <PolarGrid stroke="#27272a" />
+                      <PolarRadiusAxis
+                        angle={30}
+                        domain={[0, 5]}
+                        tickCount={6}
+                        tick={{ fill: '#71717a', fontSize: 9, fontFamily: 'Calibri' }}
+                        stroke="#3f3f46"
+                      />
+                      <PolarAngleAxis
+                        dataKey="shortLabel"
+                        tick={({ x, y, payload, textAnchor }) => {
+                          const row = wellnessRadarPeriod.find(r => r.shortLabel === payload.value);
+                          if (!row) return <g />;
+                          const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
+                          return (
+                            <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
+                              <tspan x={x} dy={0}>
+                                {row.shortLabel}
+                              </tspan>
+                              <tspan
+                                x={x}
+                                dy={12}
+                                fill={wellnessRealRadarStyle.stroke}
+                                fontWeight="bold"
+                                fontSize={10}
+                              >
+                                {row.avgLabel}
+                              </tspan>
+                            </text>
+                          );
+                        }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#000',
+                          borderColor: '#27272a',
+                          color: '#fff',
+                          fontFamily: 'Calibri',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                        }}
+                        formatter={(value: number, _name: string, item: { payload?: { subject?: string; avgLabel?: string } }) => [
+                          item?.payload?.avgLabel ?? String(value),
+                          item?.payload?.subject ?? 'Indicador',
+                        ]}
+                      />
+                      <Radar
+                        name="Média no período"
+                        dataKey="value"
+                        stroke={wellnessRealRadarStyle.stroke}
+                        fill={wellnessRealRadarStyle.fill}
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: wellnessRealRadarStyle.dot, strokeWidth: 0 }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex-1 min-h-[200px] flex items-center justify-center rounded-2xl border border-dashed border-zinc-700 bg-zinc-950/50 px-4">
+                  <p className="text-zinc-500 text-sm text-center">
+                    Sem dados no período. Preencha na aba <strong className="text-zinc-400">Bem-Estar Diário</strong> em dias com Treino, Jogo ou Musculação.
+                  </p>
+                </div>
+              )}
             </div>
-          ) : null}
+          </div>
+          <div className="mt-6 flex flex-col items-center gap-2 max-w-md mx-auto print:hidden">
+            <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide">Proximidade ao modelo ideal (realidade)</span>
+            <div
+              className="h-2.5 w-full max-w-sm rounded-full border border-zinc-700"
+              style={{
+                background: 'linear-gradient(90deg, hsl(0,82%,54%) 0%, hsl(28,90%,52%) 25%, hsl(48,95%,52%) 50%, hsl(95,75%,48%) 100%)',
+              }}
+            />
+            <div className="flex justify-between w-full max-w-sm text-[9px] text-zinc-500 font-medium px-0.5">
+              <span>Mais distante</span>
+              <span>Igual ao ideal</span>
+            </div>
+          </div>
           {hasWellnessRadarData && (
             <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-zinc-500 border-t border-zinc-800 pt-4 font-medium">
-              {wellnessRadarPeriod.map(r => (
-                <li key={r.key} className="flex justify-between gap-2 border-b border-zinc-800/60 pb-1.5 sm:border-0 sm:pb-0">
-                  <span className="text-zinc-300">{r.subject}</span>
-                  <span className="text-[#00f0ff] font-black tabular-nums">{r.avgLabel}</span>
-                </li>
-              ))}
+              {wellnessRadarPeriod.map(r => {
+                const meta = WELLNESS_IDEAL_VALUES[r.key];
+                return (
+                  <li key={r.key} className="flex justify-between gap-2 border-b border-zinc-800/60 pb-1.5 sm:border-0 sm:pb-0">
+                    <span className="text-zinc-300">{r.subject}</span>
+                    <span className="tabular-nums text-right">
+                      <span className="text-emerald-400/90 font-bold">Meta {meta}</span>
+                      <span className="text-zinc-600 mx-1">·</span>
+                      <span className="text-white font-black">{r.avgLabel}</span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
-          )}
-          {!hasWellnessRadarData && (
-            <p className="text-zinc-500 text-sm py-10 text-center">
-              Sem dados no período. Preencha na aba <strong>Bem-Estar Diário</strong> em dias com Treino, Jogo ou Musculação na programação.
-            </p>
           )}
         </ExpandableCard>
       </div>
