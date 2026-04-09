@@ -1151,7 +1151,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                       }
                     />
                     <span className="text-[10px] font-black uppercase tracking-wide text-zinc-100 leading-tight">
-                      Alertas · real vs engajamento ideal
+                      Alertas · real vs Bem-Estar Ideal
                     </span>
                   </div>
                   {wellnessEngagementSummary && (
