@@ -747,10 +747,8 @@ export default function App() {
     'scout21_players_local',
     'scout21_schedules_local',
     'championships',
-    'scout21_pse_jogos',
-    'scout21_pse_treinos',
-    'scout21_psr_jogos',
-    'scout21_psr_treinos',
+    // Não limpar PSE/PSR no logout para manter os lançamentos locais entre sessões
+    // (sincronização com API pode ocorrer depois, sem perda imediata ao sair do sistema).
     'scout21_qualidade_sono',
     'scout21_training_pse',
     'scout21_settings_current_team',

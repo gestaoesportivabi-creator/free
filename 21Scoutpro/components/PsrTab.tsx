@@ -154,7 +154,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
         await wellnessApi.saveBulk('psr-jogo', [{
           jogoId: matchId,
           jogadorId: playerId,
-          value
+          value,
+          valor: value,
         }]);
       } catch (e) {
         console.error('Falha ao salvar PSR jogo', e);
@@ -179,7 +180,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
           equipeId: schedules[0]?.equipeId || 'default-equipe',
           data: datePart,
           jogadorId: playerId,
-          value
+          value,
+          valor: value,
         }]);
       } catch (e) {
          console.error('Falha ao salvar PSR treino', e);

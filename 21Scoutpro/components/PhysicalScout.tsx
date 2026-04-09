@@ -17,7 +17,7 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
 } from 'recharts';
-import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Users } from 'lucide-react';
+import { Activity, Brain, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, Shield, Users } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
@@ -488,6 +488,19 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
   const hasWellnessRadarData = wellnessRadarPeriod.some(r => r.avg !== null);
 
+  const avgOf = (values: number[]): number | null => {
+    if (values.length === 0) return null;
+    return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+  };
+  const avgRpeMatchChart = useMemo(() => avgOf(rpeMatchData.map(d => d.rpe)), [rpeMatchData]);
+  const avgRpeTrainingChart = useMemo(() => avgOf(rpeTrainingData.map(d => d.rpe)), [rpeTrainingData]);
+  const avgPsrMatchChart = useMemo(() => avgOf(psrMatchData.map(d => d.rpe)), [psrMatchData]);
+  const avgPsrTrainingChart = useMemo(() => avgOf(psrTrainingData.map(d => d.rpe)), [psrTrainingData]);
+  const avgWellnessKpi = useMemo(
+    () => avgOf(wellnessRadarPeriod.map(r => r.avg).filter((v): v is number => v != null)),
+    [wellnessRadarPeriod]
+  );
+
   const injuryTypeData = useMemo(() => {
     const counts: Record<string, number> = {};
     filteredInjuries.forEach(i => { counts[i.type] = (counts[i.type] || 0) + 1; });
@@ -684,11 +697,11 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 print:grid-cols-4 print:gap-4">
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#ccff00] p-5 print:border-gray-200">
           <KPICardInner
-            title="Média PSE (Jogos)"
-            value={stats.avgRpeMatch}
-            icon={Activity}
+            title="Média de Bem-Estar"
+            value={avgWellnessKpi ?? '—'}
+            icon={Brain}
             color="text-[#ccff00]"
-            sub={playerFilterId ? 'Atleta no período · 0–10' : 'Equipe no período · 0–10'}
+            sub={playerFilterId ? 'Atleta no período · 1–5' : 'Equipe no período · 1–5'}
           />
         </div>
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#00f0ff] p-5 print:border-gray-200">
@@ -725,54 +738,15 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </div>
       </div>
 
-      {/* P1: ACWR - Risco de Lesão */}
-      <ExpandableCard title="ACWR — Risco de Lesão por Atleta" icon={Shield} headerColor="text-[#00f0ff]">
-        <p className="text-xs text-zinc-500 mb-4 font-medium">
-          Razão Carga Aguda (7d) / Crônica (28d). <strong>Verde</strong> 0.8–1.3 (seguro), <strong>Amarelo</strong> 1.3–1.5 (atenção), <strong>Vermelho</strong> &gt;1.5 ou &lt;0.8 (risco elevado).
-        </p>
-        {acwrData.filter(a => a.acwr !== null).length === 0 ? (
-          <p className="text-zinc-500 text-sm py-6 text-center">Preencha PSE em treinos e jogos para calcular o ACWR dos atletas.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Atleta</th>
-                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Posição</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Aguda (7d)</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Crônica (28d)</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">ACWR</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Risco</th>
-                </tr>
-              </thead>
-              <tbody>
-                {acwrData.filter(a => a.acwr !== null).map(a => (
-                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setPlayerFilterId(prev => prev === a.playerId ? '' : a.playerId)}>
-                    <td className="py-2.5 px-3 text-white font-bold">{a.nickname || a.name}</td>
-                    <td className="py-2.5 px-3 text-zinc-400">{a.position}</td>
-                    <td className="py-2.5 px-3 text-center text-white">{a.acute}</td>
-                    <td className="py-2.5 px-3 text-center text-white">{a.chronic}</td>
-                    <td className="py-2.5 px-3 text-center font-black text-lg">{a.acwr}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-block w-3 h-3 rounded-full ${a.risk === 'green' ? 'bg-emerald-500' : a.risk === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} />
-                      <span className={`ml-2 text-xs font-bold ${a.risk === 'green' ? 'text-emerald-400' : a.risk === 'yellow' ? 'text-amber-400' : 'text-red-400'}`}>
-                        {a.risk === 'green' ? 'Seguro' : a.risk === 'yellow' ? 'Atenção' : 'Risco'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </ExpandableCard>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
         <ExpandableCard title="Evolução PSE (Jogos)" icon={Activity} headerColor="text-[#00f0ff]">
            <p className="text-xs text-zinc-500 mb-2 font-medium">
              {playerFilterId ? 'PSE do atleta por jogo no período. ' : 'Média da equipe por jogo no período. '}
              Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.
            </p>
+           <div className="flex justify-end mb-2">
+             <span className="text-[10px] font-bold uppercase text-zinc-400">Média: <strong className="text-[#ccff00]">{avgRpeMatchChart ?? '—'}</strong></span>
+           </div>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeMatchData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
@@ -805,6 +779,9 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
              {playerFilterId ? 'PSE do atleta por sessão no período. ' : 'Média da equipe por sessão no período. '}
              Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.
            </p>
+           <div className="flex justify-end mb-2">
+             <span className="text-[10px] font-bold uppercase text-zinc-400">Média: <strong className="text-emerald-400">{avgRpeTrainingChart ?? '—'}</strong></span>
+           </div>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeTrainingData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
@@ -837,6 +814,9 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
             {playerFilterId ? 'PSR do atleta por jogo no período. ' : 'Média da equipe por jogo no período. '}
             Quanto mais perto de 10, melhor a recuperação. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.
           </p>
+          <div className="flex justify-end mb-2">
+            <span className="text-[10px] font-bold uppercase text-zinc-400">Média: <strong className="text-sky-400">{avgPsrMatchChart ?? '—'}</strong></span>
+          </div>
           {psrMatchData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -862,6 +842,9 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
             {playerFilterId ? 'PSR do atleta por sessão no período. ' : 'Média da equipe por sessão no período. '}
             Mais perto de 10 = melhor recuperado. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.
           </p>
+          <div className="flex justify-end mb-2">
+            <span className="text-[10px] font-bold uppercase text-zinc-400">Média: <strong className="text-cyan-400">{avgPsrTrainingChart ?? '—'}</strong></span>
+          </div>
           {psrTrainingData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -885,13 +868,13 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
       <div className="space-y-4 print:break-inside-avoid">
         <h3 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2 px-1 print:text-black">
-          <HeartPulse className="text-[#00f0ff] print:text-black" /> Bem-estar diário
+          <Brain className="text-[#00f0ff] print:text-black" /> Bem-estar diário
         </h3>
         <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
           Radar com a <strong className="text-zinc-400">média de cada indicador</strong> no período (escala 1–5), alinhado aos filtros de data e atleta. Fonte: aba{' '}
           <strong className="text-zinc-400">Bem-Estar Diário</strong>. Nos eixos: nome do indicador e média (Ø).
         </p>
-        <ExpandableCard title="Radar — médias do período" icon={HeartPulse} headerColor="text-fuchsia-400">
+        <ExpandableCard title="Radar — médias do período" icon={Brain} headerColor="text-fuchsia-400">
           {hasWellnessRadarData ? (
             <div className="h-[min(420px,70vw)] w-full max-w-2xl mx-auto min-h-[360px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -1033,179 +1016,47 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </ExpandableCard>
       </div>
 
-      {/* P2: Painel Individual do Atleta */}
-      {playerFilterId && (() => {
-        const athlete = players.find(p => p.id === playerFilterId);
-        if (!athlete) return null;
-        const acwrInfo = acwrData.find(a => a.playerId === playerFilterId);
-        const athleteInjuries = (athlete.injuryHistory || []).sort((a, b) => new Date(b.date || b.startDate).getTime() - new Date(a.date || a.startDate).getTime());
-        const activeInjuries = athleteInjuries.filter(i => !i.endDate || new Date(i.endDate) >= new Date());
-
-        const pseHistory: { date: string; value: number }[] = [];
-        const psrHistory: { date: string; value: number }[] = [];
-        const sonoHistory: { date: string; value: number }[] = [];
-
-        Object.entries(pseTreinosStored).forEach(([key, data]) => {
-          const datePart = key.split('_')[0];
-          if (!dateInRange(datePart)) return;
-          const v = data[playerFilterId];
-          if (typeof v === 'number') pseHistory.push({ date: datePart, value: v });
-        });
-        Object.entries(pseJogosStored).forEach(([matchId, data]) => {
-          const v = data[playerFilterId];
-          const m = championshipMatches.find(cm => cm.id === matchId);
-          if (typeof v === 'number' && m && dateInRange(m.date)) pseHistory.push({ date: m.date, value: v });
-        });
-        pseHistory.sort((a, b) => a.date.localeCompare(b.date));
-
-        Object.entries(psrTreinosStored).forEach(([key, data]) => {
-          const datePart = key.split('_')[0];
-          if (!dateInRange(datePart)) return;
-          const v = data[playerFilterId];
-          if (typeof v === 'number') psrHistory.push({ date: datePart, value: v });
-        });
-        Object.entries(psrJogosStored).forEach(([matchId, data]) => {
-          const v = data[playerFilterId];
-          const m = championshipMatches.find(cm => cm.id === matchId);
-          if (typeof v === 'number' && m && dateInRange(m.date)) psrHistory.push({ date: m.date, value: v });
-        });
-        psrHistory.sort((a, b) => a.date.localeCompare(b.date));
-
-        Object.entries(wellnessStored).forEach(([dateStr, dayMap]) => {
-          if (!dateInRange(dateStr)) return;
-          const v = dayMap[playerFilterId]?.sono;
-          if (typeof v === 'number') sonoHistory.push({ date: dateStr, value: v });
-        });
-        sonoHistory.sort((a, b) => a.date.localeCompare(b.date));
-
-        const lastPse = pseHistory.length > 0 ? pseHistory[pseHistory.length - 1].value : null;
-        const lastPsr = psrHistory.length > 0 ? psrHistory[psrHistory.length - 1].value : null;
-        const lastSono = sonoHistory.length > 0 ? sonoHistory[sonoHistory.length - 1].value : null;
-        const last7Pse = pseHistory.slice(-7);
-        const avg7Pse = last7Pse.length > 0 ? Math.round((last7Pse.reduce((a, b) => a + b.value, 0) / last7Pse.length) * 10) / 10 : null;
-
-        const chartData = pseHistory.slice(-14).map(p => {
-          const lbl = new Date(p.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-          const psr = psrHistory.find(r => r.date === p.date);
-          return { date: lbl, pse: p.value, psr: psr?.value ?? null };
-        });
-
-        return (
-          <div className="bg-black rounded-3xl border border-zinc-800 p-6 shadow-xl animate-fade-in print:hidden">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
-                {athlete.photoUrl ? (
-                  <img src={athlete.photoUrl} alt={athlete.name} className="w-14 h-14 rounded-xl object-cover border-2 border-[#00f0ff]/30" />
-                ) : (
-                  <div className="w-14 h-14 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-white font-black text-xl">{(athlete.nickname || athlete.name).charAt(0)}</div>
-                )}
-                <div>
-                  <h3 className="text-white font-black text-xl uppercase tracking-wide">{athlete.nickname || athlete.name}</h3>
-                  <p className="text-zinc-500 text-xs font-bold">{athlete.position} · #{athlete.jerseyNumber} · {athlete.age} anos</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => setPlayerFilterId('')} className="text-zinc-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-zinc-800 text-xs font-bold uppercase">Limpar atleta ✕</button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">ACWR</p>
-                <p className={`text-2xl font-black mt-1 ${acwrInfo?.risk === 'green' ? 'text-emerald-400' : acwrInfo?.risk === 'yellow' ? 'text-amber-400' : acwrInfo?.risk === 'red' ? 'text-red-400' : 'text-zinc-500'}`}>{acwrInfo?.acwr ?? '—'}</p>
-              </div>
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">PSE (7d)</p>
-                <p className="text-2xl font-black text-[#ccff00] mt-1">{avg7Pse ?? '—'}</p>
-              </div>
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">Último PSR</p>
-                <p className="text-2xl font-black text-sky-400 mt-1">{lastPsr ?? '—'}</p>
-              </div>
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">Sono (bem-estar)</p>
-                <p className="text-2xl font-black text-amber-400 mt-1">{lastSono ?? '—'}</p>
-              </div>
-              <div className="bg-zinc-900/50 rounded-xl p-3 border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">Lesões Ativas</p>
-                <p className={`text-2xl font-black mt-1 ${activeInjuries.length > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{activeInjuries.length}</p>
-              </div>
-            </div>
-
-            {chartData.length > 0 && (
-              <div className="mb-6">
-                <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">Evolução PSE / PSR (últimas 14 sessões)</p>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                      <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 10 }} />
-                      <YAxis domain={[0, 10]} stroke="#666" hide />
-                      <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', borderRadius: '8px' }} />
-                      <Line type="monotone" dataKey="pse" stroke="#ccff00" strokeWidth={2} dot={{ fill: '#ccff00', r: 3 }} name="PSE" />
-                      <Line type="monotone" dataKey="psr" stroke="#38bdf8" strokeWidth={2} dot={{ fill: '#38bdf8', r: 3 }} name="PSR" connectNulls />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {athleteInjuries.length > 0 && (
-              <div>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase mb-3">Histórico de Lesões & Return-to-Play</p>
-                <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
-                  {athleteInjuries.map(inj => {
-                    const isActive = !inj.endDate || new Date(inj.endDate) >= new Date();
-                    const startD = new Date(inj.date || inj.startDate);
-                    const daysElapsed = Math.floor((Date.now() - startD.getTime()) / 86400000);
-                    const totalDays = inj.daysOut || 14;
-                    const rtpPhases = ['Repouso', 'Exercícios leves', 'Treino parcial', 'Treino completo', 'Liberado'];
-                    let currentPhase = 4;
-                    if (isActive) {
-                      const progress = daysElapsed / totalDays;
-                      if (progress < 0.2) currentPhase = 0;
-                      else if (progress < 0.4) currentPhase = 1;
-                      else if (progress < 0.7) currentPhase = 2;
-                      else if (progress < 1.0) currentPhase = 3;
-                      else currentPhase = 4;
-                    }
-                    const estReturn = new Date(startD);
-                    estReturn.setDate(estReturn.getDate() + totalDays);
-
-                    return (
-                      <div key={inj.id} className="bg-zinc-900/50 rounded-xl px-4 py-3 border border-zinc-800">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-xs font-bold">{inj.type} — {inj.location} ({inj.side})</p>
-                            <p className="text-zinc-500 text-[10px]">{startD.toLocaleDateString('pt-BR')} · {inj.origin} · {inj.severity} · {inj.daysOut ?? '?'} dias previstos</p>
-                          </div>
-                          {!isActive && <span className="text-[10px] text-emerald-400 font-bold uppercase px-2 py-0.5 bg-emerald-500/10 rounded">Recuperado</span>}
-                          {isActive && <span className="text-[10px] text-red-400 font-bold uppercase px-2 py-0.5 bg-red-500/10 rounded">Ativa</span>}
-                        </div>
-                        {isActive && (
-                          <div className="mt-2">
-                            <div className="flex items-center gap-1 mb-1.5">
-                              {rtpPhases.map((phase, idx) => (
-                                <div key={phase} className="flex-1 flex flex-col items-center">
-                                  <div className={`w-full h-1.5 rounded-full ${idx <= currentPhase ? (idx < currentPhase ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-zinc-800'}`} />
-                                  <span className={`text-[8px] mt-0.5 ${idx === currentPhase ? 'text-amber-400 font-bold' : 'text-zinc-600'}`}>{idx + 1}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] text-amber-400 font-bold">Fase {currentPhase + 1}: {rtpPhases[currentPhase]}</span>
-                              <span className="text-[10px] text-zinc-500">Retorno est.: {estReturn.toLocaleDateString('pt-BR')}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+      {/* ACWR reposicionado abaixo do mapa de calor */}
+      <ExpandableCard title="ACWR — Risco de Lesão por Atleta" icon={Shield} headerColor="text-[#00f0ff]">
+        <p className="text-xs text-zinc-500 mb-4 font-medium">
+          Razão Carga Aguda (7d) / Crônica (28d). <strong>Verde</strong> 0.8–1.3 (seguro), <strong>Amarelo</strong> 1.3–1.5 (atenção), <strong>Vermelho</strong> &gt;1.5 ou &lt;0.8 (risco elevado).
+        </p>
+        {acwrData.filter(a => a.acwr !== null).length === 0 ? (
+          <p className="text-zinc-500 text-sm py-6 text-center">Preencha PSE em treinos e jogos para calcular o ACWR dos atletas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Atleta</th>
+                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Posição</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Aguda (7d)</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Crônica (28d)</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">ACWR</th>
+                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Risco</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acwrData.filter(a => a.acwr !== null).map(a => (
+                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setPlayerFilterId(prev => prev === a.playerId ? '' : a.playerId)}>
+                    <td className="py-2.5 px-3 text-white font-bold">{a.nickname || a.name}</td>
+                    <td className="py-2.5 px-3 text-zinc-400">{a.position}</td>
+                    <td className="py-2.5 px-3 text-center text-white">{a.acute}</td>
+                    <td className="py-2.5 px-3 text-center text-white">{a.chronic}</td>
+                    <td className="py-2.5 px-3 text-center font-black text-lg">{a.acwr}</td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`inline-block w-3 h-3 rounded-full ${a.risk === 'green' ? 'bg-emerald-500' : a.risk === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} />
+                      <span className={`ml-2 text-xs font-bold ${a.risk === 'green' ? 'text-emerald-400' : a.risk === 'yellow' ? 'text-amber-400' : 'text-red-400'}`}>
+                        {a.risk === 'green' ? 'Seguro' : a.risk === 'yellow' ? 'Atenção' : 'Risco'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        );
-      })()}
+        )}
+      </ExpandableCard>
 
     </div>
   );

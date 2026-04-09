@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         { id: 'athletes-physio', label: 'Atletas', icon: Users, restricted: false },
         { id: 'pse', label: 'PSE (Treinos e Jogos)', icon: Activity, restricted: false },
         { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: false },
-        { id: 'wellness', label: 'Bem-Estar Diário', icon: HeartPulse, restricted: false },
+        { id: 'wellness', label: 'Bem-Estar Diário', icon: Brain, restricted: false },
         { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: false },
         { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: false },
       ]

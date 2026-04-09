@@ -147,7 +147,7 @@ export const PseTab: React.FC<PseTabProps> = ({
     window.dispatchEvent(new Event('wellness-updated'));
     if (value !== '') {
       try {
-        await wellnessApi.saveBulk('pse-jogo', [{ jogoId: matchId, jogadorId: playerId, value }]);
+        await wellnessApi.saveBulk('pse-jogo', [{ jogoId: matchId, jogadorId: playerId, value, valor: value }]);
       } catch (err) { console.error('Erro ao salvar PSE Jogo:', err); }
     }
   };
@@ -169,6 +169,7 @@ export const PseTab: React.FC<PseTabProps> = ({
           data: datePart,
           jogadorId: playerId,
           value,
+          valor: value,
         }]);
       } catch (err) { console.error('Erro ao salvar PSE Treino:', err); }
     }

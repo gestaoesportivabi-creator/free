@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Heart, ChevronDown, ChevronRight } from 'lucide-react';
+import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 
@@ -162,7 +162,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h2 className="text-2xl font-black text-white flex items-center gap-3 uppercase tracking-wide">
-                <Heart className="text-[#00f0ff]" /> Bem-Estar Diário
+                <Brain className="text-[#00f0ff]" /> Bem-Estar Diário
               </h2>
               <p className="text-zinc-500 text-xs mt-1 font-bold uppercase tracking-wider">
                 5 indicadores · escala 1–5 · só em dias com Treino, Jogo ou Musculação na programação ativa
