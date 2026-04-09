@@ -66,6 +66,46 @@ function defaultDateRange(): { from: string; to: string } {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
+/** Alinhado ao Scout Coletivo: partida com coleta finalizada (não disponível / não executada / em andamento). */
+function isMatchNotExecutedForPhysiology(match: MatchRecord): boolean {
+  if (!match.teamStats) return true;
+  const ts = match.teamStats;
+  return (
+    ts.goals === 0 &&
+    ts.assists === 0 &&
+    ts.passesCorrect === 0 &&
+    ts.passesWrong === 0 &&
+    ts.shotsOnTarget === 0 &&
+    ts.shotsOffTarget === 0 &&
+    ts.tacklesWithBall === 0 &&
+    ts.tacklesWithoutBall === 0 &&
+    ts.tacklesCounterAttack === 0 &&
+    ts.transitionErrors === 0 &&
+    Object.keys(match.playerStats || {}).length === 0
+  );
+}
+
+function isMatchFinishedForPhysiology(match: MatchRecord): boolean {
+  if (match.status === 'encerrado') return true;
+  if (match.status === 'disponivel' || match.status === 'nao_executado' || match.status === 'em_andamento') return false;
+  if (match.status == null && isMatchNotExecutedForPhysiology(match)) return false;
+  return true;
+}
+
+/**
+ * Atleta fora por lesão neste dia: lesão já iniciada, sem data de retorno prevista,
+ * e ainda sem alta (retorno real / endDate) até o dia do jogo — mede jogos sem elenco completo (1 jogo = no máx. 1).
+ */
+function injuryWasOpenWithoutPredictedReturnOnMatchDay(inj: InjuryRecord, matchDay: string): boolean {
+  const start = (inj.startDate || inj.date || '').slice(0, 10);
+  if (!start || start.length < 10 || start > matchDay) return false;
+  const pred = (inj.returnDate || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(pred)) return false;
+  const closed = (inj.returnDateActual || inj.endDate || '').trim().slice(0, 10);
+  if (closed.length >= 10 && closed <= matchDay) return false;
+  return true;
+}
+
 export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, schedules = [], championshipMatches = [] }) => {
   const dr0 = defaultDateRange();
   const [dateFrom, setDateFrom] = useState(dr0.from);
@@ -309,22 +349,32 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       }
     }
 
+    const rosterForAbsence =
+      playerFilterId !== ''
+        ? players.filter(p => p.id === playerFilterId && !p.isTransferred)
+        : players.filter(p => !p.isTransferred);
+
+    const matchHasSquadAbsence = (matchDay: string) =>
+      rosterForAbsence.some(player =>
+        (player.injuryHistory || []).some(inj => injuryWasOpenWithoutPredictedReturnOnMatchDay(inj, matchDay))
+      );
+
     let matchesWithAbsence = 0;
-    filteredMatches.forEach(match => {
-        const matchDate = new Date(match.date);
-        const hasAbsence = filteredInjuries.some(inj => {
-            const injDate = new Date(inj.date);
-            const endDate = inj.endDate ? new Date(inj.endDate) : new Date();
-            if (!inj.endDate) {
-                // Se não tem data de fim, calcular baseado em daysOut
-                const calculatedEnd = new Date(injDate);
-                calculatedEnd.setDate(calculatedEnd.getDate() + inj.daysOut);
-                return matchDate >= injDate && matchDate <= calculatedEnd;
-            }
-            return matchDate >= injDate && matchDate <= endDate;
-        });
-        if(hasAbsence) matchesWithAbsence++;
-    });
+    if (championshipMatches.length > 0) {
+      filteredChampionshipMatches.forEach(cm => {
+        const day = cm.date.slice(0, 10);
+        const saved =
+          matches.find(s => s.date === cm.date && s.opponent === cm.opponent) ?? matches.find(s => s.date === cm.date);
+        if (!saved || !isMatchFinishedForPhysiology(saved)) return;
+        if (matchHasSquadAbsence(day)) matchesWithAbsence++;
+      });
+    } else {
+      filteredMatches.forEach(match => {
+        if (!isMatchFinishedForPhysiology(match)) return;
+        const day = match.date.slice(0, 10);
+        if (matchHasSquadAbsence(day)) matchesWithAbsence++;
+      });
+    }
 
     // Contar lesões por origem
     const injuriesByOrigin = {
@@ -340,7 +390,16 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       matchesWithAbsence,
       injuriesByOrigin
     };
-  }, [filteredMatches, filteredInjuries, championshipMatches, filteredChampionshipMatches, matches, pseJogosStored, playerFilterId]);
+  }, [
+    filteredMatches,
+    filteredInjuries,
+    championshipMatches,
+    filteredChampionshipMatches,
+    matches,
+    players,
+    pseJogosStored,
+    playerFilterId,
+  ]);
 
   // Evolução PSE (Jogos): média da equipe ou valor do atleta; só jogos no intervalo de datas
   const rpeMatchData = useMemo(() => {
@@ -775,7 +834,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           <KPICardInner title="Lesões (período)" value={stats.totalInjuries} icon={AlertTriangle} color="text-[#ff0055]" sub={playerFilterId ? 'Atleta filtrado' : 'Todos os atletas'} />
         </div>
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-orange-500 p-5 print:border-gray-200">
-          <KPICardInner title="Jogos com Desfalque" value={stats.matchesWithAbsence} icon={UserMinus} color="text-orange-500" sub="Time desfalcado por lesão" />
+          <KPICardInner title="Jogos com Desfalque" value={stats.matchesWithAbsence} icon={UserMinus} color="text-orange-500" sub="Jogos finalizados com ≥1 lesão ativa sem retorno previsto" />
         </div>
       </div>
 
@@ -1120,292 +1179,346 @@ interface InjuryBodyMapProps {
     injuries: InjuryRecord[];
 }
 
+type InjurySideKind = 'Direito' | 'Esquerdo' | 'Bilateral' | 'N/A';
+type OutwardDir = 'left' | 'right' | 'up' | 'down';
+
+const HEATMAP_BODY_POINTS: Record<string, { front: [number, number] | null; back: [number, number] | null }> = {
+    Cabeça: { front: [50, 8], back: [50, 8] },
+    Face: { front: [50, 12], back: null },
+    Ombro: { front: [28, 22], back: [28, 22] },
+    'Coxa Anterior': { front: [42, 55], back: null },
+    'Coxa Posterior': { front: null, back: [42, 55] },
+    Panturrilha: { front: null, back: [40, 80] },
+    Tornozelo: { front: [40, 88], back: [40, 88] },
+    Joelho: { front: [38, 68], back: null },
+    Adutor: { front: [47, 52], back: null },
+    Costas: { front: null, back: [50, 35] },
+    Pé: { front: [38, 94], back: [38, 94] },
+};
+
+function normalizeHeatmapLocation(location: string): string {
+    const normalized = location
+        .toLowerCase()
+        .replace(/\s*(direito|direita|esquerdo|esquerda)\s*/gi, '')
+        .trim();
+    const locationMap: Record<string, string> = {
+        'coxa posterior': 'Coxa Posterior',
+        'coxa anterior': 'Coxa Anterior',
+        tornozelo: 'Tornozelo',
+        joelho: 'Joelho',
+        adutor: 'Adutor',
+        panturrilha: 'Panturrilha',
+        ombro: 'Ombro',
+        pé: 'Pé',
+        pe: 'Pé',
+        face: 'Face',
+        cabeça: 'Cabeça',
+        cabeca: 'Cabeça',
+        costas: 'Costas',
+        tórax: 'Costas',
+        torax: 'Costas',
+        lombar: 'Costas',
+    };
+    return locationMap[normalized] || location;
+}
+
+function inferSideFromLocationText(location: string): 'Direito' | 'Esquerdo' | null {
+    const l = location.toLowerCase();
+    if (/\b(direito|direita)\b/.test(l)) return 'Direito';
+    if (/\b(esquerdo|esquerda)\b/.test(l)) return 'Esquerdo';
+    return null;
+}
+
+function effectiveInjurySide(inj: InjuryRecord): InjurySideKind {
+    if (inj.side === 'Bilateral') return 'Bilateral';
+    if (inj.side === 'Direito' || inj.side === 'Esquerdo') return inj.side;
+    const fromText = inferSideFromLocationText(inj.location);
+    if (fromText) return fromText;
+    return inj.side === 'N/A' || !inj.side ? 'N/A' : inj.side;
+}
+
+function isLateralRegion(base: string, view: 'front' | 'back'): boolean {
+    if (base === 'Cabeça' || base === 'Face' || base === 'Costas') return false;
+    const frontLateral = new Set(['Ombro', 'Joelho', 'Tornozelo', 'Pé', 'Coxa Anterior', 'Adutor']);
+    const backLateral = new Set(['Ombro', 'Tornozelo', 'Pé', 'Coxa Posterior', 'Panturrilha']);
+    return view === 'front' ? frontLateral.has(base) : backLateral.has(base);
+}
+
+function anchorForRegion(
+    base: string,
+    view: 'front' | 'back',
+    side: InjurySideKind
+): [number, number] | null {
+    const bp = HEATMAP_BODY_POINTS[base];
+    if (!bp) return null;
+    const c = view === 'front' ? bp.front : bp.back;
+    if (!c) return null;
+    const [xRef, y] = c;
+    if (!isLateralRegion(base, view)) return [c[0], y];
+    const xLeft = Math.min(xRef, 100 - xRef);
+    const xRight = Math.max(xRef, 100 - xRef);
+    if (side === 'Bilateral' || side === 'N/A') return [50, y];
+    return side === 'Direito' ? [xLeft, y] : [xRight, y];
+}
+
+function outwardDirection(x: number, y: number): OutwardDir {
+    if (x < 50) return 'left';
+    if (x > 50) return 'right';
+    if (y < 38) return 'up';
+    return 'down';
+}
+
+function heatmapLabelForSide(base: string, side: InjurySideKind): string {
+    if (side === 'Bilateral') return base;
+    if (side === 'N/A') return base;
+    return `${base} (${side})`;
+}
+
+interface HeatCalloutProps {
+    x: number;
+    y: number;
+    outward: OutwardDir;
+    regionLabel: string;
+    count: number;
+}
+
+const HeatCallout: React.FC<HeatCalloutProps> = ({ x, y, outward, regionLabel, count }) => {
+    const lineLen = 38;
+    const stroke = '#ef4444';
+    const countText = `${count} ${count === 1 ? 'lesão' : 'lesões'}`;
+
+    const lineAndHead = (() => {
+        switch (outward) {
+            case 'left':
+                return (
+                    <>
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 h-0.5 rounded-full"
+                            style={{ right: 0, width: lineLen, background: stroke }}
+                        />
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 w-0 h-0"
+                            style={{
+                                right: lineLen,
+                                borderTop: '5px solid transparent',
+                                borderBottom: '5px solid transparent',
+                                borderRight: `7px solid ${stroke}`,
+                            }}
+                        />
+                    </>
+                );
+            case 'right':
+                return (
+                    <>
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 h-0.5 rounded-full"
+                            style={{ left: 0, width: lineLen, background: stroke }}
+                        />
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 w-0 h-0"
+                            style={{
+                                left: lineLen,
+                                borderTop: '5px solid transparent',
+                                borderBottom: '5px solid transparent',
+                                borderLeft: `7px solid ${stroke}`,
+                            }}
+                        />
+                    </>
+                );
+            case 'up':
+                return (
+                    <>
+                        <div
+                            className="absolute left-1/2 -translate-x-1/2 w-0.5 rounded-full"
+                            style={{ bottom: 0, height: lineLen, background: stroke }}
+                        />
+                        <div
+                            className="absolute left-1/2 -translate-x-1/2 w-0 h-0"
+                            style={{
+                                bottom: lineLen,
+                                borderLeft: '5px solid transparent',
+                                borderRight: '5px solid transparent',
+                                borderBottom: `7px solid ${stroke}`,
+                            }}
+                        />
+                    </>
+                );
+            default:
+                return (
+                    <>
+                        <div
+                            className="absolute left-1/2 -translate-x-1/2 w-0.5 rounded-full"
+                            style={{ top: 0, height: lineLen, background: stroke }}
+                        />
+                        <div
+                            className="absolute left-1/2 -translate-x-1/2 w-0 h-0"
+                            style={{
+                                top: lineLen,
+                                borderLeft: '5px solid transparent',
+                                borderRight: '5px solid transparent',
+                                borderTop: `7px solid ${stroke}`,
+                            }}
+                        />
+                    </>
+                );
+        }
+    })();
+
+    const labelBlock = (
+        <div
+            className="absolute z-[11] flex flex-col gap-0.5"
+            style={{
+                textAlign: outward === 'left' ? 'right' : outward === 'right' ? 'left' : 'center',
+                ...(outward === 'left'
+                    ? { right: lineLen + 10, top: '50%', transform: 'translateY(-50%)' }
+                    : outward === 'right'
+                      ? { left: lineLen + 10, top: '50%', transform: 'translateY(-50%)' }
+                      : outward === 'up'
+                        ? { bottom: lineLen + 10, left: '50%', transform: 'translateX(-50%)' }
+                        : { top: lineLen + 10, left: '50%', transform: 'translateX(-50%)' }),
+            }}
+        >
+            <span
+                className="text-[11px] font-black leading-tight whitespace-nowrap"
+                style={{ color: '#facc15', textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
+            >
+                {regionLabel}
+            </span>
+            <span
+                className="text-[10px] font-bold leading-tight whitespace-nowrap"
+                style={{ color: 'rgba(248, 113, 113, 0.85)', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+            >
+                {countText}
+            </span>
+        </div>
+    );
+
+    return (
+        <div
+            className="absolute pointer-events-none z-10"
+            style={{
+                left: `${x}%`,
+                top: `${y}%`,
+                transform: 'translate(-50%, -50%)',
+                width: 1,
+                height: 1,
+            }}
+        >
+            <div className="absolute inset-0 w-px h-px">
+                {lineAndHead}
+                {labelBlock}
+            </div>
+        </div>
+    );
+};
+
+function buildHeatmapSpots(injuries: InjuryRecord[], view: 'front' | 'back'): HeatCalloutProps[] {
+    const tallies = new Map<string, { base: string; side: InjurySideKind; count: number }>();
+
+    injuries.forEach(inj => {
+        const base = normalizeHeatmapLocation(inj.location);
+        const bp = HEATMAP_BODY_POINTS[base];
+        if (!bp) return;
+        const coords = view === 'front' ? bp.front : bp.back;
+        if (!coords) return;
+
+        const side = effectiveInjurySide(inj);
+        const key = `${base}::${side}`;
+        const prev = tallies.get(key);
+        if (prev) prev.count += 1;
+        else tallies.set(key, { base, side, count: 1 });
+    });
+
+    const spots: HeatCalloutProps[] = [];
+    tallies.forEach(({ base, side, count }) => {
+        const anchor = anchorForRegion(base, view, side);
+        if (!anchor) return;
+        const [ax, ay] = anchor;
+        spots.push({
+            x: ax,
+            y: ay,
+            outward: outwardDirection(ax, ay),
+            regionLabel: heatmapLabelForSide(base, side),
+            count,
+        });
+    });
+
+    spots.sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x));
+    return spots;
+}
+
 const MuscleBodyMap: React.FC<InjuryBodyMapProps> = ({ injuries }) => {
     const [view, setView] = useState<'front' | 'back'>('front');
 
-    // Função para normalizar nomes de localização (remove Direito/Esquerdo e mapeia para nomes genéricos)
-    const normalizeLocation = (location: string): string => {
-        // Primeiro, normaliza removendo acentos e convertendo para minúsculas
-        const normalized = location.toLowerCase()
-            .replace(/\s*(direito|direita|esquerdo|esquerda)\s*/gi, '')
-            .trim();
-        
-        // Mapeamento de variações para nomes padrão (exatos como estão no bodyPoints)
-        const locationMap: Record<string, string> = {
-            'coxa posterior': 'Coxa Posterior',
-            'coxa anterior': 'Coxa Anterior',
-            'tornozelo': 'Tornozelo',
-            'joelho': 'Joelho',
-            'adutor': 'Adutor',
-            'panturrilha': 'Panturrilha',
-            'ombro': 'Ombro',
-            'pé': 'Pé',
-            'pe': 'Pé', // sem acento
-            'face': 'Face',
-            'cabeça': 'Cabeça',
-            'cabeca': 'Cabeça', // sem acento
-            'costas': 'Costas',
-            'tórax': 'Costas',
-            'torax': 'Costas', // sem acento
-            'lombar': 'Costas',
-        };
-        
-        const mapped = locationMap[normalized];
-        return mapped || location;
-    };
-
-    // Definir bodyPoints ANTES do useMemo para poder ser referenciado
-    const bodyPoints: Record<string, { front: [number, number] | null, back: [number, number] | null }> = {
-        'Cabeça': { front: [50, 8], back: [50, 8] },
-        'Face': { front: [50, 12], back: null },
-        'Ombro': { front: [28, 22], back: [28, 22] }, 
-        'Coxa Anterior': { front: [42, 55], back: null },
-        'Coxa Posterior': { front: null, back: [42, 55] },
-        'Panturrilha': { front: null, back: [40, 80] },
-        'Tornozelo': { front: [40, 88], back: [40, 88] },
-        'Joelho': { front: [38, 68], back: null },
-        'Adutor': { front: [47, 52], back: null },
-        'Costas': { front: null, back: [50, 35] },
-        'Pé': { front: [38, 94], back: [38, 94] },
-    };
-
-    const locationCounts = useMemo(() => {
-        const counts: Record<string, number> = {};
-        injuries.forEach(i => {
-            const normalized = normalizeLocation(i.location);
-            counts[normalized] = (counts[normalized] || 0) + 1;
-        });
-        return counts;
-    }, [injuries]);
+    const spotsFront = useMemo(() => buildHeatmapSpots(injuries, 'front'), [injuries]);
+    const spotsBack = useMemo(() => buildHeatmapSpots(injuries, 'back'), [injuries]);
 
     const toggleView = () => {
-        setView(prev => prev === 'front' ? 'back' : 'front');
+        setView(prev => (prev === 'front' ? 'back' : 'front'));
     };
 
     return (
         <div className="relative w-full h-full min-h-[500px] flex flex-col items-center justify-center group perspective-1000">
-            <button 
+            <p className="absolute top-3 left-3 z-30 text-[10px] sm:text-xs text-white font-black uppercase tracking-widest max-w-[min(100%,220px)] leading-snug drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
+                Frequência de lesões por região
+            </p>
+            <button
+                type="button"
                 onClick={toggleView}
-                className="absolute top-4 right-4 z-20 bg-zinc-900 text-white p-2 shadow-lg border border-zinc-700 rounded-xl transition-all hover:bg-zinc-800 flex items-center gap-2 text-xs font-bold uppercase"
+                className="absolute top-3 right-3 z-30 bg-zinc-900 text-white p-2 shadow-lg border border-zinc-700 rounded-xl transition-all hover:bg-zinc-800 flex items-center gap-2 text-xs font-bold uppercase"
             >
                 <Rotate3d size={18} className="text-[#10b981]" />
                 {view === 'front' ? 'Costas' : 'Frente'}
             </button>
             <div className={`relative w-[300px] h-[600px] scale-100 md:scale-110 overflow-visible`}>
-                 <div className={`absolute inset-0 flex justify-center transition-opacity duration-500 ${view === 'back' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                   <div className="relative w-full h-full">
-                        <img 
-                            src="/anatomy-front.png.png" 
+                <div
+                    className={`absolute inset-0 flex justify-center transition-opacity duration-500 ${view === 'back' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                >
+                    <div className="relative w-full h-full">
+                        <img
+                            src="/anatomy-front.png.png"
                             alt="Corpo humano - Vista frontal anatômica"
                             className="w-full h-full object-contain filter brightness-90 contrast-105"
-                            onError={(e) => {
-                                // Fallback para imagem online se a local não carregar
+                            onError={e => {
                                 const target = e.target as HTMLImageElement;
-                                target.src = "https://upload.wikimedia.org/wikipedia/commons/0/03/Gray1217.png";
+                                target.src = 'https://upload.wikimedia.org/wikipedia/commons/0/03/Gray1217.png';
                                 target.onerror = () => {
-                                    // Se ambas falharem, tenta SVG
-                                    target.src = "/anatomy-front.svg";
+                                    target.src = '/anatomy-front.svg';
                                 };
                             }}
                         />
-                        {/* Overlay para melhor contraste */}
-                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 pointer-events-none"></div>
-                        {/* Mapa de Calor e Flechas de Informação */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 pointer-events-none" />
                         <div className="absolute inset-0 w-full h-full overflow-visible">
-                            {Object.entries(bodyPoints).map(([location, coords]) => {
-                                const count = locationCounts[location as any] || 0;
-                                // Filtrar: anterior só mostra de frente, posterior não mostra de frente
-                                if (count === 0 || !coords.front) return null;
-                                if (location === 'Coxa Posterior' || location === 'Panturrilha' || location === 'Costas') return null; // Posterior não mostra de frente
-                                
-                                const [x, y] = coords.front;
-                                const renderPoints = [[x, y]];
-                                if (['Ombro', 'Joelho', 'Tornozelo', 'Coxa Anterior', 'Pé', 'Adutor'].includes(location)) {
-                                    renderPoints.push([100 - x, y]);
-                                }
-                                return renderPoints.map((pt, i) => {
-                                    const baseSize = 35; 
-                                    const growthFactor = 20; 
-                                    const size = baseSize + (count * growthFactor); 
-                                    const opacity = (Math.min(0.6 + (count * 0.1), 0.9)) * 0.5;
-                                    // Determinar posição da flecha (lado esquerdo ou direito)
-                                    const arrowSide = pt[0] < 50 ? 'left' : 'right';
-                                    const offsetX = arrowSide === 'left' ? -60 : 60;
-                                    const arrowDirection = arrowSide === 'left' ? 'right' : 'left';
-                                    
-                                    return (
-                                        <div key={`${location}-${i}`} className="absolute pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%' }}>
-                                            {/* Removido: Mapa de calor - apenas flecha do lado de fora conforme solicitado */}
-                                            
-                                            {/* Flecha fina apontando para o local (do lado de fora da imagem) */}
-                                            <div 
-                                                className="absolute"
-                                                style={{ 
-                                                    left: `${pt[0]}%`,
-                                                    top: `${pt[1]}%`,
-                                                    transform: `translate(${arrowSide === 'left' ? '-100%' : '0'}, -50%)`,
-                                                    zIndex: 10
-                                                }}
-                                            >
-                                                {/* Linha da flecha */}
-                                                <div 
-                                                    className="absolute bg-red-500"
-                                                    style={{
-                                                        width: '40px',
-                                                        height: '2px',
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '0' : 'auto',
-                                                        right: arrowSide === 'right' ? '0' : 'auto',
-                                                        transform: 'translateY(-50%)',
-                                                        transformOrigin: arrowSide === 'left' ? 'right center' : 'left center'
-                                                    }}
-                                                ></div>
-                                                {/* Ponta da flecha */}
-                                                <div 
-                                                    className="absolute"
-                                                    style={{
-                                                        width: 0,
-                                                        height: 0,
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '0' : 'auto',
-                                                        right: arrowSide === 'right' ? '0' : 'auto',
-                                                        transform: 'translateY(-50%)',
-                                                        borderTop: '4px solid transparent',
-                                                        borderBottom: '4px solid transparent',
-                                                        [arrowSide === 'left' ? 'borderRight' : 'borderLeft']: '6px solid #ef4444'
-                                                    }}
-                                                ></div>
-                                                {/* Texto com quantidade e nome */}
-                                                <div 
-                                                    className="absolute text-white whitespace-nowrap"
-                                                    style={{
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '-80px' : '50px',
-                                                        transform: 'translateY(-50%)',
-                                                        fontSize: '11px',
-                                                        fontWeight: 'bold',
-                                                        textShadow: '0 0 4px rgba(0,0,0,0.8)'
-                                                    }}
-                                                >
-                                                    <div className="text-red-400">{location}</div>
-                                                    <div className="text-red-300 text-[10px]">{count} {count === 1 ? 'lesão' : 'lesões'}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                });
-                            })}
+                            {spotsFront.map((s, idx) => (
+                                <HeatCallout key={`f-${s.regionLabel}-${s.x}-${s.y}-${idx}`} {...s} />
+                            ))}
                         </div>
                     </div>
                 </div>
-                <div className={`absolute inset-0 flex justify-center transition-opacity duration-500 ${view === 'front' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                   <div className="relative w-full h-full">
-                        <img 
-                            src="/anatomy-back.png.png" 
+                <div
+                    className={`absolute inset-0 flex justify-center transition-opacity duration-500 ${view === 'front' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                >
+                    <div className="relative w-full h-full">
+                        <img
+                            src="/anatomy-back.png.png"
                             alt="Corpo humano - Vista posterior anatômica"
                             className="w-full h-full object-contain filter brightness-90 contrast-105"
-                            onError={(e) => {
-                                // Fallback para imagem online se a local não carregar
+                            onError={e => {
                                 const target = e.target as HTMLImageElement;
-                                target.src = "https://upload.wikimedia.org/wikipedia/commons/9/9e/Gray1218.png";
+                                target.src = 'https://upload.wikimedia.org/wikipedia/commons/9/9e/Gray1218.png';
                                 target.onerror = () => {
-                                    // Se ambas falharem, tenta SVG
-                                    target.src = "/anatomy-back.svg";
+                                    target.src = '/anatomy-back.svg';
                                 };
                             }}
                         />
-                        {/* Overlay para melhor contraste */}
-                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 pointer-events-none"></div>
-                        {/* Mapa de Calor e Flechas de Informação */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 pointer-events-none" />
                         <div className="absolute inset-0 w-full h-full overflow-visible">
-                            {Object.entries(bodyPoints).map(([location, coords]) => {
-                                const count = locationCounts[location as any] || 0;
-                                // Filtrar: posterior só mostra de costa, anterior não mostra de costa
-                                if (count === 0 || !coords.back) return null;
-                                if (location === 'Coxa Anterior' || location === 'Joelho' || location === 'Adutor' || location === 'Face') return null; // Anterior não mostra de costa
-                                
-                                const [x, y] = coords.back;
-                                const renderPoints = [[x, y]];
-                                if (['Ombro', 'Panturrilha', 'Tornozelo', 'Coxa Posterior', 'Pé'].includes(location)) {
-                                    renderPoints.push([100 - x, y]);
-                                }
-                                return renderPoints.map((pt, i) => {
-                                    const baseSize = 35; 
-                                    const growthFactor = 20;
-                                    const size = baseSize + (count * growthFactor); 
-                                    const opacity = (Math.min(0.6 + (count * 0.1), 0.9)) * 0.5;
-                                    // Determinar posição da flecha (lado esquerdo ou direito)
-                                    const arrowSide = pt[0] < 50 ? 'left' : 'right';
-                                    const offsetX = arrowSide === 'left' ? -60 : 60;
-                                    
-                                    return (
-                                        <div key={`${location}-back-${i}`} className="absolute pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%' }}>
-                                            {/* Removido: Mapa de calor - apenas flecha do lado de fora conforme solicitado */}
-                                            
-                                            {/* Flecha fina apontando para o local (do lado de fora da imagem) */}
-                                            <div 
-                                                className="absolute"
-                                                style={{ 
-                                                    left: `${pt[0]}%`,
-                                                    top: `${pt[1]}%`,
-                                                    transform: `translate(${arrowSide === 'left' ? '-100%' : '0'}, -50%)`,
-                                                    zIndex: 10
-                                                }}
-                                            >
-                                                {/* Linha da flecha */}
-                                                <div 
-                                                    className="absolute bg-red-500"
-                                                    style={{
-                                                        width: '40px',
-                                                        height: '2px',
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '0' : 'auto',
-                                                        right: arrowSide === 'right' ? '0' : 'auto',
-                                                        transform: 'translateY(-50%)',
-                                                        transformOrigin: arrowSide === 'left' ? 'right center' : 'left center'
-                                                    }}
-                                                ></div>
-                                                {/* Ponta da flecha */}
-                                                <div 
-                                                    className="absolute"
-                                                    style={{
-                                                        width: 0,
-                                                        height: 0,
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '0' : 'auto',
-                                                        right: arrowSide === 'right' ? '0' : 'auto',
-                                                        transform: 'translateY(-50%)',
-                                                        borderTop: '4px solid transparent',
-                                                        borderBottom: '4px solid transparent',
-                                                        [arrowSide === 'left' ? 'borderRight' : 'borderLeft']: '6px solid #ef4444'
-                                                    }}
-                                                ></div>
-                                                {/* Texto com quantidade e nome */}
-                                                <div 
-                                                    className="absolute text-white whitespace-nowrap"
-                                                    style={{
-                                                        top: '50%',
-                                                        left: arrowSide === 'left' ? '-80px' : '50px',
-                                                        transform: 'translateY(-50%)',
-                                                        fontSize: '11px',
-                                                        fontWeight: 'bold',
-                                                        textShadow: '0 0 4px rgba(0,0,0,0.8)'
-                                                    }}
-                                                >
-                                                    <div className="text-red-400">{location}</div>
-                                                    <div className="text-red-300 text-[10px]">{count} {count === 1 ? 'lesão' : 'lesões'}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                });
-                            })}
+                            {spotsBack.map((s, idx) => (
+                                <HeatCallout key={`b-${s.regionLabel}-${s.x}-${s.y}-${idx}`} {...s} />
+                            ))}
                         </div>
                     </div>
                 </div>
-            </div>
-            <div className="absolute bottom-4 left-4 right-4 flex justify-center gap-4 text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                <span className="text-red-500">Frequência de lesões por região</span>
             </div>
         </div>
     );

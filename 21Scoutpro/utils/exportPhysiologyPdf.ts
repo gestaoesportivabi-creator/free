@@ -330,7 +330,7 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
       { title: 'MEDIA DE BEM-ESTAR', value: String(data.kpis.avgWellness), color: COLORS.lime, sub: 'Escala 1-5' },
       { title: 'LESÕES TREINO / JOGO / OUTROS', value: `${data.kpis.injuriesByOrigin.treino} / ${data.kpis.injuriesByOrigin.jogo} / ${data.kpis.injuriesByOrigin.outros}`, color: COLORS.cyan, sub: 'Por origem' },
       { title: 'LESÕES (PERÍODO)', value: String(data.kpis.totalInjuries), color: COLORS.red, sub: 'No intervalo' },
-      { title: 'JOGOS COM DESFALQUE', value: String(data.kpis.matchesWithAbsence), color: COLORS.orange, sub: 'Time desfalcado' },
+      { title: 'JOGOS COM DESFALQUE', value: String(data.kpis.matchesWithAbsence), color: COLORS.orange, sub: 'Finalizados, elenco incompleto' },
     ];
 
     kpis.forEach((kpi, i) => {
