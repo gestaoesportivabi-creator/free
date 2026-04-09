@@ -1,6 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { LineChart, Line, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, Filter, UserMinus, Moon, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Download } from 'lucide-react';
+import { Activity, HeartPulse, Clock, AlertTriangle, Printer, Rotate3d, UserMinus, Moon, RefreshCw, TrendingUp, Shield, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
@@ -28,10 +28,19 @@ interface PhysicalScoutProps {
     championshipMatches?: ChampionshipMatch[];
 }
 
+function defaultDateRange(): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - 29);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
 export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, schedules = [], championshipMatches = [] }) => {
-  const [injuryFilter, setInjuryFilter] = useState<string>('Todos');
-  const [monthFilter, setMonthFilter] = useState<string>('Todos');
-  const [compFilter, setCompFilter] = useState<string>('Todas');
+  const dr0 = defaultDateRange();
+  const [dateFrom, setDateFrom] = useState(dr0.from);
+  const [dateTo, setDateTo] = useState(dr0.to);
+  /** vazio = média da equipe; caso contrário dados só desse atleta (Elenco) */
+  const [playerFilterId, setPlayerFilterId] = useState('');
   const [trainingPse, setTrainingPse] = useState<Record<string, number>>({});
   const [pseJogosStored, setPseJogosStored] = useState<StoredPseJogos>({});
   const [pseTreinosStored, setPseTreinosStored] = useState<StoredPseTreinos>({});
@@ -104,29 +113,20 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     });
   };
 
-  const MONTHS = [
-    { value: 'Todos', label: 'Todos os Meses' },
-    { value: '0', label: 'Janeiro' },
-    { value: '1', label: 'Fevereiro' },
-    { value: '2', label: 'Março' },
-    { value: '3', label: 'Abril' },
-    { value: '4', label: 'Maio' },
-    { value: '5', label: 'Junho' },
-    { value: '6', label: 'Julho' },
-    { value: '7', label: 'Agosto' },
-    { value: '8', label: 'Setembro' },
-    { value: '9', label: 'Outubro' },
-    { value: '10', label: 'Novembro' },
-    { value: '11', label: 'Dezembro' },
-  ];
+  const dateInRange = useCallback((dateStr: string) => {
+    const day = (dateStr || '').slice(0, 10);
+    if (!day || day.length < 10) return false;
+    return day >= dateFrom && day <= dateTo;
+  }, [dateFrom, dateTo]);
 
   const filteredMatches = useMemo(() => {
-    return matches.filter(m => {
-        const matchMonth = monthFilter === 'Todos' || new Date(m.date).getMonth().toString() === monthFilter;
-        const matchComp = compFilter === 'Todas' || m.competition === compFilter;
-        return matchMonth && matchComp;
-    });
-  }, [monthFilter, compFilter, matches]);
+    return matches.filter(m => dateInRange(m.date));
+  }, [matches, dateInRange]);
+
+  const filteredChampionshipMatches = useMemo(
+    () => championshipMatches.filter(m => dateInRange(m.date)),
+    [championshipMatches, dateInRange]
+  );
 
   // Datas de treinos a partir da Programação (aba Programação)
   const trainingDatesFromSchedules = useMemo(() => {
@@ -195,66 +195,82 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
   };
 
-  // Usar dados reais de lesões dos jogadores (injuryHistory)
+  // Lesões no período (data de início dentro do intervalo); opcionalmente só do atleta filtrado
   const filteredInjuries = useMemo(() => {
-    const allInjuries: InjuryRecord[] = [];
-    // Coletar todas as lesões dos jogadores
-    players.forEach(player => {
-      if (player.injuryHistory && player.injuryHistory.length > 0) {
-        player.injuryHistory.forEach(injury => {
-          allInjuries.push(injury);
-        });
-      }
+    const out: InjuryRecord[] = [];
+    const roster = playerFilterId ? players.filter(p => p.id === playerFilterId) : players;
+    roster.forEach(player => {
+      (player.injuryHistory || []).forEach(injury => {
+        const startRaw = injury.startDate || injury.date;
+        if (!startRaw) return;
+        const day = String(startRaw).slice(0, 10);
+        if (!dateInRange(day)) return;
+        out.push(injury);
+      });
     });
-    
-    return allInjuries.filter(i => {
-        const date = new Date(i.date);
-        const matchMonth = monthFilter === 'Todos' || date.getMonth().toString() === monthFilter;
-        const matchType = injuryFilter === 'Todos' || i.type === injuryFilter;
-        return matchMonth && matchType;
-    });
-  }, [injuryFilter, monthFilter, players]);
+    return out;
+  }, [players, dateInRange, playerFilterId]);
 
   const filteredTraining = useMemo(() => {
-    const list = trainingDatesFromSchedules
-      .map(date => ({ date, avgRpe: trainingPse[date] ?? undefined }))
-      .filter(t => monthFilter === 'Todos' || new Date(t.date).getMonth().toString() === monthFilter);
-    return list;
-  }, [monthFilter, trainingDatesFromSchedules, trainingPse]);
+    return trainingDatesFromSchedules
+      .filter(date => dateInRange(date))
+      .map(date => ({ date, avgRpe: trainingPse[date] ?? undefined }));
+  }, [trainingDatesFromSchedules, trainingPse, dateInRange]);
 
-  // Dados do gráfico Média PSE (Treinos): média da equipe por sessão (aba Média PSE Treinos); fallback por data
+  // Dados do gráfico PSE (Treinos): média da equipe ou valor do atleta por sessão
   const rpeTrainingDataFromSessions = useMemo(() => {
     return trainingSessionsForChart
-      .filter(s => monthFilter === 'Todos' || new Date(s.date).getMonth().toString() === monthFilter)
+      .filter(s => dateInRange(s.date))
       .map(s => {
-        const teamAvg = teamAveragePseTreinos(s.sessionKey);
+        let rpe: number | null = null;
+        if (playerFilterId) {
+          const v = pseTreinosStored[s.sessionKey]?.[playerFilterId];
+          rpe = typeof v === 'number' ? v : null;
+        } else {
+          rpe = teamAveragePseTreinos(s.sessionKey);
+        }
         const dateLabel = new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         const hour = s.time ? s.time.slice(0, 5) : '';
         const label = hour ? `${dateLabel} ${hour}` : dateLabel;
         return {
           date: label,
           dateKey: s.date,
-          rpe: teamAvg ?? 0,
-          type: 'Treino'
+          rpe: rpe ?? 0,
+          type: 'Treino' as const,
+          hasData: !playerFilterId || rpe !== null,
         };
-      });
-  }, [trainingSessionsForChart, monthFilter, pseTreinosStored]);
+      })
+      .filter(row => row.hasData);
+  }, [trainingSessionsForChart, dateInRange, pseTreinosStored, playerFilterId]);
 
   const stats = useMemo(() => {
     let avgRpeMatch: string | number = 0;
     let totalMatches = filteredMatches.length;
     if (championshipMatches.length > 0) {
-      const filtered = championshipMatches
-        .filter(m => monthFilter === 'Todos' || new Date(m.date).getMonth().toString() === monthFilter)
-        .filter(m => compFilter === 'Todas' || m.competition === compFilter);
-      const values = filtered
-        .map(m => teamAveragePseJogos(m.id) ?? matches.find(s => s.date === m.date)?.teamStats?.rpeMatch)
-        .filter((v): v is number => v != null && typeof v === 'number');
+      const filtered = filteredChampionshipMatches;
+      let values: number[] = [];
+      if (playerFilterId) {
+        values = filtered
+          .map(m => pseJogosStored[m.id]?.[playerFilterId])
+          .filter((v): v is number => typeof v === 'number');
+      } else {
+        values = filtered
+          .map(m => teamAveragePseJogos(m.id) ?? matches.find(s => s.date === m.date)?.teamStats?.rpeMatch)
+          .filter((v): v is number => v != null && typeof v === 'number');
+      }
       totalMatches = filtered.length;
       avgRpeMatch = values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : 0;
     } else {
-      const totalRpe = filteredMatches.reduce((acc, curr) => acc + (curr.teamStats.rpeMatch || 0), 0);
-      avgRpeMatch = totalMatches > 0 ? (totalRpe / totalMatches).toFixed(1) : 0;
+      if (playerFilterId) {
+        const vals = filteredMatches
+          .map(m => pseJogosStored[m.id]?.[playerFilterId])
+          .filter((v): v is number => typeof v === 'number');
+        totalMatches = filteredMatches.length;
+        avgRpeMatch = vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : 0;
+      } else {
+        const totalRpe = filteredMatches.reduce((acc, curr) => acc + (curr.teamStats.rpeMatch || 0), 0);
+        avgRpeMatch = totalMatches > 0 ? (totalRpe / totalMatches).toFixed(1) : 0;
+      }
     }
 
     let matchesWithAbsence = 0;
@@ -288,34 +304,54 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       matchesWithAbsence,
       injuriesByOrigin
     };
-  }, [filteredMatches, filteredInjuries, championshipMatches, monthFilter, compFilter, matches, pseJogosStored]);
+  }, [filteredMatches, filteredInjuries, championshipMatches, filteredChampionshipMatches, matches, pseJogosStored, playerFilterId]);
 
-  // Evolução PSE (Jogos): média da equipe a partir da aba Evolução PSE (Jogos); fallback para partidas salvas
+  // Evolução PSE (Jogos): média da equipe ou valor do atleta; só jogos no intervalo de datas
   const rpeMatchData = useMemo(() => {
     if (championshipMatches.length > 0) {
-      const sorted = [...championshipMatches].sort((a, b) => a.date.localeCompare(b.date));
+      const sorted = [...filteredChampionshipMatches].sort((a, b) => a.date.localeCompare(b.date));
       return sorted
-        .filter(m => monthFilter === 'Todos' || new Date(m.date).getMonth().toString() === monthFilter)
-        .filter(m => compFilter === 'Todas' || m.competition === compFilter)
         .map(m => {
-          const teamAvg = teamAveragePseJogos(m.id);
           const saved = matches.find(s => s.date === m.date);
-          const rpe = teamAvg ?? saved?.teamStats?.rpeMatch ?? 0;
+          let rpe: number;
+          if (playerFilterId) {
+            const v = pseJogosStored[m.id]?.[playerFilterId];
+            if (typeof v !== 'number') return null;
+            rpe = v;
+          } else {
+            const teamAvg = teamAveragePseJogos(m.id);
+            rpe = teamAvg ?? saved?.teamStats?.rpeMatch ?? 0;
+          }
           return {
             date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
             rpe,
             opponent: m.opponent,
             result: saved?.result
           };
-        });
+        })
+        .filter((row): row is NonNullable<typeof row> => row != null);
     }
-    return filteredMatches.map(m => ({
-      date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      rpe: m.teamStats.rpeMatch ?? 0,
-      opponent: m.opponent,
-      result: m.result
-    }));
-  }, [championshipMatches, matches, filteredMatches, monthFilter, compFilter, pseJogosStored]);
+    return filteredMatches
+      .map(m => {
+        if (playerFilterId) {
+          const v = pseJogosStored[m.id]?.[playerFilterId];
+          if (typeof v !== 'number') return null;
+          return {
+            date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            rpe: v,
+            opponent: m.opponent,
+            result: m.result
+          };
+        }
+        return {
+          date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          rpe: m.teamStats.rpeMatch ?? 0,
+          opponent: m.opponent,
+          result: m.result
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null);
+  }, [championshipMatches, matches, filteredMatches, filteredChampionshipMatches, pseJogosStored, playerFilterId]);
 
   const rpeTrainingData = trainingSessionsForChart.length > 0
     ? rpeTrainingDataFromSessions
@@ -326,42 +362,54 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         type: 'Treino'
       }));
 
-  // Evolução PSR (Jogos): média da equipe a partir da aba PSR (Treinos e Jogos)
+  // Evolução PSR (Jogos)
   const psrMatchData = useMemo(() => {
     if (championshipMatches.length === 0) return [];
-    const sorted = [...championshipMatches].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...filteredChampionshipMatches].sort((a, b) => a.date.localeCompare(b.date));
     return sorted
-      .filter(m => monthFilter === 'Todos' || new Date(m.date).getMonth().toString() === monthFilter)
-      .filter(m => compFilter === 'Todas' || m.competition === compFilter)
       .map(m => {
-        const avg = teamAveragePsrJogos(m.id);
-        if (avg == null) return null;
+        let val: number | null = null;
+        if (playerFilterId) {
+          const v = psrJogosStored[m.id]?.[playerFilterId];
+          val = typeof v === 'number' ? v : null;
+        } else {
+          val = teamAveragePsrJogos(m.id);
+        }
+        if (val == null) return null;
         return {
           date: new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-          rpe: avg,
+          rpe: val,
           opponent: m.opponent
         };
       })
       .filter((v): v is NonNullable<typeof v> => v != null);
-  }, [championshipMatches, monthFilter, compFilter, psrJogosStored]);
+  }, [championshipMatches, filteredChampionshipMatches, psrJogosStored, playerFilterId]);
 
-  // Média PSR (Treinos): média da equipe por sessão
+  // PSR (Treinos)
   const psrTrainingDataFromSessions = useMemo(() => {
     return trainingSessionsForChart
-      .filter(s => monthFilter === 'Todos' || new Date(s.date).getMonth().toString() === monthFilter)
+      .filter(s => dateInRange(s.date))
       .map(s => {
-        const teamAvg = teamAveragePsrTreinos(s.sessionKey);
+        let rpe: number | null = null;
+        if (playerFilterId) {
+          const v = psrTreinosStored[s.sessionKey]?.[playerFilterId];
+          rpe = typeof v === 'number' ? v : null;
+        } else {
+          rpe = teamAveragePsrTreinos(s.sessionKey);
+        }
         const dateLabel = new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         const hour = s.time ? s.time.slice(0, 5) : '';
         const label = hour ? `${dateLabel} ${hour}` : dateLabel;
         return {
           date: label,
           dateKey: s.date,
-          rpe: teamAvg ?? 0,
-          type: 'Treino'
+          rpe: rpe ?? 0,
+          type: 'Treino' as const,
+          hasData: !playerFilterId || rpe !== null,
         };
-      });
-  }, [trainingSessionsForChart, monthFilter, psrTreinosStored]);
+      })
+      .filter(row => row.hasData);
+  }, [trainingSessionsForChart, dateInRange, psrTreinosStored, playerFilterId]);
 
   const psrTrainingData = trainingSessionsForChart.length > 0 ? psrTrainingDataFromSessions : [];
 
@@ -415,8 +463,20 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       const dateB = b.eventKey.replace('treino_', '').replace('jogo_', '');
       return dateA.localeCompare(dateB);
     });
-    return list;
-  }, [schedules, championshipMatches, qualidadeSonoStored]);
+
+    return list
+      .filter(item => {
+        const d = item.eventKey.replace('treino_', '').replace('jogo_', '');
+        return dateInRange(d);
+      })
+      .map(item => {
+        if (!playerFilterId) return item;
+        const v = qualidadeSonoStored[item.eventKey]?.[playerFilterId];
+        const media = typeof v === 'number' ? v : 0;
+        return { ...item, media };
+      })
+      .filter(item => !playerFilterId || item.media > 0);
+  }, [schedules, championshipMatches, qualidadeSonoStored, dateInRange, playerFilterId]);
 
   const injuryTypeData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -454,29 +514,45 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   type AcwrEntry = { playerId: string; name: string; nickname: string; position: string; acwr: number | null; acute: number; chronic: number; risk: 'green' | 'yellow' | 'red' | 'none' };
 
   const acwrData = useMemo((): AcwrEntry[] => {
-    const today = new Date();
-    const d7ago = new Date(today); d7ago.setDate(d7ago.getDate() - 7);
-    const d28ago = new Date(today); d28ago.setDate(d28ago.getDate() - 28);
+    const acuteStartStr = (() => {
+      const t = new Date(dateTo + 'T12:00:00');
+      t.setDate(t.getDate() - 7);
+      const s = t.toISOString().slice(0, 10);
+      return s > dateFrom ? s : dateFrom;
+    })();
+    const chronicStartStr = (() => {
+      const t = new Date(dateTo + 'T12:00:00');
+      t.setDate(t.getDate() - 28);
+      const s = t.toISOString().slice(0, 10);
+      return s > dateFrom ? s : dateFrom;
+    })();
 
     const allDates: { date: string; data: Record<string, number> }[] = [];
     Object.entries(pseTreinosStored).forEach(([key, data]) => {
       const datePart = key.split('_')[0];
-      if (datePart) allDates.push({ date: datePart, data });
+      if (datePart && dateInRange(datePart)) allDates.push({ date: datePart, data });
     });
     Object.entries(pseJogosStored).forEach(([_matchId, data]) => {
       const match = championshipMatches.find(m => m.id === _matchId);
-      if (match) allDates.push({ date: match.date, data });
+      if (match && dateInRange(match.date)) allDates.push({ date: match.date, data });
     });
 
     const activePlayers = players.filter(p => !p.isTransferred);
-    return activePlayers.map(p => {
+    const playersForAcwr = playerFilterId ? activePlayers.filter(p => p.id === playerFilterId) : activePlayers;
+
+    return playersForAcwr.map(p => {
       let acute = 0, acuteCount = 0, chronic = 0, chronicCount = 0;
       allDates.forEach(({ date, data }) => {
-        const d = new Date(date);
         const val = data[p.id];
         if (typeof val !== 'number' || val < 0) return;
-        if (d >= d7ago && d <= today) { acute += val; acuteCount++; }
-        if (d >= d28ago && d <= today) { chronic += val; chronicCount++; }
+        if (date >= acuteStartStr && date <= dateTo) {
+          acute += val;
+          acuteCount++;
+        }
+        if (date >= chronicStartStr && date <= dateTo) {
+          chronic += val;
+          chronicCount++;
+        }
       });
       const acuteAvg = acuteCount > 0 ? acute / acuteCount : 0;
       const chronicAvg = chronicCount > 0 ? chronic / chronicCount : 0;
@@ -492,60 +568,19 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       const riskOrder = { red: 0, yellow: 1, green: 2, none: 3 };
       return riskOrder[a.risk] - riskOrder[b.risk];
     });
-  }, [players, pseTreinosStored, pseJogosStored, championshipMatches]);
-
-  const [acwrExpanded, setAcwrExpanded] = useState(true);
-  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
-
-  // P10: Dynamic competition filter
-  const competitionOptions = useMemo(() => {
-    const comps = new Set<string>();
-    championshipMatches.forEach(m => { if (m.competition) comps.add(m.competition); });
-    return Array.from(comps).sort();
-  }, [championshipMatches]);
-
-  // P7: CSV export helper
-  const handleExportCSV = () => {
-    const rows: string[][] = [['Atleta', 'Data', 'Tipo', 'PSE', 'PSR', 'Sono']];
-    const activePlayers = players.filter(p => !p.isTransferred);
-    const allSessionKeys = Object.keys(pseTreinosStored);
-    const allMatchIds = Object.keys(pseJogosStored);
-
-    activePlayers.forEach(p => {
-      allSessionKeys.forEach(key => {
-        const datePart = key.split('_')[0];
-        const pse = pseTreinosStored[key]?.[p.id];
-        const psr = psrTreinosStored[key]?.[p.id];
-        const sono = qualidadeSonoStored[`treino_${datePart}`]?.[p.id];
-        if (pse != null || psr != null || sono != null) {
-          rows.push([p.nickname || p.name, datePart, 'Treino', pse?.toString() ?? '', psr?.toString() ?? '', sono?.toString() ?? '']);
-        }
-      });
-      allMatchIds.forEach(matchId => {
-        const match = championshipMatches.find(m => m.id === matchId);
-        const pse = pseJogosStored[matchId]?.[p.id];
-        const psr = psrJogosStored[matchId]?.[p.id];
-        const sono = match ? qualidadeSonoStored[`jogo_${match.date}`]?.[p.id] : undefined;
-        if (pse != null || psr != null || sono != null) {
-          rows.push([p.nickname || p.name, match?.date ?? '', 'Jogo', pse?.toString() ?? '', psr?.toString() ?? '', sono?.toString() ?? '']);
-        }
-      });
-    });
-
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `fisiologia_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  }, [players, pseTreinosStored, pseJogosStored, championshipMatches, dateFrom, dateTo, playerFilterId]);
 
   const handlePrint = async () => {
     try {
+      const playerLabel = playerFilterId
+        ? (players.find(pl => pl.id === playerFilterId)?.name ?? playerFilterId)
+        : 'Equipe (média)';
       const pdfData: PhysiologyPdfData = {
-        filters: { competition: compFilter, month: monthFilter === 'Todos' ? 'Todos os meses' : (MONTHS.find(m => m.value === monthFilter)?.label ?? monthFilter), injuryType: injuryFilter },
+        filters: {
+          dateFrom,
+          dateTo,
+          playerLabel,
+        },
         kpis: {
           avgPseMatch: stats.avgRpeMatch,
           injuriesByOrigin: stats.injuriesByOrigin,
@@ -567,13 +602,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     }
   };
   
-  const handleBarClick = (data: any) => {
-      if (data && data.name) {
-          setInjuryFilter(data.name === injuryFilter ? 'Todos' : data.name);
-      }
-  };
-
-  const injuryTypes = ['Todos', 'Muscular', 'Trauma', 'Articular', 'Outros'];
+  const rosterPlayers = useMemo(() => players.filter(p => !p.isTransferred), [players]);
 
   return (
     <div className="space-y-8 animate-fade-in pb-12 print:p-0 print:space-y-4">
@@ -586,52 +615,58 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               Departamento de Fisiologia
             </h2>
             <p className="text-zinc-500 text-xs mt-1 print:text-gray-600 font-bold uppercase tracking-wider">
-              {stats.totalInjuries} lesões · {filteredMatches.length} jogos · {players.length} atletas
+              {stats.totalInjuries} lesões · {stats.totalMatches} jogos (período) · {rosterPlayers.length} atletas no elenco
             </p>
           </div>
           
-          <div className="flex flex-wrap gap-3 print:hidden">
-            <div className="flex items-center bg-black/50 border border-zinc-800 px-3 rounded-xl">
-              <Filter size={16} className="text-[#00f0ff] mr-2"/>
-              <select 
-                value={compFilter}
-                onChange={(e) => setCompFilter(e.target.value)}
-                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-3 border-r border-zinc-800 pr-3"
-              >
-                <option value="Todas">Todas Competições</option>
-                {competitionOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select 
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium mr-3 border-r border-zinc-800 pr-3"
-              >
-                {MONTHS.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-              <select 
-                value={injuryFilter}
-                onChange={(e) => setInjuryFilter(e.target.value)}
-                className="bg-transparent text-white text-sm py-2 outline-none cursor-pointer font-medium"
-              >
-                {injuryTypes.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+          <div className="flex flex-col gap-3 w-full md:w-auto print:hidden">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Data inicial</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  max={dateTo}
+                  onChange={e => setDateFrom(e.target.value)}
+                  className="bg-black border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#00f0ff]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Data final</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom}
+                  onChange={e => setDateTo(e.target.value)}
+                  className="bg-black border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#00f0ff]"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[200px] flex-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase flex items-center gap-1">
+                  <Users size={12} /> Atleta (Elenco)
+                </label>
+                <select
+                  value={playerFilterId}
+                  onChange={e => setPlayerFilterId(e.target.value)}
+                  className="w-full bg-black border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-[#00f0ff]"
+                >
+                  <option value="">Equipe — médias</option>
+                  {rosterPlayers.map(p => (
+                    <option key={p.id} value={p.id}>{p.nickname || p.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <button 
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl text-xs"
-            >
-              <Download size={16} />
-              CSV
-            </button>
-            <button 
-              onClick={handlePrint}
-              className="flex items-center gap-2 bg-[#00f0ff] hover:bg-[#00d4e0] text-black px-4 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl"
-            >
-              <Printer size={18} />
-              PDF
-            </button>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-2 bg-[#00f0ff] hover:bg-[#00d4e0] text-black px-4 py-2 font-bold transition-colors uppercase tracking-wider rounded-xl text-sm"
+              >
+                <Printer size={18} />
+                PDF
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -639,7 +674,13 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 print:grid-cols-4 print:gap-4">
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#ccff00] p-5 print:border-gray-200">
-          <KPICardInner title="Média PSE (Jogos)" value={stats.avgRpeMatch} icon={Activity} color="text-[#ccff00]" sub="Escala 0-10" />
+          <KPICardInner
+            title="Média PSE (Jogos)"
+            value={stats.avgRpeMatch}
+            icon={Activity}
+            color="text-[#ccff00]"
+            sub={playerFilterId ? 'Atleta no período · 0–10' : 'Equipe no período · 0–10'}
+          />
         </div>
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#00f0ff] p-5 print:border-gray-200">
           <div className="flex items-center justify-between">
@@ -668,7 +709,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           </div>
         </div>
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-[#ff0055] p-5 print:border-gray-200">
-          <KPICardInner title="Lesões (Filtro)" value={stats.totalInjuries} icon={AlertTriangle} color="text-[#ff0055]" sub={injuryFilter === 'Todos' ? 'Total Temporada' : `Tipo: ${injuryFilter}`} />
+          <KPICardInner title="Lesões (período)" value={stats.totalInjuries} icon={AlertTriangle} color="text-[#ff0055]" sub={playerFilterId ? 'Atleta filtrado' : 'Todos os atletas'} />
         </div>
         <div className="bg-black rounded-2xl border border-zinc-900 border-l-4 border-l-orange-500 p-5 print:border-gray-200">
           <KPICardInner title="Jogos com Desfalque" value={stats.matchesWithAbsence} icon={UserMinus} color="text-orange-500" sub="Time desfalcado por lesão" />
@@ -697,7 +738,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
               </thead>
               <tbody>
                 {acwrData.filter(a => a.acwr !== null).map(a => (
-                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setSelectedAthleteId(prev => prev === a.playerId ? null : a.playerId)}>
+                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setPlayerFilterId(prev => prev === a.playerId ? '' : a.playerId)}>
                     <td className="py-2.5 px-3 text-white font-bold">{a.nickname || a.name}</td>
                     <td className="py-2.5 px-3 text-zinc-400">{a.position}</td>
                     <td className="py-2.5 px-3 text-center text-white">{a.acute}</td>
@@ -719,7 +760,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
         <ExpandableCard title="Evolução PSE (Jogos)" icon={Activity} headerColor="text-[#00f0ff]">
-           <p className="text-xs text-zinc-500 mb-2 font-medium">Média geral da equipe por jogo. Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.</p>
+           <p className="text-xs text-zinc-500 mb-2 font-medium">
+             {playerFilterId ? 'PSE do atleta por jogo no período. ' : 'Média da equipe por jogo no período. '}
+             Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.
+           </p>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeMatchData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
@@ -748,7 +792,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </ExpandableCard>
 
         <ExpandableCard title="Média PSE (Treinos)" icon={Activity} headerColor="text-[#00f0ff]">
-           <p className="text-xs text-zinc-500 mb-2 font-medium">Média geral da equipe por sessão (Treino ou Musculação). Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.</p>
+           <p className="text-xs text-zinc-500 mb-2 font-medium">
+             {playerFilterId ? 'PSE do atleta por sessão no período. ' : 'Média da equipe por sessão no período. '}
+             Preencha na aba <strong>PSE (Treinos e Jogos)</strong>.
+           </p>
            <div className="h-64">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rpeTrainingData} margin={{ top: 20, right: 30, left: 10, bottom: 5 }}>
@@ -777,7 +824,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
         <ExpandableCard title="Evolução PSR (Jogos)" icon={RefreshCw} headerColor="text-[#00f0ff]">
-          <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por jogo. Quanto mais perto de 10, melhor a recuperação. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
+          <p className="text-xs text-zinc-500 mb-2 font-medium">
+            {playerFilterId ? 'PSR do atleta por jogo no período. ' : 'Média da equipe por jogo no período. '}
+            Quanto mais perto de 10, melhor a recuperação. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.
+          </p>
           {psrMatchData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -799,7 +849,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         </ExpandableCard>
 
         <ExpandableCard title="Média PSR (Treinos)" icon={RefreshCw} headerColor="text-[#00f0ff]">
-          <p className="text-xs text-zinc-500 mb-2 font-medium">Média da equipe por sessão (Treino ou Musculação). Mais perto de 10 = melhor recuperado. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.</p>
+          <p className="text-xs text-zinc-500 mb-2 font-medium">
+            {playerFilterId ? 'PSR do atleta por sessão no período. ' : 'Média da equipe por sessão no período. '}
+            Mais perto de 10 = melhor recuperado. Preencha na aba <strong>PSR (Treinos e Jogos)</strong>.
+          </p>
           {psrTrainingData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -823,7 +876,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
       {sleepChartData.length > 0 && (
         <ExpandableCard title="Média qualidade de sono da equipe" icon={Moon} headerColor="text-[#00f0ff]">
-          <p className="text-xs text-zinc-500 mb-2 font-medium">Noites anteriores a treino (manhã) e a jogos. Preencha na aba <strong>Qualidade de sono</strong>. Escala 1-5.</p>
+          <p className="text-xs text-zinc-500 mb-2 font-medium">
+            {playerFilterId ? 'Qualidade de sono do atleta nas noites do período. ' : 'Média da equipe por noite no período. '}
+            Noites anteriores a treino (manhã) e a jogos. Preencha na aba <strong>Qualidade de sono</strong>. Escala 1–5.
+          </p>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sleepChartData} margin={{ top: 20, right: 20, left: 10, bottom: 60 }}>
@@ -849,28 +905,19 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
         <ExpandableCard title="Distribuição por Tipo" icon={AlertTriangle} headerColor="text-[#00f0ff]">
-           <p className="text-xs text-zinc-500 mb-4 font-medium">Clique na barra para filtrar o mapa corporal.</p>
+           <p className="text-xs text-zinc-500 mb-4 font-medium">Lesões com data de início no período selecionado.</p>
            <div className="h-96 min-h-[400px]">
              <ResponsiveContainer width="100%" height="100%">
                 <BarChart 
                     data={injuryTypeData} 
                     layout="vertical" 
                     margin={{left: 30, right: 30, top: 10, bottom: 10}}
-                    onClick={handleBarClick}
-                    style={{ cursor: 'pointer' }}
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={true} vertical={false} />
                     <XAxis type="number" stroke="#666" allowDecimals={false} hide />
                     <YAxis dataKey="name" type="category" stroke="#71717a" width={80} tick={{fontFamily: 'Calibri', fontSize: 14}} />
                     <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff', fontFamily: 'Calibri', borderRadius: '8px' }} />
-                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={40} name="Ocorrências">
-                      {injuryTypeData.map((entry, index) => (
-                        <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.name === injuryFilter ? '#ff0055' : '#27272a'} 
-                            stroke={entry.name === injuryFilter ? '#fff' : 'none'}
-                        />
-                      ))}
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={40} name="Ocorrências" fill="#52525b">
                       <LabelList dataKey="value" position="right" fill="#fff" fontSize={14} fontWeight="bold" fontFamily="Calibri" />
                     </Bar>
                 </BarChart>
@@ -910,8 +957,8 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         <ExpandableCard title="Mapa de Calor (Heatmap)" icon={AlertTriangle} headerColor="text-[#00f0ff]">
            <div className="flex flex-col h-full">
                <div className="mb-4 flex justify-end">
-                    <span className="text-xs text-white font-black tracking-wider bg-red-600 px-3 py-1 rounded-full uppercase">
-                        {injuryFilter}
+                    <span className="text-xs text-white font-black tracking-wider bg-zinc-800 border border-zinc-600 px-3 py-1 rounded-full uppercase">
+                        {playerFilterId ? (players.find(p => p.id === playerFilterId)?.nickname || players.find(p => p.id === playerFilterId)?.name || 'Atleta') : 'Equipe'}
                     </span>
                </div>
                
@@ -923,10 +970,10 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       </div>
 
       {/* P2: Painel Individual do Atleta */}
-      {selectedAthleteId && (() => {
-        const athlete = players.find(p => p.id === selectedAthleteId);
+      {playerFilterId && (() => {
+        const athlete = players.find(p => p.id === playerFilterId);
         if (!athlete) return null;
-        const acwrInfo = acwrData.find(a => a.playerId === selectedAthleteId);
+        const acwrInfo = acwrData.find(a => a.playerId === playerFilterId);
         const athleteInjuries = (athlete.injuryHistory || []).sort((a, b) => new Date(b.date || b.startDate).getTime() - new Date(a.date || a.startDate).getTime());
         const activeInjuries = athleteInjuries.filter(i => !i.endDate || new Date(i.endDate) >= new Date());
 
@@ -935,30 +982,37 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         const sonoHistory: { date: string; value: number }[] = [];
 
         Object.entries(pseTreinosStored).forEach(([key, data]) => {
-          const v = data[selectedAthleteId];
-          if (typeof v === 'number') pseHistory.push({ date: key.split('_')[0], value: v });
+          const datePart = key.split('_')[0];
+          if (!dateInRange(datePart)) return;
+          const v = data[playerFilterId];
+          if (typeof v === 'number') pseHistory.push({ date: datePart, value: v });
         });
         Object.entries(pseJogosStored).forEach(([matchId, data]) => {
-          const v = data[selectedAthleteId];
+          const v = data[playerFilterId];
           const m = championshipMatches.find(cm => cm.id === matchId);
-          if (typeof v === 'number' && m) pseHistory.push({ date: m.date, value: v });
+          if (typeof v === 'number' && m && dateInRange(m.date)) pseHistory.push({ date: m.date, value: v });
         });
         pseHistory.sort((a, b) => a.date.localeCompare(b.date));
 
         Object.entries(psrTreinosStored).forEach(([key, data]) => {
-          const v = data[selectedAthleteId];
-          if (typeof v === 'number') psrHistory.push({ date: key.split('_')[0], value: v });
+          const datePart = key.split('_')[0];
+          if (!dateInRange(datePart)) return;
+          const v = data[playerFilterId];
+          if (typeof v === 'number') psrHistory.push({ date: datePart, value: v });
         });
         Object.entries(psrJogosStored).forEach(([matchId, data]) => {
-          const v = data[selectedAthleteId];
+          const v = data[playerFilterId];
           const m = championshipMatches.find(cm => cm.id === matchId);
-          if (typeof v === 'number' && m) psrHistory.push({ date: m.date, value: v });
+          if (typeof v === 'number' && m && dateInRange(m.date)) psrHistory.push({ date: m.date, value: v });
         });
         psrHistory.sort((a, b) => a.date.localeCompare(b.date));
 
         Object.entries(qualidadeSonoStored).forEach(([key, data]) => {
-          const v = data[selectedAthleteId];
-          if (typeof v === 'number') sonoHistory.push({ date: key.split(/_(.*)/)[1] || key, value: v });
+          const raw = key.replace(/^treino_/, '').replace(/^jogo_/, '');
+          const d = raw.length >= 10 ? raw.slice(0, 10) : key.split(/_(.*)/)[1] || key;
+          if (!dateInRange(d)) return;
+          const v = data[playerFilterId];
+          if (typeof v === 'number') sonoHistory.push({ date: d, value: v });
         });
         sonoHistory.sort((a, b) => a.date.localeCompare(b.date));
 
@@ -988,7 +1042,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                   <p className="text-zinc-500 text-xs font-bold">{athlete.position} · #{athlete.jerseyNumber} · {athlete.age} anos</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedAthleteId(null)} className="text-zinc-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-zinc-800 text-xs font-bold uppercase">Fechar ✕</button>
+              <button type="button" onClick={() => setPlayerFilterId('')} className="text-zinc-500 hover:text-white transition-colors p-2 rounded-lg hover:bg-zinc-800 text-xs font-bold uppercase">Limpar atleta ✕</button>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">

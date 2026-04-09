@@ -79,7 +79,7 @@ function newPage(doc: jsPDF, logo: { dataUrl: string; width: number; height: num
 export interface PhysiologyPdfData {
   teamName?: string;
   teamShieldUrl?: string;
-  filters: { competition: string; month: string; injuryType: string };
+  filters: { dateFrom: string; dateTo: string; playerLabel: string };
   kpis: {
     avgPseMatch: string | number;
     injuriesByOrigin: { treino: number; jogo: number; outros: number };
@@ -212,7 +212,7 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
 
     doc.setFontSize(8);
     doc.setTextColor(...COLORS.zinc500);
-    const filterText = `Filtros: ${data.filters.competition} · ${data.filters.month} · ${data.filters.injuryType}`;
+    const filterText = `Período: ${data.filters.dateFrom} — ${data.filters.dateTo} · ${data.filters.playerLabel}`;
     doc.text(filterText, PAGE_WIDTH / 2, 145, { align: 'center' });
     doc.text(new Date().toLocaleDateString('pt-BR'), PAGE_WIDTH / 2, 150, { align: 'center' });
     drawFooter(doc);
@@ -231,7 +231,7 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
     const kpis = [
       { title: 'MÉDIA PSE (JOGOS)', value: String(data.kpis.avgPseMatch), color: COLORS.lime, sub: 'Escala 0-10' },
       { title: 'LESÕES TREINO / JOGO / OUTROS', value: `${data.kpis.injuriesByOrigin.treino} / ${data.kpis.injuriesByOrigin.jogo} / ${data.kpis.injuriesByOrigin.outros}`, color: COLORS.cyan, sub: 'Por origem' },
-      { title: 'LESÕES (FILTRO)', value: String(data.kpis.totalInjuries), color: COLORS.red, sub: data.filters.injuryType === 'Todos' ? 'Total Temporada' : `Tipo: ${data.filters.injuryType}` },
+      { title: 'LESÕES (PERÍODO)', value: String(data.kpis.totalInjuries), color: COLORS.red, sub: 'No intervalo' },
       { title: 'JOGOS COM DESFALQUE', value: String(data.kpis.matchesWithAbsence), color: COLORS.orange, sub: 'Time desfalcado' },
     ];
 
