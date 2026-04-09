@@ -17,6 +17,7 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
 } from 'recharts';
+import html2canvas from 'html2canvas';
 import { Activity, Brain, HeartPulse, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, Shield, Users } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
@@ -598,14 +599,42 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       const playerLabel = playerFilterId
         ? (players.find(pl => pl.id === playerFilterId)?.name ?? playerFilterId)
         : 'Equipe (média)';
+      let heatmapImageDataUrl: string | null = null;
+      try {
+        const heatmapEl = document.getElementById('physiology-heatmap-capture');
+        if (heatmapEl) {
+          const canvas = await html2canvas(heatmapEl, { backgroundColor: '#000000', scale: 2, useCORS: true });
+          heatmapImageDataUrl = canvas.toDataURL('image/png');
+        }
+      } catch (_) {}
       const pdfData: PhysiologyPdfData = {
+        teamName: (() => {
+          try {
+            const raw = localStorage.getItem('scout21_overview_team');
+            if (!raw) return undefined;
+            const parsed = JSON.parse(raw);
+            return parsed?.teamName || undefined;
+          } catch {
+            return undefined;
+          }
+        })(),
+        teamShieldUrl: (() => {
+          try {
+            const raw = localStorage.getItem('scout21_overview_team');
+            if (!raw) return undefined;
+            const parsed = JSON.parse(raw);
+            return parsed?.teamShieldUrl || undefined;
+          } catch {
+            return undefined;
+          }
+        })(),
         filters: {
           dateFrom,
           dateTo,
           playerLabel,
         },
         kpis: {
-          avgPseMatch: stats.avgRpeMatch,
+          avgWellness: avgWellnessKpi ?? '—',
           injuriesByOrigin: stats.injuriesByOrigin,
           totalInjuries: stats.totalInjuries,
           matchesWithAbsence: stats.matchesWithAbsence,
@@ -614,8 +643,20 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         pseTrainingData: rpeTrainingData,
         psrMatchData,
         psrTrainingData,
+        wellnessRadarData: wellnessRadarPeriod.map(r => ({ subject: r.subject, avg: r.avg })),
         injuryTypeData,
         injurySideData,
+        acwrRows: acwrData
+          .filter(a => a.acwr !== null)
+          .map(a => ({
+            name: a.nickname || a.name,
+            position: a.position,
+            acute: a.acute,
+            chronic: a.chronic,
+            acwr: a.acwr as number,
+            risk: a.risk,
+          })),
+        heatmapImageDataUrl,
       };
       await exportPhysiologyPdf(pdfData);
     } catch (err) {
@@ -1009,7 +1050,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                     </span>
                </div>
                
-               <div className="flex-1 flex items-center justify-center bg-black border border-zinc-800 rounded-2xl print:bg-gray-50 print:border-gray-200 p-8 relative overflow-visible min-h-[500px]">
+              <div id="physiology-heatmap-capture" className="flex-1 flex items-center justify-center bg-black border border-zinc-800 rounded-2xl print:bg-gray-50 print:border-gray-200 p-8 relative overflow-visible min-h-[500px]">
                     <MuscleBodyMap injuries={filteredInjuries} />
                </div>
            </div>

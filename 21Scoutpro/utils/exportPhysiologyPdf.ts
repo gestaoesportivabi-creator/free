@@ -81,7 +81,7 @@ export interface PhysiologyPdfData {
   teamShieldUrl?: string;
   filters: { dateFrom: string; dateTo: string; playerLabel: string };
   kpis: {
-    avgPseMatch: string | number;
+    avgWellness: string | number;
     injuriesByOrigin: { treino: number; jogo: number; outros: number };
     totalInjuries: number;
     matchesWithAbsence: number;
@@ -90,8 +90,11 @@ export interface PhysiologyPdfData {
   pseTrainingData: { date: string; rpe: number }[];
   psrMatchData: { date: string; rpe: number }[];
   psrTrainingData: { date: string; rpe: number }[];
+  wellnessRadarData: { subject: string; avg: number | null }[];
   injuryTypeData: { name: string; value: number }[];
   injurySideData: { direito: number; esquerdo: number };
+  acwrRows: { name: string; position: string; acute: number; chronic: number; acwr: number; risk: 'green' | 'yellow' | 'red' | 'none' }[];
+  heatmapImageDataUrl?: string | null;
 }
 
 function drawLineChart(doc: jsPDF, data: { date: string; rpe: number }[], color: [number, number, number], title: string, x: number, y: number, w: number, h: number) {
@@ -166,6 +169,87 @@ function drawHorizontalBar(doc: jsPDF, data: { name: string; value: number }[], 
   });
 }
 
+function drawPageHeader(
+  doc: jsPDF,
+  logo: { dataUrl: string; width: number; height: number } | null,
+  title: string
+) {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(...COLORS.cyan);
+  doc.text(title, MARGIN, 18);
+  if (logo) {
+    const aspect = logo.width / Math.max(logo.height, 1);
+    const h = 11;
+    const w = h * aspect;
+    try { doc.addImage(logo.dataUrl, 'PNG', PAGE_WIDTH - MARGIN - w, 8, w, h); } catch {}
+  }
+}
+
+function drawRadarChart(
+  doc: jsPDF,
+  data: { subject: string; avg: number | null }[],
+  x: number,
+  y: number,
+  size: number
+) {
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const r = size * 0.38;
+  const valid = data.filter(d => d.avg != null);
+  const axisCount = Math.max(data.length, 3);
+  if (valid.length === 0) {
+    doc.setFontSize(10);
+    doc.setTextColor(...COLORS.zinc500);
+    doc.text('Sem dados de bem-estar no período', cx, cy, { align: 'center' });
+    return;
+  }
+
+  // grades concêntricas
+  doc.setDrawColor(...COLORS.zinc700);
+  doc.setLineWidth(0.2);
+  [1, 2, 3, 4, 5].forEach(level => {
+    const lr = (r * level) / 5;
+    for (let i = 0; i < axisCount; i++) {
+      const a1 = (-Math.PI / 2) + (2 * Math.PI * i) / axisCount;
+      const a2 = (-Math.PI / 2) + (2 * Math.PI * ((i + 1) % axisCount)) / axisCount;
+      doc.line(cx + Math.cos(a1) * lr, cy + Math.sin(a1) * lr, cx + Math.cos(a2) * lr, cy + Math.sin(a2) * lr);
+    }
+  });
+
+  // eixos + rótulos
+  doc.setFontSize(8);
+  for (let i = 0; i < axisCount; i++) {
+    const item = data[i];
+    const a = (-Math.PI / 2) + (2 * Math.PI * i) / axisCount;
+    doc.line(cx, cy, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    const lx = cx + Math.cos(a) * (r + 12);
+    const ly = cy + Math.sin(a) * (r + 12);
+    const label = item?.subject || `Indicador ${i + 1}`;
+    const avgLabel = item?.avg != null ? `Ø ${item.avg}` : '—';
+    doc.setTextColor(...COLORS.zinc500);
+    doc.text(label.length > 22 ? `${label.slice(0, 21)}…` : label, lx, ly, { align: 'center' });
+    doc.setTextColor(...COLORS.cyan);
+    doc.text(avgLabel, lx, ly + 4, { align: 'center' });
+  }
+
+  // polígono radar
+  doc.setDrawColor(...COLORS.cyan);
+  doc.setLineWidth(0.9);
+  doc.setFillColor(0, 240, 255);
+  const points = data.map((item, i) => {
+    const a = (-Math.PI / 2) + (2 * Math.PI * i) / axisCount;
+    const rv = ((item.avg ?? 0) / 5) * r;
+    return { x: cx + Math.cos(a) * rv, y: cy + Math.sin(a) * rv };
+  });
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    doc.line(p1.x, p1.y, p2.x, p2.y);
+  }
+  points.forEach(p => doc.circle(p.x, p.y, 1.1, 'F'));
+}
+
 export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void> {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:1000000;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;font-family:Calibri,sans-serif;font-size:18px;color:#00f0ff;font-weight:bold;';
@@ -179,16 +263,14 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
       data.teamShieldUrl ? loadImage(data.teamShieldUrl) : Promise.resolve(null),
     ]);
 
-    // --- COVER ---
+    // --- PAGE 1: CAPA ---
     fillBg(doc);
+    drawWatermark(doc, logo);
+    drawFooter(doc);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(28);
+    doc.setFontSize(30);
     doc.setTextColor(...COLORS.white);
-    doc.text('DEPARTAMENTO DE FISIOLOGIA', PAGE_WIDTH / 2, 40, { align: 'center' });
-
-    doc.setFontSize(12);
-    doc.setTextColor(...COLORS.cyan);
-    doc.text('Relatório de Carga & Mapa de Lesões', PAGE_WIDTH / 2, 52, { align: 'center' });
+    doc.text('MONITORAMENTO FISIOLOGICO', PAGE_WIDTH / 2, 40, { align: 'center' });
 
     if (data.teamName) {
       doc.setFontSize(18);
@@ -197,7 +279,7 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
     }
     if (shield) {
       const aspect = shield.width / Math.max(shield.height, 1);
-      const sh = 22;
+      const sh = 20;
       const sw = sh * aspect;
       try { doc.addImage(shield.dataUrl, 'PNG', PAGE_WIDTH / 2 - sw / 2, 76, sw, sh); } catch {}
     }
@@ -211,24 +293,19 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
 
     doc.setFontSize(8);
     doc.setTextColor(...COLORS.zinc500);
-    const filterText = `Período: ${data.filters.dateFrom} — ${data.filters.dateTo} · ${data.filters.playerLabel}`;
+    const filterText = `Periodo: ${data.filters.dateFrom} - ${data.filters.dateTo} | Filtro: ${data.filters.playerLabel}`;
     doc.text(filterText, PAGE_WIDTH / 2, 145, { align: 'center' });
-    doc.text(new Date().toLocaleDateString('pt-BR'), PAGE_WIDTH / 2, 150, { align: 'center' });
-    drawFooter(doc);
-    drawWatermark(doc, logo);
+    doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, PAGE_WIDTH / 2, 150, { align: 'center' });
 
-    // --- PAGE 2: KPIs ---
+    // --- PAGE 2: CARDS ---
     newPage(doc, logo);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(...COLORS.cyan);
-    doc.text('INDICADORES PRINCIPAIS', MARGIN, 18);
+    drawPageHeader(doc, logo, 'MONITORAMENTO FISIOLOGICO');
 
-    const kpiY = 28;
+    const kpiY = 64;
     const kpiW = CONTENT_W / 4 - 4;
     const kpiBoxH = 32;
     const kpis = [
-      { title: 'MÉDIA PSE (JOGOS)', value: String(data.kpis.avgPseMatch), color: COLORS.lime, sub: 'Escala 0-10' },
+      { title: 'MEDIA DE BEM-ESTAR', value: String(data.kpis.avgWellness), color: COLORS.lime, sub: 'Escala 1-5' },
       { title: 'LESÕES TREINO / JOGO / OUTROS', value: `${data.kpis.injuriesByOrigin.treino} / ${data.kpis.injuriesByOrigin.jogo} / ${data.kpis.injuriesByOrigin.outros}`, color: COLORS.cyan, sub: 'Por origem' },
       { title: 'LESÕES (PERÍODO)', value: String(data.kpis.totalInjuries), color: COLORS.red, sub: 'No intervalo' },
       { title: 'JOGOS COM DESFALQUE', value: String(data.kpis.matchesWithAbsence), color: COLORS.orange, sub: 'Time desfalcado' },
@@ -253,51 +330,93 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
       doc.text(kpi.sub, bx + 4, kpiY + 24);
     });
 
-    // PSE charts on same page
-    const chartY = kpiY + kpiBoxH + 14;
-    const halfW = CONTENT_W / 2 - 4;
-    drawLineChart(doc, data.pseMatchData, COLORS.lime, 'EVOLUÇÃO PSE (JOGOS)', MARGIN, chartY, halfW, 60);
-    drawLineChart(doc, data.pseTrainingData, COLORS.emerald, 'MÉDIA PSE (TREINOS)', MARGIN + halfW + 8, chartY, halfW, 60);
-
-    // --- PAGE 3: PSR ---
+    // --- PAGE 3: EVOLUÇÃO PSE (JOGOS) ---
     newPage(doc, logo);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(...COLORS.cyan);
-    doc.text('RECUPERAÇÃO (PSR)', MARGIN, 18);
+    drawPageHeader(doc, logo, 'EVOLUÇÃO PSE (JOGOS)');
+    drawLineChart(doc, data.pseMatchData, COLORS.lime, 'EVOLUÇÃO PSE (JOGOS)', MARGIN, 34, CONTENT_W, 90);
 
-    drawLineChart(doc, data.psrMatchData, COLORS.sky, 'EVOLUÇÃO PSR (JOGOS)', MARGIN, 28, halfW, 60);
-    drawLineChart(doc, data.psrTrainingData, [14, 165, 233], 'MÉDIA PSR (TREINOS)', MARGIN + halfW + 8, 28, halfW, 60);
-
-    // --- PAGE 4: Injuries ---
+    // --- PAGE 4: MÉDIA PSE (TREINOS) ---
     newPage(doc, logo);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(...COLORS.cyan);
-    doc.text('DISTRIBUIÇÃO DE LESÕES', MARGIN, 18);
+    drawPageHeader(doc, logo, 'MÉDIA PSE (TREINOS)');
+    drawLineChart(doc, data.pseTrainingData, COLORS.emerald, 'MÉDIA PSE (TREINOS)', MARGIN, 34, CONTENT_W, 90);
 
+    // --- PAGE 5: EVOLUÇÃO PSR (JOGOS) ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'EVOLUÇÃO PSR (JOGOS)');
+    drawLineChart(doc, data.psrMatchData, COLORS.sky, 'EVOLUÇÃO PSR (JOGOS)', MARGIN, 34, CONTENT_W, 90);
+
+    // --- PAGE 6: MÉDIA PSR (TREINOS) ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'MÉDIA PSR (TREINOS)');
+    drawLineChart(doc, data.psrTrainingData, [14, 165, 233], 'MÉDIA PSR (TREINOS)', MARGIN, 34, CONTENT_W, 90);
+
+    // --- PAGE 7: RADAR BEM-ESTAR ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'RADAR — MÉDIAS DO PERÍODO');
+    drawRadarChart(doc, data.wellnessRadarData || [], MARGIN + 34, 34, 165);
+
+    // --- PAGE 8: DISTRIBUIÇÃO POR TIPO ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'DISTRIBUIÇÃO POR TIPO');
     if (data.injuryTypeData.length > 0) {
-      drawHorizontalBar(doc, data.injuryTypeData, MARGIN, 30, halfW);
+      drawHorizontalBar(doc, data.injuryTypeData, MARGIN, 34, CONTENT_W);
+    } else {
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('Sem dados de lesões no período', PAGE_WIDTH / 2, 90, { align: 'center' });
     }
 
-    const sideX = MARGIN + halfW + 10;
-    doc.setFontSize(10);
-    doc.setTextColor(...COLORS.white);
-    doc.text('LATERALIDADE', sideX, 30);
+    // --- PAGE 9: MAPA DE CALOR ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'MAPA DE CALOR (HEATMAP)');
+    if (data.heatmapImageDataUrl) {
+      const imgX = MARGIN + 40;
+      const imgY = 34;
+      const imgW = CONTENT_W - 80;
+      const imgH = 150;
+      try { doc.addImage(data.heatmapImageDataUrl, 'PNG', imgX, imgY, imgW, imgH, undefined, 'FAST'); } catch {}
+    } else {
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('Não foi possível capturar o heatmap para exportação.', PAGE_WIDTH / 2, 90, { align: 'center' });
+    }
 
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.zinc500);
-    doc.text('Lado Direito', sideX, 42);
-    doc.setFontSize(20);
-    doc.setTextColor(...COLORS.white);
-    doc.text(String(data.injurySideData.direito), sideX, 52);
-
-    doc.setFontSize(8);
-    doc.setTextColor(...COLORS.zinc500);
-    doc.text('Lado Esquerdo', sideX, 68);
-    doc.setFontSize(20);
-    doc.setTextColor(...COLORS.white);
-    doc.text(String(data.injurySideData.esquerdo), sideX, 78);
+    // --- PAGE 10: ACWR ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'ACWR — RISCO DE LESÃO POR ATLETA');
+    const rows = data.acwrRows || [];
+    if (rows.length === 0) {
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('Sem dados de ACWR no período', PAGE_WIDTH / 2, 90, { align: 'center' });
+    } else {
+      const startY = 34;
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('ATLETA', MARGIN, startY);
+      doc.text('POS', MARGIN + 70, startY);
+      doc.text('AGUDA', MARGIN + 92, startY, { align: 'right' });
+      doc.text('CRÔNICA', MARGIN + 118, startY, { align: 'right' });
+      doc.text('ACWR', MARGIN + 144, startY, { align: 'right' });
+      doc.text('RISCO', MARGIN + 170, startY, { align: 'right' });
+      let y = startY + 6;
+      rows.slice(0, 20).forEach(r => {
+        doc.setDrawColor(...COLORS.zinc700);
+        doc.line(MARGIN, y + 1, PAGE_WIDTH - MARGIN, y + 1);
+        doc.setTextColor(...COLORS.white);
+        doc.text(r.name, MARGIN, y);
+        doc.setTextColor(...COLORS.zinc500);
+        doc.text(r.position, MARGIN + 70, y);
+        doc.setTextColor(...COLORS.white);
+        doc.text(String(r.acute), MARGIN + 92, y, { align: 'right' });
+        doc.text(String(r.chronic), MARGIN + 118, y, { align: 'right' });
+        doc.text(String(r.acwr), MARGIN + 144, y, { align: 'right' });
+        const riskColor = r.risk === 'green' ? COLORS.emerald : r.risk === 'yellow' ? [234, 179, 8] as [number, number, number] : COLORS.red;
+        doc.setTextColor(...riskColor);
+        doc.text(r.risk === 'green' ? 'Seguro' : r.risk === 'yellow' ? 'Atenção' : 'Risco', MARGIN + 170, y, { align: 'right' });
+        y += 7;
+      });
+    }
 
     doc.save(`fisiologia_${new Date().toISOString().slice(0, 10)}.pdf`);
   } finally {
