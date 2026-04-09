@@ -13,12 +13,10 @@ import { TeamManagement } from './components/TeamManagement';
 import { ManagementReport } from './components/ManagementReport';
 import { StatsRanking } from './components/StatsRanking';
 import { Schedule } from './components/Schedule';
-import { Academia } from './components/Academia';
 import { PseTab } from './components/PseTab';
 import { PsrTab } from './components/PsrTab';
 import { QualidadeSonoTab } from './components/QualidadeSonoTab';
 import { WellnessTab } from './components/WellnessTab';
-import { AthletesTab } from './components/AthletesTab';
 import { LoadingMessage } from './components/LoadingMessage';
 import { ChampionshipTable, ChampionshipMatch } from './components/ChampionshipTable';
 import { SuspensionsAlert } from './components/SuspensionsAlert';
@@ -33,7 +31,6 @@ import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
-import { QuartetAnalysis } from './components/QuartetAnalysis';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
@@ -1449,7 +1446,7 @@ export default function App() {
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <QuartetAnalysis matches={matchesFinalizedForScout} players={players} isFreePlan={essentialRestricted} />
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'general':
@@ -1666,11 +1663,7 @@ export default function App() {
       case 'athletes-physio':
         return (
           <TabBackgroundWrapper>
-            {performanceTier ? (
-              <AthletesTab players={players} assessments={assessments} />
-            ) : (
-              <EmBreve />
-            )}
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'wellness':
@@ -1686,11 +1679,7 @@ export default function App() {
       case 'academia':
         return (
           <TabBackgroundWrapper>
-            {performanceTier ? (
-              <Academia schedules={schedules} players={players} />
-            ) : (
-              <EmBreve />
-            )}
+            <EmBreve />
           </TabBackgroundWrapper>
         );
       case 'management-report':

@@ -19,6 +19,9 @@ interface Category {
   items: MenuItem[];
 }
 
+/** Abas com cadeado no menu e conteúdo bloqueado (Em breve) — Quarteto, Atletas (fisiologia), Musculação */
+const LOCKED_MENU_TAB_IDS = new Set(['quarteto', 'athletes-physio', 'academia']);
+
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -202,7 +205,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
               category.items.map((item) => {
                 const ItemIcon = item.icon || category.icon;
                 const isActive = isItemActive(item.id);
-                const showLock = (category.id === 'fisiologia' && !fisiologiaUnlocked) || (item.id === 'individual' && isFreePlan);
+                const showLock =
+                  LOCKED_MENU_TAB_IDS.has(item.id) ||
+                  (category.id === 'fisiologia' && !fisiologiaUnlocked) ||
+                  (item.id === 'individual' && isFreePlan);
                 return (
                   <button
                     key={item.id}
@@ -256,7 +262,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                       {category.items.map((item) => {
                         const ItemIcon = item.icon || CategoryIcon;
                         const isActive = isItemActive(item.id);
-                        const showLock = (category.id === 'fisiologia' && !fisiologiaUnlocked) || (item.id === 'individual' && isFreePlan);
+                        const showLock =
+                          LOCKED_MENU_TAB_IDS.has(item.id) ||
+                          (category.id === 'fisiologia' && !fisiologiaUnlocked) ||
+                          (item.id === 'individual' && isFreePlan);
                         return (
                           <button
                             key={item.id}
