@@ -221,7 +221,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
     const birthDateMaxIso = getBirthDateMaxIsoLocal();
 
-    // Mapeamento de tipos de lesão para locais possíveis
+    // Mapeamento de tipos de lesão para locais possíveis (heatmap: utils/physiologyHeatmapMap.ts)
     const INJURY_LOCATIONS_BY_TYPE: Record<string, string[]> = {
         'Muscular': [
             'Coxa Posterior', 'Coxa Anterior', 'Quadríceps', 'Isquiostibiais',

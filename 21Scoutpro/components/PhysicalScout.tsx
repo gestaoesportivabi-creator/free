@@ -23,6 +23,7 @@ import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiologyPdf';
+import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS } from './WellnessTab';
 
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
@@ -1179,108 +1180,7 @@ interface InjuryBodyMapProps {
     injuries: InjuryRecord[];
 }
 
-type InjurySideKind = 'Direito' | 'Esquerdo' | 'Bilateral' | 'N/A';
-type OutwardDir = 'left' | 'right' | 'up' | 'down';
-
-const HEATMAP_BODY_POINTS: Record<string, { front: [number, number] | null; back: [number, number] | null }> = {
-    Cabeça: { front: [50, 8], back: [50, 8] },
-    Face: { front: [50, 12], back: null },
-    Ombro: { front: [28, 22], back: [28, 22] },
-    'Coxa Anterior': { front: [42, 55], back: null },
-    'Coxa Posterior': { front: null, back: [42, 55] },
-    Panturrilha: { front: null, back: [40, 80] },
-    Tornozelo: { front: [40, 88], back: [40, 88] },
-    Joelho: { front: [38, 68], back: null },
-    Adutor: { front: [47, 52], back: null },
-    Costas: { front: null, back: [50, 35] },
-    Pé: { front: [38, 94], back: [38, 94] },
-};
-
-function normalizeHeatmapLocation(location: string): string {
-    const normalized = location
-        .toLowerCase()
-        .replace(/\s*(direito|direita|esquerdo|esquerda)\s*/gi, '')
-        .trim();
-    const locationMap: Record<string, string> = {
-        'coxa posterior': 'Coxa Posterior',
-        'coxa anterior': 'Coxa Anterior',
-        tornozelo: 'Tornozelo',
-        joelho: 'Joelho',
-        adutor: 'Adutor',
-        panturrilha: 'Panturrilha',
-        ombro: 'Ombro',
-        pé: 'Pé',
-        pe: 'Pé',
-        face: 'Face',
-        cabeça: 'Cabeça',
-        cabeca: 'Cabeça',
-        costas: 'Costas',
-        tórax: 'Costas',
-        torax: 'Costas',
-        lombar: 'Costas',
-    };
-    return locationMap[normalized] || location;
-}
-
-function inferSideFromLocationText(location: string): 'Direito' | 'Esquerdo' | null {
-    const l = location.toLowerCase();
-    if (/\b(direito|direita)\b/.test(l)) return 'Direito';
-    if (/\b(esquerdo|esquerda)\b/.test(l)) return 'Esquerdo';
-    return null;
-}
-
-function effectiveInjurySide(inj: InjuryRecord): InjurySideKind {
-    if (inj.side === 'Bilateral') return 'Bilateral';
-    if (inj.side === 'Direito' || inj.side === 'Esquerdo') return inj.side;
-    const fromText = inferSideFromLocationText(inj.location);
-    if (fromText) return fromText;
-    return inj.side === 'N/A' || !inj.side ? 'N/A' : inj.side;
-}
-
-function isLateralRegion(base: string, view: 'front' | 'back'): boolean {
-    if (base === 'Cabeça' || base === 'Face' || base === 'Costas') return false;
-    const frontLateral = new Set(['Ombro', 'Joelho', 'Tornozelo', 'Pé', 'Coxa Anterior', 'Adutor']);
-    const backLateral = new Set(['Ombro', 'Tornozelo', 'Pé', 'Coxa Posterior', 'Panturrilha']);
-    return view === 'front' ? frontLateral.has(base) : backLateral.has(base);
-}
-
-function anchorForRegion(
-    base: string,
-    view: 'front' | 'back',
-    side: InjurySideKind
-): [number, number] | null {
-    const bp = HEATMAP_BODY_POINTS[base];
-    if (!bp) return null;
-    const c = view === 'front' ? bp.front : bp.back;
-    if (!c) return null;
-    const [xRef, y] = c;
-    if (!isLateralRegion(base, view)) return [c[0], y];
-    const xLeft = Math.min(xRef, 100 - xRef);
-    const xRight = Math.max(xRef, 100 - xRef);
-    if (side === 'Bilateral' || side === 'N/A') return [50, y];
-    return side === 'Direito' ? [xLeft, y] : [xRight, y];
-}
-
-function outwardDirection(x: number, y: number): OutwardDir {
-    if (x < 50) return 'left';
-    if (x > 50) return 'right';
-    if (y < 38) return 'up';
-    return 'down';
-}
-
-function heatmapLabelForSide(base: string, side: InjurySideKind): string {
-    if (side === 'Bilateral') return base;
-    if (side === 'N/A') return base;
-    return `${base} (${side})`;
-}
-
-interface HeatCalloutProps {
-    x: number;
-    y: number;
-    outward: OutwardDir;
-    regionLabel: string;
-    count: number;
-}
+type HeatCalloutProps = HeatmapCalloutData;
 
 const HeatCallout: React.FC<HeatCalloutProps> = ({ x, y, outward, regionLabel, count }) => {
     const lineLen = 38;
@@ -1412,46 +1312,11 @@ const HeatCallout: React.FC<HeatCalloutProps> = ({ x, y, outward, regionLabel, c
     );
 };
 
-function buildHeatmapSpots(injuries: InjuryRecord[], view: 'front' | 'back'): HeatCalloutProps[] {
-    const tallies = new Map<string, { base: string; side: InjurySideKind; count: number }>();
-
-    injuries.forEach(inj => {
-        const base = normalizeHeatmapLocation(inj.location);
-        const bp = HEATMAP_BODY_POINTS[base];
-        if (!bp) return;
-        const coords = view === 'front' ? bp.front : bp.back;
-        if (!coords) return;
-
-        const side = effectiveInjurySide(inj);
-        const key = `${base}::${side}`;
-        const prev = tallies.get(key);
-        if (prev) prev.count += 1;
-        else tallies.set(key, { base, side, count: 1 });
-    });
-
-    const spots: HeatCalloutProps[] = [];
-    tallies.forEach(({ base, side, count }) => {
-        const anchor = anchorForRegion(base, view, side);
-        if (!anchor) return;
-        const [ax, ay] = anchor;
-        spots.push({
-            x: ax,
-            y: ay,
-            outward: outwardDirection(ax, ay),
-            regionLabel: heatmapLabelForSide(base, side),
-            count,
-        });
-    });
-
-    spots.sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x));
-    return spots;
-}
-
 const MuscleBodyMap: React.FC<InjuryBodyMapProps> = ({ injuries }) => {
     const [view, setView] = useState<'front' | 'back'>('front');
 
-    const spotsFront = useMemo(() => buildHeatmapSpots(injuries, 'front'), [injuries]);
-    const spotsBack = useMemo(() => buildHeatmapSpots(injuries, 'back'), [injuries]);
+    const spotsFront = useMemo(() => buildHeatmapCallouts(injuries, 'front'), [injuries]);
+    const spotsBack = useMemo(() => buildHeatmapCallouts(injuries, 'back'), [injuries]);
 
     const toggleView = () => {
         setView(prev => (prev === 'front' ? 'back' : 'front'));
