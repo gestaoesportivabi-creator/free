@@ -12,17 +12,17 @@ export type WellnessDimensionKey = (typeof WELLNESS_DIMENSION_KEYS)[number];
 
 /** Metas de bem-estar (escala 1–5) para comparação no radar de monitoramento fisiológico. */
 export const WELLNESS_IDEAL_VALUES: Record<WellnessDimensionKey, number> = {
-  stress: 1,
+  stress: 2,
   sono: 5,
   humor: 5,
-  dor: 1,
+  dor: 2.5,
   satisfacao: 5,
 };
 
 export const WELLNESS_DIMENSIONS = [
   { key: 'stress' as const, label: 'Nível de stress', emoji: '🧠' },
   { key: 'sono' as const, label: 'Qualidade do sono', emoji: '😴' },
-  { key: 'humor' as const, label: 'Humor', emoji: '😊' },
+  { key: 'humor' as const, label: 'Humor/Motivação', emoji: '😊' },
   { key: 'dor' as const, label: 'Dor muscular', emoji: '🩹' },
   { key: 'satisfacao' as const, label: 'Satisfação', emoji: '✨' },
 ];

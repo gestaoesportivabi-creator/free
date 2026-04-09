@@ -1176,7 +1176,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
                     </ul>
                   ) : (
                     <p className="text-[10px] text-emerald-200/95 font-medium leading-snug">
-                      Stress e dor muscular no ideal (baixo); sono, humor e satisfação no patamar meta — sem alertas negativos.
+                      Stress e dor muscular no ideal (baixo); sono, humor/motivação e satisfação no patamar meta — sem alertas negativos.
                     </p>
                   )}
                 </div>
@@ -1279,7 +1279,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           </div>
           <div className="mt-6 flex flex-col items-center gap-2 max-w-md mx-auto print:hidden">
             <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wide text-center px-2">
-              Proximidade ao engajamento ideal da equipe (realidade)
+              Proximidade ao Bem- Estar ideal da equipe (realidade)
             </span>
             <div
               className="h-2.5 w-full max-w-sm rounded-full border border-zinc-700"
