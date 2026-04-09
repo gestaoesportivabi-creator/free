@@ -5,6 +5,7 @@ import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
 import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
+import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -29,6 +30,19 @@ type WellnessRadarChartRow = {
 };
 
 const cardBase = 'bg-black p-6 rounded-3xl border border-zinc-900 shadow-lg';
+const GOAL_BY_PERIOD_LABELS = [
+  '00:00 - 05:00',
+  '05:01 - 10:00',
+  '10:01 - 15:00',
+  '15:01 - 20:00',
+  '20:01 - 25:00',
+  '25:01 - 30:00',
+  '30:01 - 35:00',
+  '35:01 - 40:00',
+  '40:01 - 45:00',
+  '45:01 - 50:00',
+] as const;
+const SET_PIECE_METHODS = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
 
 const HeatCallout: React.FC<HeatmapCalloutData> = ({ x, y, outward, regionLabel, count }) => {
   const lineLen = 34;
@@ -207,23 +221,35 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
   }, [filteredMatches, selectedPlayerId]);
 
   const goalInsights = useMemo(() => {
-    if (!selectedPlayerId) return { bestPeriod: '—', topMethod: '—', topOrigin: '—' };
-    const periodCount: Record<string, number> = { '1T': 0, '2T': 0 };
+    if (!selectedPlayerId) return { bestPeriod: '—', bestPeriodShare: null as number | null, topMethod: '—', topOrigin: '—' };
+    const periodCount = new Array<number>(GOAL_BY_PERIOD_LABELS.length).fill(0);
     const methodCount: Record<string, number> = {};
     const originCount: Record<string, number> = {};
+    let totalGoals = 0;
     filteredMatches.forEach(match => {
       (match.postMatchEventLog || []).forEach(ev => {
         if (String(ev.playerId) !== String(selectedPlayerId) || ev.action !== 'goal' || ev.isOpponentGoal) return;
-        periodCount[ev.period || '1T'] = (periodCount[ev.period || '1T'] || 0) + 1;
+        const absSec = postMatchEventClockToAbsoluteSeconds(ev.time || '', ev.period || '1T');
+        if (absSec != null && absSec >= 0 && absSec <= 50 * 60) {
+          const idx = absSec <= 300 ? 0 : Math.min(9, Math.floor((absSec - 1) / 300));
+          periodCount[idx] += 1;
+        }
+        totalGoals += 1;
         const m = (ev.goalMethod || ev.subtipo || 'Não informado').trim();
         methodCount[m] = (methodCount[m] || 0) + 1;
-        const o = ev.zone ? String(ev.zone).replace('_', ' ') : 'Não informado';
+        const normalized = m.normalize('NFD').replace(/\p{M}/gu, '').toUpperCase();
+        const isSetPiece = SET_PIECE_METHODS.some(sp => normalized.includes(sp.normalize('NFD').replace(/\p{M}/gu, '')));
+        const o = isSetPiece ? 'Bola Parada' : 'Bola Rolando';
         originCount[o] = (originCount[o] || 0) + 1;
       });
     });
     const maxOf = (obj: Record<string, number>) =>
       Object.entries(obj).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
-    return { bestPeriod: maxOf(periodCount), topMethod: maxOf(methodCount), topOrigin: maxOf(originCount) };
+    const maxVal = periodCount.length ? Math.max(...periodCount) : 0;
+    const maxIdx = periodCount.findIndex(v => v === maxVal);
+    const bestPeriod = maxVal > 0 && maxIdx >= 0 ? GOAL_BY_PERIOD_LABELS[maxIdx] : '—';
+    const bestPeriodShare = totalGoals > 0 && maxVal > 0 ? Math.round((maxVal / totalGoals) * 10000) / 100 : null;
+    return { bestPeriod, bestPeriodShare, topMethod: maxOf(methodCount), topOrigin: maxOf(originCount) };
   }, [filteredMatches, selectedPlayerId]);
 
   const avgPsePsr = useMemo(() => {
@@ -417,10 +443,10 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
               </div>
             </div>
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Média de PSE</p><p className="text-cyan-400 text-2xl font-black">{avgPsePsr.avgPse ?? '—'}</p></div>
-              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Média de PSR</p><p className="text-sky-400 text-2xl font-black">{avgPsePsr.avgPsr ?? '—'}</p></div>
-              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Quantidade de lesões</p><p className="text-red-400 text-2xl font-black">{injuryInfo?.injuries.length ?? 0}</p></div>
-              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Total dias afastado</p><p className="text-orange-400 text-2xl font-black">{injuryInfo?.totalDaysLost ?? 0}</p></div>
+              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Média de PSE</p><p className="text-white text-2xl font-black">{avgPsePsr.avgPse ?? '—'}</p></div>
+              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Média de PSR</p><p className="text-white text-2xl font-black">{avgPsePsr.avgPsr ?? '—'}</p></div>
+              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Quantidade de lesões</p><p className="text-white text-2xl font-black">{injuryInfo?.injuries.length ?? 0}</p></div>
+              <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Total dias afastado</p><p className="text-white text-2xl font-black">{injuryInfo?.totalDaysLost ?? 0}</p></div>
               <div className="border border-zinc-900 rounded-xl p-3"><p className="text-zinc-500 text-[10px] font-bold uppercase">Recuperadas prazo vs pós</p><p className="text-white text-xl font-black">{injuryInfo?.recoveredInTime ?? 0} <span className="text-zinc-500">vs</span> {injuryInfo?.recoveredLate ?? 0}</p></div>
             </div>
           </div>
@@ -431,30 +457,36 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                 <h4 className="text-xl font-black text-white uppercase mb-4 flex items-center gap-2"><Activity className="text-[#00f0ff]" /> Estatísticas de Jogos</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                   <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Total de Jogos</p><p className="text-white font-black text-2xl">{playerStats.games}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Jogos Perdidos</p><p className="text-red-400 font-black text-2xl">{injuryInfo?.injuries.length ? injuryInfo.injuries.length : 0}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Jogos Perdidos</p><p className="text-white font-black text-2xl">{injuryInfo?.injuries.length ? injuryInfo.injuries.length : 0}</p></div>
                   <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Minutos Totais</p><p className="text-white font-black text-2xl">{playerStats.minutes}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Média Minutos</p><p className="text-[#00f0ff] font-black text-2xl">{playerStats.avgMinutes}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Período com + gols</p><p className="text-lime-400 font-black text-2xl">{goalInsights.bestPeriod}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Método de gol +</p><p className="text-emerald-400 font-black text-lg">{goalInsights.topMethod}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Origem de gol +</p><p className="text-amber-400 font-black text-lg">{goalInsights.topOrigin}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Média Minutos</p><p className="text-white font-black text-2xl">{playerStats.avgMinutes}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4">
+                    <p className="text-zinc-500 font-bold uppercase text-xs mb-2">Período mais produtivo</p>
+                    <p className="text-white font-black text-lg">{goalInsights.bestPeriod}</p>
+                    {goalInsights.bestPeriodShare != null && (
+                      <p className="text-zinc-500 text-[11px] font-bold mt-1">{goalInsights.bestPeriodShare.toFixed(2)}% dos gols</p>
+                    )}
+                  </div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Método de gol +</p><p className="text-white font-black text-lg">{goalInsights.topMethod}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Origem de gol +</p><p className="text-white font-black text-lg">{goalInsights.topOrigin}</p></div>
                 </div>
               </div>
 
               <div className={cardBase}>
                 <h4 className="text-xl font-black text-white uppercase mb-4 flex items-center gap-2"><BarChart3 className="text-[#00f0ff]" /> Estatísticas do Scout Coletivo</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Gols</p><p className="text-lime-400 font-black text-2xl">{playerStats.goals}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Assistências</p><p className="text-blue-400 font-black text-2xl">{playerStats.assists}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Chutes no Gol</p><p className="text-purple-400 font-black text-2xl">{playerStats.shotsOnTarget}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Passes Certos</p><p className="text-green-400 font-black text-2xl">{playerStats.passesCorrect}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Faltas cometidas</p><p className="text-orange-400 font-black text-2xl">{cardAndFoulStats.foulsCommitted}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Cartões amarelos</p><p className="text-amber-300 font-black text-2xl">{cardAndFoulStats.yellowCards}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Cartões vermelhos</p><p className="text-red-500 font-black text-2xl">{cardAndFoulStats.redCards}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Passes Errados</p><p className="text-red-400 font-black text-2xl">{playerStats.passesWrong}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarmes (Posse)</p><p className="text-emerald-400 font-black text-2xl">{playerStats.tacklesWithBall}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarmes (S/Posse)</p><p className="text-yellow-400 font-black text-2xl">{playerStats.tacklesWithoutBall}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarme C/A</p><p className="text-cyan-400 font-black text-2xl">{playerStats.tacklesCounterAttack}</p></div>
-                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Erro Transição</p><p className="text-red-500 font-black text-2xl">{playerStats.wrongPassesTransition}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Gols</p><p className="text-white font-black text-2xl">{playerStats.goals}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Assistências</p><p className="text-white font-black text-2xl">{playerStats.assists}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Chutes no Gol</p><p className="text-white font-black text-2xl">{playerStats.shotsOnTarget}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Passes Certos</p><p className="text-white font-black text-2xl">{playerStats.passesCorrect}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Faltas cometidas</p><p className="text-white font-black text-2xl">{cardAndFoulStats.foulsCommitted}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Cartões amarelos</p><p className="text-white font-black text-2xl">{cardAndFoulStats.yellowCards}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Cartões vermelhos</p><p className="text-white font-black text-2xl">{cardAndFoulStats.redCards}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Passes Errados</p><p className="text-white font-black text-2xl">{playerStats.passesWrong}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarmes (Posse)</p><p className="text-white font-black text-2xl">{playerStats.tacklesWithBall}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarmes (S/Posse)</p><p className="text-white font-black text-2xl">{playerStats.tacklesWithoutBall}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Desarme C/A</p><p className="text-white font-black text-2xl">{playerStats.tacklesCounterAttack}</p></div>
+                  <div className="border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 text-xs uppercase font-bold mb-2">Erro Transição</p><p className="text-white font-black text-2xl">{playerStats.wrongPassesTransition}</p></div>
                 </div>
               </div>
             </>
@@ -467,7 +499,7 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                 {Object.entries(rankings).map(([stat, position]) => (
                   <div key={stat} className="border border-zinc-900 rounded-xl p-4 text-center">
                     <p className="text-zinc-500 font-bold uppercase text-xs mb-2">{stat}</p>
-                    <p className={`font-black text-3xl ${position <= 3 ? 'text-[#00f0ff]' : 'text-white'}`}>{position}º</p>
+                    <p className="font-black text-3xl text-white">{position}º</p>
                   </div>
                 ))}
               </div>
@@ -483,11 +515,11 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                   <div key={rel.partnerId} className="border border-zinc-900 rounded-xl p-4">
                     <div className="flex justify-between items-center mb-2">
                       <p className="text-white font-bold text-sm">{selectedPlayer.name} ↔ {rel.partnerName}</p>
-                      <p className="text-[#00f0ff] font-black text-lg">{rel.total} interações</p>
+                      <p className="text-white font-black text-lg">{rel.total} interações</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-zinc-900">
-                      <div><p className="text-zinc-500 text-xs font-bold uppercase mb-1">Seu gol (assist. parceiro)</p><p className="text-green-400 font-black text-xl">{rel.goalsScoredWithPartnerAssist}</p></div>
-                      <div><p className="text-zinc-500 text-xs font-bold uppercase mb-1">Gol parceiro (sua assist.)</p><p className="text-blue-400 font-black text-xl">{rel.goalsPartnerScoredWithMyAssist}</p></div>
+                      <div><p className="text-zinc-500 text-xs font-bold uppercase mb-1">Seu gol (assist. parceiro)</p><p className="text-white font-black text-xl">{rel.goalsScoredWithPartnerAssist}</p></div>
+                      <div><p className="text-zinc-500 text-xs font-bold uppercase mb-1">Gol parceiro (sua assist.)</p><p className="text-white font-black text-xl">{rel.goalsPartnerScoredWithMyAssist}</p></div>
                     </div>
                   </div>
                 ))}
@@ -505,7 +537,20 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                     <RadarChart data={wellnessIdealRadarData} cx="50%" cy="52%" outerRadius="68%">
                       <PolarGrid stroke="#27272a" />
                       <PolarRadiusAxis angle={30} domain={[0, 5]} tickCount={6} tick={{ fill: '#71717a', fontSize: 9 }} stroke="#3f3f46" />
-                      <PolarAngleAxis dataKey="shortLabel" tick={{ fill: '#a1a1aa', fontSize: 9 }} />
+                      <PolarAngleAxis
+                        dataKey="shortLabel"
+                        tick={({ x, y, payload, textAnchor }) => {
+                          const row = wellnessIdealRadarData.find(r => r.shortLabel === payload.value);
+                          if (!row) return <g />;
+                          const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
+                          return (
+                            <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
+                              <tspan x={x} dy={0}>{row.shortLabel}</tspan>
+                              <tspan x={x} dy={12} fill="#4ade80" fontWeight="bold" fontSize={10}>{row.avgLabel}</tspan>
+                            </text>
+                          );
+                        }}
+                      />
                       <Radar dataKey="value" stroke="#22c55e" fill="#22c55e" fillOpacity={0.22} strokeWidth={2} dot={{ r: 3, fill: '#4ade80' }} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -519,7 +564,20 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                       <RadarChart data={wellnessRadarPeriod} cx="50%" cy="52%" outerRadius="68%">
                         <PolarGrid stroke="#27272a" />
                         <PolarRadiusAxis angle={30} domain={[0, 5]} tickCount={6} tick={{ fill: '#71717a', fontSize: 9 }} stroke="#3f3f46" />
-                        <PolarAngleAxis dataKey="shortLabel" tick={{ fill: '#a1a1aa', fontSize: 9 }} />
+                        <PolarAngleAxis
+                          dataKey="shortLabel"
+                          tick={({ x, y, payload, textAnchor }) => {
+                            const row = wellnessRadarPeriod.find(r => r.shortLabel === payload.value);
+                            if (!row) return <g />;
+                            const ta = textAnchor === 'end' ? 'end' : textAnchor === 'start' ? 'start' : 'middle';
+                            return (
+                              <text x={x} y={y} textAnchor={ta} fill="#a1a1aa" fontSize={9} fontFamily="Calibri">
+                                <tspan x={x} dy={0}>{row.shortLabel}</tspan>
+                                <tspan x={x} dy={12} fill={realRadarStyle.stroke} fontWeight="bold" fontSize={10}>{row.avgLabel}</tspan>
+                              </text>
+                            );
+                          }}
+                        />
                         <Tooltip contentStyle={{ backgroundColor: '#000', borderColor: '#27272a', color: '#fff' }} />
                         <Radar dataKey="value" stroke={realRadarStyle.stroke} fill={realRadarStyle.fill} strokeWidth={2} dot={{ r: 3, fill: realRadarStyle.dot }} />
                       </RadarChart>
@@ -573,8 +631,8 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                 <div className="rounded-2xl border border-zinc-900 p-4">
                   <p className="text-white font-black uppercase text-sm mb-3">Lesões por lado</p>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Direito</p><p className="text-blue-400 text-2xl font-black">{injuryInfo?.side.direito ?? 0}</p></div>
-                    <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Esquerdo</p><p className="text-red-400 text-2xl font-black">{injuryInfo?.side.esquerdo ?? 0}</p></div>
+                    <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Direito</p><p className="text-white text-2xl font-black">{injuryInfo?.side.direito ?? 0}</p></div>
+                    <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Esquerdo</p><p className="text-white text-2xl font-black">{injuryInfo?.side.esquerdo ?? 0}</p></div>
                   </div>
                 </div>
               </div>
@@ -598,7 +656,7 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                   <div key={assessment.id} className="border border-zinc-900 rounded-xl p-4">
                     <div className="flex justify-between items-start mb-2">
                       <p className="text-white font-black text-lg">{new Date(assessment.date).toLocaleDateString('pt-BR')}</p>
-                      <p className="text-[#00f0ff] font-black text-xl">{assessment.bodyFat}% BF</p>
+                      <p className="text-white font-black text-xl">{assessment.bodyFat}% BF</p>
                     </div>
                     {(assessment as any).actionPlan && <p className="text-zinc-400 text-sm font-bold mt-2 border-t border-zinc-900 pt-2">{(assessment as any).actionPlan}</p>}
                   </div>
