@@ -113,27 +113,29 @@ async function loadCircleCroppedImage(url?: string): Promise<{ dataUrl: string; 
   }
 }
 
-function drawCardGrid(doc: jsPDF, cards: Array<{ title: string; value: string; sub?: string }>, cols: number, y: number) {
-  const gap = 4;
-  const w = (CONTENT_W - gap * (cols - 1)) / cols;
-  const h = 34;
+function drawCardGrid(doc: jsPDF, cards: Array<{ title: string; value: string; sub?: string }>, cols: number, y: number, areaHeight = 160) {
+  const gapX = 4;
+  const gapY = 5;
+  const rows = Math.max(1, Math.ceil(cards.length / cols));
+  const w = (CONTENT_W - gapX * (cols - 1)) / cols;
+  const h = Math.max(26, (areaHeight - gapY * (rows - 1)) / rows);
   cards.forEach((c, i) => {
     const row = Math.floor(i / cols);
     const col = i % cols;
-    const x = MARGIN + col * (w + gap);
-    const yy = y + row * (h + 4);
+    const x = MARGIN + col * (w + gapX);
+    const yy = y + row * (h + gapY);
     doc.setDrawColor(...COLORS.zinc700);
     doc.roundedRect(x, yy, w, h, 2, 2);
-    doc.setFontSize(7);
+    doc.setFontSize(7.2);
     doc.setTextColor(...COLORS.zinc500);
     doc.text(c.title.toUpperCase(), x + 3, yy + 6);
-    doc.setFontSize(16);
+    doc.setFontSize(Math.min(17, Math.max(13, h * 0.42)));
     doc.setTextColor(...COLORS.white);
-    doc.text(c.value, x + 3, yy + 18);
+    doc.text(c.value, x + 3, yy + Math.max(16, h * 0.54));
     if (c.sub) {
-      doc.setFontSize(6);
+      doc.setFontSize(6.4);
       doc.setTextColor(...COLORS.zinc500);
-      doc.text(c.sub, x + 3, yy + 24);
+      doc.text(c.sub, x + 3, yy + Math.max(22, h - 4));
     }
   });
 }
@@ -259,7 +261,7 @@ export async function exportManagementReportPdf(data: ManagementReportPdfData): 
     loadCircleCroppedImage(data.player.photoUrl),
   ]);
 
-  // PAGE 1: Capa + cards superiores
+  // PAGE 1: Capa
   fillBg(doc);
   drawFooter(doc);
   doc.setFont('helvetica', 'bold');
@@ -276,39 +278,45 @@ export async function exportManagementReportPdf(data: ManagementReportPdfData): 
       try { doc.addImage(shield.dataUrl, 'PNG', nameX + 4, 30.5, sw, sh); } catch {}
     }
   }
-  doc.setDrawColor(...COLORS.zinc700);
-  doc.roundedRect(MARGIN, 46, CONTENT_W, 36, 3, 3);
+  const centerX = PAGE_WIDTH / 2;
+  const centerPhotoY = 92;
   if (playerPhoto) {
-    try { doc.addImage(playerPhoto.dataUrl, 'PNG', MARGIN + 6, 50, 28, 28); } catch {}
+    const size = 52;
+    const x = centerX - size / 2;
+    const y = centerPhotoY - size / 2;
+    try { doc.addImage(playerPhoto.dataUrl, 'PNG', x, y, size, size); } catch {}
     doc.setDrawColor(...COLORS.cyan);
-    doc.circle(MARGIN + 20, 64, 14.8);
+    doc.setLineWidth(0.7);
+    doc.circle(centerX, centerPhotoY, size / 2 + 1.1);
   }
   doc.setTextColor(...COLORS.white);
-  doc.setFontSize(16);
-  doc.text(data.player.name.toUpperCase(), MARGIN + 40, 59);
-  doc.setFontSize(9);
+  doc.setFontSize(17);
+  doc.text(data.player.name.toUpperCase(), centerX, 129, { align: 'center' });
+  doc.setFontSize(10);
   doc.setTextColor(...COLORS.zinc500);
-  const sub = `#${data.player.number ?? '-'} • ${data.player.position || '-'} • ${data.periodLabel}`;
-  doc.text(sub, MARGIN + 40, 66);
-  drawCardGrid(doc, data.topCards, 5, 88);
+  doc.text(data.periodLabel, centerX, 136, { align: 'center' });
 
-  // PAGE 2: Estatísticas de Jogos
+  // PAGE 2: cards superiores
+  newPage(doc, 'CARDS SUPERIORES');
+  drawCardGrid(doc, data.topCards, 5, 30, 162);
+
+  // PAGE 3: Estatísticas de Jogos
   newPage(doc, 'ESTATÍSTICAS DE JOGOS');
-  drawCardGrid(doc, data.gameStatsCards, 4, 32);
+  drawCardGrid(doc, data.gameStatsCards, 4, 30, 162);
 
-  // PAGE 3: Estatísticas Scout Coletivo
+  // PAGE 4: Estatísticas Scout Coletivo
   newPage(doc, 'ESTATÍSTICAS DO SCOUT COLETIVO');
-  drawCardGrid(doc, data.scoutCards, 4, 32);
+  drawCardGrid(doc, data.scoutCards, 4, 30, 162);
 
-  // PAGE 4: Rankings
+  // PAGE 5: Rankings
   newPage(doc, 'POSIÇÃO NOS RANKINGS');
   drawRankingTable(doc, data.rankings);
 
-  // PAGE 5: Dualidades
+  // PAGE 6: Dualidades
   newPage(doc, 'DUALIDADES (TOP 3)');
   drawDualities(doc, data.dualities);
 
-  // PAGE 6: Fisiológica radares
+  // PAGE 7: Fisiológica radares
   newPage(doc, 'FISIOLÓGICA — RADARES');
   doc.setFontSize(9);
   doc.setTextColor(...COLORS.emerald);
@@ -319,7 +327,7 @@ export async function exportManagementReportPdf(data: ManagementReportPdfData): 
   const realColor = data.wellnessCloseness != null ? wellnessClosenessRgb(data.wellnessCloseness) : COLORS.zinc500;
   drawRadar(doc, data.wellnessReal, MARGIN + 130, 34, 112, realColor, realColor);
 
-  // PAGE 7: Mapa de calor + tipos
+  // PAGE 8: Mapa de calor + tipos
   newPage(doc, 'MAPA DE CALOR DE LESÕES E TIPOS');
   if (data.heatmapImageDataUrl) {
     try { doc.addImage(data.heatmapImageDataUrl, 'PNG', MARGIN, 34, 165, 150, undefined, 'FAST'); } catch {}
