@@ -5,9 +5,10 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tool
 
 const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
+/** Dimensões ativas (PSE e Qualidade de sono ficam nas respetivas abas) */
+export const WELLNESS_DIMENSION_KEYS = ['estresse', 'dor', 'humor'] as const;
+
 const DIMENSIONS = [
-  { key: 'fadiga', label: 'Fadiga Muscular', emoji: '💪' },
-  { key: 'sono', label: 'Qualidade do Sono', emoji: '😴' },
   { key: 'estresse', label: 'Nível de Estresse', emoji: '🧠' },
   { key: 'dor', label: 'Dor Muscular', emoji: '🩹' },
   { key: 'humor', label: 'Humor / Motivação', emoji: '😊' },
@@ -57,7 +58,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players }) => {
   const getPlayerScore = (playerId: string): number | null => {
     const pd = data[selectedDate]?.[playerId];
     if (!pd) return null;
-    const vals = Object.values(pd).filter(v => typeof v === 'number');
+    const vals = WELLNESS_DIMENSION_KEYS.map(k => pd[k]).filter((v): v is number => typeof v === 'number');
     if (vals.length === 0) return null;
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   };
@@ -65,7 +66,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players }) => {
   const getPlayerFilled = (playerId: string): number => {
     const pd = data[selectedDate]?.[playerId];
     if (!pd) return 0;
-    return Object.values(pd).filter(v => typeof v === 'number' && v >= 1).length;
+    return WELLNESS_DIMENSION_KEYS.filter(k => typeof pd[k] === 'number' && pd[k] >= 1).length;
   };
 
   const teamRadarData = useMemo(() => {
@@ -105,7 +106,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players }) => {
               <Heart className="text-[#00f0ff]" /> Bem-Estar Diário
             </h2>
             <p className="text-zinc-500 text-xs mt-1 font-bold uppercase tracking-wider">
-              Wellness Score · 5 dimensões · Escala 1-5
+              Wellness Score · 3 dimensões · Escala 1-5
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -168,7 +169,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players }) => {
                   </button>
                   {isExpanded && (
                     <div className="p-4 pt-0 border-t border-zinc-800">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {DIMENSIONS.map(dim => {
                           const current = data[selectedDate]?.[player.id]?.[dim.key];
                           return (

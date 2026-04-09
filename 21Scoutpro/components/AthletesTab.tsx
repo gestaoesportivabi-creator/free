@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Users, Search, Filter, ChevronDown, ChevronUp, Dumbbell, Ruler, Shield, AlertTriangle, HeartPulse, X } from 'lucide-react';
 import { Player, PhysicalAssessment, Position } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { WELLNESS_DIMENSION_KEYS } from './WellnessTab';
 
 const PSE_TREINOS_KEY = 'scout21_pse_treinos';
 const PSE_JOGOS_KEY = 'scout21_pse_jogos';
@@ -91,7 +92,7 @@ export const AthletesTab: React.FC<AthletesTabProps> = ({ players, assessments }
     const todayStr = new Date().toISOString().split('T')[0];
     const wToday = wellnessStored[todayStr]?.[playerId];
     if (wToday) {
-      const vals = Object.values(wToday).filter(v => typeof v === 'number');
+      const vals = WELLNESS_DIMENSION_KEYS.map(k => wToday[k]).filter((v): v is number => typeof v === 'number');
       if (vals.length > 0) wellnessScore = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
     }
 

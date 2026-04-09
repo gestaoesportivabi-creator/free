@@ -202,3 +202,59 @@ html {
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Filtros e listas — fundo preto, texto branco (app após login: .platform-font) */
+/* -------------------------------------------------------------------------- */
+.platform-font select,
+.platform-font input[type='date'],
+.platform-font input[type='month'],
+.platform-font input[type='time'] {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #3f3f46 !important;
+}
+
+.platform-font select option {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+.platform-font input[type='date'],
+.platform-font input[type='month'] {
+  color-scheme: dark;
+}
+
+/* Campos de busca por placeholder (filtros de atleta / listas) */
+.platform-font input[type='text'][placeholder*='Buscar'],
+.platform-font input[type='text'][placeholder*='buscar'],
+.platform-font input[type='search'] {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #3f3f46 !important;
+}
+
+/* Cabine de vídeo: partida + URL */
+.platform-font input[type='text'][placeholder*='Cole o link'],
+.platform-font input[type='text'][placeholder*='YouTube'] {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border-color: #3f3f46 !important;
+}
+
+.platform-font select:focus,
+.platform-font input[type='date']:focus,
+.platform-font input[type='month']:focus,
+.platform-font input[type='time']:focus,
+.platform-font input[type='search']:focus,
+.platform-font input[type='text'][placeholder*='Buscar']:focus,
+.platform-font input[type='text'][placeholder*='buscar']:focus,
+.platform-font input[type='text'][placeholder*='Cole o link']:focus {
+  outline: none !important;
+  border-color: rgba(0, 240, 255, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.12);
+}
+
+.platform-font select:disabled {
+  opacity: 0.55;
+}
+
