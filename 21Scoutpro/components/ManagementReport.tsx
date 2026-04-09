@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Player, MatchRecord, PhysicalAssessment, PlayerTimeControl, MatchStats, InjuryRecord } from '../types';
-import { FileText, Calendar, User, Printer, Activity, Trophy, AlertTriangle, BarChart3, Users, HeartPulse, Rotate3d, Brain } from 'lucide-react';
+import { FileText, Calendar, User, Download, Activity, Trophy, AlertTriangle, BarChart3, Users, HeartPulse, Rotate3d, Brain } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
 import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
+import { exportManagementReportPdf } from '../utils/exportManagementReportPdf';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -386,6 +388,87 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
     ];
   }, [playerStats, selectedPlayer, avgPsePsr, injuryInfo, wellnessAlerts]);
 
+  const handleExportPdf = async () => {
+    if (!selectedPlayer || !playerStats) return;
+    let heatmapImageDataUrl: string | null = null;
+    try {
+      const el = document.getElementById('management-report-heatmap-capture');
+      if (el) {
+        const canvas = await html2canvas(el, { backgroundColor: '#000000', scale: 2, useCORS: true });
+        heatmapImageDataUrl = canvas.toDataURL('image/png');
+      }
+    } catch (_) {}
+
+    const teamSettings = (() => {
+      try {
+        const raw = localStorage.getItem('scout21_overview_team');
+        if (!raw) return { teamName: undefined, teamShieldUrl: undefined };
+        const parsed = JSON.parse(raw);
+        return {
+          teamName: parsed?.teamName || undefined,
+          teamShieldUrl: parsed?.teamShieldUrl || parsed?.shieldUrl || undefined,
+        };
+      } catch {
+        return { teamName: undefined, teamShieldUrl: undefined };
+      }
+    })();
+
+    await exportManagementReportPdf({
+      teamName: teamSettings.teamName,
+      teamShieldUrl: teamSettings.teamShieldUrl,
+      player: {
+        name: selectedPlayer.name,
+        number: selectedPlayer.jerseyNumber,
+        position: selectedPlayer.position,
+        photoUrl: selectedPlayer.photoUrl,
+      },
+      periodLabel: `${startDate || 'Início'} a ${endDate || 'Atual'}`,
+      topCards: [
+        { title: 'Média de PSE', value: String(avgPsePsr.avgPse ?? '—') },
+        { title: 'Média de PSR', value: String(avgPsePsr.avgPsr ?? '—') },
+        { title: 'Quantidade de lesões', value: String(injuryInfo?.injuries.length ?? 0) },
+        { title: 'Total dias afastado', value: String(injuryInfo?.totalDaysLost ?? 0) },
+        { title: 'Recuperadas prazo vs pós', value: `${injuryInfo?.recoveredInTime ?? 0} vs ${injuryInfo?.recoveredLate ?? 0}` },
+      ],
+      gameStatsCards: [
+        { title: 'Total de jogos', value: String(playerStats.games) },
+        { title: 'Jogos perdidos', value: String(injuryInfo?.injuries.length ?? 0) },
+        { title: 'Minutos totais', value: String(playerStats.minutes) },
+        { title: 'Média minutos', value: String(playerStats.avgMinutes) },
+        { title: 'Período mais produtivo', value: String(goalInsights.bestPeriod), sub: goalInsights.bestPeriodShare != null ? `${goalInsights.bestPeriodShare.toFixed(2)}% dos gols` : undefined },
+        { title: 'Método de gol +', value: String(goalInsights.topMethod) },
+        { title: 'Origem de gol +', value: String(goalInsights.topOrigin) },
+      ],
+      scoutCards: [
+        { title: 'Gols', value: String(playerStats.goals) },
+        { title: 'Assistências', value: String(playerStats.assists) },
+        { title: 'Chutes no gol', value: String(playerStats.shotsOnTarget) },
+        { title: 'Passes certos', value: String(playerStats.passesCorrect) },
+        { title: 'Faltas cometidas', value: String(cardAndFoulStats.foulsCommitted) },
+        { title: 'Cartões amarelos', value: String(cardAndFoulStats.yellowCards) },
+        { title: 'Cartões vermelhos', value: String(cardAndFoulStats.redCards) },
+        { title: 'Passes errados', value: String(playerStats.passesWrong) },
+        { title: 'Desarmes (posse)', value: String(playerStats.tacklesWithBall) },
+        { title: 'Desarmes (s/posse)', value: String(playerStats.tacklesWithoutBall) },
+        { title: 'Desarme c/a', value: String(playerStats.tacklesCounterAttack) },
+        { title: 'Erro transição', value: String(playerStats.wrongPassesTransition) },
+      ],
+      rankings: Object.entries(rankings || {}).map(([name, position]) => ({ name, position })),
+      dualities: goalAssistDualities.map(d => ({
+        pairLabel: `${selectedPlayer.name} ↔ ${d.partnerName}`,
+        total: d.total,
+        given: d.goalsPartnerScoredWithMyAssist,
+        received: d.goalsScoredWithPartnerAssist,
+      })),
+      wellnessIdeal: wellnessIdealRadarData.map(r => ({ subject: r.subject, avg: r.avg ?? 0 })),
+      wellnessReal: wellnessRadarPeriod.map(r => ({ subject: r.subject, avg: r.avg })),
+      wellnessCloseness: closeness,
+      injuryTypes: injuryTypeData,
+      injurySide: injuryInfo?.side || { direito: 0, esquerdo: 0 },
+      heatmapImageDataUrl,
+    });
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       <div className={cardBase}>
@@ -397,8 +480,8 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
             <p className="text-zinc-500 text-xs font-bold mt-1">Análise completa do atleta para avaliação da diretoria</p>
           </div>
           {selectedPlayer && (
-            <button onClick={() => window.print()} className="bg-[#00f0ff] hover:bg-[#00f0ff]/80 text-black font-bold px-6 py-3 rounded-xl flex items-center gap-2 transition-colors print:hidden">
-              <Printer size={18} /> Imprimir / PDF
+            <button onClick={handleExportPdf} className="bg-[#00f0ff] hover:bg-[#00f0ff]/80 text-black font-bold px-6 py-3 rounded-xl flex items-center gap-2 transition-colors print:hidden">
+              <Download size={18} /> Exportar PDF
             </button>
           )}
         </div>
@@ -607,7 +690,7 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                   <p className="text-white font-black uppercase text-sm">Mapa de calor de lesões</p>
                   <button onClick={() => setBodyView(v => (v === 'front' ? 'back' : 'front'))} className="text-xs text-zinc-300 border border-zinc-700 rounded-lg px-2 py-1 flex items-center gap-1"><Rotate3d size={12} /> {bodyView === 'front' ? 'Costas' : 'Frente'}</button>
                 </div>
-                <div className="relative h-[440px] bg-black rounded-xl border border-zinc-800 overflow-visible">
+                <div id="management-report-heatmap-capture" className="relative h-[440px] bg-black rounded-xl border border-zinc-800 overflow-visible">
                   <img src={bodyView === 'front' ? '/anatomy-front.png.png' : '/anatomy-back.png.png'} alt="Corpo humano" className="absolute inset-0 w-full h-full object-contain" />
                   <div className="absolute inset-0">{heatmapSpots.map((s, i) => <HeatCallout key={`${s.regionLabel}-${i}`} {...s} />)}</div>
                 </div>
