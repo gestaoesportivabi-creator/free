@@ -1670,7 +1670,7 @@ export default function App() {
         return (
           <TabBackgroundWrapper>
             {performanceTier ? (
-              <WellnessTab players={players} />
+              <WellnessTab players={players} schedules={schedules} />
             ) : (
               <EmBreve />
             )}

@@ -5,6 +5,7 @@ import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiologyPdf';
+import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS } from './WellnessTab';
 
 const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -20,6 +21,22 @@ type StoredPseJogos = Record<string, Record<string, number>>;
 type StoredPseTreinos = Record<string, Record<string, number>>;
 type StoredPsrJogos = Record<string, Record<string, number>>;
 type StoredPsrTreinos = Record<string, Record<string, number>>;
+type StoredWellness = Record<string, Record<string, Record<string, number>>>;
+
+function enumerateDatesInclusive(from: string, to: string): string[] {
+  const out: string[] = [];
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const end = new Date(ty, tm - 1, td);
+  const cur = new Date(fy, fm - 1, fd);
+  while (cur <= end) {
+    out.push(
+      `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+    );
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
 
 interface PhysicalScoutProps {
     matches: MatchRecord[];
@@ -47,6 +64,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   const [psrJogosStored, setPsrJogosStored] = useState<StoredPsrJogos>({});
   const [psrTreinosStored, setPsrTreinosStored] = useState<StoredPsrTreinos>({});
   const [qualidadeSonoStored, setQualidadeSonoStored] = useState<StoredQualidadeSono>({});
+  const [wellnessStored, setWellnessStored] = useState<StoredWellness>({});
 
   useEffect(() => {
     try {
@@ -85,6 +103,18 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     } catch (_) {}
   }, []);
 
+  useEffect(() => {
+    const loadWellness = () => {
+      try {
+        const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
+        if (w) setWellnessStored(JSON.parse(w));
+      } catch (_) {}
+    };
+    loadWellness();
+    window.addEventListener('wellness-updated', loadWellness);
+    return () => window.removeEventListener('wellness-updated', loadWellness);
+  }, []);
+
   // Recarregar dados das abas PSE, PSR e Qualidade de sono quando a tab for exibida (para atualizar após preencher nas outras abas)
   useEffect(() => {
     const onStorage = () => {
@@ -99,6 +129,8 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         if (pt) setPsrTreinosStored(JSON.parse(pt));
         const q = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
         if (q) setQualidadeSonoStored(JSON.parse(q));
+        const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
+        if (w) setWellnessStored(JSON.parse(w));
       } catch (_) {}
     };
     window.addEventListener('storage', onStorage);
@@ -477,6 +509,40 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       })
       .filter(item => !playerFilterId || item.media > 0);
   }, [schedules, championshipMatches, qualidadeSonoStored, dateInRange, playerFilterId]);
+
+  const WELLNESS_LINE_COLORS = ['#e879f9', '#38bdf8', '#fbbf24', '#34d399', '#f472b6'];
+
+  const wellnessLineSeries = useMemo(() => {
+    const roster = players.filter(p => !p.isTransferred);
+    const dates = enumerateDatesInclusive(dateFrom, dateTo);
+    return WELLNESS_DIMENSIONS.map((dim, idx) => {
+      const data = dates
+        .map(dateStr => {
+          const dayMap = wellnessStored[dateStr];
+          let val: number | null = null;
+          if (dayMap) {
+            if (playerFilterId) {
+              const v = dayMap[playerFilterId]?.[dim.key];
+              val = typeof v === 'number' ? v : null;
+            } else {
+              const vals = roster
+                .map(p => dayMap[p.id]?.[dim.key])
+                .filter((x): x is number => typeof x === 'number');
+              val =
+                vals.length > 0
+                  ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+                  : null;
+            }
+          }
+          return {
+            date: new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            value: val,
+          };
+        })
+        .filter((row): row is { date: string; value: number } => row.value !== null);
+      return { ...dim, data, stroke: WELLNESS_LINE_COLORS[idx % WELLNESS_LINE_COLORS.length] };
+    });
+  }, [wellnessStored, dateFrom, dateTo, playerFilterId, players]);
 
   const injuryTypeData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -902,6 +968,54 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           </div>
         </ExpandableCard>
       )}
+
+      <div className="space-y-4 print:break-inside-avoid">
+        <h3 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2 px-1 print:text-black">
+          <HeartPulse className="text-[#00f0ff] print:text-black" /> Bem-estar diário
+        </h3>
+        <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
+          Cinco indicadores da aba <strong className="text-zinc-400">Bem-Estar Diário</strong>, filtrados pelo mesmo período e atleta desta página.
+        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {wellnessLineSeries.map(series => (
+            <ExpandableCard key={series.key} title={series.label} icon={HeartPulse} headerColor="text-fuchsia-400">
+              <p className="text-xs text-zinc-500 mb-2 font-medium">Escala 1–5 · só dias com registro no bem-estar.</p>
+              {series.data.length > 0 ? (
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={series.data} margin={{ top: 12, right: 16, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                      <XAxis dataKey="date" stroke="#71717a" tick={{ fontSize: 10, fontFamily: 'Calibri' }} />
+                      <YAxis domain={[0, 5.5]} stroke="#666" tick={{ fontSize: 10 }} allowDecimals />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#000',
+                          borderColor: '#27272a',
+                          color: '#fff',
+                          fontFamily: 'Calibri',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke={series.stroke}
+                        strokeWidth={2}
+                        dot={{ fill: series.stroke, r: 3 }}
+                        name={series.label}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="text-zinc-500 text-sm py-6 text-center">
+                  Sem dados no período. Preencha na aba <strong>Bem-Estar Diário</strong> em dias com Treino, Jogo ou Musculação na programação.
+                </p>
+              )}
+            </ExpandableCard>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:grid-cols-2 print:break-inside-avoid">
         <ExpandableCard title="Distribuição por Tipo" icon={AlertTriangle} headerColor="text-[#00f0ff]">
