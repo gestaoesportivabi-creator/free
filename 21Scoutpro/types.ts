@@ -18,6 +18,8 @@ export interface User {
   teamDisplayName?: string;
   /** URL ou base64 do escudo — persiste no backend para outro dispositivo */
   teamShieldUrl?: string;
+  /** Só para PUT /auth/profile ao alterar senha; nunca vem do servidor no login */
+  password?: string;
 }
 
 // Championship Table Types
