@@ -417,23 +417,6 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
     [injuryInfo]
   );
 
-  const predictiveSummary = useMemo(() => {
-    if (!playerStats || !selectedPlayer) return [];
-    const strong: string[] = [];
-    const weak: string[] = [];
-    if (playerStats.goals >= Math.max(3, Math.ceil(playerStats.games * 0.5))) strong.push('boa taxa de gols no período');
-    if (playerStats.assists >= Math.max(2, Math.ceil(playerStats.games * 0.3))) strong.push('participação em assistências consistente');
-    if (avgPsePsr.avgPsr != null && avgPsePsr.avgPsr >= 7.5) strong.push('boa percepção de recuperação (PSR)');
-    if ((injuryInfo?.injuries.length || 0) >= 2) weak.push('histórico recente de lesões relevante');
-    if ((injuryInfo?.totalDaysLost || 0) > 20) weak.push('alto volume de dias afastado por lesão');
-    if (wellnessAlerts.some(a => a.severity === 'critical')) weak.push('bem-estar diário com desvios críticos versus ideal');
-    if (avgPsePsr.avgPse != null && avgPsePsr.avgPse >= 8.5) weak.push('carga percebida (PSE) muito elevada');
-    return [
-      `Pontos fortes: ${strong.length ? strong.join('; ') : 'sem destaque estatístico forte no período.'}`,
-      `Pontos de atenção: ${weak.length ? weak.join('; ') : 'sem alerta crítico nos indicadores acompanhados.'}`,
-    ];
-  }, [playerStats, selectedPlayer, avgPsePsr, injuryInfo, wellnessAlerts]);
-
   const handleExportPdf = async () => {
     if (!selectedPlayer || !playerStats) return;
     let heatmapImageDataUrl: string | null = null;
@@ -834,15 +817,6 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className={cardBase}>
-            <h4 className="text-xl font-black text-white uppercase mb-4">Resumo de análise preditiva</h4>
-            <div className="space-y-3">
-              {predictiveSummary.map((line, i) => (
-                <p key={i} className={`text-sm font-medium leading-relaxed ${i === 0 ? 'text-emerald-200' : 'text-amber-100'}`}>{line}</p>
-              ))}
             </div>
           </div>
 
