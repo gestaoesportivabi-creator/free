@@ -4,6 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 
 import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
 
@@ -106,18 +107,22 @@ export const PseTreinosTab: React.FC<PseTreinosTabProps> = ({ schedules, players
     });
 
     if (value !== '') {
-       try {
-         // O sessionKey tem formato 'YYYY-MM-DD_HH:MM_Treino'
-         const datePart = sessionKey.split('_')[0];
-         await wellnessApi.saveBulk('pse-treino', [{
-            equipeId: schedules[0]?.equipeId || 'default-equipe',  // fallback caso nao venha populado
-            data: datePart, // YYYY-MM-DD -> passa limpo
+      const equipeId = resolveEquipeIdFromSchedules(schedules);
+      if (!equipeId) {
+        console.warn('[PSE treino] Sem equipeId nas programações; dados ficam só no navegador.');
+      } else {
+        try {
+          const datePart = sessionKey.split('_')[0];
+          await wellnessApi.saveBulk('pse-treino', [{
+            equipeId,
+            data: datePart,
             jogadorId: playerId,
-            value
-         }]);
-       } catch (err) {
-         console.error('Erro ao salvar PSE Treino no backend:', err);
-       }
+            value,
+          }]);
+        } catch (err) {
+          console.error('Erro ao salvar PSE Treino no backend:', err);
+        }
+      }
     }
   };
 

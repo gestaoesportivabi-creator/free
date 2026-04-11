@@ -3,6 +3,7 @@ import { Activity, ChevronDown, ChevronRight, Calendar, Trophy, Search, Chevrons
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
@@ -162,16 +163,21 @@ export const PseTab: React.FC<PseTabProps> = ({
     });
     window.dispatchEvent(new Event('wellness-updated'));
     if (value !== '') {
-      try {
-        const datePart = sessionKey.split('_')[0];
-        await wellnessApi.saveBulk('pse-treino', [{
-          equipeId: schedules[0]?.equipeId || 'default-equipe',
-          data: datePart,
-          jogadorId: playerId,
-          value,
-          valor: value,
-        }]);
-      } catch (err) { console.error('Erro ao salvar PSE Treino:', err); }
+      const equipeId = resolveEquipeIdFromSchedules(schedules);
+      if (!equipeId) {
+        console.warn('[PSE treino] Sem equipeId nas programações; dados ficam só no navegador. Sincronize a programação pela API.');
+      } else {
+        try {
+          const datePart = sessionKey.split('_')[0];
+          await wellnessApi.saveBulk('pse-treino', [{
+            equipeId,
+            data: datePart,
+            jogadorId: playerId,
+            value,
+            valor: value,
+          }]);
+        } catch (err) { console.error('Erro ao salvar PSE Treino:', err); }
+      }
     }
   };
 

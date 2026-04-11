@@ -3,6 +3,7 @@ import { Moon, ChevronDown, ChevronRight, Calendar, Trophy, Search } from 'lucid
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 export const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
 
@@ -101,17 +102,21 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
     window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
-      try {
-        // Formato da key: treino_YYYY-MM-DD ou jogo_YYYY-MM-DD
-        const datePart = eventKey.split('_')[1];
-        await wellnessApi.saveBulk('qualidade-sono', [{
-           equipeId: schedules[0]?.equipeId || 'default-equipe',
-           data: datePart,
-           jogadorId: playerId,
-           value
-        }]);
-      } catch (err) {
-        console.error('Falha ao salvar a qualidade do sono', err);
+      const equipeId = resolveEquipeIdFromSchedules(safeSchedules);
+      if (!equipeId) {
+        console.warn('[Qualidade do sono] Sem equipeId nas programações; dados ficam só no navegador.');
+      } else {
+        try {
+          const datePart = eventKey.split('_')[1];
+          await wellnessApi.saveBulk('qualidade-sono', [{
+            equipeId,
+            data: datePart,
+            jogadorId: playerId,
+            value,
+          }]);
+        } catch (err) {
+          console.error('Falha ao salvar a qualidade do sono', err);
+        }
       }
     }
   };

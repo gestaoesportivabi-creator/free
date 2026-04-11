@@ -108,6 +108,7 @@ export interface WeeklySchedule {
   title: string;
   weekStart: string;
   weekEnd: string;
+  equipeId?: string;
   days: DaySchedule[];
   isActive?: boolean;
   createdAt?: number;

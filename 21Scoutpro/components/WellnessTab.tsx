@@ -27,13 +27,38 @@ export const WELLNESS_DIMENSIONS = [
   { key: 'satisfacao' as const, label: 'Satisfação', emoji: '✨' },
 ];
 
-const SCALE_OPTIONS = [
+/** Escala visual: quanto maior o valor (1→5), melhor o indicador (ex.: sono, humor). */
+const SCALE_HIGHER_IS_BETTER = [
   { value: 1, label: 'Muito ruim', color: 'bg-red-500' },
   { value: 2, label: 'Ruim', color: 'bg-orange-500' },
   { value: 3, label: 'Regular', color: 'bg-amber-400' },
   { value: 4, label: 'Bom', color: 'bg-emerald-400' },
   { value: 5, label: 'Muito bom', color: 'bg-emerald-500' },
 ];
+
+/**
+ * Stress e dor muscular: quanto menor o valor na escala, melhor → 1 = verde, 5 = vermelho.
+ * (Mesmos rótulos da escala; só a cor do botão reflete “melhor nota”.)
+ */
+const SCALE_LOWER_IS_BETTER = [
+  { value: 1, label: 'Muito ruim', color: 'bg-emerald-500' },
+  { value: 2, label: 'Ruim', color: 'bg-emerald-400' },
+  { value: 3, label: 'Regular', color: 'bg-amber-400' },
+  { value: 4, label: 'Bom', color: 'bg-orange-500' },
+  { value: 5, label: 'Muito bom', color: 'bg-red-500' },
+];
+
+const LOWER_IS_BETTER_DIMS = new Set<WellnessDimensionKey>(['stress', 'dor']);
+
+function scaleOptionsForDimension(dimKey: WellnessDimensionKey) {
+  return LOWER_IS_BETTER_DIMS.has(dimKey) ? SCALE_LOWER_IS_BETTER : SCALE_HIGHER_IS_BETTER;
+}
+
+/** Converte cada dimensão para “quanto maior melhor” (1–5) para média e cor de resumo. */
+function toComparableWellnessScore(dimKey: WellnessDimensionKey, raw: number): number {
+  if (LOWER_IS_BETTER_DIMS.has(dimKey)) return 6 - raw;
+  return raw;
+}
 
 type CommitType = 'treino' | 'jogo' | 'musculacao';
 
@@ -178,6 +203,9 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
               <p className="text-zinc-500 text-xs mt-1 font-bold uppercase tracking-wider">
                 5 indicadores · escala 1–5 · só em dias com Treino, Jogo ou Musculação na programação ativa
               </p>
+              <p className="text-zinc-600 text-[11px] mt-2 max-w-xl">
+                Stress e dor muscular: quanto menor o valor, melhor (1 = melhor). Demais indicadores: quanto maior, melhor (5 = melhor). Os registos desta aba ficam guardados neste navegador; ainda não há sincronização com o servidor.
+              </p>
             </div>
             {teamAvgScore !== null && selectedDayHasCommitment && (
               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-2">
@@ -264,7 +292,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                                 {dim.emoji} {dim.label}
                               </p>
                               <div className="flex gap-1">
-                                {SCALE_OPTIONS.map(opt => (
+                                {scaleOptionsForDimension(dim.key).map(opt => (
                                   <button
                                     key={opt.value}
                                     type="button"

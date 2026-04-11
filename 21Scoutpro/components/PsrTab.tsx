@@ -3,6 +3,7 @@ import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, Chevron
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
@@ -174,17 +175,22 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
-      try {
-        const datePart = sessionKey.split('_')[0];
-        await wellnessApi.saveBulk('psr-treino', [{
-          equipeId: schedules[0]?.equipeId || 'default-equipe',
-          data: datePart,
-          jogadorId: playerId,
-          value,
-          valor: value,
-        }]);
-      } catch (e) {
-         console.error('Falha ao salvar PSR treino', e);
+      const equipeId = resolveEquipeIdFromSchedules(schedules);
+      if (!equipeId) {
+        console.warn('[PSR treino] Sem equipeId nas programações; dados ficam só no navegador.');
+      } else {
+        try {
+          const datePart = sessionKey.split('_')[0];
+          await wellnessApi.saveBulk('psr-treino', [{
+            equipeId,
+            data: datePart,
+            jogadorId: playerId,
+            value,
+            valor: value,
+          }]);
+        } catch (e) {
+          console.error('Falha ao salvar PSR treino', e);
+        }
       }
     }
   };

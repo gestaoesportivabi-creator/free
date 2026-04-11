@@ -11,6 +11,19 @@ const PSR_JOGOS_KEY = 'scout21_psr_jogos';
 const QUALIDADE_SONO_KEY = 'scout21_qualidade_sono';
 const WELLNESS_KEY = 'scout21_wellness';
 
+/** Alinha com Bem-Estar Diário: stress/dor quanto menor melhor → entram na média como (6−valor). */
+function comparableWellnessDayAvg(wToday: Record<string, number> | undefined): number | null {
+  if (!wToday) return null;
+  const parts: number[] = [];
+  for (const k of WELLNESS_DIMENSION_KEYS) {
+    const v = wToday[k];
+    if (typeof v !== 'number') continue;
+    parts.push(k === 'stress' || k === 'dor' ? 6 - v : v);
+  }
+  if (parts.length === 0) return null;
+  return Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 10) / 10;
+}
+
 interface AthletesTabProps {
   players: Player[];
   assessments: PhysicalAssessment[];
@@ -91,10 +104,7 @@ export const AthletesTab: React.FC<AthletesTabProps> = ({ players, assessments }
     let wellnessScore: number | null = null;
     const todayStr = new Date().toISOString().split('T')[0];
     const wToday = wellnessStored[todayStr]?.[playerId];
-    if (wToday) {
-      const vals = WELLNESS_DIMENSION_KEYS.map(k => wToday[k]).filter((v): v is number => typeof v === 'number');
-      if (vals.length > 0) wellnessScore = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
-    }
+    wellnessScore = comparableWellnessDayAvg(wToday);
 
     return {
       lastPse: pseVals.length > 0 ? pseVals[0].value : null,

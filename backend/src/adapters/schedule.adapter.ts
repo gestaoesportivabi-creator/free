@@ -95,6 +95,8 @@ export function transformScheduleToFrontend(
     title: programacao.titulo,
     weekStart: formatDate(programacao.dataInicio),
     weekEnd: formatDate(programacao.dataFim),
+    /** Necessário para PSE/PSR/sono persistirem na API (FK em `equipe_id`) */
+    equipeId: programacao.equipeId,
     days: daysArray,
     isActive: programacao.isAtivo,
     createdAt,
