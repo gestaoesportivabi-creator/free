@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Player, PhysicalAssessment } from '../types';
 import {
   Calculator,
@@ -86,6 +86,66 @@ function computeJacksonPollock7(
     bodyDensity,
     bodyFatPercent: Number.isFinite(bodyFatPercent) ? bodyFatPercent : NaN,
   };
+}
+
+/** Densidade a partir do % gordura (inversa da Siri) quando não há como recalcular por dobras */
+function bodyDensityFromSiriPercent(bfPercent: number): number {
+  return 495 / (bfPercent + 450);
+}
+
+function buildLastSavedFromAssessment(a: PhysicalAssessment, sex: 'M' | 'F', ageYears: number): LastSavedResults | null {
+  const bfRaw = a.bodyFatPercent ?? a.bodyFat;
+  if (typeof bfRaw !== 'number' || !Number.isFinite(bfRaw)) return null;
+  const bf = parseFloat(bfRaw.toFixed(1));
+
+  const skin = {
+    chest: a.chest ?? 0,
+    axilla: a.axilla ?? 0,
+    subscapular: a.subscapular ?? 0,
+    triceps: a.triceps ?? 0,
+    abdominal: a.abdominal ?? 0,
+    suprailiac: a.suprailiac ?? 0,
+    thigh: a.thigh ?? 0,
+  };
+  const sum7 = SKINFOLD_KEYS.reduce((acc, { key }) => acc + (skin[key] || 0), 0);
+
+  let bodyDensity: number;
+  if (sum7 > 0) {
+    const c = computeJacksonPollock7(skin, sex, ageYears);
+    if (Number.isFinite(c.bodyDensity) && c.bodyDensity > 0) {
+      bodyDensity = c.bodyDensity;
+    } else {
+      bodyDensity = bodyDensityFromSiriPercent(bf);
+    }
+  } else {
+    bodyDensity = bodyDensityFromSiriPercent(bf);
+  }
+
+  const w = a.weight;
+  const h = a.height;
+  let fatMassKg: number | null = null;
+  let leanMassKg: number | null = null;
+  if (w > 0) {
+    fatMassKg = parseFloat(((w * bf) / 100).toFixed(1));
+    leanMassKg = parseFloat((w - fatMassKg).toFixed(1));
+  }
+  const imc = w > 0 && h > 0 ? w / Math.pow(h / 100, 2) : null;
+
+  return {
+    sum7Mm: Math.round(sum7 * 10) / 10,
+    bodyDensity: parseFloat(bodyDensity.toFixed(4)),
+    bodyFatPercent: bf,
+    fatMassKg,
+    leanMassKg,
+    imc: imc != null ? Math.round(imc * 10) / 10 : null,
+    referenceBand: classifyBodyFatReference(bf, sex),
+  };
+}
+
+function bandToBfTextClass(band: BodyFatReferenceBand): string {
+  if (band === 'ideal') return 'text-emerald-400';
+  if (band === 'adequado') return 'text-amber-400';
+  return 'text-red-400';
 }
 
 const formulaBox = 'my-3 rounded-lg border border-dashed border-zinc-600 bg-zinc-900/80 px-4 py-3 text-center font-mono text-[13px] leading-relaxed text-emerald-200/95';
@@ -328,7 +388,48 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({
     thigh: 0,
   });
 
+  /** Evita que o efeito do atleta limpe o formulário ao hidratar a partir do histórico */
+  const loadingFromHistoryRef = useRef(false);
+
+  const loadAssessmentFromHistory = useCallback(
+    (a: PhysicalAssessment) => {
+      loadingFromHistoryRef.current = true;
+      const p = players.find(pl => pl.id === a.playerId);
+      const sexVal: 'M' | 'F' = a.sex === 'F' ? 'F' : 'M';
+      const ageVal =
+        typeof a.ageYears === 'number' && a.ageYears > 0
+          ? a.ageYears
+          : p && typeof p.age === 'number' && p.age > 0
+            ? p.age
+            : 25;
+
+      setSelectedPlayerId(a.playerId);
+      setAssessmentDate(a.date.length >= 10 ? a.date.slice(0, 10) : a.date);
+      setSex(sexVal);
+      setAgeYears(ageVal);
+      setWeight(typeof a.weight === 'number' && !Number.isNaN(a.weight) ? a.weight : 0);
+      setHeight(typeof a.height === 'number' && !Number.isNaN(a.height) ? a.height : 0);
+      setSkinfolds({
+        chest: a.chest ?? 0,
+        axilla: a.axilla ?? 0,
+        subscapular: a.subscapular ?? 0,
+        triceps: a.triceps ?? 0,
+        abdominal: a.abdominal ?? 0,
+        suprailiac: a.suprailiac ?? 0,
+        thigh: a.thigh ?? 0,
+      });
+      setActionPlan(a.actionPlan ?? '');
+      setLastSavedResults(buildLastSavedFromAssessment(a, sexVal, ageVal));
+      setViewTab('form');
+      queueMicrotask(() => {
+        loadingFromHistoryRef.current = false;
+      });
+    },
+    [players]
+  );
+
   useEffect(() => {
+    if (loadingFromHistoryRef.current) return;
     if (!selectedPlayerId) {
       setWeight(0);
       setHeight(0);
@@ -414,7 +515,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({
       referenceBand,
     });
 
-    const newAssessment = {
+    const newAssessment: PhysicalAssessment = {
       id: Date.now().toString(),
       playerId: selectedPlayerId,
       date: assessmentDate,
@@ -430,7 +531,9 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({
       speed: 0,
       strength: 0,
       agility: 0,
-    } as PhysicalAssessment;
+      sex,
+      ageYears,
+    };
 
     onSaveAssessment(newAssessment);
     setSkinfolds({ chest: 0, axilla: 0, subscapular: 0, triceps: 0, abdominal: 0, suprailiac: 0, thigh: 0 });
@@ -611,22 +714,12 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({
       {viewTab === 'form' && (
         <>
           <div className="rounded-3xl border border-zinc-800 bg-zinc-950/40 p-6 shadow-xl md:p-8">
-            <div className="mb-6 flex flex-col gap-3 border-b border-zinc-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h3 className="text-lg font-black uppercase tracking-wide text-white">Jackson & Pollock – 7 dobras</h3>
-                <p className="mt-2 max-w-3xl text-xs leading-relaxed text-zinc-500">
-                  Insira as dobras em mm. Sítios (7): peito, axilar média, tríceps, subescapular, abdômen, supra-ilíaca e coxa. A equação
-                  muda conforme o sexo. Peso e altura vêm do cadastro do atleta ao selecioná-lo (aba Elenco), podendo ser ajustados.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInterpretationOpen(true)}
-                className="flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#00f0ff]/40 bg-[#00f0ff]/10 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-[#00f0ff] transition hover:bg-[#00f0ff]/20"
-              >
-                <Lightbulb className="h-4 w-4" />
-                Interpretação
-              </button>
+            <div className="mb-6 border-b border-zinc-800 pb-4">
+              <h3 className="text-lg font-black uppercase tracking-wide text-white">Jackson & Pollock – 7 dobras</h3>
+              <p className="mt-2 max-w-3xl text-xs leading-relaxed text-zinc-500">
+                Insira as dobras em mm. Sítios (7): peito, axilar média, tríceps, subescapular, abdômen, supra-ilíaca e coxa. A equação muda
+                conforme o sexo. Peso e altura vêm do cadastro do atleta ao selecioná-lo (aba Elenco), podendo ser ajustados.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
@@ -911,45 +1004,60 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({
               {history.length === 0 && <p className="py-10 text-center text-xs text-zinc-600">Nenhuma avaliação registrada.</p>}
               {history.map(assessment => {
                 const playerName = players.find(p => p.id === assessment.playerId)?.name || 'Atleta desconhecido';
+                const bfVal =
+                  typeof assessment.bodyFatPercent === 'number'
+                    ? assessment.bodyFatPercent
+                    : assessment.bodyFat ?? 0;
+                const histSex: 'M' | 'F' = assessment.sex === 'F' ? 'F' : 'M';
+                const histBand = classifyBodyFatReference(bfVal, histSex);
                 return (
                   <div
                     key={assessment.id}
-                    className="group relative rounded-xl border border-zinc-800 bg-black p-4 transition-colors hover:border-zinc-600"
+                    className="group relative rounded-xl border border-zinc-800 bg-black transition-colors hover:border-zinc-600"
                   >
                     {onDeleteAssessment && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={e => {
+                          e.stopPropagation();
                           if (confirm('Excluir esta avaliação? Esta ação não pode ser desfeita.')) {
                             onDeleteAssessment(assessment.id);
                           }
                         }}
-                        className="absolute right-2 top-2 rounded-lg p-1.5 text-zinc-600 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
+                        className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-zinc-600 opacity-0 transition-opacity hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100"
                         title="Excluir avaliação"
                       >
                         <Trash2 size={14} />
                       </button>
                     )}
-                    <div className="mb-2 flex flex-col gap-1">
-                      <span className="text-sm font-bold text-white">{playerName}</span>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-zinc-500">
-                          {new Date(assessment.date).toLocaleDateString()}
-                        </span>
-                        <span className="text-xl font-black text-emerald-400">
-                          {(assessment as PhysicalAssessment & { bodyFatPercent?: number }).bodyFatPercent ?? assessment.bodyFat ?? 0}%
-                          <span className="ml-1 text-[10px] font-bold uppercase text-zinc-500">gordura</span>
-                        </span>
+                    <button
+                      type="button"
+                      onClick={() => loadAssessmentFromHistory(assessment)}
+                      className="w-full rounded-xl p-4 pr-12 text-left transition-colors hover:bg-zinc-900/60"
+                      title="Abrir medidas, anotações e resultados desta avaliação"
+                    >
+                      <div className="mb-2 flex flex-col gap-1">
+                        <span className="text-sm font-bold text-white">{playerName}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold text-zinc-500">
+                            {new Date(assessment.date).toLocaleDateString()}
+                          </span>
+                          <span className={`shrink-0 text-xl font-black ${bandToBfTextClass(histBand)}`}>
+                            {bfVal.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                            <span className="ml-1 text-[10px] font-bold uppercase text-zinc-500">gordura</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    {(assessment as PhysicalAssessment & { actionPlan?: string }).actionPlan && (
-                      <div className="mt-2 border-t border-zinc-900 pt-2">
-                        <p className="mb-1 text-[10px] font-bold uppercase text-zinc-500">Plano de ação</p>
-                        <p className="line-clamp-3 text-xs text-zinc-300">
-                          {(assessment as PhysicalAssessment & { actionPlan?: string }).actionPlan}
-                        </p>
-                      </div>
-                    )}
+                      {assessment.actionPlan ? (
+                        <div className="mt-2 border-t border-zinc-900 pt-2">
+                          <p className="mb-1 text-[10px] font-bold uppercase text-zinc-500">Plano de ação</p>
+                          <p className="line-clamp-3 text-xs text-zinc-300">{assessment.actionPlan}</p>
+                        </div>
+                      ) : null}
+                      <p className="mt-3 text-[10px] font-bold uppercase text-[#00f0ff]/80">
+                        Clique para ver medidas, cartões e anotações
+                      </p>
+                    </button>
                   </div>
                 );
               })}

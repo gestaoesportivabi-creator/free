@@ -8,6 +8,7 @@ import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
 import { exportManagementReportPdf } from '../utils/exportManagementReportPdf';
+import { classifyBodyFatReference, type BodyFatReferenceBand } from './PhysicalAssessment';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
@@ -343,6 +344,51 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
     [assessments, selectedPlayerId, startDate, endDate]
   );
 
+  /** Distribuição das avaliações salvas na aba Avaliação física pelas faixas Ideal / Adequado / Elevado */
+  const physicalAssessmentBandStats = useMemo(() => {
+    const bands: Record<BodyFatReferenceBand, number> = { ideal: 0, adequado: 0, elevado: 0 };
+    filteredAssessments.forEach(a => {
+      const bfRaw = typeof a.bodyFatPercent === 'number' && Number.isFinite(a.bodyFatPercent) ? a.bodyFatPercent : a.bodyFat;
+      if (typeof bfRaw !== 'number' || !Number.isFinite(bfRaw)) return;
+      const sex: 'M' | 'F' = a.sex === 'F' ? 'F' : 'M';
+      bands[classifyBodyFatReference(bfRaw, sex)] += 1;
+    });
+    const total = filteredAssessments.length;
+    const pct = (n: number) => (total > 0 ? Math.round((n / total) * 1000) / 10 : 0);
+    return {
+      total,
+      bands,
+      pctIdeal: pct(bands.ideal),
+      pctAdequado: pct(bands.adequado),
+      pctElevado: pct(bands.elevado),
+    };
+  }, [filteredAssessments]);
+
+  const physicalAssessmentBandAlerts = useMemo(() => {
+    const { total, bands, pctIdeal, pctAdequado, pctElevado } = physicalAssessmentBandStats;
+    if (total === 0) return [] as { band: BodyFatReferenceBand; message: string }[];
+    const rows: { band: BodyFatReferenceBand; message: string }[] = [];
+    if (bands.ideal > 0) {
+      rows.push({
+        band: 'ideal',
+        message: `${bands.ideal} avaliação(ões) (${pctIdeal}%) na faixa Ideal (referência de % gordura para o sexo informado na avaliação).`,
+      });
+    }
+    if (bands.adequado > 0) {
+      rows.push({
+        band: 'adequado',
+        message: `${bands.adequado} avaliação(ões) (${pctAdequado}%) na faixa Adequada (saudável) ou intermediária fora de Ideal/Elevado.`,
+      });
+    }
+    if (bands.elevado > 0) {
+      rows.push({
+        band: 'elevado',
+        message: `${bands.elevado} avaliação(ões) (${pctElevado}%) acima do limite de referência (Elevado). Acompanhar contexto nutricional, de treino e critérios clínicos.`,
+      });
+    }
+    return rows;
+  }, [physicalAssessmentBandStats]);
+
   const rankings = useMemo(() => {
     if (!selectedPlayerId || !playerStats) return null;
     const categories: { key: keyof MatchStats; label: string }[] = [
@@ -465,6 +511,15 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
       wellnessCloseness: closeness,
       injuryTypes: injuryTypeData,
       injurySide: injuryInfo?.side || { direito: 0, esquerdo: 0 },
+      physicalAssessmentBands: {
+        total: physicalAssessmentBandStats.total,
+        ideal: physicalAssessmentBandStats.bands.ideal,
+        adequado: physicalAssessmentBandStats.bands.adequado,
+        elevado: physicalAssessmentBandStats.bands.elevado,
+        pctIdeal: physicalAssessmentBandStats.pctIdeal,
+        pctAdequado: physicalAssessmentBandStats.pctAdequado,
+        pctElevado: physicalAssessmentBandStats.pctElevado,
+      },
       heatmapImageDataUrl,
     });
   };
@@ -717,6 +772,66 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                     <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Direito</p><p className="text-white text-2xl font-black">{injuryInfo?.side.direito ?? 0}</p></div>
                     <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800"><p className="text-zinc-400 text-xs uppercase font-bold">Esquerdo</p><p className="text-white text-2xl font-black">{injuryInfo?.side.esquerdo ?? 0}</p></div>
                   </div>
+                </div>
+                <div className="rounded-2xl border border-zinc-900 p-4">
+                  <p className="text-white font-black uppercase text-sm mb-1">Avaliações físicas · % gordura</p>
+                  <p className="text-[10px] text-zinc-500 mb-3 font-bold uppercase tracking-wide">Mesmas faixas da aba Avaliação física (Ideal / Adequado / Elevado)</p>
+                  {physicalAssessmentBandStats.total === 0 ? (
+                    <p className="text-zinc-500 text-sm">Sem avaliações no período.</p>
+                  ) : (
+                    <>
+                      <div className="mb-4 flex items-baseline gap-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2">
+                        <span className="text-2xl font-black text-[#00f0ff]">{physicalAssessmentBandStats.total}</span>
+                        <span className="text-xs font-bold uppercase text-zinc-400">avaliações registradas</span>
+                      </div>
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center justify-between rounded-lg border border-emerald-800/60 bg-emerald-950/35 px-3 py-2.5">
+                          <span className="text-[11px] font-black uppercase text-emerald-300">Ideal</span>
+                          <span className="text-sm font-black text-emerald-200">
+                            {physicalAssessmentBandStats.bands.ideal}{' '}
+                            <span className="text-emerald-400/90">({physicalAssessmentBandStats.pctIdeal}%)</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg border border-amber-800/50 bg-amber-950/30 px-3 py-2.5">
+                          <span className="text-[11px] font-black uppercase text-amber-300">Adequado</span>
+                          <span className="text-sm font-black text-amber-200">
+                            {physicalAssessmentBandStats.bands.adequado}{' '}
+                            <span className="text-amber-400/90">({physicalAssessmentBandStats.pctAdequado}%)</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between rounded-lg border border-red-900/50 bg-red-950/35 px-3 py-2.5">
+                          <span className="text-[11px] font-black uppercase text-red-300">Elevado</span>
+                          <span className="text-sm font-black text-red-200">
+                            {physicalAssessmentBandStats.bands.elevado}{' '}
+                            <span className="text-red-400/90">({physicalAssessmentBandStats.pctElevado}%)</span>
+                          </span>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-zinc-700/60 bg-zinc-950 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-zinc-200 mb-2">Alertas · composição corporal</p>
+                        {physicalAssessmentBandAlerts.length ? (
+                          <ul className="space-y-1.5">
+                            {physicalAssessmentBandAlerts.map(row => (
+                              <li
+                                key={row.band}
+                                className={`text-[10px] leading-snug ${
+                                  row.band === 'ideal'
+                                    ? 'text-emerald-200'
+                                    : row.band === 'adequado'
+                                      ? 'text-amber-200'
+                                      : 'text-red-200'
+                                }`}
+                              >
+                                {row.message}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[10px] text-zinc-500">Sem dados classificáveis.</p>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

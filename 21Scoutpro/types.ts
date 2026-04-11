@@ -274,6 +274,19 @@ export interface PhysicalAssessment {
   speed: number;
   strength: number;
   agility: number;
+  /** Jackson & Pollock — dobras (mm), opcional em registros antigos */
+  chest?: number;
+  axilla?: number;
+  subscapular?: number;
+  triceps?: number;
+  abdominal?: number;
+  suprailiac?: number;
+  thigh?: number;
+  bodyFatPercent?: number;
+  actionPlan?: string;
+  /** Usados no cálculo e na faixa Ideal/Adequado/Elevado (registros novos) */
+  sex?: 'M' | 'F';
+  ageYears?: number;
 }
 
 // Schedule Types - Formato flat: cada linha = um evento (data, horário, atividade)

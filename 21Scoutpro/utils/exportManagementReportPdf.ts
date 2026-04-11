@@ -31,6 +31,16 @@ export interface ManagementReportPdfData {
   wellnessCloseness: number | null;
   injuryTypes: { name: string; value: number }[];
   injurySide: { direito: number; esquerdo: number };
+  /** Distribuição por faixa (Ideal / Adequado / Elevado), alinhada à aba Avaliação física */
+  physicalAssessmentBands?: {
+    total: number;
+    ideal: number;
+    adequado: number;
+    elevado: number;
+    pctIdeal: number;
+    pctAdequado: number;
+    pctElevado: number;
+  };
   heatmapImageDataUrl?: string | null;
 }
 
@@ -349,6 +359,30 @@ export async function exportManagementReportPdf(data: ManagementReportPdfData): 
   doc.setFontSize(14);
   doc.text(`Direito: ${data.injurySide.direito}`, MARGIN + 175, 146);
   doc.text(`Esquerdo: ${data.injurySide.esquerdo}`, MARGIN + 226, 146);
+
+  const pa = data.physicalAssessmentBands;
+  if (pa) {
+    doc.setDrawColor(...COLORS.zinc700);
+    doc.roundedRect(MARGIN + 172, 156, 108, pa.total > 0 ? 40 : 16, 2, 2);
+    doc.setTextColor(...COLORS.zinc500);
+    doc.setFontSize(7);
+    doc.text('Avaliações físicas · ref. % gordura', MARGIN + 175, 161);
+    doc.setFont('helvetica', 'normal');
+    if (pa.total === 0) {
+      doc.setFontSize(8);
+      doc.text('Sem avaliações no período.', MARGIN + 175, 170);
+    } else {
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.white);
+      doc.text(`Total: ${pa.total}`, MARGIN + 175, 169);
+      doc.setTextColor(...COLORS.emerald);
+      doc.text(`Ideal: ${pa.ideal} (${pa.pctIdeal}%)`, MARGIN + 175, 176);
+      doc.setTextColor(...COLORS.amber);
+      doc.text(`Adequado: ${pa.adequado} (${pa.pctAdequado}%)`, MARGIN + 175, 183);
+      doc.setTextColor(...COLORS.red);
+      doc.text(`Elevado: ${pa.elevado} (${pa.pctElevado}%)`, MARGIN + 175, 190);
+    }
+  }
 
   doc.save(`relatorio-gerencial-${data.player.name.replace(/\s+/g, '-').toLowerCase()}.pdf`);
 }
