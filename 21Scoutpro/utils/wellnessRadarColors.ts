@@ -34,7 +34,7 @@ function closenessToHueSatLight(meanScore: number): { hue: number; s: number; l:
   return { hue, s, l };
 }
 
-/** Cor do radar “real”: vermelho → laranja → amarelo → verde conforme a proximidade ao engajamento ideal. */
+/** Cor do radar “real”: vermelho → laranja → amarelo → verde conforme a proximidade ao bem-estar ideal. */
 export function wellnessRealRadarColors(meanScore: number): { stroke: string; fill: string; dot: string } {
   const { hue, s, l } = closenessToHueSatLight(meanScore);
   const hi = Math.round(hue);

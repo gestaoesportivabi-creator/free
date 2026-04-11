@@ -13,7 +13,7 @@ const LOWER_IS_BETTER: Partial<Record<WellnessDimensionKey, true>> = {
   dor: true,
 };
 
-/** Só alerta quando o desvio prejudica o engajamento vs meta (fora da tolerância). */
+/** Só alerta quando o desvio prejudica o bem-estar vs meta (fora da tolerância). */
 export function buildWellnessEngagementAlerts(
   rows: { key: WellnessDimensionKey; subject: string; avg: number | null }[]
 ): WellnessEngagementAlert[] {
@@ -37,9 +37,9 @@ export function buildWellnessEngagementAlerts(
 
     let message: string;
     if (lowerBetter) {
-      message = `${r.subject}: Ø ${r.avg} (meta ${ideal}). Acima do engajamento ideal — indicador negativo na escala.`;
+      message = `${r.subject}: Ø ${r.avg} (meta ${ideal}). Acima do bem-estar ideal — indicador negativo na escala.`;
     } else {
-      message = `${r.subject}: Ø ${r.avg} (meta ${ideal}). Abaixo do engajamento ideal da equipe.`;
+      message = `${r.subject}: Ø ${r.avg} (meta ${ideal}). Abaixo do bem-estar ideal da equipe.`;
     }
     out.push({ key: r.key, severity, message });
   });

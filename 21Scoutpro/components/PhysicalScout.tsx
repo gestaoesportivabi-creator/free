@@ -691,12 +691,12 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   const wellnessEngagementSummary = useMemo(() => {
     if (!hasWellnessRadarData) return null;
     const n = wellnessEngagementAlerts.length;
-    if (n === 0) return 'Indicadores alinhados ao engajamento ideal da equipe no período.';
+    if (n === 0) return 'Indicadores alinhados ao bem-estar ideal da equipe no período.';
     const c = wellnessEngagementAlerts.filter(a => a.severity === 'critical').length;
     const w = wellnessEngagementAlerts.filter(a => a.severity === 'warning').length;
-    if (c > 0) return `${c} indicador(es) com desvio forte em relação ao engajamento ideal.`;
-    if (w > 0) return `${w} indicador(es) requerem atenção em relação ao engajamento ideal.`;
-    return `${n} indicador(es) com leve desvio em relação ao engajamento ideal.`;
+    if (c > 0) return `${c} indicador(es) com desvio forte em relação ao bem-estar ideal.`;
+    if (w > 0) return `${w} indicador(es) requerem atenção em relação ao bem-estar ideal.`;
+    return `${n} indicador(es) com leve desvio em relação ao bem-estar ideal.`;
   }, [hasWellnessRadarData, wellnessEngagementAlerts]);
 
   const avgOf = (values: number[]): number | null => {
@@ -1124,7 +1124,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
           <Brain className="text-[#00f0ff] print:text-black" /> Bem-estar diário
         </h3>
         <p className="text-xs text-zinc-500 -mt-2 px-1 print:text-gray-600">
-          <strong className="text-zinc-400">Modelo ideal</strong> (verde): metas de <strong className="text-zinc-400">engajamento ideal</strong> da equipe.{' '}
+          <strong className="text-zinc-400">Modelo ideal</strong> (verde): metas de <strong className="text-zinc-400">bem-estar ideal</strong> da equipe.{' '}
           <strong className="text-zinc-400">Realidade</strong>: médias do período (1–5); quanto mais distante do ideal, mais{' '}
           <strong className="text-zinc-400">avermelhado</strong> o radar. Fonte: <strong className="text-zinc-400">Bem-Estar Diário</strong>.
         </p>
@@ -1290,7 +1290,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
             />
             <div className="flex justify-between w-full max-w-sm text-[9px] text-zinc-500 font-medium px-0.5">
               <span>Mais distante</span>
-              <span>Igual ao engajamento ideal</span>
+              <span>Igual ao bem-estar ideal</span>
             </div>
           </div>
           {hasWellnessRadarData && (

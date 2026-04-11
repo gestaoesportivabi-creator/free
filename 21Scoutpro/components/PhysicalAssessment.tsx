@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Player, PhysicalAssessment } from '../types';
 import { Calculator, Ruler, Save, Trash2, Calendar, User, FileText, TrendingDown, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
@@ -29,6 +29,21 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({ playe
         thigh: 0
     });
 
+    /** Peso e altura do cadastro do atleta (aba Elenco) ao selecionar ou ao limpar seleção */
+    useEffect(() => {
+        if (!selectedPlayerId) {
+            setWeight(0);
+            setHeight(0);
+            return;
+        }
+        const p = players.find(pl => pl.id === selectedPlayerId);
+        if (!p) return;
+        const w = p.weight;
+        const h = p.height;
+        setWeight(typeof w === 'number' && !Number.isNaN(w) && w > 0 ? w : 0);
+        setHeight(typeof h === 'number' && !Number.isNaN(h) && h > 0 ? h : 0);
+    }, [selectedPlayerId, players]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -51,16 +66,28 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({ playe
             id: Date.now().toString(),
             playerId: selectedPlayerId,
             date: assessmentDate,
+            weight,
+            height,
+            bodyFat: isNaN(bodyFat) ? 0 : parseFloat(bodyFat.toFixed(2)),
             ...skinfolds,
             bodyFatPercent: isNaN(bodyFat) ? 0 : parseFloat(bodyFat.toFixed(2)),
-            actionPlan: actionPlan
-        };
+            actionPlan: actionPlan,
+            muscleMass: 0,
+            vo2max: 0,
+            flexibility: 0,
+            speed: 0,
+            strength: 0,
+            agility: 0,
+        } as PhysicalAssessment;
 
         onSaveAssessment(newAssessment);
         setSkinfolds({ chest: 0, axilla: 0, subscapular: 0, triceps: 0, abdominal: 0, suprailiac: 0, thigh: 0 });
         setActionPlan('');
-        setWeight(0);
-        setHeight(0);
+        const pAfter = players.find(pl => pl.id === selectedPlayerId);
+        const wR = pAfter?.weight;
+        const hR = pAfter?.height;
+        setWeight(typeof wR === 'number' && !Number.isNaN(wR) && wR > 0 ? wR : 0);
+        setHeight(typeof hR === 'number' && !Number.isNaN(hR) && hR > 0 ? hR : 0);
         alert(`Avaliação salva! BF: ${newAssessment.bodyFatPercent}%${imc > 0 ? ` · IMC: ${imc.toFixed(1)}` : ''}`);
     };
 
@@ -73,7 +100,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({ playe
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(a => ({
           date: new Date(a.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-          bf: a.bodyFatPercent,
+          bf: (a as PhysicalAssessment & { bodyFatPercent?: number }).bodyFatPercent ?? a.bodyFat ?? 0,
         }));
     }, [selectedPlayerId, assessments]);
 
@@ -87,7 +114,8 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({ playe
       return Object.values(latestByPlayer)
         .map(a => {
           const p = players.find(pl => pl.id === a.playerId);
-          return { name: p?.nickname || p?.name || 'Desconhecido', bf: a.bodyFatPercent, playerId: a.playerId };
+          const bfVal = (a as PhysicalAssessment & { bodyFatPercent?: number }).bodyFatPercent ?? a.bodyFat ?? 0;
+          return { name: p?.nickname || p?.name || 'Desconhecido', bf: bfVal, playerId: a.playerId };
         })
         .sort((a, b) => a.bf - b.bf);
     }, [assessments, players]);
@@ -298,7 +326,7 @@ export const PhysicalAssessmentTab: React.FC<PhysicalAssessmentProps> = ({ playe
                                         <span className="text-white font-bold text-sm">{playerName}</span>
                                         <div className="flex justify-between items-center">
                                             <span className="text-zinc-500 text-[10px] font-bold">{new Date(assessment.date).toLocaleDateString()}</span>
-                                            <span className="text-[#10b981] font-black text-xl">{assessment.bodyFatPercent}% <span className="text-[10px] text-zinc-500 font-bold uppercase">Gordura</span></span>
+                                            <span className="text-[#10b981] font-black text-xl">{(assessment as PhysicalAssessment & { bodyFatPercent?: number }).bodyFatPercent ?? assessment.bodyFat ?? 0}% <span className="text-[10px] text-zinc-500 font-bold uppercase">Gordura</span></span>
                                         </div>
                                     </div>
                                     

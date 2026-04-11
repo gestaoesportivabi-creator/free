@@ -157,9 +157,13 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     (playerId: string): number | null => {
       const pd = data[selectedDate]?.[playerId];
       if (!pd) return null;
-      const vals = WELLNESS_DIMENSION_KEYS.map(k => pd[k]).filter((v): v is number => typeof v === 'number');
-      if (vals.length === 0) return null;
-      return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+      const parts = WELLNESS_DIMENSION_KEYS.map(k => {
+        const v = pd[k];
+        if (typeof v !== 'number') return null;
+        return toComparableWellnessScore(k, v);
+      }).filter((v): v is number => v != null);
+      if (parts.length === 0) return null;
+      return Math.round((parts.reduce((a, b) => a + b, 0) / parts.length) * 10) / 10;
     },
     [data, selectedDate]
   );

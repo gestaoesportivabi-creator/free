@@ -260,6 +260,25 @@ export function heatmapLabelForMedical(displayLocation: string, side: InjurySide
   return `${displayLocation} (${side})`;
 }
 
+/**
+ * Em que vistas anatómicas cada região pode mostrar rótulos.
+ * - Só coordenada frontal → só vista "frente"
+ * - Só coordenada dorsal → só vista "costas"
+ * - Joelho: regra explícita — rótulos só na frente (patela vista anterior)
+ * - Ambas as coordenadas → frente e costas
+ */
+export function getAllowedViewsForRegion(regionId: string): Set<'front' | 'back'> {
+  if (regionId === 'Joelho') return new Set(['front']);
+  const bp = HEATMAP_BODY_POINTS[regionId];
+  if (!bp) return new Set();
+  const hasF = bp.front != null;
+  const hasB = bp.back != null;
+  if (hasF && !hasB) return new Set(['front']);
+  if (!hasF && hasB) return new Set(['back']);
+  if (hasF && hasB) return new Set(['front', 'back']);
+  return new Set();
+}
+
 export interface HeatmapCalloutData {
   x: number;
   y: number;
@@ -268,59 +287,18 @@ export interface HeatmapCalloutData {
   count: number;
 }
 
-/** Coordenadas na vista atual, com fallback entre frente/costas quando a região só existe numa vista. */
+/**
+ * Coordenadas na vista atual — só se a região existir nessa vista (sem “empurrar” lesão dorsal para a frente, etc.).
+ */
 export function pickCoordsForView(
   regionId: string,
   view: 'front' | 'back'
 ): { regionId: string; coords: [number, number] } | null {
-  const read = (id: string): [number, number] | null => {
-    const bp = HEATMAP_BODY_POINTS[id];
-    if (!bp) return null;
-    const c = view === 'front' ? bp.front : bp.back;
-    return c ?? null;
-  };
-
-  let coords = read(regionId);
-  let eff = regionId;
-
-  if (!coords) {
-    if (view === 'back') {
-      const toBack: Record<string, string> = {
-        'Coxa Anterior': 'Coxa Posterior',
-        Adutor: 'Coxa Posterior',
-        Tórax: 'ColunaToracica',
-      };
-      const alt = toBack[regionId];
-      if (alt) {
-        const c = read(alt);
-        if (c) {
-          coords = c;
-          eff = alt;
-        }
-      }
-    } else {
-      const toFront: Record<string, string> = {
-        'Coxa Posterior': 'Coxa Anterior',
-        Panturrilha: 'Joelho',
-        Glúteo: 'Quadril',
-        ColunaToracica: 'Tórax',
-        ColunaLombar: 'Quadril',
-        ColunaCervical: 'Pescoço',
-        Costas: 'Tórax',
-      };
-      const alt = toFront[regionId];
-      if (alt) {
-        const c = read(alt);
-        if (c) {
-          coords = c;
-          eff = alt;
-        }
-      }
-    }
-  }
-
-  if (!coords) return null;
-  return { regionId: eff, coords };
+  const bp = HEATMAP_BODY_POINTS[regionId];
+  if (!bp) return null;
+  const c = view === 'front' ? bp.front : bp.back;
+  if (!c) return null;
+  return { regionId, coords: c };
 }
 
 export function buildHeatmapCallouts(injuries: InjuryRecord[], view: 'front' | 'back'): HeatmapCalloutData[] {
@@ -333,6 +311,7 @@ export function buildHeatmapCallouts(injuries: InjuryRecord[], view: 'front' | '
     const resolved = resolveMedicalLocationToHeatmap(inj.location);
     if (!resolved) return;
     const { regionId, ox, oy } = resolved;
+    if (!getAllowedViewsForRegion(regionId).has(view)) return;
     const picked = pickCoordsForView(regionId, view);
     if (!picked) return;
 
