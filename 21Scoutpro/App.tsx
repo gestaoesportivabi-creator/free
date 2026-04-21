@@ -139,10 +139,28 @@ const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
   timeControls: false,
 };
 
+function normalizePathname(): string {
+  if (typeof window === 'undefined') return '/';
+  return window.location.pathname.replace(/\/$/, '') || '/';
+}
+
+/** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
+function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
+  const p = normalizePathname();
+  if (/^\/blog(?:\/([^/]+))?$/.test(p)) return 'blog';
+  if (p === '/login' || p === '/registro' || p === '/register' || p === '/dashboard') return 'login';
+  return 'landing';
+}
+
+function getInitialBlogSlugFromPath(): string | null {
+  const m = normalizePathname().match(/^\/blog(?:\/([^/]+))?$/);
+  return m?.[1] ?? null;
+}
+
 export default function App() {
   // Route state: 'landing' | 'login' | 'app' | 'blog' (blog público /blog e /blog/:slug)
-  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app' | 'blog'>('landing');
-  const [blogSlug, setBlogSlug] = useState<string | null>(null);
+  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app' | 'blog'>(getInitialRouteFromPath);
+  const [blogSlug, setBlogSlug] = useState<string | null>(getInitialBlogSlugFromPath);
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -158,7 +176,14 @@ export default function App() {
   const [sidebarRetracted, setSidebarRetracted] = useState(false); // desktop: true = recolhida, false = expandida (padrão expandida)
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  /** Blog público sem token: não bloquear 1.º paint com “Carregando…” */
+  const [isInitializing, setIsInitializing] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const isBlog = /^\/blog(?:\/([^/]+))?$/.test(normalizePathname());
+    const hasToken = Boolean(localStorage.getItem('token'));
+    if (isBlog && !hasToken) return false;
+    return true;
+  });
 
   // Persisted States - Inicializados vazios, serão carregados da API
   const [matches, setMatches] = useState<MatchRecord[]>([]);
@@ -1470,11 +1495,6 @@ export default function App() {
       <LandingPage
         onGetStarted={() => setCurrentRoute('login')}
         onGoToLogin={() => setCurrentRoute('login')}
-        onNavigateBlog={() => {
-          setBlogSlug(null);
-          setCurrentRoute('blog');
-          window.history.pushState({}, '', '/blog');
-        }}
       />
     );
   }
@@ -1923,9 +1943,15 @@ export default function App() {
             >
               <Menu size={24} />
             </button>
-            <span className="font-bold text-white truncate text-sm uppercase tracking-wider">
+            <span className="font-bold text-white truncate text-sm uppercase tracking-wider flex-1 min-w-0">
               {TAB_LABELS[activeTab] ?? activeTab}
             </span>
+            <a
+              href="/blog"
+              className="shrink-0 text-xs font-bold uppercase tracking-wider text-[#00f0ff] hover:text-white py-2 px-1"
+            >
+              Blog
+            </a>
           </header>
         )}
         <div className="flex-1 p-4 sm:p-6 min-w-0 print:p-0 overflow-x-hidden">

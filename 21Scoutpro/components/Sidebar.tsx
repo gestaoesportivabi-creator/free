@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -172,6 +172,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       )}
       
       <nav className={`flex-1 overflow-y-auto custom-scrollbar pb-4 ${retracted ? 'px-2 pt-4 space-y-1' : 'px-4 pt-2 space-y-2'}`}>
+          <a
+            href="/blog"
+            title="Blog"
+            onClick={() => onNavigate?.()}
+            className={`w-full flex items-center rounded-xl transition-all duration-200 text-zinc-500 hover:bg-zinc-900 hover:text-[#00f0ff] border border-transparent ${
+              retracted ? 'justify-center p-2.5' : 'space-x-3 px-4 py-3'
+            }`}
+          >
+            <BookOpen size={20} className="shrink-0 text-zinc-600" />
+            {!retracted && (
+              <span className="text-xs uppercase tracking-wider font-bold whitespace-nowrap">Blog</span>
+            )}
+          </a>
           {/* Itens standalone (Visão Geral, Configurações) */}
           {visibleStandaloneItems.map((item) => {
             const Icon = item.icon;
