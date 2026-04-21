@@ -18,11 +18,12 @@ const ALLOWLIST = [
 ];
 
 function git(args, options = {}) {
-  return execFileSync('git', args, {
+  const result = execFileSync('git', args, {
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
     ...options,
-  }).trim();
+  });
+  return typeof result === 'string' ? result.trim() : '';
 }
 
 function npm(args, options = {}) {
