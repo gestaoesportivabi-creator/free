@@ -4,6 +4,8 @@ import { ArrowRight, Users, Target, TrendingUp, Clock, BarChart3, Shield, CheckC
 interface LandingPageProps {
   onGetStarted: () => void;
   onGoToLogin?: () => void;
+  /** SPA: ir para /blog sem recarregar */
+  onNavigateBlog?: () => void;
 }
 
 // Hook para animações ao scroll
@@ -144,7 +146,7 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLogin }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLogin, onNavigateBlog }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSubmitted, setContactSubmitted] = useState(false);
@@ -180,6 +182,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               {NAV_LINKS.map(({ href, label }) => (
                 <a key={href} href={href} onClick={(e) => { scrollToSection(e, href); setMobileMenuOpen(false); }} className="text-zinc-400 hover:text-white transition-colors text-sm font-medium">{label}</a>
               ))}
+              {onNavigateBlog ? (
+                <a
+                  href="/blog"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMobileMenuOpen(false);
+                    onNavigateBlog();
+                  }}
+                  className="text-zinc-400 hover:text-[#00f0ff] transition-colors text-sm font-medium"
+                >
+                  Blog
+                </a>
+              ) : (
+                <a href="/blog" className="text-zinc-400 hover:text-[#00f0ff] transition-colors text-sm font-medium">Blog</a>
+              )}
             </div>
             <div className="hidden md:flex items-center gap-4">
               <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
@@ -198,6 +215,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               {NAV_LINKS.map(({ href, label }) => (
                 <a key={href} href={href} onClick={(e) => { scrollToSection(e, href); setMobileMenuOpen(false); }} className="text-zinc-400 hover:text-white text-sm font-medium py-2">{label}</a>
               ))}
+              {onNavigateBlog ? (
+                <a
+                  href="/blog"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setMobileMenuOpen(false);
+                    onNavigateBlog();
+                  }}
+                  className="text-[#00f0ff] text-sm font-medium py-2"
+                >
+                  Blog
+                </a>
+              ) : (
+                <a href="/blog" className="text-[#00f0ff] text-sm font-medium py-2">Blog</a>
+              )}
             </div>
           )}
         </div>
@@ -611,7 +643,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
           <p className="landing-body text-zinc-500">
             Plataforma brasileira de gestão e performance para futsal
           </p>
-          <div className="pt-8 border-t border-zinc-900">
+          <div className="pt-8 border-t border-zinc-900 space-y-3">
+            {onNavigateBlog ? (
+              <p className="landing-body text-zinc-500 text-sm">
+                <a
+                  href="/blog"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigateBlog();
+                  }}
+                  className="text-[#00f0ff] hover:underline"
+                >
+                  Blog
+                </a>
+                {' · '}
+                Artigos sobre gestão e performance
+              </p>
+            ) : (
+              <p className="landing-body text-zinc-500 text-sm">
+                <a href="/blog" className="text-[#00f0ff] hover:underline">Blog</a>
+                {' · '}
+                Artigos sobre gestão e performance
+              </p>
+            )}
             <p className="landing-body text-zinc-700 text-xs">
               © 2026 SCOUT21. Todos os direitos reservados.
             </p>

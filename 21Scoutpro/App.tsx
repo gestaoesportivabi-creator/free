@@ -37,6 +37,7 @@ import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards
 import { upsertMatchRecord } from './utils/matchUpsert';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
 import { isEssentialPlanUser, isPerformanceTierUser } from './config';
+import { BlogPage } from './components/BlogPage';
 
 const SLIDES = [
     {
@@ -139,8 +140,9 @@ const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
 };
 
 export default function App() {
-  // Route state: 'landing' | 'login' | 'app'
-  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app'>('landing');
+  // Route state: 'landing' | 'login' | 'app' | 'blog' (blog público /blog e /blog/:slug)
+  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app' | 'blog'>('landing');
+  const [blogSlug, setBlogSlug] = useState<string | null>(null);
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1255,14 +1257,20 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let restored = false;
-    const path = window.location.pathname;
+    const p = window.location.pathname.replace(/\/$/, '') || '/';
+    const blogPathMatch = p.match(/^\/blog(?:\/([^/]+))?$/);
+    const isBlogPath = blogPathMatch != null;
+    const initialBlogSlug = blogPathMatch?.[1] ?? null;
     const token = localStorage.getItem('token');
 
     const setRouteFromPath = () => {
-      if (path === '/registro' || path === '/register') setCurrentRoute('login');
-      else if (path === '/login') setCurrentRoute('login');
-      else if (path === '/dashboard') setCurrentRoute('login');
-      else if (path === '/' || path === '') setCurrentRoute('landing');
+      if (isBlogPath) {
+        setCurrentRoute('blog');
+        setBlogSlug(initialBlogSlug);
+      } else if (p === '/registro' || p === '/register') setCurrentRoute('login');
+      else if (p === '/login') setCurrentRoute('login');
+      else if (p === '/dashboard') setCurrentRoute('login');
+      else if (p === '/' || p === '') setCurrentRoute('landing');
     };
 
     const run = async () => {
@@ -1281,15 +1289,7 @@ export default function App() {
         if (cancelled) return;
         if (result.success && result.data) {
           const u = result.data;
-          await Promise.all([
-            loadPlayers(),
-            loadMatches(),
-            loadChampionshipMatches(),
-          ]);
-          if (cancelled) return;
-          loadSchedules();
-          loadChampionships();
-          setCurrentUser({
+          const nextUser = {
             id: u.id,
             name: u.name,
             email: u.email,
@@ -1299,7 +1299,37 @@ export default function App() {
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
             teamShieldUrl: u.teamShieldUrl,
-          });
+          };
+          if (isBlogPath) {
+            setCurrentUser(nextUser);
+            if (u.teamDisplayName != null || u.teamShieldUrl != null) {
+              try {
+                const cur = JSON.parse(localStorage.getItem('scout21_settings_current_team') || '{}');
+                const teamName = u.teamDisplayName ?? cur.teamName ?? '';
+                const shieldUrl = u.teamShieldUrl ?? cur.shieldUrl ?? '';
+                localStorage.setItem('scout21_settings_current_team', JSON.stringify({ ...cur, teamName, shieldUrl }));
+                setOverviewTeamSettings({ teamName, teamShieldUrl: shieldUrl });
+              } catch (_) {}
+            }
+            setCurrentRoute('blog');
+            setBlogSlug(initialBlogSlug);
+            setIsInitializing(false);
+            restored = true;
+            void Promise.all([loadPlayers(), loadMatches(), loadChampionshipMatches()]).then(() => {
+              loadSchedules();
+              loadChampionships();
+            });
+            return;
+          }
+          await Promise.all([
+            loadPlayers(),
+            loadMatches(),
+            loadChampionshipMatches(),
+          ]);
+          if (cancelled) return;
+          loadSchedules();
+          loadChampionships();
+          setCurrentUser(nextUser);
           if (u.teamDisplayName != null || u.teamShieldUrl != null) {
             try {
               const cur = JSON.parse(localStorage.getItem('scout21_settings_current_team') || '{}');
@@ -1333,6 +1363,11 @@ export default function App() {
   useEffect(() => {
     if (isInitializing) return;
     if (window.location.pathname === '/scout-realtime') return;
+    if (currentRoute === 'blog') {
+      const blogUrl = blogSlug ? `/blog/${blogSlug}` : '/blog';
+      window.history.pushState({}, '', blogUrl);
+      return;
+    }
     if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
     } else if (currentRoute === 'landing') {
@@ -1340,7 +1375,29 @@ export default function App() {
     } else if (currentRoute === 'app') {
       window.history.pushState({}, '', '/dashboard');
     }
-  }, [currentRoute, isInitializing]);
+  }, [currentRoute, isInitializing, blogSlug]);
+
+  // Voltar/avançar no browser: sincronizar blog com a URL
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname.replace(/\/$/, '') || '/';
+      const m = path.match(/^\/blog(?:\/([^/]+))?$/);
+      if (m) {
+        setCurrentRoute('blog');
+        setBlogSlug(m[1] ?? null);
+        return;
+      }
+      if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard') {
+        setCurrentRoute('login');
+        setBlogSlug(null);
+      } else if (path === '/' || path === '') {
+        setCurrentRoute('landing');
+        setBlogSlug(null);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Redirecionar para login se estiver na rota 'app' mas não tiver usuário
   useEffect(() => {
@@ -1377,12 +1434,49 @@ export default function App() {
     );
   }
 
+  // Blog público (sem exigir login)
+  if (currentRoute === 'blog') {
+    return (
+      <BlogPage
+        slug={blogSlug}
+        currentUser={currentUser}
+        onHome={() => {
+          setBlogSlug(null);
+          setCurrentRoute('landing');
+          window.history.pushState({}, '', '/');
+        }}
+        onLogin={() => {
+          setBlogSlug(null);
+          setCurrentRoute('login');
+          window.history.pushState({}, '', '/login');
+        }}
+        onOpenPost={(s) => {
+          const next = s || null;
+          setBlogSlug(next);
+          setCurrentRoute('blog');
+          window.history.pushState({}, '', next ? `/blog/${next}` : '/blog');
+        }}
+        onGoToDashboard={() => {
+          setCurrentRoute('app');
+          window.history.pushState({}, '', '/dashboard');
+        }}
+      />
+    );
+  }
+
   // Mostrar landing page
   if (currentRoute === 'landing') {
-    return <LandingPage 
-      onGetStarted={() => setCurrentRoute('login')}
-      onGoToLogin={() => setCurrentRoute('login')}
-    />;
+    return (
+      <LandingPage
+        onGetStarted={() => setCurrentRoute('login')}
+        onGoToLogin={() => setCurrentRoute('login')}
+        onNavigateBlog={() => {
+          setBlogSlug(null);
+          setCurrentRoute('blog');
+          window.history.pushState({}, '', '/blog');
+        }}
+      />
+    );
   }
 
   if (currentRoute === 'login') {
