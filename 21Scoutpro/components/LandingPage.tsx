@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Users, Target, TrendingUp, Clock, BarChart3, Shield, CheckCircle, Building2, Trophy, Sparkles, Brain, Rocket } from 'lucide-react';
 import { track } from '../utils/analytics';
+import { NewsletterTriggerButton } from './NewsletterPopup';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -244,6 +245,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               </a>
             </div>
             <div className="hidden md:flex items-center gap-4">
+              <NewsletterTriggerButton source="nav-desktop" />
               <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('nav-desktop-cadastrese')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
               <button onClick={() => trackLogin('nav-desktop')} className="px-4 py-2.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm uppercase tracking-wider rounded-lg transition-all">Login</button>
             </div>
@@ -263,6 +265,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               <a href="/blog" onClick={() => trackBlog('nav-mobile-menu')} className="text-[#00f0ff] text-sm font-medium py-2">
                 Blog
               </a>
+              <NewsletterTriggerButton source="nav-mobile-menu" className="mt-1 inline-flex items-center justify-center gap-2 rounded-lg border border-[#00f0ff]/40 bg-[#00f0ff]/10 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#00f0ff]" />
             </div>
           )}
         </div>

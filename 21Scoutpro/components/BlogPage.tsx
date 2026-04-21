@@ -11,6 +11,7 @@ import {
 import type { User } from '../types';
 import { applyRouteMeta, canonicalUrl, injectJsonLd } from '../utils/seo';
 import { onScrollPercent, track } from '../utils/analytics';
+import { NewsletterTriggerButton } from './NewsletterPopup';
 
 interface BlogPageProps {
   slug: string | null;
@@ -247,6 +248,7 @@ export const BlogPage: React.FC<BlogPageProps> = ({
             </button>
             <div className="flex items-center gap-3">
               {LangSelector}
+              <NewsletterTriggerButton source="blog-post-header" />
               {currentUser ? (
                 <button
                   type="button"
@@ -311,6 +313,7 @@ export const BlogPage: React.FC<BlogPageProps> = ({
           </button>
           <div className="flex items-center gap-3">
             {LangSelector}
+            <NewsletterTriggerButton source="blog-list-header" />
             {currentUser ? (
               <button
                 type="button"

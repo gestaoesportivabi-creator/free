@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConsentBanner } from './components/ConsentBanner';
+import { NewsletterPopup } from './components/NewsletterPopup';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,10 +17,17 @@ try {
       <ErrorBoundary>
         <App />
         <ConsentBanner />
+        <NewsletterPopup />
       </ErrorBoundary>
     </React.StrictMode>
   );
   console.log('✅ React app rendered successfully');
+
+  if (typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/newsletter') {
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('scout21:newsletter-open'));
+    }, 400);
+  }
 } catch (error) {
   console.error('❌ Error rendering React app:', error);
   rootElement.innerHTML = `
