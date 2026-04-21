@@ -8,9 +8,9 @@ export const POSTS_PT: BlogPost[] = [
   {
     slug: 'por-que-dados-no-banco-importam-mais-que-no-papel',
     lang: 'pt-BR',
-    title: 'Por que dados no banco importam mais do que no papel',
+    title: 'Por que dados no banco valem mais do que qualquer planilha no futsal',
     subtitle:
-      'Planilhas funcionam até deixarem de funcionar. Um banco único dá histórico, consistência e velocidade — e paga o investimento na primeira temporada.',
+      'Planilha ajuda no começo. Depois vira ruído, retrabalho e versão conflitante. Um banco único devolve confiança para a comissão técnica decidir melhor.',
     date: '2026-04-12',
     updatedDate: '2026-04-20',
     readMinutes: 9,
@@ -18,7 +18,7 @@ export const POSTS_PT: BlogPost[] = [
     heroEmoji: '🧠',
     tags: ['gestão', 'dados', 'planilha', 'clube'],
     excerpt:
-      'Planilhas funcionam até deixarem de funcionar. Um único repositório de dados evita versões conflitantes, dá histórico e profissionaliza a comissão técnica.',
+      'Quando scout, presença, calendário e avaliação vivem em arquivos soltos, o clube perde tempo e clareza. Um banco único transforma dado espalhado em decisão utilizável.',
     keywords: [
       'gestão de clube de futsal',
       'planilhas futsal',
@@ -121,9 +121,9 @@ export const POSTS_PT: BlogPost[] = [
   {
     slug: 'rotina-de-semana-competitiva-com-elenco-apertado',
     lang: 'pt-BR',
-    title: 'Rotina de uma semana competitiva com elenco apertado',
+    title: 'Como organizar uma semana competitiva com elenco curto',
     subtitle:
-      'Semana cheia é uma sequência de decisões sob escassez. Sem visão comum entre staff, cada um improvisa — e o atleta paga a conta.',
+      'Quando o elenco é curto, improviso custa caro. A semana precisa de ritmo, visibilidade e decisões compartilhadas entre treinador, analista e preparação física.',
     date: '2026-04-08',
     updatedDate: '2026-04-20',
     readMinutes: 10,
@@ -131,7 +131,7 @@ export const POSTS_PT: BlogPost[] = [
     heroEmoji: '📅',
     tags: ['rotina', 'carga', 'preparação física', 'comissão técnica'],
     excerpt:
-      'Semana cheia é uma sequência de decisões: carga, disponibilidade, recuperação e comunicação. Um esqueleto bem desenhado tira o improviso da equação.',
+      'Carga, recuperação, convocação e comunicação precisam morar no mesmo fluxo. Um microciclo bem desenhado reduz atrito e protege o rendimento do elenco.',
     keywords: [
       'rotina semanal futsal',
       'gestão de carga',
@@ -231,9 +231,9 @@ export const POSTS_PT: BlogPost[] = [
   {
     slug: 'scout-alem-dos-numeros-contexto-para-o-treinador',
     lang: 'pt-BR',
-    title: 'Scout além dos números: contexto que o treinador precisa',
+    title: 'Scout além dos números: o contexto que o treinador realmente usa',
     subtitle:
-      'Estatística bruta responde “quanto”. Treinador precisa de “em que momento”, “contra que sistema”, “com quem em quadra”. É o contexto que transforma dado em decisão.',
+      'Número cru responde pouco. Treinador quer saber quando, contra qual sistema, com qual quarteto e em que tipo de posse o lance aconteceu.',
     date: '2026-04-03',
     updatedDate: '2026-04-20',
     readMinutes: 8,
@@ -241,7 +241,7 @@ export const POSTS_PT: BlogPost[] = [
     heroEmoji: '🎯',
     tags: ['scout', 'análise tática', 'contexto', 'treinador'],
     excerpt:
-      'Estatísticas brutas são úteis, mas o treinador pergunta «em que momento?», «contra que sistema?». Contexto transforma número em decisão.',
+      'Scout de verdade não é só contagem. É evento com minuto, sistema, quarteto e origem da jogada para a comissão ajustar treino, leitura e escalação.',
     keywords: [
       'scout futsal',
       'análise tática futsal',
@@ -329,9 +329,9 @@ export const POSTS_PT: BlogPost[] = [
   {
     slug: 'indicadores-de-alta-performance-para-clubes-de-futsal',
     lang: 'pt-BR',
-    title: 'Indicadores de alta performance: o kit mínimo para clubes de futsal',
+    title: 'Indicadores de alta performance no futsal: o kit mínimo da comissão',
     subtitle:
-      'Você não precisa de 50 métricas. Precisa de 8 que toda comissão entende, atualizadas por jogo e atualizadas por atleta.',
+      'Dashboard não precisa impressionar. Precisa responder rápido. O kit mínimo certo ajuda treinador, coordenação e presidência a enxergarem a mesma realidade.',
     date: '2026-04-16',
     updatedDate: '2026-04-20',
     readMinutes: 8,
@@ -339,7 +339,7 @@ export const POSTS_PT: BlogPost[] = [
     heroEmoji: '📊',
     tags: ['KPIs', 'métricas', 'alta performance', 'dashboard'],
     excerpt:
-      'Lista curta, brutalmente honesta, dos indicadores que decidem temporada em clubes de futsal que trabalham com poucos recursos e alta ambição.',
+      'Poucas métricas, lidas toda semana, com responsabilidade clara. Este é o conjunto que mais ajuda clubes de futsal a decidir sem se perder em painel bonito.',
     keywords: [
       'KPI futsal',
       'indicadores de performance esportiva',
@@ -432,9 +432,9 @@ export const POSTS_PT: BlogPost[] = [
   {
     slug: 'como-montar-um-scout-individual-em-10-passos',
     lang: 'pt-BR',
-    title: 'Como montar um scout individual de atleta em 10 passos',
+    title: 'Scout individual no futsal: como transformar observação em plano de evolução',
     subtitle:
-      'Método direto para registrar, comparar e conversar com o atleta a partir de dado — sem virar burocracia de preparador.',
+      'O scout individual só vira ferramenta quando ajuda a conversar melhor com o atleta e gerar metas claras. Sem isso, ele vira arquivo morto.',
     date: '2026-04-19',
     updatedDate: '2026-04-20',
     readMinutes: 7,
@@ -442,7 +442,7 @@ export const POSTS_PT: BlogPost[] = [
     heroEmoji: '🧩',
     tags: ['scout individual', 'avaliação', 'feedback', 'atleta'],
     excerpt:
-      'Passo a passo prático para construir o scout individual que conversa com o atleta e sustenta decisão de comissão técnica.',
+      'Um método simples para transformar observação dispersa em histórico, comparação e feedback útil para atleta, treinador e comissão técnica.',
     keywords: [
       'scout individual',
       'avaliação de atleta',
@@ -495,6 +495,305 @@ export const POSTS_PT: BlogPost[] = [
           'Uma comissão organizada leva ~20 minutos por atleta para preparar um 1:1 mensal. Sem um banco único, leva 2–3 horas — e é por isso que quase ninguém faz.',
       },
       { type: 'cta-product' },
+    ],
+  },
+  {
+    slug: 'gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo',
+    lang: 'pt-BR',
+    title: 'Gestão de equipe no futsal: como parar de gerir elenco no grupo e no caderno',
+    subtitle:
+      'Elenco, presença, minutos, status físico e comunicação não podem viver em cinco lugares diferentes. Gestão boa começa quando todos olham para a mesma base.',
+    date: '2026-04-21',
+    updatedDate: '2026-04-21',
+    readMinutes: 9,
+    author: 'Redação SCOUT21',
+    heroEmoji: '👥',
+    tags: ['gestão de equipe', 'elenco', 'disponibilidade', 'organização'],
+    excerpt:
+      'A maior parte dos clubes perde clareza antes de perder performance. Quando o elenco é gerido no grupo, na planilha e na memória, o staff trabalha sem uma visão única.',
+    keywords: [
+      'gestão de equipe futsal',
+      'controle de elenco futsal',
+      'software para clube de futsal',
+      'organização de comissão técnica',
+      'gestão esportiva futsal',
+    ],
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Toda comissão técnica conhece a cena: o treinador pergunta quem está apto, o preparador físico responde “quase todos”, o analista lembra que dois atletas saíram mais cedo no treino anterior, e a coordenação descobre em cima da hora que um terceiro não vai chegar. Não falta esforço. Falta uma fonte única de verdade.',
+      },
+      { type: 'h2', text: 'O problema não é comunicação. É fragmentação.' },
+      {
+        type: 'p',
+        text:
+          'Grupo de WhatsApp serve para velocidade, não para governança. Caderno serve para memória local, não para histórico compartilhado. Planilha serve para cálculo, não para operação viva. Quando elenco, presença, disponibilidade e observações ficam separados, o clube passa a tomar decisão por sensação.',
+      },
+      {
+        type: 'list',
+        items: [
+          'A coordenação vê uma versão do elenco; o treinador, outra.',
+          'Presença no treino não conversa com minutos do jogo.',
+          'Status físico é relatado de forma solta, sem histórico comparável.',
+          'A ausência de um atleta vira surpresa, não dado processado.',
+        ],
+      },
+      { type: 'h2', text: 'O que uma gestão de equipe bem feita precisa mostrar' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Quem faz parte do elenco hoje, com cadastro limpo e papel claro.',
+          'Quem esteve presente em cada treino, jogo ou reunião.',
+          'Quem está disponível, com restrição ou fora da sessão.',
+          'Qual atleta está acumulando mais minutos e carga.',
+          'Que observações importam para a próxima decisão da comissão.',
+        ],
+      },
+      { type: 'h2', text: 'Como isso aparece na prática no SCOUT 21' },
+      {
+        type: 'p',
+        text:
+          'No módulo de Gestão de Equipe, o clube centraliza elenco, presença, programação e histórico operacional no mesmo ambiente. Isso não é detalhe administrativo: é a base para montar convocação, organizar microciclo, distribuir minutos e evitar ruído entre staff.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Tradução prática',
+        text:
+          'Quando a gestão de equipe está redonda, a comissão gasta menos energia lembrando o que aconteceu e mais energia escolhendo o que fazer a seguir.',
+      },
+      { type: 'cta-newsletter', text: 'Quer ver exemplos reais de organização de comissão técnica no futsal?' },
+      { type: 'h2', text: 'O ganho não é só ordem. É velocidade de decisão.' },
+      {
+        type: 'p',
+        text:
+          'Clubes pequenos e médios não têm luxo para perder uma tarde inteira consolidando informação antes de um jogo. Quanto mais centralizada a gestão, mais rápido o staff fecha a semana, convoca melhor e chega no jogo com menos improviso.',
+      },
+      { type: 'cta-product', text: 'Conheça a base operacional do SCOUT 21 para gerir elenco sem depender de planilha solta.' },
+    ],
+  },
+  {
+    slug: 'programacao-semanal-de-treinos-e-jogos-sem-whatsapp',
+    lang: 'pt-BR',
+    title: 'Programação semanal de treinos e jogos: como organizar a semana sem depender do WhatsApp',
+    subtitle:
+      'A semana de um clube muda rápido demais para morar só em mensagem. Programação boa precisa ser visível, atualizável e conectada à realidade do elenco.',
+    date: '2026-04-21',
+    updatedDate: '2026-04-21',
+    readMinutes: 8,
+    author: 'Redação SCOUT21',
+    heroEmoji: '🗓️',
+    tags: ['programação', 'treinos', 'jogos', 'microciclo'],
+    excerpt:
+      'Programação não é só agenda. É a espinha dorsal da semana. Quando ela não está clara, todo o resto da operação vira mensagem perdida e decisão reativa.',
+    keywords: [
+      'programação semanal futsal',
+      'agenda de treinos futsal',
+      'organização de jogos futsal',
+      'software programação esportiva',
+      'microciclo futsal',
+    ],
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Muita comissão técnica acredita que programação é “colocar treino no calendário”. Não é. Programar bem significa ligar sessão, objetivo, presença, convocação e contexto competitivo. Quando isso não acontece, a semana até existe no papel, mas não governa ninguém.',
+      },
+      { type: 'h2', text: 'O que normalmente quebra a programação' },
+      {
+        type: 'list',
+        items: [
+          'Mudança de horário que não chega igual para todo mundo.',
+          'Treino registrado sem deixar claro o objetivo daquela sessão.',
+          'Convocação fechada fora da programação, em outro canal.',
+          'Comissão olhando para agendas diferentes.',
+        ],
+      },
+      { type: 'h2', text: 'Programação boa responde 4 perguntas' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'O que vai acontecer hoje?',
+          'Quem precisa estar aqui?',
+          'Qual é o objetivo técnico, físico ou tático da sessão?',
+          'O que essa sessão muda para o jogo seguinte?',
+        ],
+      },
+      {
+        type: 'p',
+        text:
+          'Se a programação não responde isso com clareza para treinador, preparador, atleta e coordenação, ela é só uma agenda bonita. E agenda bonita não ganha jogo.',
+      },
+      { type: 'h2', text: 'Como o módulo Programação ajuda a comissão' },
+      {
+        type: 'p',
+        text:
+          'No SCOUT 21, a Programação não vive isolada. Ela conversa com presença, elenco e rotina competitiva. Isso permite transformar a semana em processo auditável: quem foi, o que foi feito, o que mudou e qual é a próxima decisão.',
+      },
+      {
+        type: 'callout',
+        kind: 'tip',
+        title: 'Boa prática',
+        text:
+          'Se todo D+2 e D+4 o staff olha a mesma programação atualizada, a reunião fica objetiva. Quando cada um traz sua versão, a semana perde nitidez.',
+      },
+      { type: 'cta-newsletter', text: 'Receba mais textos práticos sobre rotina competitiva e organização de staff.' },
+      { type: 'h2', text: 'Organização é vantagem competitiva' },
+      {
+        type: 'p',
+        text:
+          'Em clubes com orçamento apertado, organização vira performance. A programação certa não substitui a qualidade do treino, mas protege essa qualidade de ruídos evitáveis. É uma das maneiras mais baratas de melhorar a operação.',
+      },
+      { type: 'cta-product', text: 'Veja como o SCOUT 21 ajuda a organizar a semana inteira em um fluxo único.' },
+    ],
+  },
+  {
+    slug: 'relatorio-gerencial-no-futsal-o-que-a-presidencia-precisa-ver',
+    lang: 'pt-BR',
+    title: 'Relatório gerencial no futsal: o que a presidência precisa ver sem sufocar a comissão',
+    subtitle:
+      'Presidência e coordenação não precisam de 40 abas. Precisam de poucos sinais confiáveis sobre disponibilidade, carga, desempenho e andamento da operação.',
+    date: '2026-04-21',
+    updatedDate: '2026-04-21',
+    readMinutes: 8,
+    author: 'Redação SCOUT21',
+    heroEmoji: '📄',
+    tags: ['relatório gerencial', 'presidência', 'coordenação', 'dashboard'],
+    excerpt:
+      'Relatório gerencial bom não fiscaliza a comissão: reduz ruído entre quem executa no dia a dia e quem precisa enxergar a saúde esportiva do clube.',
+    keywords: [
+      'relatório gerencial futsal',
+      'dashboard presidência clube',
+      'indicadores gestão esportiva',
+      'coordenação esportiva futsal',
+      'BI para clubes',
+    ],
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'O atrito entre comissão e gestão quase nunca nasce de má vontade. Nasce de falta de visibilidade. A presidência quer entender o que está acontecendo. A comissão quer trabalhar sem ter que reconstruir a semana inteira em PDF toda segunda-feira.',
+      },
+      { type: 'h2', text: 'O erro comum: relatório demais, utilidade de menos' },
+      {
+        type: 'p',
+        text:
+          'Muitos clubes produzem relatórios longos, bonitos e quase inúteis. Têm cor, gráfico e texto, mas não ajudam a responder o essencial: o elenco está disponível? a carga está coerente? o desempenho está sustentado? a operação está fechando no prazo?',
+      },
+      {
+        type: 'list',
+        items: [
+          'Disponibilidade do elenco por ciclo.',
+          'Distribuição de minutos e concentração de carga.',
+          'Tendência de desempenho coletivo e individual.',
+          'Aderência ao planejamento semanal.',
+          'Tempo para fechar o dado depois do jogo.',
+        ],
+      },
+      { type: 'h2', text: 'O papel do relatório gerencial no SCOUT 21' },
+      {
+        type: 'p',
+        text:
+          'O módulo de Relatório Gerencial existe para encurtar a distância entre operação e gestão. Ele organiza os sinais que importam sem obrigar a comissão a “montar um dossiê” toda vez que alguém pergunta como está o time.',
+      },
+      { type: 'h2', text: 'Quando o relatório é bom, a conversa melhora' },
+      {
+        type: 'p',
+        text:
+          'A presidência deixa de cobrar por sensação. A comissão deixa de se defender no escuro. E a coordenação passa a ter uma visão mais limpa do que precisa ser corrigido: rotina, carga, processo ou performance.',
+      },
+      {
+        type: 'quote',
+        text:
+          'Relatório gerencial não é para vigiar o treino. É para evitar que a gestão tome decisão sem ver a realidade esportiva.',
+        cite: 'Princípio editorial SCOUT21',
+      },
+      { type: 'cta-newsletter', text: 'Quer receber mais conteúdos sobre gestão esportiva orientada por dado?' },
+      { type: 'h2', text: 'Menos PowerPoint, mais clareza' },
+      {
+        type: 'p',
+        text:
+          'No fim, o bom relatório é aquele que poupa tempo de todos. Se ele exige consolidação manual, captura de tela e explicação paralela toda semana, ele não está resolvendo a operação. Está criando mais uma camada de trabalho.',
+      },
+      { type: 'cta-product', text: 'Conheça o Relatório Gerencial do SCOUT 21 e reduza o atrito entre gestão e comissão.' },
+    ],
+  },
+  {
+    slug: 'monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar',
+    lang: 'pt-BR',
+    title: 'Monitoramento fisiológico no futsal: como usar PSE, PSR e bem-estar sem inflar a operação',
+    subtitle:
+      'Fisiologia não precisa virar burocracia para funcionar. O segredo é coletar pouco, coletar bem e ligar esses sinais ao que a comissão realmente decide.',
+    date: '2026-04-21',
+    updatedDate: '2026-04-21',
+    readMinutes: 9,
+    author: 'Redação SCOUT21',
+    heroEmoji: '❤️',
+    tags: ['fisiologia', 'PSE', 'PSR', 'bem-estar'],
+    excerpt:
+      'PSE, PSR, bem-estar diário e avaliação física só valem a pena quando entram no fluxo da comissão. Caso contrário, viram formulário sem consequência.',
+    keywords: [
+      'monitoramento fisiológico futsal',
+      'PSE futsal',
+      'PSR futsal',
+      'bem-estar diário atleta',
+      'avaliação física futsal',
+    ],
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Coletar dado fisiológico é fácil. Difícil é fazer esse dado entrar na conversa da comissão. É por isso que tantos clubes abandonam a prática depois de algumas semanas: preenchem formulário, exportam planilha, mas a decisão continua sendo tomada “no olho”.',
+      },
+      { type: 'h2', text: 'O mínimo que já muda a rotina' },
+      {
+        type: 'list',
+        items: [
+          'PSE de treino e jogo para enxergar carga percebida.',
+          'PSR para leitura de recuperação.',
+          'Bem-estar diário para sinalizar fadiga e sono.',
+          'Avaliação física periódica para contexto de evolução.',
+        ],
+      },
+      {
+        type: 'p',
+        text:
+          'Isolados, esses números são fracos. Juntos, contam uma história operacional: quem está acumulando fadiga, quem tolera bem o microciclo, quem precisa de ajuste antes do problema aparecer no jogo.',
+      },
+      { type: 'h2', text: 'Onde os clubes se perdem' },
+      {
+        type: 'list',
+        items: [
+          'Coletam demais e ninguém analisa.',
+          'Coletam bem, mas o treinador não vê.',
+          'Veem, mas não cruzam com presença, minutos e scout.',
+          'Só olham o dado quando o atleta já caiu de rendimento.',
+        ],
+      },
+      { type: 'h2', text: 'Como a fisiologia conversa com o SCOUT 21' },
+      {
+        type: 'p',
+        text:
+          'O módulo de Fisiologia do SCOUT 21 organiza Monitoramento Fisiológico, PSE, PSR, Bem-Estar Diário e Avaliação Física no mesmo ecossistema da gestão e do scout. Isso encurta a distância entre coleta e ação.',
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'Sinal de alerta',
+        text:
+          'Se o atleta responde o formulário, mas ninguém muda nada a partir dele, o processo está comunicando desorganização, não cuidado.',
+      },
+      { type: 'cta-newsletter', text: 'Assine a newsletter para receber textos práticos sobre fisiologia e rotina competitiva.' },
+      { type: 'h2', text: 'Fisiologia útil é fisiologia integrada' },
+      {
+        type: 'p',
+        text:
+          'O melhor cenário não é ter mais dado. É ter dado suficiente, bem coletado, dentro da mesma conversa da comissão. Quando a fisiologia entra no fluxo diário, o clube protege melhor a carga, comunica melhor o cuidado e reduz decisão no escuro.',
+      },
+      { type: 'cta-product', text: 'Veja como o módulo de Fisiologia do SCOUT 21 ajuda a transformar coleta em decisão.' },
     ],
   },
 ];

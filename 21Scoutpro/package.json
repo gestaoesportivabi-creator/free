@@ -7,7 +7,8 @@
     "dev": "vite",
     "prebuild": "node scripts/build-sitemap.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "push:blog-only": "node scripts/push-blog-only.mjs"
   },
   "dependencies": {
     "googleapis": "^131.0.0",
