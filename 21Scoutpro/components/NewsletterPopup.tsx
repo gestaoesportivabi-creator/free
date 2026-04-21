@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { track } from '../utils/analytics';
 
 const STORAGE_KEY = 'scout21_newsletter_v1';
-const DELAY_MS = 25_000;
-const SCROLL_TRIGGER = 0.55;
+const DELAY_MS = 18_000;
+const SCROLL_TRIGGER = 0.4;
+const STICKY_DELAY_MS = 8_000;
 
 type Status = 'idle' | 'sending' | 'success' | 'error';
 
@@ -215,6 +216,14 @@ export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'news
     };
     window.addEventListener('scroll', onScroll, { passive: true });
 
+    /** Exit-intent: mouse saindo pela borda superior → forte sinal de abandono. */
+    const onMouseOut = (e: MouseEvent) => {
+      if (done) return;
+      if (e.relatedTarget) return;
+      if (e.clientY <= 0) openAuto();
+    };
+    document.addEventListener('mouseout', onMouseOut);
+
     const onOpenEvent: EventListener = () => {
       if (done) {
         setTriggerReason('manual');
@@ -230,6 +239,7 @@ export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'news
     return () => {
       window.clearTimeout(tm);
       window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('mouseout', onMouseOut);
       window.removeEventListener('scout21:newsletter-open', onOpenEvent);
     };
   }, []);
@@ -270,6 +280,109 @@ export const NewsletterTriggerButton: React.FC<{
 export function openNewsletter(): void {
   window.dispatchEvent(new CustomEvent('scout21:newsletter-open'));
 }
+
+/** Barra fina, fixa no rodapé do blog, persistente mas discreta. */
+export const NewsletterStickyBar: React.FC<{ source?: string }> = ({ source = 'sticky_bar' }) => {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<Status>('idle');
+  const [hidden, setHidden] = useState<boolean>(() => readStoredState() !== null);
+  const [visible, setVisible] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (hidden) return;
+    const tm = window.setTimeout(() => setVisible(true), STICKY_DELAY_MS);
+    return () => window.clearTimeout(tm);
+  }, [hidden]);
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setStatus('error');
+        return;
+      }
+      setStatus('sending');
+      track('newsletter_submit', { source });
+      const ok = await submitNewsletter(email, source);
+      if (ok) {
+        setStatus('success');
+        writeStoredState('subscribed');
+        track('newsletter_subscribed', { source });
+        setTimeout(() => setHidden(true), 1800);
+      } else {
+        setStatus('error');
+      }
+    },
+    [email, source],
+  );
+
+  const handleDismiss = useCallback(() => {
+    setHidden(true);
+    if (readStoredState() !== 'subscribed') writeStoredState('dismissed');
+    track('newsletter_sticky_dismiss', { source });
+  }, [source]);
+
+  if (hidden || !visible) return null;
+
+  return (
+    <div
+      role="region"
+      aria-label="Assinar newsletter"
+      className="fixed inset-x-0 bottom-0 z-[60] px-3 pb-3 sm:px-4 sm:pb-4 pointer-events-none"
+    >
+      <div className="pointer-events-auto mx-auto flex max-w-4xl items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/95 px-4 py-3 shadow-2xl backdrop-blur">
+        <div className="hidden sm:flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-[#00f0ff]/15 text-[#00f0ff]">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="hidden sm:block text-sm font-semibold text-white leading-tight">
+            Receba 1 análise por semana
+          </p>
+          <p className="hidden sm:block text-[11px] text-zinc-400 leading-tight">
+            Casos reais de gestão e scout — sem spam.
+          </p>
+          <p className="sm:hidden text-sm font-semibold text-white leading-tight">Newsletter SCOUT21</p>
+        </div>
+        {status === 'success' ? (
+          <span className="text-sm text-emerald-300 whitespace-nowrap">Assinado ✓</span>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-1 items-center gap-2">
+            <input
+              type="email"
+              required
+              placeholder="seu@email.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (status === 'error') setStatus('idle');
+              }}
+              className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-white placeholder-zinc-600 focus:border-[#00f0ff] focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={status === 'sending'}
+              className="whitespace-nowrap rounded-lg bg-[#00f0ff] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-black hover:bg-[#00d4e6] disabled:opacity-60"
+            >
+              {status === 'sending' ? '…' : 'Assinar'}
+            </button>
+          </form>
+        )}
+        <button
+          type="button"
+          onClick={handleDismiss}
+          aria-label="Fechar"
+          className="ml-1 rounded-md p-1 text-zinc-500 hover:bg-zinc-900 hover:text-white"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
 
 /** Página dedicada para compartilhar como link curto. */
 export const NewsletterSection: React.FC = () => {

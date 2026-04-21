@@ -25,20 +25,32 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://scout21.vercel.app/blog/por-que-dados-no-banco</loc>
+    <loc>https://scout21.vercel.app/blog/por-que-dados-no-banco-importam-mais-que-no-papel</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://scout21.vercel.app/blog/rotina-semana-competitiva</loc>
+    <loc>https://scout21.vercel.app/blog/rotina-de-semana-competitiva-com-elenco-apertado</loc>
     <lastmod>2026-04-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://scout21.vercel.app/blog/scout-alem-dos-numeros</loc>
+    <loc>https://scout21.vercel.app/blog/scout-alem-dos-numeros-contexto-para-o-treinador</loc>
     <lastmod>2026-04-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/indicadores-de-alta-performance-para-clubes-de-futsal</loc>
+    <lastmod>2026-04-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/como-montar-um-scout-individual-em-10-passos</loc>
+    <lastmod>2026-04-19</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

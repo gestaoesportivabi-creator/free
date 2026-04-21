@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpen, Calendar, Clock, Globe } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, Clock, Globe, Share2, Tag as TagIcon } from 'lucide-react';
 import {
   BLOG_POSTS_BY_LANG,
   getPostBySlug,
@@ -8,10 +8,11 @@ import {
   type BlogLang,
   type BlogPost,
 } from '../blog/posts';
+import { blocksOf, slugify, tocOf } from '../blog/types';
 import type { User } from '../types';
 import { applyRouteMeta, canonicalUrl, injectJsonLd } from '../utils/seo';
 import { onScrollPercent, track } from '../utils/analytics';
-import { NewsletterTriggerButton } from './NewsletterPopup';
+import { NewsletterStickyBar, NewsletterTriggerButton, openNewsletter } from './NewsletterPopup';
 
 interface BlogPageProps {
   slug: string | null;
@@ -270,32 +271,15 @@ export const BlogPage: React.FC<BlogPageProps> = ({
             </div>
           </div>
         </header>
-        <article className="max-w-3xl mx-auto px-4 py-12 md:py-16">
-          <p className="text-zinc-500 text-sm mb-3 flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-1">
-              <Calendar size={14} /> {post.date}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <Clock size={14} /> {post.readMinutes} {t.readMin}
-            </span>
-          </p>
-          <h1 className="landing-headline text-3xl md:text-4xl text-white mb-8 leading-tight">{post.title}</h1>
-          <div className="space-y-6 landing-body text-zinc-300 text-lg leading-relaxed">
-            {post.paragraphs.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
-          <BlogLeadCta lang={lang} source={`blog/${post.slug}`} />
-          <div className="mt-12 pt-8 border-t border-zinc-800">
-            <button
-              type="button"
-              onClick={() => onOpenPost('', lang)}
-              className="text-[#00f0ff] hover:underline text-sm font-medium"
-            >
-              {t.backTop}
-            </button>
-          </div>
-        </article>
+        <ReadingProgressBar />
+        <PostView
+          post={post}
+          lang={lang}
+          t={t}
+          related={postsForLang(lang).filter((p) => p.slug !== post.slug).slice(0, 3)}
+          onOpenPost={onOpenPost}
+        />
+        <NewsletterStickyBar source={`sticky_bar_${post.slug}`} />
       </div>
     );
   }
@@ -343,26 +327,335 @@ export const BlogPage: React.FC<BlogPageProps> = ({
             <p className="text-zinc-500 mt-1 text-sm md:text-base">{t.blogSubtitle}</p>
           </div>
         </div>
-        <ul className="space-y-4">
+        <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {listPosts.map((item) => (
             <li key={item.slug}>
               <button
                 type="button"
                 onClick={() => onOpenPost(item.slug, lang)}
-                className="w-full text-left p-5 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:border-[#00f0ff]/40 hover:bg-zinc-900/80 transition-colors"
+                className="group h-full w-full text-left p-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 hover:border-[#00f0ff]/40 hover:bg-zinc-900/70 transition-all"
               >
-                <h2 className="text-lg md:text-xl font-semibold text-white mb-2">{item.title}</h2>
-                <p className="text-zinc-400 text-sm mb-2 line-clamp-2">{item.excerpt}</p>
-                <p className="text-zinc-600 text-xs">
-                  {item.date} · {item.readMinutes} {t.readMinFull}
-                </p>
+                {item.heroEmoji ? (
+                  <div className="text-3xl mb-4">{item.heroEmoji}</div>
+                ) : (
+                  <div className="w-10 h-10 mb-4 rounded-lg bg-[#00f0ff]/10 flex items-center justify-center text-[#00f0ff]">
+                    <BookOpen size={18} />
+                  </div>
+                )}
+                <h2 className="text-xl md:text-2xl font-bold text-white mb-2 leading-tight group-hover:text-[#00f0ff] transition-colors">
+                  {item.title}
+                </h2>
+                <p className="text-zinc-400 text-sm mb-4 line-clamp-3 leading-relaxed">{item.excerpt}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-zinc-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar size={12} /> {item.date}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock size={12} /> {item.readMinutes} {t.readMinFull}
+                  </span>
+                  {item.tags?.slice(0, 2).map((tg) => (
+                    <span key={tg} className="inline-flex items-center gap-1 rounded-full bg-zinc-800/70 px-2 py-0.5 text-[10px] uppercase tracking-wider text-zinc-300">
+                      <TagIcon size={10} /> {tg}
+                    </span>
+                  ))}
+                </div>
               </button>
             </li>
           ))}
         </ul>
       </main>
+      <NewsletterStickyBar source="sticky_bar_blog_list" />
     </div>
   );
+};
+
+/* ============================================================================
+ * Reading progress bar (fixed top)
+ * ========================================================================= */
+const ReadingProgressBar: React.FC = () => {
+  const [pct, setPct] = useState(0);
+  useEffect(() => {
+    const handler = () => {
+      const h = document.documentElement;
+      const max = Math.max(1, h.scrollHeight - window.innerHeight);
+      setPct(Math.min(100, (window.scrollY / max) * 100));
+    };
+    handler();
+    window.addEventListener('scroll', handler, { passive: true });
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+  return (
+    <div
+      aria-hidden
+      className="fixed left-0 right-0 top-0 z-20 h-0.5 bg-transparent pointer-events-none"
+    >
+      <div
+        className="h-full bg-[#00f0ff] transition-[width] duration-150 ease-out"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+};
+
+/* ============================================================================
+ * PostView — typography, TOC, blocks, share, related
+ * ========================================================================= */
+interface PostViewProps {
+  post: BlogPost;
+  lang: BlogLang;
+  t: (typeof COPY)[BlogLang];
+  related: BlogPost[];
+  onOpenPost: (slug: string, lang?: BlogLang) => void;
+}
+
+const PostView: React.FC<PostViewProps> = ({ post, lang, t, related, onOpenPost }) => {
+  const toc = useMemo(() => tocOf(post), [post]);
+  const blocks = useMemo(() => blocksOf(post), [post]);
+
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const handleShare = async () => {
+    track('blog_share_click', { slug: post.slug, lang: post.lang });
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.title, text: post.excerpt, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+    } catch {
+      /* user cancelled */
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-10 md:py-16">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-10">
+        <article className="min-w-0">
+          <header className="mb-8">
+            {post.heroEmoji && <div className="text-5xl mb-6" aria-hidden>{post.heroEmoji}</div>}
+            <p className="text-zinc-500 text-sm mb-4 flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1">
+                <Calendar size={14} /> {post.date}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Clock size={14} /> {post.readMinutes} {t.readMinFull}
+              </span>
+              {post.author && <span>· {post.author}</span>}
+            </p>
+            <h1 className="landing-headline text-4xl md:text-5xl text-white mb-4 leading-[1.08] tracking-tight">
+              {post.title}
+            </h1>
+            {post.subtitle && (
+              <p className="text-lg md:text-xl text-zinc-300 leading-relaxed">{post.subtitle}</p>
+            )}
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleShare}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-300 hover:text-white hover:border-zinc-600"
+              >
+                <Share2 size={14} /> Compartilhar
+              </button>
+              {post.tags?.map((tg) => (
+                <span
+                  key={tg}
+                  className="inline-flex items-center gap-1 rounded-full bg-zinc-800/70 px-3 py-1 text-[11px] uppercase tracking-wider text-zinc-300"
+                >
+                  <TagIcon size={11} /> {tg}
+                </span>
+              ))}
+            </div>
+          </header>
+
+          <div className="landing-body text-zinc-200 text-[17px] md:text-[18px] leading-[1.78]">
+            {blocks.map((b, i) => (
+              <BlockRenderer key={i} block={b} lang={lang} postSlug={post.slug} />
+            ))}
+          </div>
+
+          <BlogLeadCta lang={lang} source={`blog/${post.slug}`} />
+
+          {related.length > 0 && (
+            <section className="mt-16 pt-10 border-t border-zinc-800">
+              <h2 className="text-zinc-500 text-xs uppercase tracking-[0.2em] mb-6">Leia também</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {related.map((r) => (
+                  <button
+                    key={r.slug}
+                    type="button"
+                    onClick={() => onOpenPost(r.slug, lang)}
+                    className="group text-left p-5 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:border-[#00f0ff]/40 transition-colors"
+                  >
+                    {r.heroEmoji && <div className="text-2xl mb-3" aria-hidden>{r.heroEmoji}</div>}
+                    <h3 className="font-semibold text-white mb-2 leading-snug group-hover:text-[#00f0ff] transition-colors">
+                      {r.title}
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      {r.readMinutes} {t.readMinFull}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div className="mt-12 pt-6 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={() => onOpenPost('', lang)}
+              className="text-[#00f0ff] hover:underline text-sm font-medium"
+            >
+              {t.backTop}
+            </button>
+          </div>
+        </article>
+
+        {toc.length > 0 && (
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <p className="text-zinc-500 text-[11px] uppercase tracking-[0.2em] mb-3">Nesta página</p>
+              <nav className="space-y-2">
+                {toc.map((item) => (
+                  <a
+                    key={item.id}
+                    href={`#${item.id}`}
+                    className={`block text-sm text-zinc-400 hover:text-[#00f0ff] transition-colors ${
+                      item.level === 3 ? 'pl-3 text-[13px]' : ''
+                    }`}
+                  >
+                    {item.text}
+                  </a>
+                ))}
+              </nav>
+              <div className="mt-8 p-4 rounded-xl border border-[#00f0ff]/30 bg-[#00f0ff]/5">
+                <p className="text-[11px] uppercase tracking-wider text-[#00f0ff] mb-1">Newsletter</p>
+                <p className="text-xs text-zinc-300 leading-relaxed mb-3">
+                  1 artigo por semana — casos reais de futsal.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track('newsletter_button_click', { source: 'blog-toc-sidebar' });
+                    openNewsletter();
+                  }}
+                  className="w-full rounded-lg bg-[#00f0ff] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-black hover:bg-[#00d4e6]"
+                >
+                  Assinar
+                </button>
+              </div>
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================================
+ * BlockRenderer — renderiza cada bloco com tipografia forte
+ * ========================================================================= */
+const BlockRenderer: React.FC<{
+  block: ReturnType<typeof blocksOf>[number];
+  lang: BlogLang;
+  postSlug: string;
+}> = ({ block, lang, postSlug }) => {
+  switch (block.type) {
+    case 'p':
+      return <p className="my-5">{block.text}</p>;
+    case 'h2':
+      return (
+        <h2
+          id={block.id || slugify(block.text)}
+          className="mt-12 mb-4 scroll-mt-24 text-2xl md:text-3xl font-bold text-white tracking-tight"
+        >
+          {block.text}
+        </h2>
+      );
+    case 'h3':
+      return (
+        <h3
+          id={block.id || slugify(block.text)}
+          className="mt-8 mb-3 scroll-mt-24 text-xl md:text-2xl font-semibold text-white tracking-tight"
+        >
+          {block.text}
+        </h3>
+      );
+    case 'list': {
+      const Tag = block.ordered ? 'ol' : 'ul';
+      return (
+        <Tag
+          className={`my-6 space-y-2 ${block.ordered ? 'list-decimal' : 'list-disc'} pl-6 marker:text-[#00f0ff]`}
+        >
+          {block.items.map((item, i) => (
+            <li key={i} className="leading-relaxed">
+              {item}
+            </li>
+          ))}
+        </Tag>
+      );
+    }
+    case 'quote':
+      return (
+        <blockquote className="my-8 border-l-4 border-[#00f0ff]/60 bg-zinc-900/40 px-5 py-4 rounded-r-lg italic text-zinc-200">
+          <p className="mb-1">“{block.text}”</p>
+          {block.cite && <cite className="not-italic text-xs text-zinc-500">— {block.cite}</cite>}
+        </blockquote>
+      );
+    case 'callout': {
+      const tone =
+        block.kind === 'warn'
+          ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+          : block.kind === 'tip'
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
+          : 'border-[#00f0ff]/40 bg-[#00f0ff]/10 text-zinc-100';
+      return (
+        <div className={`my-6 rounded-xl border p-5 ${tone}`}>
+          {block.title && <p className="font-semibold mb-1">{block.title}</p>}
+          <p className="text-[15px] leading-relaxed opacity-95">{block.text}</p>
+        </div>
+      );
+    }
+    case 'cta-newsletter':
+      return (
+        <div className="my-10 rounded-2xl border border-[#00f0ff]/30 bg-gradient-to-br from-[#00f0ff]/10 to-transparent p-6 md:p-8 text-center">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[#00f0ff] mb-2">Newsletter SCOUT21</p>
+          <p className="text-lg md:text-xl font-semibold text-white mb-2 leading-snug">
+            {block.text || 'Gosta do que está a ler? Recebe 1 artigo por semana.'}
+          </p>
+          <p className="text-sm text-zinc-400 mb-5">Casos reais, sem spam. Cancele quando quiser.</p>
+          <button
+            type="button"
+            onClick={() => {
+              track('newsletter_button_click', { source: `blog-inline-${postSlug}` });
+              openNewsletter();
+            }}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#00f0ff] px-6 py-3 text-sm font-semibold uppercase tracking-wider text-black hover:bg-[#00d4e6]"
+          >
+            Quero assinar
+          </button>
+        </div>
+      );
+    case 'cta-product':
+      return (
+        <div className="my-10 rounded-2xl border border-zinc-700 bg-zinc-900/60 p-6 md:p-8">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 mb-2">SCOUT 21 PRO</p>
+          <p className="text-lg md:text-xl font-semibold text-white mb-2 leading-snug">
+            {block.text || 'Coloque isto em prática com a plataforma completa.'}
+          </p>
+          <p className="text-sm text-zinc-400 mb-5">
+            Scout estruturado, fisiologia, calendário e relatório gerencial — tudo num banco único.
+          </p>
+          <a
+            href="/"
+            onClick={() => track('blog_product_cta', { source: postSlug, lang })}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#00f0ff] px-6 py-3 text-sm font-semibold uppercase tracking-wider text-[#00f0ff] hover:bg-[#00f0ff] hover:text-black transition-colors"
+          >
+            Testar o SCOUT 21
+          </a>
+        </div>
+      );
+    default:
+      return null;
+  }
 };
 
 interface LeadCtaProps {

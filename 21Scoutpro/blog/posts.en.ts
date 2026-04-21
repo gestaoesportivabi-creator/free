@@ -16,7 +16,7 @@ export const POSTS_EN: BlogPost[] = [
       'For the coordinator the gain is not "more tech", it is less duplicate work. The same row drives availability, the weekly plan and in-game decisions.',
       'SCOUT21 is built on that idea: one history per squad, readable for the people who actually decide — not only for spreadsheet fans.',
     ],
-    translations: { 'pt-BR': 'por-que-dados-no-banco', es: 'por-que-datos-en-la-base' },
+    translations: { 'pt-BR': 'por-que-dados-no-banco-importam-mais-que-no-papel', es: 'por-que-datos-en-la-base' },
   },
   {
     slug: 'competitive-week-routine',
@@ -33,7 +33,7 @@ export const POSTS_EN: BlogPost[] = [
       'A healthy routine mixes a clear calendar, a live squad state (injury, availability, recent minutes) and tight communication between staff.',
       'Tools help when they remove copy-paste and show the same information to everyone who decides.',
     ],
-    translations: { 'pt-BR': 'rotina-semana-competitiva', es: 'rutina-semana-competitiva' },
+    translations: { 'pt-BR': 'rotina-de-semana-competitiva-com-elenco-apertado', es: 'rutina-semana-competitiva' },
   },
   {
     slug: 'scout-beyond-numbers',
@@ -50,6 +50,6 @@ export const POSTS_EN: BlogPost[] = [
       'Good teams tie events to moments and players: not only "how many", but "when and why".',
       'SCOUT21 aims to bring the record closer to the reality of the bench: the same game feeds the collective read and the individual one.',
     ],
-    translations: { 'pt-BR': 'scout-alem-dos-numeros', es: 'scout-mas-alla-de-los-numeros' },
+    translations: { 'pt-BR': 'scout-alem-dos-numeros-contexto-para-o-treinador', es: 'scout-mas-alla-de-los-numeros' },
   },
 ];

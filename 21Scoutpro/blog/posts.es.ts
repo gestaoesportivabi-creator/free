@@ -16,7 +16,7 @@ export const POSTS_ES: BlogPost[] = [
       'Para el coordinador no es «más tecnología», es menos trabajo duplicado: el mismo dato alimenta disponibilidad, preparación de la semana y decisiones en el banco.',
       'SCOUT21 parte de ese principio: histórico por equipo, legible para quien decide — no sólo para quien ama las hojas de cálculo.',
     ],
-    translations: { 'pt-BR': 'por-que-dados-no-banco', en: 'why-database-beats-spreadsheet' },
+    translations: { 'pt-BR': 'por-que-dados-no-banco-importam-mais-que-no-papel', en: 'why-database-beats-spreadsheet' },
   },
   {
     slug: 'rutina-semana-competitiva',
@@ -33,7 +33,7 @@ export const POSTS_ES: BlogPost[] = [
       'Una rutina sana combina calendario claro, estado del plantel (lesión, disponibilidad, minutos recientes) y comunicación corta entre staff.',
       'Las herramientas ayudan cuando eliminan copiar y pegar y muestran la misma información a todos los que deciden.',
     ],
-    translations: { 'pt-BR': 'rotina-semana-competitiva', en: 'competitive-week-routine' },
+    translations: { 'pt-BR': 'rotina-de-semana-competitiva-com-elenco-apertado', en: 'competitive-week-routine' },
   },
   {
     slug: 'scout-mas-alla-de-los-numeros',
@@ -50,6 +50,6 @@ export const POSTS_ES: BlogPost[] = [
       'Los buenos equipos unen evento a momento y jugador: no sólo «cuántos», sino «cuándo y por qué».',
       'En SCOUT21, la ambición es acercar el registro a la realidad del banco: el mismo partido alimenta la lectura colectiva y la individual.',
     ],
-    translations: { 'pt-BR': 'scout-alem-dos-numeros', en: 'scout-beyond-numbers' },
+    translations: { 'pt-BR': 'scout-alem-dos-numeros-contexto-para-o-treinador', en: 'scout-beyond-numbers' },
   },
 ];
