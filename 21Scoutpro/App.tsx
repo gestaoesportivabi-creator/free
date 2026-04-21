@@ -38,6 +38,9 @@ import { upsertMatchRecord } from './utils/matchUpsert';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
 import { isEssentialPlanUser, isPerformanceTierUser } from './config';
 import { BlogPage } from './components/BlogPage';
+import type { BlogLang } from './blog/types';
+import { applyRouteMeta } from './utils/seo';
+import { track, trackPageView } from './utils/analytics';
 
 const SLIDES = [
     {
@@ -144,23 +147,50 @@ function normalizePathname(): string {
   return window.location.pathname.replace(/\/$/, '') || '/';
 }
 
+/**
+ * Match:
+ *   /blog                -> pt-BR list
+ *   /blog/<slug>         -> pt-BR post
+ *   /blog/en             -> en list
+ *   /blog/en/<slug>      -> en post
+ *   /blog/es             -> es list
+ *   /blog/es/<slug>      -> es post
+ */
+function matchBlogPath(p: string): { lang: BlogLang; slug: string | null } | null {
+  const m = p.match(/^\/blog(?:\/(en|es))?(?:\/([^/]+))?$/);
+  if (!m) return null;
+  const langFromUrl = m[1];
+  const maybeSlug = m[2];
+  const lang: BlogLang = langFromUrl === 'en' ? 'en' : langFromUrl === 'es' ? 'es' : 'pt-BR';
+  return { lang, slug: maybeSlug || null };
+}
+
 /** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
 function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
   const p = normalizePathname();
-  if (/^\/blog(?:\/([^/]+))?$/.test(p)) return 'blog';
+  if (matchBlogPath(p)) return 'blog';
   if (p === '/login' || p === '/registro' || p === '/register' || p === '/dashboard') return 'login';
   return 'landing';
 }
 
 function getInitialBlogSlugFromPath(): string | null {
-  const m = normalizePathname().match(/^\/blog(?:\/([^/]+))?$/);
-  return m?.[1] ?? null;
+  return matchBlogPath(normalizePathname())?.slug ?? null;
+}
+
+function getInitialBlogLangFromPath(): BlogLang {
+  return matchBlogPath(normalizePathname())?.lang ?? 'pt-BR';
+}
+
+function blogPathFor(lang: BlogLang, slug?: string | null): string {
+  const base = lang === 'pt-BR' ? '/blog' : `/blog/${lang}`;
+  return slug ? `${base}/${slug}` : base;
 }
 
 export default function App() {
   // Route state: 'landing' | 'login' | 'app' | 'blog' (blog público /blog e /blog/:slug)
   const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app' | 'blog'>(getInitialRouteFromPath);
   const [blogSlug, setBlogSlug] = useState<string | null>(getInitialBlogSlugFromPath);
+  const [blogLang, setBlogLang] = useState<BlogLang>(getInitialBlogLangFromPath);
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -179,7 +209,7 @@ export default function App() {
   /** Blog público sem token: não bloquear 1.º paint com “Carregando…” */
   const [isInitializing, setIsInitializing] = useState(() => {
     if (typeof window === 'undefined') return true;
-    const isBlog = /^\/blog(?:\/([^/]+))?$/.test(normalizePathname());
+    const isBlog = matchBlogPath(normalizePathname()) != null;
     const hasToken = Boolean(localStorage.getItem('token'));
     if (isBlog && !hasToken) return false;
     return true;
@@ -1283,15 +1313,17 @@ export default function App() {
     let cancelled = false;
     let restored = false;
     const p = window.location.pathname.replace(/\/$/, '') || '/';
-    const blogPathMatch = p.match(/^\/blog(?:\/([^/]+))?$/);
-    const isBlogPath = blogPathMatch != null;
-    const initialBlogSlug = blogPathMatch?.[1] ?? null;
+    const blogMatch = matchBlogPath(p);
+    const isBlogPath = blogMatch != null;
+    const initialBlogSlug = blogMatch?.slug ?? null;
+    const initialBlogLang: BlogLang = blogMatch?.lang ?? 'pt-BR';
     const token = localStorage.getItem('token');
 
     const setRouteFromPath = () => {
       if (isBlogPath) {
         setCurrentRoute('blog');
         setBlogSlug(initialBlogSlug);
+        setBlogLang(initialBlogLang);
       } else if (p === '/registro' || p === '/register') setCurrentRoute('login');
       else if (p === '/login') setCurrentRoute('login');
       else if (p === '/dashboard') setCurrentRoute('login');
@@ -1338,6 +1370,7 @@ export default function App() {
             }
             setCurrentRoute('blog');
             setBlogSlug(initialBlogSlug);
+            setBlogLang(initialBlogLang);
             setIsInitializing(false);
             restored = true;
             void Promise.all([loadPlayers(), loadMatches(), loadChampionshipMatches()]).then(() => {
@@ -1389,27 +1422,45 @@ export default function App() {
     if (isInitializing) return;
     if (window.location.pathname === '/scout-realtime') return;
     if (currentRoute === 'blog') {
-      const blogUrl = blogSlug ? `/blog/${blogSlug}` : '/blog';
+      const blogUrl = blogPathFor(blogLang, blogSlug);
       window.history.pushState({}, '', blogUrl);
+      trackPageView(blogUrl);
       return;
     }
     if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
+      trackPageView('/login');
     } else if (currentRoute === 'landing') {
       window.history.pushState({}, '', '/');
+      applyRouteMeta({
+        title: 'SCOUT 21 PRO — Gestão e Performance para Futsal',
+        description:
+          'Plataforma brasileira de gestão e performance para futsal: scout, fisiologia, calendário e relatórios.',
+        path: '/',
+        lang: 'pt-BR',
+        image: '/og-cover.jpg',
+        alternates: [
+          { hreflang: 'pt-BR', path: '/' },
+          { hreflang: 'en', path: '/blog/en' },
+          { hreflang: 'es', path: '/blog/es' },
+        ],
+      });
+      trackPageView('/');
     } else if (currentRoute === 'app') {
       window.history.pushState({}, '', '/dashboard');
+      trackPageView('/dashboard');
     }
-  }, [currentRoute, isInitializing, blogSlug]);
+  }, [currentRoute, isInitializing, blogSlug, blogLang]);
 
   // Voltar/avançar no browser: sincronizar blog com a URL
   useEffect(() => {
     const onPopState = () => {
       const path = window.location.pathname.replace(/\/$/, '') || '/';
-      const m = path.match(/^\/blog(?:\/([^/]+))?$/);
+      const m = matchBlogPath(path);
       if (m) {
         setCurrentRoute('blog');
-        setBlogSlug(m[1] ?? null);
+        setBlogLang(m.lang);
+        setBlogSlug(m.slug);
         return;
       }
       if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard') {
@@ -1464,6 +1515,7 @@ export default function App() {
     return (
       <BlogPage
         slug={blogSlug}
+        lang={blogLang}
         currentUser={currentUser}
         onHome={() => {
           setBlogSlug(null);
@@ -1471,15 +1523,24 @@ export default function App() {
           window.history.pushState({}, '', '/');
         }}
         onLogin={() => {
+          track('cta_login_click', { from: 'blog' });
           setBlogSlug(null);
           setCurrentRoute('login');
           window.history.pushState({}, '', '/login');
         }}
-        onOpenPost={(s) => {
+        onOpenPost={(s, lang) => {
           const next = s || null;
+          const nextLang = (lang ?? blogLang) as BlogLang;
           setBlogSlug(next);
+          setBlogLang(nextLang);
           setCurrentRoute('blog');
-          window.history.pushState({}, '', next ? `/blog/${next}` : '/blog');
+          window.history.pushState({}, '', blogPathFor(nextLang, next));
+        }}
+        onChangeLang={(lang) => {
+          setBlogLang(lang);
+          setBlogSlug(null);
+          setCurrentRoute('blog');
+          window.history.pushState({}, '', blogPathFor(lang));
         }}
         onGoToDashboard={() => {
           setCurrentRoute('app');

@@ -1,7 +1,3 @@
-// SCOUT21 - Schema Prisma
-// Baseado nos 9 prompts de alinhamento com a landing page
-// Criado em: 2026-01-09
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,6 +7,7 @@ datasource db {
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
 model Role {
   id          String   @id @default(uuid())
   name        String   @unique @db.VarChar(50)
@@ -22,34 +19,34 @@ model Role {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique @db.VarChar(255)
-  passwordHash    String   @map("password_hash") @db.VarChar(255)
-  name            String   @db.VarChar(255)
-  photoUrl        String?  @map("photo_url")
-  roleId          String   @map("role_id")
-  isActive        Boolean  @default(true) @map("is_active")
-  teamDisplayName String?  @map("team_display_name") @db.VarChar(255)
-  teamShieldUrl   String?  @map("team_shield_url") @db.Text
+  id              String    @id @default(uuid())
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  name            String    @db.VarChar(255)
+  photoUrl        String?   @map("photo_url")
+  roleId          String    @map("role_id")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  teamDisplayName String?   @map("team_display_name") @db.VarChar(255)
+  teamShieldUrl   String?   @map("team_shield_url")
   lastLoginAt     DateTime? @map("last_login_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
   clube           Clube?
   tecnico         Tecnico?
-  role            Role     @relation(fields: [roleId], references: [id])
+  role            Role      @relation(fields: [roleId], references: [id])
 
   @@map("users")
 }
 
 model Tecnico {
-  id                   String     @id @default(uuid())
-  userId               String     @unique @map("user_id")
-  nome                 String     @db.VarChar(255)
-  cpf                  String?    @unique @db.VarChar(14)
-  registroProfissional String?    @map("registro_profissional") @db.VarChar(50)
-  createdAt            DateTime   @default(now()) @map("created_at")
+  id                   String   @id @default(uuid())
+  userId               String   @unique @map("user_id")
+  nome                 String   @db.VarChar(255)
+  cpf                  String?  @unique @db.VarChar(14)
+  registroProfissional String?  @map("registro_profissional") @db.VarChar(50)
+  createdAt            DateTime @default(now()) @map("created_at")
   equipes              Equipe[]
-  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("tecnicos")
 }
@@ -76,6 +73,7 @@ model Equipe {
   tecnicoId         String              @map("tecnico_id")
   clubeId           String?             @map("clube_id")
   createdAt         DateTime            @default(now()) @map("created_at")
+  bem_estar_diario  bem_estar_diario[]
   campeonatos       Campeonato[]
   clube             Clube?              @relation(fields: [clubeId], references: [id])
   tecnico           Tecnico             @relation(fields: [tecnicoId], references: [id])
@@ -104,7 +102,7 @@ model Jogador {
   altura              Decimal?                   @db.Decimal(5, 2)
   peso                Decimal?                   @db.Decimal(5, 2)
   ultimoClube         String?                    @map("ultimo_clube") @db.VarChar(255)
-  fotoUrl             String?                    @map("foto_url") @db.Text
+  fotoUrl             String?                    @map("foto_url")
   maxLoadsJson        Json?                      @map("max_loads_json")
   isTransferido       Boolean                    @default(false) @map("is_transferido")
   dataTransferencia   DateTime?                  @map("data_transferencia") @db.Date
@@ -112,14 +110,15 @@ model Jogador {
   createdAt           DateTime                   @default(now()) @map("created_at")
   updatedAt           DateTime                   @updatedAt @map("updated_at")
   avaliacoesFisicas   AvaliacaoFisica[]
+  bem_estar_diario    bem_estar_diario[]
   equipes             EquipesJogadores[]
   estatisticasJogador JogosEstatisticasJogador[]
   eventos             JogosEventos[]
   lesoes              Lesao[]
-  pseTreinos          PseTreino[]
   pseJogos            PseJogo[]
-  psrTreinos          PsrTreino[]
+  pseTreinos          PseTreino[]
   psrJogos            PsrJogo[]
+  psrTreinos          PsrTreino[]
   qualidadesSono      QualidadeSono[]
 
   @@map("jogadores")
@@ -142,25 +141,24 @@ model EquipesJogadores {
 }
 
 model Jogo {
-  id                     String                     @id @default(uuid())
-  equipeId               String                     @map("equipe_id")
-  adversario             String                     @db.VarChar(255)
-  data                   DateTime                   @db.Date
-  campeonato             String?                    @db.VarChar(255)
-  competicaoId          String?                    @map("competicao_id")
-  local                  String?                    @db.VarChar(255)
-  resultado             String?                    @db.Char(1)
-  golsPro               Int                        @default(0) @map("gols_pro")
-  golsContra            Int                        @default(0) @map("gols_contra")
-  videoUrl              String?                    @map("video_url")
-  postMatchEventLog     Json?                      @map("post_match_event_log")
-  playerRelationships   Json?                      @map("player_relationships")
-  lineup                Json?                      @map("lineup")
-  substitutionHistory   Json?                      @map("substitution_history")
-  status                String?                    @default("encerrado") @db.VarChar(50)
-  // Coleta scout: 0 não iniciada, 1 primeiro tempo, 2 segundo tempo
-  collectionPhase       Int                        @default(0) @map("collection_phase") @db.SmallInt
-  createdAt             DateTime                   @default(now()) @map("created_at")
+  id                  String                     @id @default(uuid())
+  equipeId            String                     @map("equipe_id")
+  adversario          String                     @db.VarChar(255)
+  data                DateTime                   @db.Date
+  campeonato          String?                    @db.VarChar(255)
+  competicaoId        String?                    @map("competicao_id")
+  local               String?                    @db.VarChar(255)
+  resultado           String?                    @db.Char(1)
+  golsPro             Int                        @default(0) @map("gols_pro")
+  golsContra          Int                        @default(0) @map("gols_contra")
+  videoUrl            String?                    @map("video_url")
+  postMatchEventLog   Json?                      @map("post_match_event_log")
+  playerRelationships Json?                      @map("player_relationships")
+  lineup              Json?                      @map("lineup")
+  substitutionHistory Json?                      @map("substitution_history")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  status              String?                    @default("encerrado") @db.VarChar(50)
+  collectionPhase     Int                        @default(0) @map("collection_phase") @db.SmallInt
   campeonatosJogos    CampeonatosJogos[]
   competicao          Competicao?                @relation(fields: [competicaoId], references: [id])
   equipe              Equipe                     @relation(fields: [equipeId], references: [id])
@@ -176,29 +174,29 @@ model Jogo {
 }
 
 model JogosEstatisticasEquipe {
-  id                     String @id @default(uuid())
-  jogoId                 String @unique @map("jogo_id")
-  minutosJogados         Int    @default(0) @map("minutos_jogados")
-  gols                   Int    @default(0)
-  golsSofridos           Int    @default(0) @map("gols_sofridos")
-  assistencias           Int    @default(0)
-  cartoesAmarelos        Int    @default(0) @map("cartoes_amarelos")
-  cartoesVermelhos       Int    @default(0) @map("cartoes_vermelhos")
-  passesCorretos         Int    @default(0) @map("passes_corretos")
-  passesErrados          Int    @default(0) @map("passes_errados")
-  passesErradosTransicao Int    @default(0) @map("passes_errados_transicao")
-  desarmesComBola        Int    @default(0) @map("desarmes_com_bola")
-  desarmesContraAtaque   Int    @default(0) @map("desarmes_contra_ataque")
-  desarmesSemBola        Int    @default(0) @map("desarmes_sem_bola")
-  chutesNoGol            Int    @default(0) @map("chutes_no_gol")
-  chutesFora             Int    @default(0) @map("chutes_fora")
-  rpePartida             Int?   @map("rpe_partida")
-  golsMarcadosJogoAberto Int    @default(0) @map("gols_marcados_jogo_aberto")
-  golsMarcadosBolaParada Int    @default(0) @map("gols_marcados_bola_parada")
+  id                     String  @id @default(uuid())
+  jogoId                 String  @unique @map("jogo_id")
+  minutosJogados         Int     @default(0) @map("minutos_jogados")
+  gols                   Int     @default(0)
+  golsSofridos           Int     @default(0) @map("gols_sofridos")
+  assistencias           Int     @default(0)
+  cartoesAmarelos        Int     @default(0) @map("cartoes_amarelos")
+  cartoesVermelhos       Int     @default(0) @map("cartoes_vermelhos")
+  passesCorretos         Int     @default(0) @map("passes_corretos")
+  passesErrados          Int     @default(0) @map("passes_errados")
+  passesErradosTransicao Int     @default(0) @map("passes_errados_transicao")
+  desarmesComBola        Int     @default(0) @map("desarmes_com_bola")
+  desarmesContraAtaque   Int     @default(0) @map("desarmes_contra_ataque")
+  desarmesSemBola        Int     @default(0) @map("desarmes_sem_bola")
+  chutesNoGol            Int     @default(0) @map("chutes_no_gol")
+  chutesFora             Int     @default(0) @map("chutes_fora")
+  rpePartida             Int?    @map("rpe_partida")
+  golsMarcadosJogoAberto Int     @default(0) @map("gols_marcados_jogo_aberto")
+  golsMarcadosBolaParada Int     @default(0) @map("gols_marcados_bola_parada")
   golsSofridosJogoAberto Int     @default(0) @map("gols_sofridos_jogo_aberto")
   golsSofridosBolaParada Int     @default(0) @map("gols_sofridos_bola_parada")
-  metodoGol              String? @map("metodo_gol") @db.Text
-  metodoGolTomado        String? @map("metodo_gol_tomado") @db.Text
+  metodoGol              String? @map("metodo_gol")
+  metodoGolTomado        String? @map("metodo_gol_tomado")
   jogo                   Jogo    @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@map("jogos_estatisticas_equipe")
@@ -335,8 +333,8 @@ model Campeonato {
   id        String             @id @default(uuid())
   nome      String             @db.VarChar(255)
   equipeId  String?            @map("equipe_id")
-  dados     Json?              @db.Json
   createdAt DateTime           @default(now()) @map("created_at")
+  dados     Json?              @db.Json
   equipe    Equipe?            @relation(fields: [equipeId], references: [id])
   jogos     CampeonatosJogos[]
 
@@ -345,19 +343,19 @@ model Campeonato {
 }
 
 model CampeonatosJogos {
-  id             String     @id @default(uuid())
-  campeonatoId   String     @map("campeonato_id")
-  data           DateTime   @db.Date
-  horario        String?    @db.VarChar(10)
-  equipe         String     @db.VarChar(255)
-  adversario     String     @db.VarChar(255)
-  competicao     String?    @db.VarChar(255)
-  local          String?    @db.VarChar(50)
-  metaPontuacao  String?    @map("meta_pontuacao") @db.VarChar(255)
-  jogoId         String?    @map("jogo_id")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  campeonato     Campeonato @relation(fields: [campeonatoId], references: [id], onDelete: Cascade)
-  jogo           Jogo?      @relation(fields: [jogoId], references: [id])
+  id            String     @id @default(uuid())
+  campeonatoId  String     @map("campeonato_id")
+  data          DateTime   @db.Date
+  horario       String?    @db.VarChar(10)
+  equipe        String     @db.VarChar(255)
+  adversario    String     @db.VarChar(255)
+  competicao    String?    @db.VarChar(255)
+  local         String?    @db.VarChar(50)
+  metaPontuacao String?    @map("meta_pontuacao") @db.VarChar(255)
+  jogoId        String?    @map("jogo_id")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  campeonato    Campeonato @relation(fields: [campeonatoId], references: [id], onDelete: Cascade)
+  jogo          Jogo?      @relation(fields: [jogoId], references: [id])
 
   @@index([jogoId])
   @@map("campeonatos_jogos")
@@ -397,12 +395,11 @@ model PseTreino {
   id          String   @id @default(uuid())
   equipeId    String   @map("equipe_id")
   jogadorId   String   @map("jogador_id")
-  data        DateTime @db.Date // Salva a data do evento (treino)
-  valor       Int      @db.SmallInt // 0 a 10
-  observacoes String?  @db.Text
+  data        DateTime @db.Date
+  valor       Int      @db.SmallInt
+  observacoes String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
   equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
   jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
 
@@ -415,13 +412,12 @@ model PseJogo {
   id          String   @id @default(uuid())
   jogoId      String   @map("jogo_id")
   jogadorId   String   @map("jogador_id")
-  valor       Int      @db.SmallInt // 0 a 10
-  observacoes String?  @db.Text
+  valor       Int      @db.SmallInt
+  observacoes String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
-  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
   jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@index([jogoId])
   @@index([jogadorId])
@@ -433,11 +429,10 @@ model PsrTreino {
   equipeId    String   @map("equipe_id")
   jogadorId   String   @map("jogador_id")
   data        DateTime @db.Date
-  valor       Int      @db.SmallInt // 0 a 10
-  observacoes String?  @db.Text
+  valor       Int      @db.SmallInt
+  observacoes String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
   equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
   jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
 
@@ -450,13 +445,12 @@ model PsrJogo {
   id          String   @id @default(uuid())
   jogoId      String   @map("jogo_id")
   jogadorId   String   @map("jogador_id")
-  valor       Int      @db.SmallInt // 0 a 10
-  observacoes String?  @db.Text
+  valor       Int      @db.SmallInt
+  observacoes String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
-  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
   jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+  jogo        Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
   @@index([jogoId])
   @@index([jogadorId])
@@ -469,10 +463,9 @@ model QualidadeSono {
   jogadorId   String   @map("jogador_id")
   data        DateTime @db.Date
   valor       Int      @db.SmallInt
-  observacoes String?  @db.Text
+  observacoes String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
   equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
   jogador     Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
 
@@ -480,3 +473,51 @@ model QualidadeSono {
   @@index([jogadorId])
   @@map("qualidade_sono")
 }
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model bem_estar_diario {
+  id           String   @id
+  equipe_id    String
+  jogador_id   String
+  data         DateTime @db.Date
+  nivel_stress Int?     @db.SmallInt
+  qual_sono    Int?     @db.SmallInt
+  humor_mot    Int?     @db.SmallInt
+  dor_muscular Int?     @db.SmallInt
+  satisfacao   Int?     @db.SmallInt
+  observacoes  String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  equipes      Equipe   @relation(fields: [equipe_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  jogadores    Jogador  @relation(fields: [jogador_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([jogador_id, data], map: "bem_estar_diario_jogador_data_key")
+  @@index([equipe_id, data])
+  @@index([jogador_id])
+}
+
+/// Leads capturados em landing/blog/outbound.
+/// Fonte de verdade para o agente `analytics` e para o ciclo `growth.pivot_guard`:
+/// se `createdAt` de todos os leads ficar estagnado, dispara o issue STRATEGY_PIVOT.
+model Lead {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  email       String   @db.VarChar(255)
+  phone       String?  @db.VarChar(50)
+  message     String?
+  source      String   @db.VarChar(120)
+  lang        String?  @db.VarChar(10)
+  ua          String?
+  ip          String?  @db.VarChar(45)
+  utmSource   String?  @map("utm_source") @db.VarChar(120)
+  utmMedium   String?  @map("utm_medium") @db.VarChar(120)
+  utmCampaign String?  @map("utm_campaign") @db.VarChar(120)
+  utmTerm     String?  @map("utm_term") @db.VarChar(120)
+  utmContent  String?  @map("utm_content") @db.VarChar(120)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([source])
+  @@map("leads")
+}
+

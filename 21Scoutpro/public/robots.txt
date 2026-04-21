@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /login
+Disallow: /registro
+
+Sitemap: https://scout21.vercel.app/sitemap.xml

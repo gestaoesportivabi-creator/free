@@ -24,6 +24,7 @@ import timeControlsRoutes from './routes/timeControls.routes';
 import teamsRoutes from './routes/teams.routes';
 import wellnessRoutes from './routes/wellness.routes';
 import championshipsRoutes from './routes/championships.routes';
+import leadsRoutes from './routes/leads.routes';
 
 const app: Express = express();
 
@@ -67,6 +68,7 @@ app.get('/health', (_req, res) => {
 
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes);
+app.use('/api/leads', leadsRoutes);
 
 // Rotas protegidas (com autenticação e tenant)
 app.use('/api/teams', authMiddleware, tenantMiddleware(), teamsRoutes);

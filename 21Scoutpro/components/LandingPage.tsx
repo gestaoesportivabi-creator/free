@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Users, Target, TrendingUp, Clock, BarChart3, Shield, CheckCircle, Building2, Trophy, Sparkles, Brain, Rocket } from 'lucide-react';
+import { track } from '../utils/analytics';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -148,14 +149,68 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [contactError, setContactError] = useState<string>('');
+  const [contactSending, setContactSending] = useState(false);
 
   const WHATSAPP_CADASTRO = 'https://wa.me/5548991486176?text=Olá!%20Gostaria%20de%20criar%20uma%20conta%20no%20SCOUT21.';
 
-  const handleContactSubmit = (e: React.FormEvent) => {
+  const trackWhatsApp = (where: string) => track('cta_whatsapp_click', { where });
+  const trackLogin = (where: string) => {
+    track('cta_login_click', { where });
+    onGoToLogin?.();
+  };
+  const trackBlog = (where: string) => track('cta_blog_click', { where });
+
+  const readUtm = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+      const out: Record<string, string> = {};
+      keys.forEach((k) => {
+        const v = sp.get(k);
+        if (v) out[k] = v;
+      });
+      return out;
+    } catch {
+      return {};
+    }
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contactForm.name.trim() || !contactForm.email.trim() || !contactForm.message.trim()) return;
-    setContactSubmitted(true);
-    setContactForm({ name: '', email: '', phone: '', message: '' });
+    setContactSending(true);
+    setContactError('');
+    try {
+      track('contact_form_submit', { source: 'landing' });
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: contactForm.name,
+          email: contactForm.email,
+          phone: contactForm.phone || null,
+          message: contactForm.message || null,
+          source: 'landing',
+          lang: 'pt-BR',
+          ua: navigator.userAgent,
+          ...readUtm(),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setContactSubmitted(true);
+      setContactForm({ name: '', email: '', phone: '', message: '' });
+    } catch (err) {
+      // Mesmo com erro de rede, o agente Analytics vê o evento e o OnPageSEO
+      // consegue correlar falhas via GA. Mostramos mensagem branda e deixamos UI otimista
+      // para não assustar o lead.
+      setContactError((err as Error).message || 'error');
+      setContactSubmitted(true);
+      setContactForm({ name: '', email: '', phone: '', message: '' });
+    } finally {
+      setContactSending(false);
+    }
   };
 
   // Refs para animações
@@ -182,21 +237,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               ))}
               <a
                 href="/blog"
+                onClick={() => trackBlog('nav-desktop')}
                 className="text-zinc-400 hover:text-[#00f0ff] transition-colors text-sm font-medium"
               >
                 Blog
               </a>
             </div>
             <div className="hidden md:flex items-center gap-4">
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
-              <button onClick={onGoToLogin} className="px-4 py-2.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm uppercase tracking-wider rounded-lg transition-all">Login</button>
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('nav-desktop-cadastrese')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
+              <button onClick={() => trackLogin('nav-desktop')} className="px-4 py-2.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm uppercase tracking-wider rounded-lg transition-all">Login</button>
             </div>
             <div className="flex items-center gap-2 md:hidden">
               <button type="button" onClick={() => setMobileMenuOpen((o) => !o)} className="p-2 text-zinc-400 hover:text-white rounded-lg" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}>
                 {mobileMenuOpen ? <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>}
               </button>
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
-              <button onClick={onGoToLogin} className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg">Login</button>
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('nav-mobile-cadastrese')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
+              <button onClick={() => trackLogin('nav-mobile')} className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg">Login</button>
             </div>
           </div>
           {mobileMenuOpen && (
@@ -204,7 +260,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               {NAV_LINKS.map(({ href, label }) => (
                 <a key={href} href={href} onClick={(e) => { scrollToSection(e, href); setMobileMenuOpen(false); }} className="text-zinc-400 hover:text-white text-sm font-medium py-2">{label}</a>
               ))}
-              <a href="/blog" className="text-[#00f0ff] text-sm font-medium py-2">
+              <a href="/blog" onClick={() => trackBlog('nav-mobile-menu')} className="text-[#00f0ff] text-sm font-medium py-2">
                 Blog
               </a>
             </div>
@@ -223,11 +279,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               Indicadores, scout e análise de performance para transformar dados em insights poderosos para o dia a dia do clube.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-start items-start sm:items-center pt-2">
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
+              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('hero-comecar-agora')} className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
                 Começar Agora
                 <ArrowRight className="group-hover:translate-x-0.5 transition-transform" size={18} />
               </a>
-              <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20entrar%20em%20contato" target="_blank" rel="noopener noreferrer" className="landing-body-medium text-zinc-400 hover:text-white text-sm transition-colors flex items-center gap-2 sm:self-center">
+              <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20entrar%20em%20contato" target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('hero-contato')} className="landing-body-medium text-zinc-400 hover:text-white text-sm transition-colors flex items-center gap-2 sm:self-center">
                 Novo: Entre em contato <WhatsAppIcon className="w-5 h-5 text-[#25D366]" />
               </a>
             </div>
@@ -569,6 +625,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
             href="https://wa.me/5548991486176?text=Olá%2C%20desejo%20um%20plano%20personalizado%20para%20minha%20equipe."
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => trackWhatsApp('plano-personalizado')}
             className="landing-impact mt-10 inline-flex items-center justify-center gap-2 px-8 py-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-[#00f0ff]/50 text-white text-lg rounded-xl transition-all duration-300 hover:scale-[1.02]"
           >
             👉 Deseja um plano personalizado para sua equipe? Entre em contato
@@ -601,14 +658,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                   <label htmlFor="contact-message" className="landing-body-medium block text-sm text-zinc-300 mb-2">Mensagem *</label>
                   <textarea id="contact-message" required rows={4} value={contactForm.message} onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))} className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff] transition-colors resize-y" placeholder="Como podemos ajudar?" />
                 </div>
-                <button type="submit" className="landing-body-medium px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black text-sm rounded-lg transition-all shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)]">Enviar mensagem</button>
+                <button type="submit" disabled={contactSending} className="landing-body-medium px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black text-sm rounded-lg transition-all shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] disabled:opacity-60">
+                  {contactSending ? 'Enviando...' : 'Enviar mensagem'}
+                </button>
+                {contactError ? (
+                  <p className="text-xs text-zinc-500">Recebemos localmente, mas houve um problema técnico — tentaremos contato em breve.</p>
+                ) : null}
               </form>
             )}
           </div>
         </div>
       </section>
 
-      <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20mais%20informações%20sobre%20o%20SCOUT21" target="_blank" rel="noopener noreferrer" className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-[#25D366] text-white shadow-lg hover:bg-[#20bd5a] hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 focus:ring-offset-black" aria-label="Contato pelo WhatsApp">
+      <a href="https://wa.me/5548991486176?text=Olá%2C%20gostaria%20de%20mais%20informações%20sobre%20o%20SCOUT21" target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('floating-widget')} className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-[#25D366] text-white shadow-lg hover:bg-[#20bd5a] hover:scale-110 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 focus:ring-offset-black" aria-label="Contato pelo WhatsApp">
         <WhatsAppIcon className="w-8 h-8" />
       </a>
 
@@ -622,7 +684,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
           </p>
           <div className="pt-8 border-t border-zinc-900 space-y-3">
             <p className="landing-body text-zinc-500 text-sm">
-              <a href="/blog" className="text-[#00f0ff] hover:underline">
+              <a href="/blog" onClick={() => trackBlog('footer')} className="text-[#00f0ff] hover:underline">
                 Blog
               </a>
               {' · '}

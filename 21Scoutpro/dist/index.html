@@ -3,12 +3,113 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SCOUT 21 PRO</title>
+    <title>SCOUT 21 PRO — Gestão e Performance para Futsal</title>
+    <meta name="description" content="Plataforma brasileira de gestão e performance para futsal: scout, fisiologia, calendário e relatórios — dados no banco, decisões claras para comissão técnica." />
+    <meta name="theme-color" content="#000000" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+
+    <!-- Canonical e idioma -->
+    <link rel="canonical" href="https://scout21.vercel.app/" />
+    <link rel="alternate" hreflang="pt-BR" href="https://scout21.vercel.app/" />
+    <link rel="alternate" hreflang="en" href="https://scout21.vercel.app/blog/en" />
+    <link rel="alternate" hreflang="es" href="https://scout21.vercel.app/blog/es" />
+    <link rel="alternate" hreflang="x-default" href="https://scout21.vercel.app/" />
+
+    <!-- Google Search Console (injete VITE_GSC_VERIFICATION no Vercel) -->
+    <meta name="google-site-verification" content="%VITE_GSC_VERIFICATION%" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SCOUT 21 PRO" />
+    <meta property="og:title" content="SCOUT 21 PRO — Gestão e Performance para Futsal" />
+    <meta property="og:description" content="Scout, fisiologia, calendário e relatórios num só lugar — dados no banco, decisões claras para comissão técnica." />
+    <meta property="og:url" content="https://scout21.vercel.app/" />
+    <meta property="og:image" content="https://scout21.vercel.app/og-cover.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:locale:alternate" content="es_ES" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SCOUT 21 PRO — Gestão e Performance para Futsal" />
+    <meta name="twitter:description" content="Scout, fisiologia, calendário e relatórios num só lugar." />
+    <meta name="twitter:image" content="https://scout21.vercel.app/og-cover.jpg" />
+
+    <!-- JSON-LD: Organization + WebSite com SearchAction -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://scout21.vercel.app/#org",
+            "name": "SCOUT 21 PRO",
+            "url": "https://scout21.vercel.app/",
+            "logo": "https://scout21.vercel.app/public-logo.png.png",
+            "sameAs": []
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://scout21.vercel.app/#site",
+            "url": "https://scout21.vercel.app/",
+            "name": "SCOUT 21 PRO",
+            "publisher": { "@id": "https://scout21.vercel.app/#org" },
+            "inLanguage": ["pt-BR","en","es"],
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://scout21.vercel.app/blog?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "SCOUT 21 PRO",
+            "applicationCategory": "SportsApplication",
+            "operatingSystem": "Web",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "BRL" },
+            "description": "Plataforma de gestão e performance para futsal: scout, fisiologia e calendário."
+          }
+        ]
+      }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;1,800&family=Oswald:ital,wght@1,700&display=swap" rel="stylesheet">
+
+    <!-- GA4 loader (ativa se VITE_GA4_ID vier do env do Vercel) -->
+    <script>
+      (function () {
+        var gaId = "%VITE_GA4_ID%";
+        if (!gaId || gaId.indexOf("VITE_GA4_ID") !== -1) return;
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){window.dataLayer.push(arguments);}
+        window.gtag = gtag;
+        gtag('consent', 'default', {
+          ad_storage: 'denied',
+          analytics_storage: 'denied',
+          wait_for_update: 500,
+        });
+        try {
+          var c = localStorage.getItem('scout21_consent_v1');
+          if (c === 'granted') {
+            gtag('consent', 'update', { ad_storage: 'denied', analytics_storage: 'granted' });
+          }
+        } catch (e) {}
+        gtag('js', new Date());
+        gtag('config', gaId, { anonymize_ip: true, send_page_view: true });
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(gaId);
+        document.head.appendChild(s);
+        window.__scout21_analytics_ready = true;
+      })();
+    </script>
+
     <style>
       /* Body text – DM Sans (variável em index.css) */
       body {
@@ -17,11 +118,11 @@
         background-color: #000000;
         color: #f8fafc;
       }
-      
+
       /* Titles */
       h1, h2, h3, h4, h5, h6 {
         font-family: var(--font-sans);
-        letter-spacing: -0.025em; 
+        letter-spacing: -0.025em;
       }
 
       /* Custom scrollbar - Dark Mode */
@@ -39,12 +140,13 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #3f3f46;
       }
-    </style>
-  <script type="module" crossorigin src="/assets/index-D7wI26Cb.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/charts-Cm8jSR-f.js">
+    </style>
+  <script type="module" crossorigin src="/assets/index-BPaM7bsB.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-KfUPlHYY.js">
+  <link rel="modulepreload" crossorigin href="/assets/charts-0-nXQcrQ.js">
   <link rel="stylesheet" crossorigin href="/assets/index-BQGWtrIL.css">
 </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>
