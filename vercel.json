@@ -7,6 +7,24 @@
   "env": {
     "PRISMA_SCHEMA_CACHE_BUST": "v6"
   },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "gestaoesportiva-free.vercel.app" }
+      ],
+      "destination": "https://scout21.vercel.app/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        { "type": "host", "value": "gestaoesportiva-free-scout21s-projects.vercel.app" }
+      ],
+      "destination": "https://scout21.vercel.app/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
