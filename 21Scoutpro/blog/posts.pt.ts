@@ -117,13 +117,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
-    coverImage: '/blog-covers/por-que-dados-no-banco-importam-mais-que-no-papel.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'AS Photography',
-      photographerUrl: 'https://www.pexels.com/@asphotography',
-      photoUrl: 'https://www.pexels.com/photo/black-samsung-tablet-computer-106344/',
-    },
   },
   {
     slug: 'rotina-de-semana-competitiva-com-elenco-apertado',
@@ -234,13 +227,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
-    coverImage: '/blog-covers/rotina-de-semana-competitiva-com-elenco-apertado.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'Md Jawadur Rahman',
-      photographerUrl: 'https://www.pexels.com/@srijonism',
-      photoUrl: 'https://www.pexels.com/photo/men-playing-football-indoors-15818644/',
-    },
   },
   {
     slug: 'scout-alem-dos-numeros-contexto-para-o-treinador',
@@ -339,13 +325,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
-    coverImage: '/blog-covers/scout-alem-dos-numeros-contexto-para-o-treinador.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'Franco Monsalvo',
-      photographerUrl: 'https://www.pexels.com/@franco-monsalvo-252430633',
-      photoUrl: 'https://www.pexels.com/photo/soccer-coaches-discussing-strategy-outdoors-32101180/',
-    },
   },
   {
     slug: 'indicadores-de-alta-performance-para-clubes-de-futsal',
@@ -449,13 +428,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
-    coverImage: '/blog-covers/indicadores-de-alta-performance-para-clubes-de-futsal.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'Ketut Subiyanto',
-      photographerUrl: 'https://www.pexels.com/@ketut-subiyanto',
-      photoUrl: 'https://www.pexels.com/photo/man-setting-smartwatch-before-exercise-5037319/',
-    },
   },
   {
     slug: 'como-montar-um-scout-individual-em-10-passos',
@@ -524,13 +496,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
-    coverImage: '/blog-covers/como-montar-um-scout-individual-em-10-passos.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'Anastasia  Shuraeva',
-      photographerUrl: 'https://www.pexels.com/@anastasia-shuraeva',
-      photoUrl: 'https://www.pexels.com/photo/group-of-women-playing-football-9442068/',
-    },
   },
   {
     slug: 'gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo',
@@ -553,6 +518,10 @@ export const POSTS_PT: BlogPost[] = [
       'organização de comissão técnica',
       'gestão esportiva futsal',
     ],
+    translations: {
+      en: 'team-management-futsal-stop-running-it-from-whatsapp',
+      es: 'gestion-de-equipo-futsal-sin-grupo-de-whatsapp',
+    },
     blocks: [
       {
         type: 'p',
@@ -608,13 +577,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Conheça a base operacional do SCOUT 21 para gerir elenco sem depender de planilha solta.' },
     ],
-    coverImage: '/blog-covers/gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'César O\'neill',
-      photographerUrl: 'https://www.pexels.com/@cesar-o-neill-26650613',
-      photoUrl: 'https://www.pexels.com/photo/team-unity-celebrated-in-pre-game-huddle-29811412/',
-    },
   },
   {
     slug: 'programacao-semanal-de-treinos-e-jogos-sem-whatsapp',
@@ -637,6 +599,10 @@ export const POSTS_PT: BlogPost[] = [
       'software programação esportiva',
       'microciclo futsal',
     ],
+    translations: {
+      en: 'weekly-planning-trainings-matches-without-whatsapp',
+      es: 'programacion-semanal-entrenamientos-y-partidos-sin-whatsapp',
+    },
     blocks: [
       {
         type: 'p',
@@ -691,13 +657,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Veja como o SCOUT 21 ajuda a organizar a semana inteira em um fluxo único.' },
     ],
-    coverImage: '/blog-covers/programacao-semanal-de-treinos-e-jogos-sem-whatsapp.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'Matheus Bertelli',
-      photographerUrl: 'https://www.pexels.com/@bertellifotografia',
-      photoUrl: 'https://www.pexels.com/photo/2025-desk-calendar-with-coffee-and-succulent-29509456/',
-    },
   },
   {
     slug: 'relatorio-gerencial-no-futsal-o-que-a-presidencia-precisa-ver',
@@ -720,6 +679,10 @@ export const POSTS_PT: BlogPost[] = [
       'coordenação esportiva futsal',
       'BI para clubes',
     ],
+    translations: {
+      en: 'management-report-for-futsal-what-the-board-needs',
+      es: 'informe-gerencial-futsal-que-necesita-la-directiva',
+    },
     blocks: [
       {
         type: 'p',
@@ -769,13 +732,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Conheça o Relatório Gerencial do SCOUT 21 e reduza o atrito entre gestão e comissão.' },
     ],
-    coverImage: '/blog-covers/relatorio-gerencial-no-futsal-o-que-a-presidencia-precisa-ver.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'RDNE Stock project',
-      photographerUrl: 'https://www.pexels.com/@rdne',
-      photoUrl: 'https://www.pexels.com/photo/person-holding-white-printer-paper-7580792/',
-    },
   },
   {
     slug: 'monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar',
@@ -798,6 +754,10 @@ export const POSTS_PT: BlogPost[] = [
       'bem-estar diário atleta',
       'avaliação física futsal',
     ],
+    translations: {
+      en: 'physiological-monitoring-futsal-rpe-psr-wellness',
+      es: 'monitoreo-fisiologico-futsal-con-pse-psr-y-bienestar',
+    },
     blocks: [
       {
         type: 'p',
@@ -851,12 +811,5 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Veja como o módulo de Fisiologia do SCOUT 21 ajuda a transformar coleta em decisão.' },
     ],
-    coverImage: '/blog-covers/monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar.jpg',
-    coverCredit: {
-      source: 'Pexels',
-      photographer: 'VO2 Master',
-      photographerUrl: 'https://www.pexels.com/@vo2-master-1061578389',
-      photoUrl: 'https://www.pexels.com/photo/man-with-training-date-on-tablet-20523364/',
-    },
   },
 ];

@@ -97,6 +97,42 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/en/high-performance-kpis-for-futsal-clubs</loc>
+    <lastmod>2026-04-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/en/how-to-build-an-individual-scouting-sheet-in-10-steps</loc>
+    <lastmod>2026-04-19</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/en/team-management-futsal-stop-running-it-from-whatsapp</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/en/weekly-planning-trainings-matches-without-whatsapp</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/en/management-report-for-futsal-what-the-board-needs</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/en/physiological-monitoring-futsal-rpe-psr-wellness</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/es/por-que-datos-en-la-base</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -111,6 +147,42 @@
   <url>
     <loc>https://scout21.vercel.app/blog/es/scout-mas-alla-de-los-numeros</loc>
     <lastmod>2026-04-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/kpi-de-alto-rendimiento-para-clubes-de-futsal</loc>
+    <lastmod>2026-04-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/como-armar-un-scout-individual-en-10-pasos</loc>
+    <lastmod>2026-04-19</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/gestion-de-equipo-futsal-sin-grupo-de-whatsapp</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/programacion-semanal-entrenamientos-y-partidos-sin-whatsapp</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/informe-gerencial-futsal-que-necesita-la-directiva</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/monitoreo-fisiologico-futsal-con-pse-psr-y-bienestar</loc>
+    <lastmod>2026-04-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
