@@ -69,7 +69,12 @@ for (const slug of slugs) {
   body = body.replace(/^\s*coverImage:\s*'[^']*',\n/m, '');
   body = body.replace(/^\s*coverCredit:\s*\{[\s\S]*?\n\s*\},\n/m, '');
 
-  const updated = body + injection;
+  // Coloca capa antes de `blocks:` (mais legível e menos propenso a sumir em edições).
+  const blocksIdx = body.indexOf('\n    blocks: [');
+  const updated =
+    blocksIdx !== -1
+      ? `${body.slice(0, blocksIdx)}\n${injection}${body.slice(blocksIdx + 1)}`
+      : body + injection;
   src = src.slice(0, m.index) + updated + m[2] + src.slice(m.index + m[0].length);
   changed += 1;
   console.log('linked:', slug);
