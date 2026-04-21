@@ -111,6 +111,24 @@ const PostCover: React.FC<{ post: BlogPost; compact?: boolean }> = ({ post, comp
       <div className={`relative overflow-hidden rounded-xl border border-zinc-800 ${compact ? 'mb-4 h-36' : 'mb-8 h-64 md:h-80'}`}>
         <img src={post.coverImage} alt={post.title} className="h-full w-full object-cover" loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        {!compact && post.coverCredit && (
+          <div className="absolute bottom-2 right-2 text-[10px] leading-tight text-white/70 bg-black/40 backdrop-blur-sm px-2 py-1 rounded">
+            Foto:{' '}
+            {post.coverCredit.photographerUrl ? (
+              <a
+                href={post.coverCredit.photographerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white underline-offset-2 hover:underline"
+              >
+                {post.coverCredit.photographer}
+              </a>
+            ) : (
+              <span>{post.coverCredit.photographer}</span>
+            )}{' '}
+            · {post.coverCredit.source}
+          </div>
+        )}
       </div>
     );
   }

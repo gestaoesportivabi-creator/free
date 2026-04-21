@@ -35,6 +35,13 @@ export interface BlogPost {
   tags?: string[];
   /** Opcional: capa do post (URL/path). Se ausente, UI usa capa automática. */
   coverImage?: string;
+  /** Crédito de atribuição da capa (ex.: Pexels, Unsplash). */
+  coverCredit?: {
+    source: string;
+    photographer: string;
+    photographerUrl?: string;
+    photoUrl?: string;
+  };
 }
 
 export function blocksOf(post: BlogPost): BlogBlock[] {

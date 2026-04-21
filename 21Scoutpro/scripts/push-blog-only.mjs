@@ -10,11 +10,13 @@ const ALLOWLIST = [
   'components/BlogPage.tsx',
   'public/sitemap.xml',
   'public/blog-covers/',
+  'public/blog-covers-credits.json',
   'dist/index.html',
   'scripts/build-sitemap.mjs',
   'scripts/push-blog-only.mjs',
   'scripts/gen-blog-covers.mjs',
   'scripts/link-cover-images.mjs',
+  'scripts/fetch-pexels-covers.mjs',
 ];
 
 function git(args, options = {}) {
