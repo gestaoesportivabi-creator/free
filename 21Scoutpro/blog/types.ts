@@ -33,6 +33,8 @@ export interface BlogPost {
   author?: string;
   heroEmoji?: string;
   tags?: string[];
+  /** Opcional: capa do post (URL/path). Se ausente, UI usa capa automática. */
+  coverImage?: string;
 }
 
 export function blocksOf(post: BlogPost): BlogBlock[] {

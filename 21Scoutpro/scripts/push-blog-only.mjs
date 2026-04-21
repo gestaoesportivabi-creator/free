@@ -9,9 +9,12 @@ const ALLOWLIST = [
   'blog/',
   'components/BlogPage.tsx',
   'public/sitemap.xml',
+  'public/blog-covers/',
   'dist/index.html',
   'scripts/build-sitemap.mjs',
   'scripts/push-blog-only.mjs',
+  'scripts/gen-blog-covers.mjs',
+  'scripts/link-cover-images.mjs',
 ];
 
 function git(args, options = {}) {

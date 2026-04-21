@@ -117,6 +117,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
+    coverImage: '/blog-covers/por-que-dados-no-banco-importam-mais-que-no-papel.jpg',
   },
   {
     slug: 'rotina-de-semana-competitiva-com-elenco-apertado',
@@ -227,6 +228,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
+    coverImage: '/blog-covers/rotina-de-semana-competitiva-com-elenco-apertado.jpg',
   },
   {
     slug: 'scout-alem-dos-numeros-contexto-para-o-treinador',
@@ -325,6 +327,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
+    coverImage: '/blog-covers/scout-alem-dos-numeros-contexto-para-o-treinador.jpg',
   },
   {
     slug: 'indicadores-de-alta-performance-para-clubes-de-futsal',
@@ -428,6 +431,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
+    coverImage: '/blog-covers/indicadores-de-alta-performance-para-clubes-de-futsal.jpg',
   },
   {
     slug: 'como-montar-um-scout-individual-em-10-passos',
@@ -496,6 +500,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product' },
     ],
+    coverImage: '/blog-covers/como-montar-um-scout-individual-em-10-passos.jpg',
   },
   {
     slug: 'gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo',
@@ -573,6 +578,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Conheça a base operacional do SCOUT 21 para gerir elenco sem depender de planilha solta.' },
     ],
+    coverImage: '/blog-covers/gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo.jpg',
   },
   {
     slug: 'programacao-semanal-de-treinos-e-jogos-sem-whatsapp',
@@ -649,6 +655,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Veja como o SCOUT 21 ajuda a organizar a semana inteira em um fluxo único.' },
     ],
+    coverImage: '/blog-covers/programacao-semanal-de-treinos-e-jogos-sem-whatsapp.jpg',
   },
   {
     slug: 'relatorio-gerencial-no-futsal-o-que-a-presidencia-precisa-ver',
@@ -720,6 +727,7 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Conheça o Relatório Gerencial do SCOUT 21 e reduza o atrito entre gestão e comissão.' },
     ],
+    coverImage: '/blog-covers/relatorio-gerencial-no-futsal-o-que-a-presidencia-precisa-ver.jpg',
   },
   {
     slug: 'monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar',
@@ -795,5 +803,6 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Veja como o módulo de Fisiologia do SCOUT 21 ajuda a transformar coleta em decisão.' },
     ],
+    coverImage: '/blog-covers/monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar.jpg',
   },
 ];

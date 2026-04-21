@@ -38,13 +38,13 @@ const COPY = {
     notFound: 'Artigo não encontrado.',
     allPosts: 'Ver todos os artigos',
     backTop: '← Voltar ao blog',
-    leadHeadline: 'Quer testar o SCOUT21 com a sua equipa?',
-    leadSub: 'Deixa o teu contacto — falamos em 24h.',
+    leadHeadline: 'Quer receber um plano ideal para sua equipe?',
+    leadSub: 'Deixe seu contato. Em até 24h enviamos uma proposta clara e sem compromisso.',
     name: 'Nome',
     email: 'E-mail',
     phone: 'WhatsApp',
-    send: 'Quero saber mais',
-    thanks: 'Recebido! Entramos em contacto em 24h.',
+    send: 'Quero receber minha proposta',
+    thanks: 'Cadastro completo! Nosso time entra em contato em até 24h.',
     dashboard: 'Painel',
     login: 'Login',
   },
@@ -89,6 +89,46 @@ const COPY = {
     login: 'Login',
   },
 } as const;
+
+const COVER_GRADIENTS = [
+  'from-cyan-500/25 via-blue-500/15 to-indigo-500/20',
+  'from-emerald-500/20 via-teal-500/15 to-cyan-500/20',
+  'from-fuchsia-500/20 via-purple-500/15 to-indigo-500/25',
+  'from-amber-500/20 via-orange-500/15 to-red-500/20',
+  'from-sky-500/25 via-cyan-500/15 to-teal-500/20',
+];
+
+function gradientForSlug(slug: string): string {
+  let hash = 0;
+  for (let i = 0; i < slug.length; i += 1) hash = (hash * 31 + slug.charCodeAt(i)) >>> 0;
+  return COVER_GRADIENTS[hash % COVER_GRADIENTS.length];
+}
+
+const PostCover: React.FC<{ post: BlogPost; compact?: boolean }> = ({ post, compact = false }) => {
+  const gradient = gradientForSlug(post.slug);
+  if (post.coverImage) {
+    return (
+      <div className={`relative overflow-hidden rounded-xl border border-zinc-800 ${compact ? 'mb-4 h-36' : 'mb-8 h-64 md:h-80'}`}>
+        <img src={post.coverImage} alt={post.title} className="h-full w-full object-cover" loading="lazy" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+      </div>
+    );
+  }
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl border border-zinc-800 bg-gradient-to-br ${gradient} ${compact ? 'mb-4 h-36' : 'mb-8 h-64 md:h-80'}`}
+      aria-label={`Capa do post ${post.title}`}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_40%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,0.1),transparent_35%)]" />
+      <div className="relative flex h-full flex-col justify-end p-5 md:p-7">
+        <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-zinc-200/85">SCOUT21 Blog</p>
+        <p className={`${compact ? 'line-clamp-2 text-lg' : 'line-clamp-3 text-2xl md:text-3xl'} font-black leading-tight text-white`}>
+          {post.title}
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export const BlogPage: React.FC<BlogPageProps> = ({
   slug,
@@ -335,13 +375,8 @@ export const BlogPage: React.FC<BlogPageProps> = ({
                 onClick={() => onOpenPost(item.slug, lang)}
                 className="group h-full w-full text-left p-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 hover:border-[#00f0ff]/40 hover:bg-zinc-900/70 transition-all"
               >
-                {item.heroEmoji ? (
-                  <div className="text-3xl mb-4">{item.heroEmoji}</div>
-                ) : (
-                  <div className="w-10 h-10 mb-4 rounded-lg bg-[#00f0ff]/10 flex items-center justify-center text-[#00f0ff]">
-                    <BookOpen size={18} />
-                  </div>
-                )}
+                <PostCover post={item} compact />
+                {item.heroEmoji ? <div className="text-2xl mb-2">{item.heroEmoji}</div> : null}
                 <h2 className="text-xl md:text-2xl font-bold text-white mb-2 leading-tight group-hover:text-[#00f0ff] transition-colors">
                   {item.title}
                 </h2>
@@ -431,6 +466,7 @@ const PostView: React.FC<PostViewProps> = ({ post, lang, t, related, onOpenPost 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-10">
         <article className="min-w-0">
           <header className="mb-8">
+            <PostCover post={post} />
             {post.heroEmoji && <div className="text-5xl mb-6" aria-hidden>{post.heroEmoji}</div>}
             <p className="text-zinc-500 text-sm mb-4 flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1">
