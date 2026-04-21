@@ -141,15 +141,15 @@ const NewsletterModal: React.FC<NewsletterModalProps> = ({ open, onClose, source
         </div>
 
         <h2 id="newsletter-title" className="mb-2 text-xl sm:text-2xl font-bold text-white">
-          Gestão esportiva, direto no seu e-mail.
+          Receba insights de futsal que viram resultado.
         </h2>
         <p className="mb-5 text-sm leading-relaxed text-zinc-400">
-          1 artigo por semana com casos reais de futsal: scout, fisiologia e rotina de clube. Sem spam — cancele quando quiser.
+          Toda semana: gestão de elenco, scout e fisiologia em linguagem prática para comissão técnica. Sem spam, só conteúdo aplicável.
         </p>
 
         {status === 'success' ? (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300">
-            Inscrição confirmada. Primeiro artigo chega na sua caixa em breve.
+            Cadastro completo! Seu primeiro conteúdo chega em breve no e-mail.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -171,7 +171,7 @@ const NewsletterModal: React.FC<NewsletterModalProps> = ({ open, onClose, source
             </label>
             {status === 'error' && (
               <p className="text-xs text-red-400">
-                Não consegui registrar agora. Confere o e-mail e tenta de novo.
+                Não consegui finalizar agora. Confere o e-mail e tenta novamente.
               </p>
             )}
             <button
@@ -179,10 +179,10 @@ const NewsletterModal: React.FC<NewsletterModalProps> = ({ open, onClose, source
               disabled={status === 'sending'}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#00f0ff] px-4 py-3 text-sm font-semibold uppercase tracking-wider text-black transition-colors hover:bg-[#00d4e6] disabled:opacity-60"
             >
-              {status === 'sending' ? 'Inscrevendo…' : 'Quero receber'}
+              {status === 'sending' ? 'Finalizando…' : 'Quero receber os insights'}
             </button>
             <p className="text-[11px] leading-relaxed text-zinc-500">
-              Ao enviar, você concorda em receber e-mails do SCOUT 21. Lemos LGPD/GDPR a sério.
+              Ao enviar, você autoriza o envio da newsletter SCOUT21. LGPD em primeiro lugar.
             </p>
           </form>
         )}
@@ -338,15 +338,15 @@ export const NewsletterStickyBar: React.FC<{ source?: string }> = ({ source = 's
         </div>
         <div className="min-w-0 flex-1">
           <p className="hidden sm:block text-sm font-semibold text-white leading-tight">
-            Receba 1 análise por semana
+            Receba insights semanais de futsal
           </p>
           <p className="hidden sm:block text-[11px] text-zinc-400 leading-tight">
-            Casos reais de gestão e scout — sem spam.
+            Gestão, scout e performance com foco em resultado.
           </p>
           <p className="sm:hidden text-sm font-semibold text-white leading-tight">Newsletter SCOUT21</p>
         </div>
         {status === 'success' ? (
-          <span className="text-sm text-emerald-300 whitespace-nowrap">Assinado ✓</span>
+          <span className="text-sm text-emerald-300 whitespace-nowrap">Cadastro completo ✓</span>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-1 items-center gap-2">
             <input

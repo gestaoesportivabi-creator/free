@@ -640,8 +640,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
             {contactSubmitted ? (
               <div className="bg-zinc-900/80 border border-[#00f0ff]/30 rounded-xl p-8 text-center">
                 <CheckCircle className="text-[#00f0ff] mx-auto mb-4" size={48} />
-                <p className="landing-body-medium text-white text-lg">Mensagem enviada!</p>
-                <p className="landing-body text-zinc-400 mt-2">Em breve entraremos em contato.</p>
+                <p className="landing-body-medium text-white text-lg">Cadastro completo!</p>
+                <p className="landing-body text-zinc-400 mt-2">Recebido com sucesso. Em até 24h nosso time entra em contato.</p>
               </div>
             ) : (
               <form onSubmit={handleContactSubmit} className="space-y-5 max-w-xl">
@@ -659,10 +659,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                 </div>
                 <div>
                   <label htmlFor="contact-message" className="landing-body-medium block text-sm text-zinc-300 mb-2">Mensagem *</label>
-                  <textarea id="contact-message" required rows={4} value={contactForm.message} onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))} className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff] transition-colors resize-y" placeholder="Como podemos ajudar?" />
+                  <textarea id="contact-message" required rows={4} value={contactForm.message} onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))} className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-[#00f0ff] focus:ring-1 focus:ring-[#00f0ff] transition-colors resize-y" placeholder="Conte o cenário da sua equipe para receber uma proposta ideal." />
                 </div>
                 <button type="submit" disabled={contactSending} className="landing-body-medium px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black text-sm rounded-lg transition-all shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] disabled:opacity-60">
-                  {contactSending ? 'Enviando...' : 'Enviar mensagem'}
+                  {contactSending ? 'Finalizando cadastro...' : 'Quero receber uma proposta'}
                 </button>
                 {contactError ? (
                   <p className="text-xs text-zinc-500">Recebemos localmente, mas houve um problema técnico — tentaremos contato em breve.</p>
