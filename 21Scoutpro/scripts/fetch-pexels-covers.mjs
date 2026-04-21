@@ -115,12 +115,12 @@ async function downloadTo(filePath, url) {
 }
 
 function bestLandscape(photo) {
-  return (
-    photo?.src?.landscape ||
-    photo?.src?.large2x ||
-    photo?.src?.large ||
-    photo?.src?.original
-  );
+  // Monta URL grande a partir do `original` para garantir 1600x900 nítido em hero.
+  const original = photo?.src?.original;
+  if (original) {
+    return `${original}?auto=compress&cs=tinysrgb&fit=crop&w=1600&h=900`;
+  }
+  return photo?.src?.landscape || photo?.src?.large2x || photo?.src?.large;
 }
 
 const credits = {};
