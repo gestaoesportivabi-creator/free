@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { Brain, ChevronDown, ChevronRight, Save } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
@@ -70,6 +72,17 @@ const COMMIT_LABELS: Record<CommitType, string> = {
 
 type WellnessData = Record<string, Record<string, Record<string, number>>>;
 
+function mergeWellnessData(base: WellnessData, incoming: WellnessData): WellnessData {
+  const out: WellnessData = { ...base };
+  Object.entries(incoming).forEach(([date, byPlayer]) => {
+    out[date] = { ...(out[date] || {}) };
+    Object.entries(byPlayer).forEach(([playerId, dims]) => {
+      out[date][playerId] = { ...(out[date][playerId] || {}), ...dims };
+    });
+  });
+  return out;
+}
+
 interface WellnessTabProps {
   players: Player[];
   schedules?: WeeklySchedule[];
@@ -106,6 +119,8 @@ function firstAllowedDate(commitmentByDate: Record<string, Set<CommitType>>, pre
 export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [] }) => {
   const [data, setData] = useState<WellnessData>({});
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
+  const [savingDate, setSavingDate] = useState<string | null>(null);
+  const [savedAtByDate, setSavedAtByDate] = useState<Record<string, string>>({});
 
   const commitmentByDate = useMemo(() => buildCommitmentByDate(schedules), [schedules]);
 
@@ -123,6 +138,41 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       const raw = localStorage.getItem(WELLNESS_STORAGE_KEY);
       if (raw) setData(JSON.parse(raw));
     } catch (_) {}
+
+    let mounted = true;
+    const loadApi = async () => {
+      try {
+        const rows = await wellnessApi.getAll('bem-estar-diario');
+        if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
+        const apiData: WellnessData = {};
+        rows.forEach((row: any) => {
+          const date = String(row.data || '').slice(0, 10);
+          const playerId = String(row.jogador_id || row.jogadorId || '');
+          if (!date || !playerId) return;
+          if (!apiData[date]) apiData[date] = {};
+          apiData[date][playerId] = {
+            stress: typeof row.nivel_stress === 'number' ? row.nivel_stress : 0,
+            sono: typeof row.qual_sono === 'number' ? row.qual_sono : 0,
+            humor: typeof row.humor_mot === 'number' ? row.humor_mot : 0,
+            dor: typeof row.dor_muscular === 'number' ? row.dor_muscular : 0,
+            satisfacao: typeof row.satisfacao === 'number' ? row.satisfacao : 0,
+          };
+        });
+        setData(prev => {
+          const merged = mergeWellnessData(apiData, prev);
+          try {
+            localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(merged));
+          } catch (_) {}
+          return merged;
+        });
+      } catch (err) {
+        console.error('Erro ao carregar bem-estar diário da API:', err);
+      }
+    };
+    loadApi();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -195,6 +245,54 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     ? (['treino', 'jogo', 'musculacao'] as CommitType[]).filter(t => selectedCommitTypes.has(t))
     : [];
 
+  const saveSelectedDateToApi = async () => {
+    if (!selectedDayHasCommitment) {
+      alert('Escolha uma data com compromisso para salvar.');
+      return;
+    }
+    const equipeId = resolveEquipeIdFromSchedules(schedules);
+    if (!equipeId) {
+      alert('Não foi possível identificar a equipe da programação para sincronizar os dados.');
+      return;
+    }
+    const items = activePlayers
+      .map(player => {
+        const d = data[selectedDate]?.[player.id];
+        if (!d) return null;
+        const hasAny = WELLNESS_DIMENSION_KEYS.some(k => typeof d[k] === 'number' && d[k] >= 1 && d[k] <= 5);
+        if (!hasAny) return null;
+        return {
+          equipeId,
+          data: selectedDate,
+          jogadorId: player.id,
+          stress: typeof d.stress === 'number' ? d.stress : null,
+          sono: typeof d.sono === 'number' ? d.sono : null,
+          humor: typeof d.humor === 'number' ? d.humor : null,
+          dor: typeof d.dor === 'number' ? d.dor : null,
+          satisfacao: typeof d.satisfacao === 'number' ? d.satisfacao : null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    if (items.length === 0) {
+      alert('Não há registros preenchidos para salvar nesta data.');
+      return;
+    }
+    try {
+      setSavingDate(selectedDate);
+      await wellnessApi.saveBulk('bem-estar-diario', items);
+      setSavedAtByDate(prev => ({
+        ...prev,
+        [selectedDate]: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      }));
+      alert('Bem-estar diário salvo com sucesso e sincronizado para outros dispositivos.');
+    } catch (err) {
+      console.error('Erro ao salvar bem-estar diário:', err);
+      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+    } finally {
+      setSavingDate(null);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg">
@@ -208,7 +306,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                 5 indicadores · escala 1–5 · só em dias com Treino, Jogo ou Musculação na programação ativa
               </p>
               <p className="text-zinc-600 text-[11px] mt-2 max-w-xl">
-                Stress e dor muscular: quanto menor o valor, melhor (1 = melhor). Demais indicadores: quanto maior, melhor (5 = melhor). Os registos desta aba ficam guardados neste navegador; ainda não há sincronização com o servidor.
+                Stress e dor muscular: quanto menor o valor, melhor (1 = melhor). Demais indicadores: quanto maior, melhor (5 = melhor). Após preencher, use o botão "Salvar dia" para sincronizar no servidor e manter os dados entre dispositivos.
               </p>
             </div>
             {teamAvgScore !== null && selectedDayHasCommitment && (
@@ -244,6 +342,22 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
             <p className="text-[10px] text-zinc-600 uppercase font-bold">
               Só é possível registrar bem-estar em dias com Treino, Jogo ou Musculação na programação ativa. Se escolher outro dia, a data ajusta para o dia válido mais próximo.
             </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={saveSelectedDateToApi}
+                disabled={!selectedDayHasCommitment || savingDate === selectedDate}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 bg-emerald-900/30 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-emerald-300 transition hover:bg-emerald-800/40 disabled:opacity-50"
+              >
+                <Save size={13} />
+                {savingDate === selectedDate ? 'Salvando...' : 'Salvar dia'}
+              </button>
+              {savedAtByDate[selectedDate] && (
+                <span className="text-[10px] font-bold uppercase text-emerald-400">
+                  Salvo {savedAtByDate[selectedDate]}
+                </span>
+              )}
+            </div>
           </div>
 
           <p className="text-zinc-400 text-xs">
