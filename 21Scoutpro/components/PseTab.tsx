@@ -139,11 +139,17 @@ export const PseTab: React.FC<PseTabProps> = ({
     return () => { mounted = false; };
   }, []);
 
+  const normalizePseValue = (value: number | ''): number | '' => {
+    if (value === '') return '';
+    return Math.max(0, Math.min(10, Math.round(value)));
+  };
+
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
+    const normalized = normalizePseValue(value);
     setPseJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
-      if (value === '') delete next[matchId][playerId];
-      else next[matchId][playerId] = value;
+      if (normalized === '') delete next[matchId][playerId];
+      else next[matchId][playerId] = normalized;
       try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -151,10 +157,11 @@ export const PseTab: React.FC<PseTabProps> = ({
   };
 
   const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
+    const normalized = normalizePseValue(value);
     setPseTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
-      if (value === '') delete next[sessionKey][playerId];
-      else next[sessionKey][playerId] = value;
+      if (normalized === '') delete next[sessionKey][playerId];
+      else next[sessionKey][playerId] = normalized;
       try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -243,8 +250,8 @@ export const PseTab: React.FC<PseTabProps> = ({
           entries.map(([jogadorId, valor]) => ({
             jogoId: ev.eventKey,
             jogadorId,
-            value: valor,
-            valor,
+            value: Math.round(valor),
+            valor: Math.round(valor),
           }))
         );
       } else {
@@ -260,8 +267,8 @@ export const PseTab: React.FC<PseTabProps> = ({
             equipeId,
             data: datePart,
             jogadorId,
-            value: valor,
-            valor,
+            value: Math.round(valor),
+            valor: Math.round(valor),
           }))
         );
       }
@@ -427,14 +434,14 @@ export const PseTab: React.FC<PseTabProps> = ({
                             type="number"
                             min={0}
                             max={10}
-                            step={0.5}
+                            step={1}
                             value={val}
                             onChange={e => {
                               const raw = e.target.value;
                               if (raw === '') saveValue(ev, player.id, '');
                               else {
                                 const v = parseFloat(raw);
-                                if (!Number.isNaN(v) && v >= 0 && v <= 10) saveValue(ev, player.id, v);
+                                if (!Number.isNaN(v) && v >= 0 && v <= 10) saveValue(ev, player.id, Math.round(v));
                               }
                             }}
                             onClick={e => e.stopPropagation()}
