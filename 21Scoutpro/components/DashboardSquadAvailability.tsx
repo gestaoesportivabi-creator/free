@@ -58,10 +58,10 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
   }, [players, nextMatch, championships]);
 
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 space-y-3 overflow-hidden">
+    <div className="dashboard-squad-shell rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 space-y-3 overflow-hidden">
       <p className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold">Elenco disponível</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-emerald-500/80">
+        <div className="dashboard-squad-card rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-emerald-500/80">
           <div className="flex items-center gap-1.5 mb-1">
             <Check className="text-emerald-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Disponíveis</span>
@@ -71,7 +71,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             {isFreePlan ? 'Atletas cadastrados' : (available.slice(0, 3).map((p) => p.nickname || p.name).join(' · ') + (available.length > 3 ? ` +${available.length - 3}` : ''))}
           </p>
         </div>
-        <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-amber-500/80">
+        <div className="dashboard-squad-card rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-amber-500/80">
           <div className="flex items-center gap-1.5 mb-1">
             <AlertTriangle className="text-amber-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Pendurados</span>
@@ -89,7 +89,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             </>
           )}
         </div>
-        <div className="rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-red-500/80">
+        <div className="dashboard-squad-card rounded border border-white/[0.08] bg-zinc-900/30 px-3 py-2.5 border-l-[3px] border-l-red-500/80">
           <div className="flex items-center gap-1.5 mb-1">
             <Ambulance className="text-red-500/80" size={14} strokeWidth={2.5} />
             <span className="text-zinc-400 font-medium text-xs">Desfalques por lesão</span>

@@ -32,7 +32,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
 }) => {
   if (!nextMatch) {
     return (
-      <div className="rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 flex flex-col min-h-0">
+      <div className="dashboard-next-game-card rounded-lg border border-white/[0.08] bg-zinc-900/40 p-4 flex flex-col min-h-0">
         <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-3 shrink-0">
           <Trophy className="text-zinc-500" size={14} />
           Próximo jogo
@@ -51,19 +51,19 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
   const locationLabel = nextMatch.location && nextMatch.location.trim() ? nextMatch.location.trim() : null;
 
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm flex flex-col min-h-0">
+    <div className="dashboard-next-game-card rounded-lg border border-white/[0.08] bg-zinc-900/60 bg-emerald-950/15 p-4 shadow-sm flex flex-col min-h-0">
       <h3 className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 font-semibold flex items-center gap-2 mb-3 shrink-0">
         <Trophy size={14} className="text-zinc-500" />
         Próximo jogo
       </h3>
       <div className="flex flex-col gap-3">
         {nextMatch.competition && nextMatch.competition.trim() && (
-          <div className="rounded-lg bg-black/30 border border-white/[0.06] px-3 py-2">
+          <div className="dashboard-next-game-subcard rounded-lg bg-black/30 border border-white/[0.06] px-3 py-2">
             <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">Competição</p>
             <p className="text-white font-semibold text-sm mt-0.5 truncate" title={nextMatch.competition}>{nextMatch.competition}</p>
           </div>
         )}
-        <div className="flex items-center gap-3 rounded-lg bg-black/20 border border-white/[0.06] px-3 py-2.5 flex-1 min-h-0">
+        <div className="dashboard-next-game-subcard flex items-center gap-3 rounded-lg bg-black/20 border border-white/[0.06] px-3 py-2.5 flex-1 min-h-0">
           {teamShieldUrl ? (
             <img src={teamShieldUrl} alt="" className="w-10 h-10 object-contain flex-shrink-0 rounded" aria-hidden />
           ) : null}
@@ -77,7 +77,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
           </div>
         </div>
         {locationLabel && (
-          <div className="flex items-center gap-2 rounded-lg bg-black/20 border border-white/[0.06] px-3 py-2">
+          <div className="dashboard-next-game-subcard flex items-center gap-2 rounded-lg bg-black/20 border border-white/[0.06] px-3 py-2">
             <MapPin size={14} className="text-zinc-500 shrink-0" />
             <span className="text-zinc-300 text-xs font-medium">{locationLabel}</span>
           </div>
