@@ -2884,7 +2884,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const useFullViewport = isRealtimePage || takeFullWidth;
   const leftOffset = sidebarRetracted ? 'left-16' : 'left-64';
   return (
-    <div className={`fixed z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-fade-in overflow-hidden p-0 ${
+    <div className={`match-scouting-window fixed z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-fade-in overflow-hidden p-0 ${
       useFullViewport ? 'inset-0 h-dvh min-h-dvh' : `${leftOffset} top-0 right-0 bottom-0`
     }`}>
       <div className="w-full h-full min-h-0 bg-black flex flex-col relative overflow-hidden">
@@ -2898,12 +2898,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         )}
 
         {/* DADOS DA PARTIDA - placar centralizado e botão sair na mesma box */}
-        <div className="bg-zinc-950 border-b border-zinc-800 p-1.5 shrink-0">
+        <div className="match-data-panel bg-zinc-950 border-b border-zinc-800 p-1.5 shrink-0">
           <div className="flex items-center justify-between mb-1">
             <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
             <button
               onClick={handleCloseWithSilentSave}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white p-1.5 rounded-full transition-colors border border-zinc-700"
+              className="match-data-button-solid bg-zinc-900 hover:bg-zinc-800 text-white p-1.5 rounded-full transition-colors border border-zinc-700"
               title="Fechar"
             >
               <X size={18} />
@@ -2913,14 +2913,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             {/* Placar: nome na mesma linha dos gols (nomes pro lado de fora), gols centralizados, faltas abaixo */}
             <div className="flex flex-col items-center gap-1 w-full">
               {/* Linha 1: Nome (fora) | Gols centralizados | Nome (fora) */}
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full max-w-md">
-                <p className="text-zinc-300 text-xs font-normal uppercase truncate text-right">{(teamName || 'Nossa equipe').toUpperCase()}</p>
-                <div className="flex items-center justify-center gap-3">
-                  <p className="text-[#00f0ff] text-2xl font-black font-mono min-w-[1.5rem] text-center">{goalsFor}</p>
-                  <span className="text-zinc-600 text-xl font-black">x</span>
-                  <p className="text-red-400 text-2xl font-black font-mono min-w-[1.5rem] text-center">{goalsAgainst}</p>
+              <div className="match-scoreboard grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full max-w-md">
+                <p className="match-scoreboard-label text-zinc-300 text-xs font-normal uppercase truncate text-right">{(teamName || 'Nossa equipe').toUpperCase()}</p>
+                <div className="match-scoreboard-values flex items-center justify-center gap-3">
+                  <p className="match-score-value-for text-[#00f0ff] text-2xl font-black font-mono min-w-[1.5rem] text-center">{goalsFor}</p>
+                  <span className="match-scoreboard-separator text-zinc-600 text-xl font-black">x</span>
+                  <p className="match-score-value-against text-red-400 text-2xl font-black font-mono min-w-[1.5rem] text-center">{goalsAgainst}</p>
                 </div>
-                <p className="text-zinc-300 text-xs font-normal uppercase truncate text-left">{(match.opponent || 'Adversário').toUpperCase()}</p>
+                <p className="match-scoreboard-label text-zinc-300 text-xs font-normal uppercase truncate text-left">{(match.opponent || 'Adversário').toUpperCase()}</p>
               </div>
               {/* Linha 2: faltas do período selecionado (1T ou 2T) - controlado pelo botão central de tempo */}
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full max-w-md">
@@ -2943,7 +2943,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <button
                 type="button"
                 onClick={() => setShowLogsView(true)}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] uppercase font-normal transition-colors"
+                className="match-data-button-solid flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] uppercase font-normal transition-colors"
               >
                 <List size={14} /> Logs
               </button>
@@ -2952,7 +2952,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <button
                     onClick={handleEndCollection}
                     disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                    className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
+                    className={`match-data-button-solid px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
                       (isPostmatch && matchEvents.length >= 1) || isMatchEnded
                         ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
                         : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
@@ -2964,7 +2964,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveLater}
-                  className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
+                  className="match-data-button-solid px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
                 >
                   Guardar como incompleto
                 </button>

@@ -280,16 +280,21 @@ html {
 }
 
 .theme-light [class*='text-white'] {
+  color: #000000 !important;
+}
+
+.theme-light [class*='text-zinc-300'] {
   color: #111827 !important;
 }
 
 .theme-light [class*='text-zinc-500'],
-.theme-light [class*='text-zinc-600'] {
-  color: #52525b !important;
+.theme-light [class*='text-zinc-600'],
+.theme-light [class*='text-zinc-700'] {
+  color: #111827 !important;
 }
 
 .theme-light [class*='text-zinc-400'] {
-  color: #3f3f46 !important;
+  color: #000000 !important;
 }
 
 .theme-light [style*='color: #FFFFFF'],
@@ -307,6 +312,58 @@ html {
 
 .theme-light .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #71717a;
+}
+
+.theme-light .match-data-panel {
+  background-color: #ffffff !important;
+  border-bottom-color: #94a3b8 !important;
+}
+
+.theme-light .match-scoreboard-label,
+.theme-light .match-scoreboard-values,
+.theme-light .match-scoreboard-separator,
+.theme-light .match-score-value-for,
+.theme-light .match-score-value-against {
+  color: #000000 !important;
+}
+
+.theme-light .match-data-button-solid {
+  box-shadow: none !important;
+}
+
+.theme-light .match-data-button-solid[class*='bg-zinc'],
+.theme-light .match-data-button-solid[class*='bg-black'] {
+  background-color: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+}
+
+.theme-light .match-data-button-solid[class*='bg-[#00f0ff]'] {
+  background-color: #0ea5e9 !important;
+  color: #ffffff !important;
+  border-color: #0284c7 !important;
+}
+
+.theme-light .match-data-button-solid[class*='bg-red-500'] {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+}
+
+.theme-light .match-data-button-solid:disabled {
+  background-color: #9ca3af !important;
+  border-color: #6b7280 !important;
+  color: #f9fafb !important;
+}
+
+.theme-light .operational-status-section {
+  border-color: #64748b !important;
+  background-color: #ffffff !important;
+}
+
+.theme-light .operational-status-card {
+  border-color: #94a3b8 !important;
+  background-color: #f8fafc !important;
 }
 
 .theme-light.platform-font select,
