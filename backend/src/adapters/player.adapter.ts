@@ -33,6 +33,7 @@ interface LesaoDB {
   data: Date | string; // DEPRECADO: usar dataInicio
   dataInicio: Date | string;
   dataFim?: Date | string | null;
+  dataRetornoPrevisto?: Date | string | null;
   tipo: string;
   localizacao: string;
   lado?: string | null;
@@ -81,12 +82,16 @@ function formatDate(date: Date | string | undefined): string | undefined {
  * Transforma lesão do banco para formato InjuryRecord do frontend
  */
 function transformLesaoToFrontend(lesao: LesaoDB): InjuryRecord {
+  const dataFimFmt = formatDate(lesao.dataFim || undefined);
+  const previstoFmt = formatDate(lesao.dataRetornoPrevisto || undefined);
   return {
     id: lesao.id,
     playerId: lesao.jogadorId,
     date: formatDate(lesao.dataInicio || lesao.data || undefined), // Usar dataInicio se disponível
     startDate: formatDate(lesao.dataInicio || lesao.data || undefined) || '',
-    endDate: formatDate(lesao.dataFim || undefined),
+    endDate: dataFimFmt,
+    returnDate: previstoFmt,
+    returnDateActual: dataFimFmt,
     type: lesao.tipo,
     location: lesao.localizacao,
     side: (lesao.lado as any) || 'N/A',

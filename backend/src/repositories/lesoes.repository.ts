@@ -16,6 +16,7 @@ type LesaoDB = {
   data: Date;
   dataInicio: Date;
   dataFim: Date | null;
+  dataRetornoPrevisto: Date | null;
   tipo: string;
   localizacao: string;
   lado: string | null;
@@ -70,6 +71,7 @@ export const lesoesRepository = {
     data: Date;
     dataInicio: Date;
     dataFim?: Date | null;
+    dataRetornoPrevisto?: Date | null;
     tipo: string;
     localizacao: string;
     lado?: string | null;
@@ -83,6 +85,7 @@ export const lesoesRepository = {
         data: data.data,
         dataInicio: data.dataInicio,
         dataFim: data.dataFim ?? null,
+        dataRetornoPrevisto: data.dataRetornoPrevisto ?? null,
         tipo: data.tipo,
         localizacao: data.localizacao,
         lado: data.lado ?? null,

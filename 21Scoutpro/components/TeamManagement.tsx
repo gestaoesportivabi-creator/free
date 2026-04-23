@@ -502,20 +502,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             const start = new Date(inj.startDate || inj.date || '');
             start.setHours(0, 0, 0, 0);
             let daysOut = 0;
-            
-            // Priorizar: retorno real > retorno prevista > fim (alta)
-            const endDate = inj.returnDateActual || inj.returnDate || inj.endDate;
-            if (endDate) {
-                const end = new Date(endDate);
+            // Só retorno REAL (ou alta em endDate) encerra a lesão — nunca usar returnDate (previsto)
+            const endRelease = inj.returnDateActual || inj.endDate;
+            if (endRelease) {
+                const end = new Date(endRelease);
                 end.setHours(0, 0, 0, 0);
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 daysOut = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             } else {
-                // Active injury - calculate from start to today
                 const diffTime = Math.abs(today.getTime() - start.getTime());
                 daysOut = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             }
-            
+
             return { ...inj, daysOut };
         });
         

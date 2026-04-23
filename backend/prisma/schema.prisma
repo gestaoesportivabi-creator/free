@@ -248,20 +248,22 @@ model JogosEventos {
   @@map("jogos_eventos")
 }
 
+// Lesão: data_fim = liberação real; data_retorno_previsto = limite planejado (aba Elenco / médico)
 model Lesao {
-  id           String    @id @default(uuid())
-  jogadorId    String    @map("jogador_id")
-  data         DateTime  @db.Date
-  dataInicio   DateTime  @map("data_inicio") @db.Date
-  dataFim      DateTime? @map("data_fim") @db.Date
-  tipo         String    @db.VarChar(100)
-  localizacao  String    @db.VarChar(100)
-  lado         String?   @db.VarChar(20)
-  severidade   String?   @db.VarChar(50)
-  origem       String?   @db.VarChar(20)
-  diasAfastado Int?      @map("dias_afastado")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  jogador      Jogador   @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
+  id                     String    @id @default(uuid())
+  jogadorId              String    @map("jogador_id")
+  data                   DateTime  @db.Date
+  dataInicio             DateTime  @map("data_inicio") @db.Date
+  dataFim                DateTime? @map("data_fim") @db.Date
+  dataRetornoPrevisto    DateTime? @map("data_retorno_previsto") @db.Date
+  tipo                String    @db.VarChar(100)
+  localizacao         String    @db.VarChar(100)
+  lado                String?   @db.VarChar(20)
+  severidade          String?   @db.VarChar(50)
+  origem              String?   @db.VarChar(20)
+  diasAfastado        Int?      @map("dias_afastado")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  jogador             Jogador   @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
 
   @@index([jogadorId, data(sort: Desc)])
   @@map("lesoes")
