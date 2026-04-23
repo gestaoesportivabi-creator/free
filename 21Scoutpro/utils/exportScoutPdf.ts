@@ -16,7 +16,9 @@ export interface PlayerTablesPdf {
   cards: PlayerTop10RowPdf[];
 }
 
-const LOGO_URL = '/public-logo.png.png';
+const LOGO_DARK_URL = '/public-logo-dark.png';
+const LOGO_LIGHT_URL = '/public-logo-light.png';
+const LOGO_FALLBACK_URL = '/public-logo.png.png';
 const BRAND_NAME = 'SCOUT21';
 const HEADER_PHRASE_PART1 = 'SCOUT21';
 const HEADER_PHRASE_PART2 = ' — Gestão esportiva baseada em dados para decisões vencedoras.';
@@ -251,9 +253,8 @@ export interface ScoutPdfData {
 }
 
 /** Logo PNG (fundo transparente) para cabeçalho e capa do PDF */
-function loadLogoForPdf(): Promise<{ dataUrl: string; width: number; height: number } | null> {
+function loadLogoForPdf(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
   return new Promise((resolve) => {
-    const url = window.location.origin + LOGO_URL;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -275,8 +276,20 @@ function loadLogoForPdf(): Promise<{ dataUrl: string; width: number; height: num
       }
     };
     img.onerror = () => resolve(null);
-    img.src = url;
+    img.src = window.location.origin + url;
   });
+}
+
+async function loadPdfLogoByTheme(
+  lightMode: boolean
+): Promise<{ logo: { dataUrl: string; width: number; height: number } | null; isFallback: boolean }> {
+  const preferredUrl = lightMode ? LOGO_LIGHT_URL : LOGO_DARK_URL;
+  const preferred = await loadLogoForPdf(preferredUrl);
+  if (preferred) {
+    return { logo: preferred, isFallback: false };
+  }
+  const fallback = await loadLogoForPdf(LOGO_FALLBACK_URL);
+  return { logo: fallback, isFallback: true };
 }
 
 /** Escudo do clube (URL ou data URL) para a capa do PDF — retorna PNG + dimensões */
@@ -454,12 +467,15 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
-      const [logoPdfRaw, teamShieldPdf] = await Promise.all([
-        loadLogoForPdf(),
+      const lightMode = isLightModeActive();
+      const [{ logo: logoPdfByTheme, isFallback }, teamShieldPdf] = await Promise.all([
+        loadPdfLogoByTheme(lightMode),
         loadTeamShieldForPdf(data.teamShieldUrl),
       ]);
-      const logoPdf = logoPdfRaw
-        ? await recolorMonochromeLogo(logoPdfRaw, isLightModeActive() ? [0, 0, 0] : [255, 255, 255])
+      const logoPdf = logoPdfByTheme
+        ? (isFallback
+            ? await recolorMonochromeLogo(logoPdfByTheme, lightMode ? [0, 0, 0] : [255, 255, 255])
+            : logoPdfByTheme)
         : null;
       const logoBase64 = logoPdf?.dataUrl ?? null;
       const logoDims = logoPdf ? { width: logoPdf.width, height: logoPdf.height } : null;

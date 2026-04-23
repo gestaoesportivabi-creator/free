@@ -6,7 +6,9 @@
 import { jsPDF } from 'jspdf';
 import { wellnessClosenessRgb } from './wellnessRadarColors';
 
-const LOGO_URL = '/public-logo.png.png';
+const LOGO_DARK_URL = '/public-logo-dark.png';
+const LOGO_LIGHT_URL = '/public-logo-light.png';
+const LOGO_FALLBACK_URL = '/public-logo.png.png';
 const BRAND = 'SCOUT21';
 const TAGLINE = 'Gestão esportiva baseada em dados para decisões vencedoras.';
 
@@ -103,6 +105,18 @@ function loadImage(url: string): Promise<{ dataUrl: string; width: number; heigh
     img.onerror = () => resolve(null);
     img.src = url;
   });
+}
+
+async function loadPdfLogoByTheme(
+  lightMode: boolean
+): Promise<{ logo: { dataUrl: string; width: number; height: number } | null; isFallback: boolean }> {
+  const preferredUrl = lightMode ? LOGO_LIGHT_URL : LOGO_DARK_URL;
+  const preferred = await loadImage(preferredUrl);
+  if (preferred) {
+    return { logo: preferred, isFallback: false };
+  }
+  const fallback = await loadImage(LOGO_FALLBACK_URL);
+  return { logo: fallback, isFallback: true };
 }
 
 function drawWatermark(doc: jsPDF, logo: { dataUrl: string; width: number; height: number } | null) {
@@ -360,12 +374,14 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
 
   try {
     const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
-    const [logoRaw, shield] = await Promise.all([
-      loadImage(LOGO_URL),
+    const [{ logo: logoByTheme, isFallback }, shield] = await Promise.all([
+      loadPdfLogoByTheme(lightMode),
       data.teamShieldUrl ? loadImage(data.teamShieldUrl) : Promise.resolve(null),
     ]);
-    const logo = logoRaw
-      ? await recolorMonochromeLogo(logoRaw, lightMode ? [0, 0, 0] : [255, 255, 255])
+    const logo = logoByTheme
+      ? (isFallback
+          ? await recolorMonochromeLogo(logoByTheme, lightMode ? [0, 0, 0] : [255, 255, 255])
+          : logoByTheme)
       : null;
 
     // --- PAGE 1: CAPA ---

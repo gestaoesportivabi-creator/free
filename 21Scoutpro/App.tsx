@@ -2029,6 +2029,7 @@ export default function App() {
             onToggleRetract={() => setSidebarRetracted((r) => !r)}
             isFreePlan={essentialRestricted}
             fisiologiaUnlocked={performanceTier}
+            themeMode={themeMode}
           />
         </>
       )}
