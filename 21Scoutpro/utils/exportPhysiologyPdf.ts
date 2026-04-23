@@ -15,7 +15,7 @@ const PAGE_HEIGHT = 210;
 const MARGIN = 14;
 const CONTENT_W = PAGE_WIDTH - MARGIN * 2;
 
-const COLORS = {
+const DARK_COLORS = {
   bg: [0, 0, 0] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
   cyan: [0, 240, 255] as [number, number, number],
@@ -27,6 +27,26 @@ const COLORS = {
   emerald: [16, 185, 129] as [number, number, number],
   sky: [56, 189, 248] as [number, number, number],
 };
+
+const LIGHT_COLORS = {
+  bg: [255, 255, 255] as [number, number, number],
+  white: [17, 24, 39] as [number, number, number],
+  cyan: [8, 145, 178] as [number, number, number],
+  zinc500: [82, 82, 91] as [number, number, number],
+  zinc700: [161, 161, 170] as [number, number, number],
+  lime: [101, 163, 13] as [number, number, number],
+  red: [190, 24, 93] as [number, number, number],
+  orange: [194, 65, 12] as [number, number, number],
+  emerald: [5, 150, 105] as [number, number, number],
+  sky: [2, 132, 199] as [number, number, number],
+};
+
+let COLORS = DARK_COLORS;
+
+function isLightModeActive(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.getAttribute('data-theme') === 'light';
+}
 
 function fillBg(doc: jsPDF) {
   doc.setFillColor(...COLORS.bg);
@@ -299,6 +319,7 @@ function drawRadarChart(
 }
 
 export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void> {
+  COLORS = isLightModeActive() ? LIGHT_COLORS : DARK_COLORS;
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;z-index:1000000;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;font-family:Calibri,sans-serif;font-size:18px;color:#00f0ff;font-weight:bold;';
   overlay.textContent = 'Gerando PDF...';

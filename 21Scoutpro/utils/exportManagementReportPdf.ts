@@ -7,14 +7,34 @@ const PAGE_HEIGHT = 210;
 const MARGIN = 14;
 const CONTENT_W = PAGE_WIDTH - MARGIN * 2;
 
-const COLORS = {
+const DARK_COLORS = {
   bg: [0, 0, 0] as [number, number, number],
   white: [255, 255, 255] as [number, number, number],
   zinc500: [113, 113, 122] as [number, number, number],
   zinc700: [63, 63, 70] as [number, number, number],
   cyan: [0, 240, 255] as [number, number, number],
   emerald: [16, 185, 129] as [number, number, number],
+  amber: [251, 191, 36] as [number, number, number],
+  red: [248, 113, 113] as [number, number, number],
 };
+
+const LIGHT_COLORS = {
+  bg: [255, 255, 255] as [number, number, number],
+  white: [17, 24, 39] as [number, number, number],
+  zinc500: [82, 82, 91] as [number, number, number],
+  zinc700: [161, 161, 170] as [number, number, number],
+  cyan: [8, 145, 178] as [number, number, number],
+  emerald: [5, 150, 105] as [number, number, number],
+  amber: [180, 83, 9] as [number, number, number],
+  red: [190, 24, 93] as [number, number, number],
+};
+
+let COLORS = DARK_COLORS;
+
+function isLightModeActive(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.getAttribute('data-theme') === 'light';
+}
 
 export interface ManagementReportPdfData {
   teamName?: string;
@@ -264,6 +284,7 @@ function drawInjuryTypes(doc: jsPDF, data: { name: string; value: number }[], x:
 }
 
 export async function exportManagementReportPdf(data: ManagementReportPdfData): Promise<void> {
+  COLORS = isLightModeActive() ? LIGHT_COLORS : DARK_COLORS;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
   const [logo, shield, playerPhoto] = await Promise.all([
     loadImage(LOGO_URL),

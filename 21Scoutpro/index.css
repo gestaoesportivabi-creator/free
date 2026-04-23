@@ -258,3 +258,78 @@ html {
   opacity: 0.55;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Tema claro (plataforma)                                                     */
+/* -------------------------------------------------------------------------- */
+.theme-light {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.theme-light [class*='bg-black'],
+.theme-light [class*='bg-zinc-950'],
+.theme-light [class*='bg-zinc-900'],
+.theme-light [class*='bg-zinc-800'] {
+  background-color: #ffffff !important;
+}
+
+.theme-light [class*='border-zinc-900'],
+.theme-light [class*='border-zinc-800'],
+.theme-light [class*='border-zinc-700'] {
+  border-color: #d4d4d8 !important;
+}
+
+.theme-light [class*='text-white'] {
+  color: #111827 !important;
+}
+
+.theme-light [class*='text-zinc-500'],
+.theme-light [class*='text-zinc-600'] {
+  color: #52525b !important;
+}
+
+.theme-light [class*='text-zinc-400'] {
+  color: #3f3f46 !important;
+}
+
+.theme-light [style*='color: #FFFFFF'],
+.theme-light [style*='color:#FFFFFF'] {
+  color: #111827 !important;
+}
+
+.theme-light .custom-scrollbar::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+
+.theme-light .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #a1a1aa;
+}
+
+.theme-light .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}
+
+.theme-light.platform-font select,
+.theme-light.platform-font input[type='date'],
+.theme-light.platform-font input[type='month'],
+.theme-light.platform-font input[type='time'],
+.theme-light.platform-font input[type='search'],
+.theme-light.platform-font input[type='text'][placeholder*='Buscar'],
+.theme-light.platform-font input[type='text'][placeholder*='buscar'],
+.theme-light.platform-font input[type='text'][placeholder*='Cole o link'],
+.theme-light.platform-font input[type='text'][placeholder*='YouTube'] {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border-color: #a1a1aa !important;
+}
+
+.theme-light.platform-font select option {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.theme-light.platform-font input[type='date'],
+.theme-light.platform-font input[type='month'] {
+  color-scheme: light;
+}
+

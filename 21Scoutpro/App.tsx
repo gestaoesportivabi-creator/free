@@ -29,7 +29,7 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
+import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle, Sun, Moon } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
@@ -204,6 +204,7 @@ export default function App() {
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
   const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
   const [sidebarRetracted, setSidebarRetracted] = useState(false); // desktop: true = recolhida, false = expandida (padrão expandida)
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>('dark');
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   /** Blog público sem token: não bloquear 1.º paint com “Carregando…” */
@@ -231,6 +232,11 @@ export default function App() {
 
   /** Se true, os dados do dashboard já foram disparados no init (evita duplicar no useEffect de currentUser) */
   const dashboardDataLoadStarted = useRef(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-theme', themeMode);
+  }, [themeMode]);
   
   // Stats Targets State
   const [statTargets, setStatTargets] = useState<StatTargets>({
@@ -1896,14 +1902,48 @@ export default function App() {
           <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:p-6 md:p-8 shadow-sm animate-fade-in overflow-x-hidden">
             <div className="flex flex-col gap-6 sm:gap-8">
               <header className="border-b border-zinc-800 pb-4 shrink-0">
-                <span className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-medium">Visão geral</span>
-                <h1
-                  className="mt-1 text-xl md:text-2xl text-white uppercase font-black italic"
-                  style={{ fontFamily: "'Arial Black', Arial, sans-serif", letterSpacing: '1px', color: '#FFFFFF' }}
-                >
-                  CENTRAL DE INFOMAÇÕES
-                </h1>
-                <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-medium">Visão geral</span>
+                    <h1
+                      className="mt-1 text-xl md:text-2xl text-white uppercase font-black italic"
+                      style={{
+                        fontFamily: "'Arial Black', Arial, sans-serif",
+                        letterSpacing: '1px',
+                        color: themeMode === 'light' ? '#111827' : '#FFFFFF',
+                      }}
+                    >
+                      CENTRAL DE INFOMAÇÕES
+                    </h1>
+                    <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/60 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setThemeMode('dark')}
+                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide transition ${
+                        themeMode === 'dark' ? 'bg-[#00f0ff] text-black' : 'text-zinc-300 hover:bg-zinc-800'
+                      }`}
+                      aria-pressed={themeMode === 'dark'}
+                      title="Modo escuro"
+                    >
+                      <Moon size={12} />
+                      Escuro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThemeMode('light')}
+                      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide transition ${
+                        themeMode === 'light' ? 'bg-[#00f0ff] text-black' : 'text-zinc-300 hover:bg-zinc-800'
+                      }`}
+                      aria-pressed={themeMode === 'light'}
+                      title="Modo claro"
+                    >
+                      <Sun size={12} />
+                      Claro
+                    </button>
+                  </div>
+                </div>
               </header>
 
               {/* 1. Próxima Partida - início da visão geral */}
@@ -1960,7 +2000,7 @@ export default function App() {
 
   // Rota 'app' - renderizar com Sidebar (escondida quando a janela Scout da Partida está aberta)
   return (
-    <div className="platform-font flex min-h-screen bg-black text-zinc-100 min-w-0">
+    <div className={`platform-font flex min-h-screen bg-black text-zinc-100 min-w-0 ${themeMode === 'light' ? 'theme-light' : ''}`}>
       {!scoutWindowOpen && (
         <>
           {/* Backdrop do drawer (apenas mobile) */}
