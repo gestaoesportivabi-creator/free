@@ -876,4 +876,102 @@ export const POSTS_EN: BlogPost[] = [
       { type: 'cta-product', text: 'See how the SCOUT 21 Physiology module turns collection into decision.' },
     ],
   },
+  {
+    slug: 'scout-training-feedback-loop-72h-futsal',
+    lang: 'en',
+    title: 'The 72-hour loop between scout and training: closing the distance between observation and correction',
+    subtitle:
+      'A scout that stays inside a report is only description. A scout that becomes a correction in the following week’s training is decision. The 72-hour loop connects the two.',
+    date: '2026-04-22',
+    updatedDate: '2026-04-22',
+    readMinutes: 8,
+    author: 'SCOUT21 Editorial',
+    heroEmoji: '🔁',
+    tags: ['scout', 'training', 'methodology', 'feedback'],
+    excerpt:
+      'Most clubs collect scout data and deliver feedback too late — the following week, the next cycle, the next interview. When information arrives after the memory of the match fades, it loses force. A 72-hour loop fixes that.',
+    keywords: [
+      'futsal feedback loop',
+      'scout and training futsal',
+      'training methodology futsal',
+      'post-game futsal',
+      'tactical correction futsal',
+      'competitive microcycle',
+    ],
+    translations: {
+      pt: 'ciclo-de-feedback-scout-treino-72h-futsal',
+      es: 'ciclo-de-feedback-scout-entrenamiento-72h-futsal',
+    },
+    coverImage: '/blog-covers/ciclo-de-feedback-scout-treino-72h-futsal.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Franco Monsalvo',
+      photographerUrl: 'https://www.pexels.com/@franco-monsalvo-252430633',
+      photoUrl: 'https://www.pexels.com/photo/soccer-coaches-discussing-strategy-outdoors-32101180/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Every club knows it should run scout. Fewer clubs know what happens after. The report is finished, shared with the staff group, eventually turns into a talk with the squad — but most of the time the following week’s training has already been planned without it. The scout describes the past, the training looks at the future, and the two rarely meet where they should: on the court, on Tuesday.',
+      },
+      { type: 'h2', text: 'Why the short window matters' },
+      {
+        type: 'p',
+        text:
+          'The players’ memory of the match fades quickly. After three days, the body has already processed the load, the mind has moved on to the next opponent, and the precise image of how the press was broken or how the zonal defence failed starts to become abstract. If the correction reaches training after that, it competes with what is about to happen — and loses.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Rule of thumb',
+        text:
+          'A scout only creates real technical adaptation if it lands back with the squad before the third post-match training session. Any later, the correction competes with the preparation for the next opponent.',
+      },
+      { type: 'h2', text: 'Designing the 72 hours' },
+      {
+        type: 'p',
+        text:
+          'The loop is not complicated. What costs is the discipline to honour the three cut-offs without skipping. Each window has a clear objective, an owner and an artefact that must exist at the end.',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          '0–24h: consolidated technical-tactical scout, with the three to five points that matter most for the group — not the exhaustive list of events.',
+          '24–48h: block conversation with the squad — short video, coach’s language, focus on the pattern, not the individual mistake.',
+          '48–72h: first training session with the correction applied, designed in real situations, with pressure variations that reproduce the problematic scenario.',
+        ],
+      },
+      { type: 'h2', text: 'What breaks the loop in practice' },
+      {
+        type: 'list',
+        items: [
+          'Scout too polished: a 20-page report no one reads, which postpones the feedback.',
+          'Video too long: a 15-minute edit with clips the players no longer remember.',
+          'Disconnected training: the coach knows the scout, but the week plan was already closed.',
+          'Fragmentation: each area of the staff has its own version of the truth and the squad receives contradictory signals.',
+        ],
+      },
+      {
+        type: 'quote',
+        text:
+          'Late correction turns into a lecture. Correction inside the window turns into training. The difference is the calendar, not the analyst’s eye.',
+      },
+      { type: 'h2', text: 'How SCOUT 21 sustains the loop' },
+      {
+        type: 'p',
+        text:
+          'When scout, calendar, attendance and training live in the same database, closing the loop in 72h stops depending on willpower. The analyst publishes the scout, the staff marks the three prioritised points, the coach designs the week’s training already connected to those points, and the player sees the same narrative across every moment of the microcycle.',
+      },
+      { type: 'cta-newsletter', text: 'Get short texts on methodology, scout and club routine — straight to your inbox, no noise.' },
+      { type: 'h2', text: 'When the loop becomes culture' },
+      {
+        type: 'p',
+        text:
+          'A loop fulfilled once is luck. Fulfilled week after week, it becomes method. And method, in futsal, is what separates a club that repeats a good result from a club that builds a good year. The scout stops being a reporting duty and becomes a living part of training — which is, in the end, where the team is actually built.',
+      },
+      { type: 'cta-product', text: 'See how SCOUT 21 connects scout, training and tactical analysis in a single flow.' },
+    ],
+  },
 ];

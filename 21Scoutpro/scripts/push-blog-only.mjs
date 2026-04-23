@@ -137,7 +137,7 @@ function main() {
 
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
   git(['push', 'origin', branch], { stdio: 'inherit' });
-  console.log(`Push concluido em origin/${branch}.`);
+  console.log(`Push concluido em origin/${branch}. (Deploy Vercel: integracao GitHub ao receber o push.)`);
 }
 
 main();

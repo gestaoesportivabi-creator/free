@@ -79,6 +79,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/ciclo-de-feedback-scout-treino-72h-futsal</loc>
+    <lastmod>2026-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/en/why-database-beats-spreadsheet</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -133,6 +139,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/en/scout-training-feedback-loop-72h-futsal</loc>
+    <lastmod>2026-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/es/por-que-datos-en-la-base</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -183,6 +195,12 @@
   <url>
     <loc>https://scout21.vercel.app/blog/es/monitoreo-fisiologico-futsal-con-pse-psr-y-bienestar</loc>
     <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/ciclo-de-feedback-scout-entrenamiento-72h-futsal</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

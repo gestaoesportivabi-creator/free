@@ -876,4 +876,102 @@ export const POSTS_ES: BlogPost[] = [
       { type: 'cta-product', text: 'Mirá cómo el módulo de Fisiología de SCOUT 21 convierte la recolección en decisión.' },
     ],
   },
+  {
+    slug: 'ciclo-de-feedback-scout-entrenamiento-72h-futsal',
+    lang: 'es',
+    title: 'El ciclo de 72 horas entre scout y entrenamiento: cómo acortar la distancia entre observar y corregir',
+    subtitle:
+      'Un scout que se queda en un informe es solo descripción. Un scout que se transforma en corrección en el entrenamiento de la semana es decisión. El ciclo de 72 horas conecta ambos lados.',
+    date: '2026-04-22',
+    updatedDate: '2026-04-22',
+    readMinutes: 8,
+    author: 'Redacción SCOUT21',
+    heroEmoji: '🔁',
+    tags: ['scout', 'entrenamiento', 'metodología', 'feedback'],
+    excerpt:
+      'La mayoría de los clubes recolecta scout y devuelve feedback demasiado tarde — la semana siguiente, el próximo ciclo, la próxima entrevista. Cuando el dato llega después de que la memoria del partido se diluye, pierde fuerza. Un ciclo de 72 horas lo resuelve.',
+    keywords: [
+      'ciclo de feedback futsal',
+      'scout y entrenamiento futsal',
+      'metodología de entrenamiento futsal',
+      'post-partido futsal',
+      'corrección táctica futsal',
+      'microciclo competitivo',
+    ],
+    translations: {
+      pt: 'ciclo-de-feedback-scout-treino-72h-futsal',
+      en: 'scout-training-feedback-loop-72h-futsal',
+    },
+    coverImage: '/blog-covers/ciclo-de-feedback-scout-treino-72h-futsal.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Franco Monsalvo',
+      photographerUrl: 'https://www.pexels.com/@franco-monsalvo-252430633',
+      photoUrl: 'https://www.pexels.com/photo/soccer-coaches-discussing-strategy-outdoors-32101180/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Todo club sabe que debe hacer scout. Menos clubes saben qué pasa después. El informe queda listo, circula por el grupo del staff, finalmente se convierte en una charla con el plantel — pero, la mayoría de las veces, el entrenamiento de la semana siguiente ya fue planificado sin él. El scout describe el pasado, el entrenamiento mira hacia adelante, y los dos rara vez se encuentran en el lugar donde deberían: en la cancha, el martes.',
+      },
+      { type: 'h2', text: 'Por qué importa la ventana corta' },
+      {
+        type: 'p',
+        text:
+          'La memoria del plantel sobre el partido cae rápido. Pasados tres días, el cuerpo ya procesó la carga, la cabeza ya pasó al próximo rival, y aquella imagen exacta de cómo se rompió el bloqueo o de cómo falló la marca zonal empieza a volverse abstracción. Si la corrección entra al entrenamiento después de eso, compite con lo que está por suceder — y pierde.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Regla práctica',
+        text:
+          'El scout solo genera adaptación técnica real si vuelve al plantel antes del tercer entrenamiento post-partido. Después, la corrección compite con la preparación del próximo rival.',
+      },
+      { type: 'h2', text: 'El diseño de las 72 horas' },
+      {
+        type: 'p',
+        text:
+          'El ciclo no es complicado. Lo que cuesta es la disciplina de cumplir los tres cortes sin saltarse ninguno. Cada ventana tiene un objetivo claro, un responsable y un artefacto que debe existir al final.',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          '0–24h: scout técnico-táctico consolidado, con los tres a cinco puntos más importantes para el grupo — no la lista exhaustiva de eventos.',
+          '24–48h: charla en bloque con el plantel — video corto, lenguaje del entrenador, foco en el patrón, no en el error individual.',
+          '48–72h: primer entrenamiento con el ajuste aplicado, diseñado en situación real, con variaciones de presión que reproduzcan el escenario problemático del partido.',
+        ],
+      },
+      { type: 'h2', text: 'Lo que rompe el ciclo en la práctica' },
+      {
+        type: 'list',
+        items: [
+          'Scout demasiado pulido: informe de 20 páginas que nadie lee y que retrasa la devolución.',
+          'Video demasiado largo: un montaje de 15 minutos con cortes que el plantel ya no recuerda.',
+          'Entrenamiento desconectado: el entrenador conoce el scout, pero el plan de la semana ya estaba cerrado.',
+          'Pulverización: cada área del staff tiene su versión de la verdad y el plantel recibe señales contradictorias.',
+        ],
+      },
+      {
+        type: 'quote',
+        text:
+          'La corrección tardía se vuelve una charla. La corrección dentro de la ventana se vuelve entrenamiento. La diferencia está en el calendario, no en el ojo del analista.',
+      },
+      { type: 'h2', text: 'Cómo SCOUT 21 sostiene el ciclo' },
+      {
+        type: 'p',
+        text:
+          'Cuando scout, calendario, asistencia y entrenamiento viven en la misma base de datos, cerrar el ciclo en 72h deja de depender de fuerza de voluntad. El analista publica el scout, el staff marca los tres puntos priorizados, el entrenador arma el entrenamiento de la semana ya conectado a esos puntos, y el jugador ve la misma narrativa en cada momento del microciclo.',
+      },
+      { type: 'cta-newsletter', text: 'Recibí textos cortos sobre metodología, scout y rutina de club — directo a tu correo, sin ruido.' },
+      { type: 'h2', text: 'Cuando el ciclo se vuelve cultura' },
+      {
+        type: 'p',
+        text:
+          'Un ciclo cumplido una vez es suerte. Cumplido semana tras semana, se vuelve método. Y método, en el futsal, es lo que separa al club que repite un buen resultado del club que construye un buen año. El scout deja de ser una obligación de reporte y pasa a ser parte viva del entrenamiento — que es, al final, donde el equipo realmente se construye.',
+      },
+      { type: 'cta-product', text: 'Mirá cómo SCOUT 21 conecta scout, entrenamiento y análisis táctico en un solo flujo.' },
+    ],
+  },
 ];
