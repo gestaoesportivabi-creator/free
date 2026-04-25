@@ -527,7 +527,7 @@ export default function App() {
   }, [players]);
 
   const StatCard = ({ label, value, helper, highlight = false }: StatCardProps) => (
-    <div className="dashboard-stat-card rounded-lg border border-white/[0.08] bg-zinc-900/50 p-3 flex flex-col justify-center overflow-hidden min-w-0">
+    <div className="rounded-lg border border-white/[0.08] bg-zinc-900/50 p-3 flex flex-col justify-center overflow-hidden min-w-0">
       <p className="text-[9px] uppercase tracking-[0.25em] text-zinc-500 font-medium truncate">{label}</p>
       <p className={`mt-1 text-base font-medium truncate ${highlight ? 'text-slate-400' : 'text-zinc-300'}`} title={String(value)}>
         {value}
@@ -1899,9 +1899,9 @@ export default function App() {
           : null;
 
         return (
-          <div className="dashboard-overview-shell w-full rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:p-6 md:p-8 shadow-sm animate-fade-in overflow-x-hidden">
+          <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:p-6 md:p-8 shadow-sm animate-fade-in overflow-x-hidden">
             <div className="flex flex-col gap-6 sm:gap-8">
-              <header className="dashboard-overview-header border-b border-zinc-800 pb-4 shrink-0">
+              <header className="border-b border-zinc-800 pb-4 shrink-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <span className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-medium">Visão geral</span>
