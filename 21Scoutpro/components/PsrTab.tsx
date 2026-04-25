@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown, Save } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
@@ -71,6 +71,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
+  const [savingEventKey, setSavingEventKey] = useState<string | null>(null);
+  const [savedAtByEvent, setSavedAtByEvent] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -140,7 +142,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     return () => { mounted = false; };
   }, []);
 
-  const saveJogo = async (matchId: string, playerId: string, value: number | '') => {
+  const saveJogo = (matchId: string, playerId: string, value: number | '') => {
     setPsrJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
@@ -150,21 +152,9 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     });
     window.dispatchEvent(new Event('wellness-updated'));
 
-    if (value !== '') {
-      try {
-        await wellnessApi.saveBulk('psr-jogo', [{
-          jogoId: matchId,
-          jogadorId: playerId,
-          value,
-          valor: value,
-        }]);
-      } catch (e) {
-        console.error('Falha ao salvar PSR jogo', e);
-      }
-    }
   };
 
-  const saveTreino = async (sessionKey: string, playerId: string, value: number | '') => {
+  const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
     setPsrTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
@@ -174,24 +164,39 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     });
     window.dispatchEvent(new Event('wellness-updated'));
 
-    if (value !== '') {
-      const equipeId = resolveEquipeIdFromSchedules(schedules);
-      if (!equipeId) {
-        console.warn('[PSR treino] Sem equipeId nas programações; dados ficam só no navegador.');
+  };
+
+  const saveSessionToApi = async (ev: PsrEvent) => {
+    try {
+      setSavingEventKey(ev.eventKey);
+      if (ev.type === 'jogo') {
+        const values = psrJogos[ev.eventKey] || {};
+        const items = Object.entries(values)
+          .filter(([, value]) => typeof value === 'number')
+          .map(([jogadorId, value]) => ({ jogoId: ev.eventKey, jogadorId, value, valor: value }));
+        if (items.length === 0) return;
+        await wellnessApi.saveBulk('psr-jogo', items);
       } else {
-        try {
-          const datePart = sessionKey.split('_')[0];
-          await wellnessApi.saveBulk('psr-treino', [{
-            equipeId,
-            data: datePart,
-            jogadorId: playerId,
-            value,
-            valor: value,
-          }]);
-        } catch (e) {
-          console.error('Falha ao salvar PSR treino', e);
+        const equipeId = resolveEquipeIdFromSchedules(schedules);
+        if (!equipeId) {
+          alert('Não foi possível salvar no servidor: equipe não identificada na programação.');
+          return;
         }
+        const values = psrTreinos[ev.eventKey] || {};
+        const datePart = ev.eventKey.split('_')[0];
+        const items = Object.entries(values)
+          .filter(([, value]) => typeof value === 'number')
+          .map(([jogadorId, value]) => ({ equipeId, data: datePart, jogadorId, value, valor: value }));
+        if (items.length === 0) return;
+        await wellnessApi.saveBulk('psr-treino', items);
       }
+      setSavedAtByEvent(prev => ({ ...prev, [ev.eventKey]: new Date().toLocaleTimeString('pt-BR') }));
+      window.dispatchEvent(new Event('wellness-updated'));
+    } catch (err) {
+      console.error('Erro ao salvar sessão PSR no servidor:', err);
+      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+    } finally {
+      setSavingEventKey(null);
     }
   };
 
@@ -376,7 +381,27 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                 </button>
                 {isExpanded && (
                   <div className="p-4 pt-0 border-t border-zinc-800">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3">PSR por atleta (0-10, mais perto de 10 = melhor recuperado)</p>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="text-[10px] text-zinc-500 uppercase font-bold">PSR por atleta (0-10, mais perto de 10 = melhor recuperado)</p>
+                      <button
+                        type="button"
+                        onClick={() => saveSessionToApi(ev)}
+                        disabled={savingEventKey === ev.eventKey}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
+                          savingEventKey === ev.eventKey
+                            ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed'
+                            : 'bg-[#00f0ff]/15 border-[#00f0ff]/40 text-[#00f0ff] hover:bg-[#00f0ff]/25'
+                        }`}
+                      >
+                        <Save size={12} />
+                        {savingEventKey === ev.eventKey ? 'Salvando...' : 'Salvar sessão'}
+                      </button>
+                    </div>
+                    {savedAtByEvent[ev.eventKey] && (
+                      <p className="text-[10px] text-emerald-400 mb-3">
+                        Sessão salva no servidor às {savedAtByEvent[ev.eventKey]}.
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {activePlayers.map(player => {
                         const val = getStoredValue(ev, player.id);

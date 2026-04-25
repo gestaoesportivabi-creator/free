@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Brain, ChevronDown, ChevronRight } from 'lucide-react';
+import { Brain, ChevronDown, ChevronRight, Save } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
+import { wellnessApi } from '../services/api';
+import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 
 export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
@@ -68,11 +70,22 @@ const COMMIT_LABELS: Record<CommitType, string> = {
   musculacao: 'Musculação',
 };
 
-type WellnessData = Record<string, Record<string, Record<string, number>>>;
+type WellnessData = Record<string, Record<string, Partial<Record<WellnessDimensionKey, number>>>>;
 
 interface WellnessTabProps {
   players: Player[];
   schedules?: WeeklySchedule[];
+}
+
+function mergeWellnessData(base: WellnessData, incoming: WellnessData): WellnessData {
+  const out: WellnessData = { ...base };
+  Object.entries(incoming).forEach(([date, byPlayer]) => {
+    out[date] = { ...(out[date] || {}), ...(byPlayer || {}) };
+    Object.entries(byPlayer || {}).forEach(([playerId, dimensions]) => {
+      out[date][playerId] = { ...(out[date][playerId] || {}), ...(dimensions || {}) };
+    });
+  });
+  return out;
 }
 
 function buildCommitmentByDate(schedules: WeeklySchedule[]): Record<string, Set<CommitType>> {
@@ -106,6 +119,8 @@ function firstAllowedDate(commitmentByDate: Record<string, Set<CommitType>>, pre
 export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [] }) => {
   const [data, setData] = useState<WellnessData>({});
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
+  const [savingDate, setSavingDate] = useState<string | null>(null);
+  const [savedAtByDate, setSavedAtByDate] = useState<Record<string, string>>({});
 
   const commitmentByDate = useMemo(() => buildCommitmentByDate(schedules), [schedules]);
 
@@ -119,10 +134,35 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
   useEffect(() => {
+    let mounted = true;
     try {
       const raw = localStorage.getItem(WELLNESS_STORAGE_KEY);
-      if (raw) setData(JSON.parse(raw));
+      const localData: WellnessData = raw ? JSON.parse(raw) : {};
+      if (mounted) setData(localData);
+      wellnessApi.getAll('bem-estar-diario')
+        .then((apiRows: any[]) => {
+          if (!mounted || !Array.isArray(apiRows)) return;
+          const fromApi: WellnessData = {};
+          apiRows.forEach((row) => {
+            const date = new Date(row.data).toISOString().split('T')[0];
+            const playerId = String(row.jogador_id || '');
+            if (!date || !playerId) return;
+            if (!fromApi[date]) fromApi[date] = {};
+            fromApi[date][playerId] = {
+              stress: row.nivel_stress ?? undefined,
+              sono: row.qual_sono ?? undefined,
+              humor: row.humor_mot ?? undefined,
+              dor: row.dor_muscular ?? undefined,
+              satisfacao: row.satisfacao ?? undefined,
+            };
+          });
+          const merged = mergeWellnessData(fromApi, localData);
+          setData(merged);
+          try { localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(merged)); } catch (_) {}
+        })
+        .catch((err) => console.error('Erro ao carregar bem-estar diário:', err));
     } catch (_) {}
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -134,7 +174,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     }
   }, [commitmentByDate, selectedDate]);
 
-  const save = (playerId: string, dimension: string, value: number) => {
+  const save = (playerId: string, dimension: WellnessDimensionKey, value: number) => {
     if (!commitmentByDate[selectedDate]?.size) return;
     setData(prev => {
       const next = { ...prev };
@@ -147,6 +187,49 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       window.dispatchEvent(new Event('wellness-updated'));
       return next;
     });
+  };
+
+  const saveSelectedDateToApi = async () => {
+    try {
+      if (!selectedDayHasCommitment) {
+        alert('Selecione um dia com compromisso para salvar no servidor.');
+        return;
+      }
+      const equipeId = resolveEquipeIdFromSchedules(schedules);
+      if (!equipeId) {
+        alert('Não foi possível salvar no servidor: equipe não identificada na programação.');
+        return;
+      }
+      const byPlayer = data[selectedDate] || {};
+      const items = Object.entries(byPlayer).map(([jogadorId, values]) => ({
+        equipeId,
+        jogadorId,
+        data: selectedDate,
+        nivel_stress: values.stress ?? null,
+        qual_sono: values.sono ?? null,
+        humor_mot: values.humor ?? null,
+        dor_muscular: values.dor ?? null,
+        satisfacao: values.satisfacao ?? null,
+      })).filter(item =>
+        [item.nivel_stress, item.qual_sono, item.humor_mot, item.dor_muscular, item.satisfacao]
+          .some(v => typeof v === 'number')
+      );
+
+      if (items.length === 0) {
+        alert('Nenhum dado preenchido para salvar neste dia.');
+        return;
+      }
+
+      setSavingDate(selectedDate);
+      await wellnessApi.saveBulk('bem-estar-diario', items);
+      setSavedAtByDate(prev => ({ ...prev, [selectedDate]: new Date().toLocaleTimeString('pt-BR') }));
+      window.dispatchEvent(new Event('wellness-updated'));
+    } catch (err) {
+      console.error('Erro ao salvar bem-estar diário no servidor:', err);
+      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+    } finally {
+      setSavingDate(null);
+    }
   };
 
   const activePlayers = useMemo(() => players.filter(p => !p.isTransferred), [players]);
@@ -208,7 +291,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                 5 indicadores · escala 1–5 · só em dias com Treino, Jogo ou Musculação na programação ativa
               </p>
               <p className="text-zinc-600 text-[11px] mt-2 max-w-xl">
-                Stress e dor muscular: quanto menor o valor, melhor (1 = melhor). Demais indicadores: quanto maior, melhor (5 = melhor). Os registos desta aba ficam guardados neste navegador; ainda não há sincronização com o servidor.
+                Stress e dor muscular: quanto menor o valor, melhor (1 = melhor). Demais indicadores: quanto maior, melhor (5 = melhor). Depois de preencher, use o botão <strong>Salvar dia</strong> para enviar ao servidor.
               </p>
             </div>
             {teamAvgScore !== null && selectedDayHasCommitment && (
@@ -219,6 +302,27 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
               </div>
             )}
           </div>
+
+          <div className="flex items-center justify-end">
+            <button
+              type="button"
+              onClick={saveSelectedDateToApi}
+              disabled={savingDate === selectedDate}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-bold uppercase tracking-wide transition-colors ${
+                savingDate === selectedDate
+                  ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed'
+                  : 'bg-[#00f0ff]/15 border-[#00f0ff]/40 text-[#00f0ff] hover:bg-[#00f0ff]/25'
+              }`}
+            >
+              <Save size={14} />
+              {savingDate === selectedDate ? 'Salvando...' : 'Salvar dia'}
+            </button>
+          </div>
+          {savedAtByDate[selectedDate] && (
+            <p className="text-[11px] text-emerald-400 text-right -mt-3">
+              Dia salvo no servidor às {savedAtByDate[selectedDate]}.
+            </p>
+          )}
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
             <label htmlFor="wellness-date" className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wide">

@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
+import { randomUUID } from 'crypto';
 
 type WellnessType = 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono';
+type WellnessExtendedType = WellnessType | 'bem-estar-diario';
 
 const getModelInfo = (type: WellnessType) => {
   switch (type) {
@@ -23,9 +25,117 @@ function isAdminUser(req: Request): boolean {
 }
 
 export const wellnessController = {
+  async getBemEstarDiario(req: Request, res: Response): Promise<void> {
+    try {
+      const equipeIds = tenantEquipeIds(req);
+      const admin = isAdminUser(req);
+
+      if (!admin && equipeIds.length === 0) {
+        res.json({ success: true, data: [] });
+        return;
+      }
+
+      const data = await prisma.bem_estar_diario.findMany({
+        where: admin && equipeIds.length === 0 ? undefined : { equipe_id: { in: equipeIds } },
+        orderBy: { created_at: 'desc' },
+      });
+
+      res.json({ success: true, data });
+    } catch (error: unknown) {
+      console.error('Erro ao buscar dados de bem-estar diário:', error);
+      res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
+    }
+  },
+
+  async saveBemEstarDiarioBulk(req: Request, res: Response): Promise<void> {
+    try {
+      const { items } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ success: false, error: 'Lista de dados inválida.' });
+        return;
+      }
+
+      const equipeIds = tenantEquipeIds(req);
+      const admin = isAdminUser(req);
+
+      const clamp = (v: unknown): number | null => {
+        if (v === undefined || v === null || v === '') return null;
+        const n = Number(v);
+        if (Number.isNaN(n)) return null;
+        if (n < 1 || n > 5) return null;
+        return Math.round(n);
+      };
+
+      const results: unknown[] = [];
+
+      for (const item of items as Record<string, unknown>[]) {
+        const jogadorId = typeof item.jogadorId === 'string' ? item.jogadorId : '';
+        const equipeId = typeof item.equipeId === 'string' ? item.equipeId : '';
+        const dataRaw = item.data;
+        if (!jogadorId || !equipeId || (!dataRaw && dataRaw !== 0)) continue;
+
+        if (!admin) {
+          if (equipeIds.length === 0) continue;
+          if (!equipeIds.includes(equipeId)) continue;
+        }
+
+        const dataValue = new Date(dataRaw as string);
+        if (Number.isNaN(dataValue.getTime())) continue;
+
+        const payload = {
+          nivel_stress: clamp(item.nivel_stress),
+          qual_sono: clamp(item.qual_sono),
+          humor_mot: clamp(item.humor_mot),
+          dor_muscular: clamp(item.dor_muscular),
+          satisfacao: clamp(item.satisfacao),
+          observacoes: typeof item.observacoes === 'string' ? item.observacoes : null,
+        };
+
+        const existing = await prisma.bem_estar_diario.findFirst({
+          where: {
+            jogador_id: jogadorId,
+            data: dataValue,
+          },
+        });
+
+        if (existing) {
+          const updated = await prisma.bem_estar_diario.update({
+            where: { id: existing.id },
+            data: {
+              ...payload,
+              equipe_id: equipeId,
+              updated_at: new Date(),
+            },
+          });
+          results.push(updated);
+        } else {
+          const created = await prisma.bem_estar_diario.create({
+            data: {
+              id: randomUUID(),
+              equipe_id: equipeId,
+              jogador_id: jogadorId,
+              data: dataValue,
+              ...payload,
+            },
+          });
+          results.push(created);
+        }
+      }
+
+      res.status(200).json({ success: true, data: results });
+    } catch (error: unknown) {
+      console.error('Erro ao salvar bem-estar diário:', error);
+      res.status(500).json({ success: false, error: 'Erro ao salvar os dados.' });
+    }
+  },
+
   async getAll(req: Request, res: Response) {
     try {
-      const { type } = req.params as { type: WellnessType };
+      const { type } = req.params as { type: WellnessExtendedType };
+      if (type === 'bem-estar-diario') {
+        await this.getBemEstarDiario(req, res);
+        return;
+      }
       const { model, dateField } = getModelInfo(type);
 
       const equipeIds = tenantEquipeIds(req);
@@ -60,7 +170,11 @@ export const wellnessController = {
 
   async saveBulk(req: Request, res: Response): Promise<void> {
     try {
-      const { type } = req.params as { type: WellnessType };
+      const { type } = req.params as { type: WellnessExtendedType };
+      if (type === 'bem-estar-diario') {
+        await this.saveBemEstarDiarioBulk(req, res);
+        return;
+      }
       const { items } = req.body;
       const { model, idField, dateField } = getModelInfo(type);
 

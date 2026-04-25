@@ -538,11 +538,11 @@ export const adminApi = {
  */
 export const wellnessApi = {
   // Buscar histórico de um tipo
-  getAll: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono') => 
+  getAll: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono' | 'bem-estar-diario') => 
     get<any>(`wellness/${type}`),
   
   // Salvar em lote
-  saveBulk: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono', items: any[]) => 
+  saveBulk: (type: 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono' | 'bem-estar-diario', items: any[]) => 
     post<any>(`wellness/${type}/bulk`, { items }),
 };
 
