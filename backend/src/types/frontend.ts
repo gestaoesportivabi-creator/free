@@ -35,10 +35,6 @@ export interface InjuryRecord {
   origin: 'Treino' | 'Jogo' | 'Outros';
   startDate: string;
   endDate?: string;
-  /** Data limite de retorno (previsto) — YYYY-MM-DD */
-  returnDate?: string;
-  /** Data real de liberação — YYYY-MM-DD; no banco = data_fim */
-  returnDateActual?: string;
   daysOut?: number;
 }
 

@@ -317,13 +317,11 @@ export const playersService = {
           if (!startDate) continue;
           // dataFim = apenas retorno REAL (liberação); nunca usar returnDate (previsto) aqui
           const dataFimVal = inj.returnDateActual || inj.endDate;
-          const previstoRaw = inj.returnDate;
           await lesoesRepository.create({
             jogadorId: jogador.id,
             data: new Date(startDate),
             dataInicio: new Date(startDate),
             dataFim: dataFimVal ? new Date(dataFimVal) : null,
-            dataRetornoPrevisto: previstoRaw && String(previstoRaw).trim() ? new Date(String(previstoRaw).slice(0, 10)) : null,
             tipo: inj.type || 'Outros',
             localizacao: inj.location || 'Não informado',
             lado: inj.side || null,
@@ -407,13 +405,11 @@ export const playersService = {
         if (!startDate) continue;
         // dataFim = apenas retorno REAL (liberação); nunca usar returnDate (previsto) aqui
         const dataFimVal = inj.returnDateActual || inj.endDate;
-        const previstoRaw = inj.returnDate;
         await lesoesRepository.create({
           jogadorId: id,
           data: new Date(startDate),
           dataInicio: new Date(startDate),
           dataFim: dataFimVal ? new Date(dataFimVal) : null,
-          dataRetornoPrevisto: previstoRaw && String(previstoRaw).trim() ? new Date(String(previstoRaw).slice(0, 10)) : null,
           tipo: inj.type || 'Outros',
           localizacao: inj.location || 'Não informado',
           lado: inj.side || null,

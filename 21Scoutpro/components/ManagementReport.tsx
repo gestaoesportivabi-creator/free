@@ -186,10 +186,8 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
       const st = new Date(i.startDate || i.date || '');
       const end = i.endDate ? new Date(i.endDate) : i.returnDateActual ? new Date(i.returnDateActual) : new Date();
       totalDaysLost += i.daysOut || Math.max(0, Math.ceil((end.getTime() - st.getTime()) / (1000 * 60 * 60 * 24)));
-      const actualYmd = ((i.returnDateActual || i.endDate || '') as string).toString().slice(0, 10);
-      const expectedYmd = ((i.returnDate || '') as string).toString().slice(0, 10);
-      if (actualYmd && expectedYmd) {
-        if (actualYmd <= expectedYmd) recoveredInTime += 1;
+      if (i.returnDateActual && i.returnDate) {
+        if (i.returnDateActual <= i.returnDate) recoveredInTime += 1;
         else recoveredLate += 1;
       }
     });
