@@ -26,40 +26,6 @@ type LesaoDB = {
   createdAt: Date;
 };
 
-const LESAO_BASE_SELECT = {
-  id: true,
-  jogadorId: true,
-  data: true,
-  dataInicio: true,
-  dataFim: true,
-  tipo: true,
-  localizacao: true,
-  lado: true,
-  severidade: true,
-  origem: true,
-  diasAfastado: true,
-  createdAt: true,
-} as const;
-
-const LESAO_SELECT_WITH_PREDICTED = {
-  ...LESAO_BASE_SELECT,
-  dataRetornoPrevisto: true,
-} as const;
-
-function isMissingPredictedReturnColumnError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error || '');
-  return msg.includes('data_retorno_previsto') || msg.includes('dataRetornoPrevisto');
-}
-
-function withPredictedNullWhenMissing(
-  rows: Array<Omit<LesaoDB, 'dataRetornoPrevisto'> & { dataRetornoPrevisto?: Date | null }>
-): LesaoDB[] {
-  return rows.map((row) => ({
-    ...row,
-    dataRetornoPrevisto: row.dataRetornoPrevisto ?? null,
-  }));
-}
-
 export const lesoesRepository = {
   /**
    * Buscar lesões por jogadores (do tenant)
@@ -77,22 +43,10 @@ export const lesoesRepository = {
       select: { id: true },
     });
     const idsValidos = jogadoresValidos.map(j => j.id);
-    try {
-      const rows = await db(tx).lesao.findMany({
-        where: { jogadorId: { in: idsValidos } },
-        orderBy: { dataInicio: 'desc' },
-        select: LESAO_SELECT_WITH_PREDICTED,
-      });
-      return rows as LesaoDB[];
-    } catch (error) {
-      if (!isMissingPredictedReturnColumnError(error)) throw error;
-      const rows = await db(tx).lesao.findMany({
-        where: { jogadorId: { in: idsValidos } },
-        orderBy: { dataInicio: 'desc' },
-        select: LESAO_BASE_SELECT,
-      });
-      return withPredictedNullWhenMissing(rows as Array<Omit<LesaoDB, 'dataRetornoPrevisto'>>);
-    }
+    return db(tx).lesao.findMany({
+      where: { jogadorId: { in: idsValidos } },
+      orderBy: { dataInicio: 'desc' },
+    }) as Promise<LesaoDB[]>;
   },
 
   async findByJogador(jogadorId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<LesaoDB[]> {
@@ -106,22 +60,10 @@ export const lesoesRepository = {
       },
     });
     if (!jogador) return [];
-    try {
-      const rows = await db(tx).lesao.findMany({
-        where: { jogadorId },
-        orderBy: { dataInicio: 'desc' },
-        select: LESAO_SELECT_WITH_PREDICTED,
-      });
-      return rows as LesaoDB[];
-    } catch (error) {
-      if (!isMissingPredictedReturnColumnError(error)) throw error;
-      const rows = await db(tx).lesao.findMany({
-        where: { jogadorId },
-        orderBy: { dataInicio: 'desc' },
-        select: LESAO_BASE_SELECT,
-      });
-      return withPredictedNullWhenMissing(rows as Array<Omit<LesaoDB, 'dataRetornoPrevisto'>>);
-    }
+    return db(tx).lesao.findMany({
+      where: { jogadorId },
+      orderBy: { dataInicio: 'desc' },
+    }) as Promise<LesaoDB[]>;
   },
 
   async create(data: {
@@ -137,38 +79,21 @@ export const lesoesRepository = {
     origem?: string | null;
     diasAfastado?: number | null;
   }, tx?: TransactionClient): Promise<LesaoDB> {
-    const baseData = {
-      jogadorId: data.jogadorId,
-      data: data.data,
-      dataInicio: data.dataInicio,
-      dataFim: data.dataFim ?? null,
-      tipo: data.tipo,
-      localizacao: data.localizacao,
-      lado: data.lado ?? null,
-      severidade: data.severidade ?? null,
-      origem: data.origem ?? null,
-      diasAfastado: data.diasAfastado ?? null,
-    };
-    const createData = data.dataRetornoPrevisto
-      ? { ...baseData, dataRetornoPrevisto: data.dataRetornoPrevisto }
-      : baseData;
-    try {
-      const created = await db(tx).lesao.create({
-        data: createData as any,
-        select: LESAO_SELECT_WITH_PREDICTED,
-      });
-      return created as LesaoDB;
-    } catch (error) {
-      if (!isMissingPredictedReturnColumnError(error)) throw error;
-      const created = await db(tx).lesao.create({
-        data: baseData,
-        select: LESAO_BASE_SELECT,
-      });
-      const [normalized] = withPredictedNullWhenMissing([
-        created as Omit<LesaoDB, 'dataRetornoPrevisto'>,
-      ]);
-      return normalized;
-    }
+    return db(tx).lesao.create({
+      data: {
+        jogadorId: data.jogadorId,
+        data: data.data,
+        dataInicio: data.dataInicio,
+        dataFim: data.dataFim ?? null,
+        dataRetornoPrevisto: data.dataRetornoPrevisto ?? null,
+        tipo: data.tipo,
+        localizacao: data.localizacao,
+        lado: data.lado ?? null,
+        severidade: data.severidade ?? null,
+        origem: data.origem ?? null,
+        diasAfastado: data.diasAfastado ?? null,
+      },
+    }) as Promise<LesaoDB>;
   },
 };
 
