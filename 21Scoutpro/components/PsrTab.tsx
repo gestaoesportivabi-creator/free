@@ -142,17 +142,11 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     return () => { mounted = false; };
   }, []);
 
-  const normalizePsrValue = (value: number | ''): number | '' => {
-    if (value === '') return '';
-    return Math.max(0, Math.min(10, Math.round(value)));
-  };
-
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
-    const normalized = normalizePsrValue(value);
     setPsrJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
-      if (normalized === '') delete next[matchId][playerId];
-      else next[matchId][playerId] = normalized as number;
+      if (value === '') delete next[matchId][playerId];
+      else next[matchId][playerId] = value as number;
       try { localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -161,11 +155,10 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   };
 
   const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
-    const normalized = normalizePsrValue(value);
     setPsrTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
-      if (normalized === '') delete next[sessionKey][playerId];
-      else next[sessionKey][playerId] = normalized as number;
+      if (value === '') delete next[sessionKey][playerId];
+      else next[sessionKey][playerId] = value as number;
       try { localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
@@ -255,8 +248,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
           entries.map(([jogadorId, valor]) => ({
             jogoId: ev.eventKey,
             jogadorId,
-            value: Math.round(valor),
-            valor: Math.round(valor),
+            value: valor,
+            valor,
           }))
         );
       } else {
@@ -272,8 +265,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
             equipeId,
             data: datePart,
             jogadorId,
-            value: Math.round(valor),
-            valor: Math.round(valor),
+            value: valor,
+            valor,
           }))
         );
       }
@@ -436,14 +429,14 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                             type="number"
                             min={0}
                             max={10}
-                            step={1}
+                            step={0.5}
                             value={val}
                             onChange={e => {
                               const raw = e.target.value;
                               if (raw === '') saveValue(ev, player.id, '');
                               else {
                                 const v = parseFloat(raw);
-                                if (!Number.isNaN(v) && v >= 0 && v <= 10) saveValue(ev, player.id, Math.round(v));
+                                if (!Number.isNaN(v) && v >= 0 && v <= 10) saveValue(ev, player.id, v);
                               }
                             }}
                             onClick={e => e.stopPropagation()}
