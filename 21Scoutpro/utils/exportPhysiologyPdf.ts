@@ -122,6 +122,7 @@ export interface PhysiologyPdfData {
   wellnessRadarCloseness: number | null;
   injuryTypeData: { name: string; value: number }[];
   injurySideData: { direito: number; esquerdo: number };
+  acwrRows: { name: string; position: string; acute: number; chronic: number; acwr: number; risk: 'green' | 'yellow' | 'red' | 'none' }[];
   heatmapImageDataUrl?: string | null;
 }
 
@@ -440,6 +441,43 @@ export async function exportPhysiologyPdf(data: PhysiologyPdfData): Promise<void
       doc.setFontSize(10);
       doc.setTextColor(...COLORS.zinc500);
       doc.text('Não foi possível capturar o heatmap para exportação.', PAGE_WIDTH / 2, 90, { align: 'center' });
+    }
+
+    // --- PAGE 10: ACWR ---
+    newPage(doc, logo);
+    drawPageHeader(doc, logo, 'ACWR — RISCO DE LESÃO POR ATLETA');
+    const rows = data.acwrRows || [];
+    if (rows.length === 0) {
+      doc.setFontSize(10);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('Sem dados de ACWR no período', PAGE_WIDTH / 2, 90, { align: 'center' });
+    } else {
+      const startY = 34;
+      doc.setFontSize(8);
+      doc.setTextColor(...COLORS.zinc500);
+      doc.text('ATLETA', MARGIN, startY);
+      doc.text('POS', MARGIN + 70, startY);
+      doc.text('AGUDA', MARGIN + 92, startY, { align: 'right' });
+      doc.text('CRÔNICA', MARGIN + 118, startY, { align: 'right' });
+      doc.text('ACWR', MARGIN + 144, startY, { align: 'right' });
+      doc.text('RISCO', MARGIN + 170, startY, { align: 'right' });
+      let y = startY + 6;
+      rows.slice(0, 20).forEach(r => {
+        doc.setDrawColor(...COLORS.zinc700);
+        doc.line(MARGIN, y + 1, PAGE_WIDTH - MARGIN, y + 1);
+        doc.setTextColor(...COLORS.white);
+        doc.text(r.name, MARGIN, y);
+        doc.setTextColor(...COLORS.zinc500);
+        doc.text(r.position, MARGIN + 70, y);
+        doc.setTextColor(...COLORS.white);
+        doc.text(String(r.acute), MARGIN + 92, y, { align: 'right' });
+        doc.text(String(r.chronic), MARGIN + 118, y, { align: 'right' });
+        doc.text(String(r.acwr), MARGIN + 144, y, { align: 'right' });
+        const riskColor = r.risk === 'green' ? COLORS.emerald : r.risk === 'yellow' ? [234, 179, 8] as [number, number, number] : COLORS.red;
+        doc.setTextColor(...riskColor);
+        doc.text(r.risk === 'green' ? 'Seguro' : r.risk === 'yellow' ? 'Atenção' : 'Risco', MARGIN + 170, y, { align: 'right' });
+        y += 7;
+      });
     }
 
     doc.save(`fisiologia_${new Date().toISOString().slice(0, 10)}.pdf`);
