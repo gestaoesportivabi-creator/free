@@ -33,3 +33,5 @@ export const INJURY_LOCATIONS_BY_TYPE: Record<string, string[]> = {
 };
 
 export const WELLNESS_PAIN_LOCATION_OPTIONS = INJURY_LOCATIONS_BY_TYPE.Outros;
+export const WELLNESS_PAIN_TYPE_OPTIONS = ['Muscular', 'Trauma', 'Articular', 'Outros'] as const;
+export const WELLNESS_PAIN_SIDE_OPTIONS = ['Direito', 'Esquerdo', 'Bilateral', 'N/A'] as const;

@@ -4,7 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
-import { WELLNESS_PAIN_LOCATION_OPTIONS } from '../utils/injuryLocations';
+import { INJURY_LOCATIONS_BY_TYPE, WELLNESS_PAIN_SIDE_OPTIONS, WELLNESS_PAIN_TYPE_OPTIONS } from '../utils/injuryLocations';
 
 export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
@@ -72,6 +72,9 @@ const COMMIT_LABELS: Record<CommitType, string> = {
 };
 
 type WellnessPlayerEntry = Partial<Record<WellnessDimensionKey, number>> & {
+  painType?: string;
+  painLocation?: string;
+  painSide?: string;
   painLocations?: string[];
 };
 type WellnessData = Record<string, Record<string, WellnessPlayerEntry>>;
@@ -88,12 +91,34 @@ function parsePainLocationsFromObservacoes(observacoes: unknown): string[] {
   }
 }
 
+function parsePainMetaFromObservacoes(observacoes: unknown): { type?: string; location?: string; side?: string } {
+  if (typeof observacoes !== 'string' || !observacoes.trim()) return {};
+  try {
+    const parsed = JSON.parse(observacoes);
+    return {
+      type: typeof parsed?.painType === 'string' ? parsed.painType : undefined,
+      location: typeof parsed?.painLocation === 'string' ? parsed.painLocation : undefined,
+      side: typeof parsed?.painSide === 'string' ? parsed.painSide : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function buildObservacoesPayload(entry: WellnessPlayerEntry): string | null {
   const painLocations = Array.isArray(entry.painLocations)
     ? entry.painLocations.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
     : [];
-  if (painLocations.length === 0) return null;
-  return JSON.stringify({ painLocations });
+  const painType = typeof entry.painType === 'string' ? entry.painType : undefined;
+  const painLocation = typeof entry.painLocation === 'string' ? entry.painLocation : undefined;
+  const painSide = typeof entry.painSide === 'string' ? entry.painSide : undefined;
+  if (!painType && !painLocation && !painSide && painLocations.length === 0) return null;
+  return JSON.stringify({
+    painType,
+    painLocation,
+    painSide,
+    painLocations: painLocations.length > 0 ? painLocations : undefined,
+  });
 }
 
 interface WellnessTabProps {
@@ -172,12 +197,16 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
             const playerId = String(row.jogador_id || '');
             if (!date || !playerId) return;
             if (!fromApi[date]) fromApi[date] = {};
+            const painMeta = parsePainMetaFromObservacoes(row.observacoes);
             fromApi[date][playerId] = {
               stress: row.nivel_stress ?? undefined,
               sono: row.qual_sono ?? undefined,
               humor: row.humor_mot ?? undefined,
               dor: row.dor_muscular ?? undefined,
               satisfacao: row.satisfacao ?? undefined,
+              painType: painMeta.type,
+              painLocation: painMeta.location,
+              painSide: painMeta.side,
               painLocations: parsePainLocationsFromObservacoes(row.observacoes),
             };
           });
@@ -214,7 +243,10 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     });
   };
 
-  const setPainLocations = (playerId: string, locations: string[]) => {
+  const setPainMeta = (
+    playerId: string,
+    patch: Partial<Pick<WellnessPlayerEntry, 'painType' | 'painLocation' | 'painSide'>>
+  ) => {
     if (!commitmentByDate[selectedDate]?.size) return;
     setData(prev => {
       const next = { ...prev };
@@ -222,7 +254,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       if (!next[selectedDate][playerId]) next[selectedDate][playerId] = {};
       next[selectedDate][playerId] = {
         ...next[selectedDate][playerId],
-        painLocations: Array.from(new Set(locations)),
+        ...patch,
       };
       try {
         localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(next));
@@ -335,7 +367,11 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     activePlayers.forEach((player) => {
       const entry = data[selectedDate]?.[player.id];
       if (!entry || typeof entry.dor !== 'number') return;
-      const unique = Array.from(new Set(entry.painLocations || []));
+      const chosenLocation =
+        (typeof entry.painLocation === 'string' && entry.painLocation.trim())
+          ? entry.painLocation
+          : (entry.painLocations?.[0] || '');
+      const unique = chosenLocation ? [chosenLocation] : [];
       unique.forEach((loc) => {
         counts[loc] = (counts[loc] || 0) + 1;
       });
@@ -517,7 +553,13 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                         {WELLNESS_DIMENSIONS.map(dim => {
                           const current = data[selectedDate]?.[player.id]?.[dim.key];
-                          const selectedPainLocations = data[selectedDate]?.[player.id]?.painLocations || [];
+                          const painType = data[selectedDate]?.[player.id]?.painType || 'Muscular';
+                          const painLocation =
+                            data[selectedDate]?.[player.id]?.painLocation
+                            || data[selectedDate]?.[player.id]?.painLocations?.[0]
+                            || '';
+                          const painSide = data[selectedDate]?.[player.id]?.painSide || 'N/A';
+                          const locationOptions = INJURY_LOCATIONS_BY_TYPE[painType] || INJURY_LOCATIONS_BY_TYPE.Outros;
                           return (
                             <div key={dim.key} className="bg-black/50 rounded-xl p-3 border border-zinc-800">
                               <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">
@@ -543,31 +585,51 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                               {dim.key === 'dor' && typeof current === 'number' && (
                                 <div className="mt-3 space-y-2">
                                   <p className="text-[10px] text-zinc-500 font-bold uppercase">
-                                    Locais de dor / trauma / articulações (aba médica)
+                                    Detalhamento da dor (aba médica)
                                   </p>
-                                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-auto pr-1">
-                                    {WELLNESS_PAIN_LOCATION_OPTIONS.map((location) => {
-                                      const active = selectedPainLocations.includes(location);
-                                      return (
-                                        <button
-                                          key={location}
-                                          type="button"
-                                          onClick={() => {
-                                            const next = active
-                                              ? selectedPainLocations.filter((x) => x !== location)
-                                              : [...selectedPainLocations, location];
-                                            setPainLocations(player.id, next);
-                                          }}
-                                          className={`px-2 py-1 rounded-md text-[10px] border transition-colors ${
-                                            active
-                                              ? 'bg-red-500/20 border-red-500/50 text-red-200'
-                                              : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'
-                                          }`}
-                                        >
-                                          {location}
-                                        </button>
-                                      );
-                                    })}
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div>
+                                      <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Tipo</label>
+                                      <select
+                                        value={painType}
+                                        onChange={(e) => {
+                                          const nextType = e.target.value;
+                                          const nextOptions = INJURY_LOCATIONS_BY_TYPE[nextType] || INJURY_LOCATIONS_BY_TYPE.Outros;
+                                          const nextLocation = nextOptions.includes(painLocation) ? painLocation : nextOptions[0];
+                                          setPainMeta(player.id, { painType: nextType, painLocation: nextLocation });
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white text-xs"
+                                      >
+                                        {WELLNESS_PAIN_TYPE_OPTIONS.map((type) => (
+                                          <option key={type} value={type}>{type}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Local</label>
+                                      <select
+                                        value={painLocation}
+                                        onChange={(e) => setPainMeta(player.id, { painLocation: e.target.value })}
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white text-xs"
+                                      >
+                                        <option value="">Selecione</option>
+                                        {locationOptions.map((location) => (
+                                          <option key={location} value={location}>{location}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Lado do corpo</label>
+                                      <select
+                                        value={painSide}
+                                        onChange={(e) => setPainMeta(player.id, { painSide: e.target.value })}
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-white text-xs"
+                                      >
+                                        {WELLNESS_PAIN_SIDE_OPTIONS.map((side) => (
+                                          <option key={side} value={side}>{side}</option>
+                                        ))}
+                                      </select>
+                                    </div>
                                   </div>
                                 </div>
                               )}
