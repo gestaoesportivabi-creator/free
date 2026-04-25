@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen } from 'lucide-react';
 import { User } from '../types';
 
-const LOGO_DARK_IMAGE = '/public-logo-dark.png';
-const LOGO_LIGHT_IMAGE = '/public-logo-light.png';
-const LOGO_FALLBACK_IMAGE = '/public-logo.png.png';
+// Importação explícita da logo oficial
+const LOGO_IMAGE = '/public-logo.png.png';
 
 interface MenuItem {
   id: string;
@@ -41,10 +40,9 @@ interface SidebarProps {
   isFreePlan?: boolean;
   /** Performance / admin: Fisiologia sem ícone de cadeado no menu */
   fisiologiaUnlocked?: boolean;
-  themeMode?: 'dark' | 'light';
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false, fisiologiaUnlocked = false, themeMode = 'dark' }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false, fisiologiaUnlocked = false }) => {
   const canAccessAdminPanel = Boolean(
     currentUser?.isPlatformAdmin || currentUser?.planName === 'ADMINISTRADOR'
   );
@@ -125,8 +123,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
     if (open) closeButtonRef.current?.focus();
   }, [open]);
 
-  const logoByTheme = themeMode === 'light' ? LOGO_LIGHT_IMAGE : LOGO_DARK_IMAGE;
-
   return (
     <div
       className={`sidebar-drawer w-64 bg-black h-screen fixed left-0 top-0 text-zinc-400 flex flex-col border-r border-zinc-900 z-50 shadow-2xl print:hidden transition-all duration-300 ease-out md:translate-x-0 ${retracted ? 'md:w-16' : 'md:w-64'} ${open ? 'translate-x-0' : '-translate-x-full'}`}
@@ -137,13 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       <div className={`h-24 flex items-center justify-between gap-4 border-b border-zinc-900 bg-black shrink-0 ${retracted ? 'px-2 md:flex-col md:justify-center md:gap-1' : 'px-4 pr-2'}`}>
         <div className={`flex items-center gap-4 min-w-0 ${retracted ? 'md:flex-col md:gap-1' : ''}`}>
         <img
-          src={logoByTheme}
-          onError={(event) => {
-            const target = event.currentTarget;
-            if (!target.src.endsWith(LOGO_FALLBACK_IMAGE)) {
-              target.src = LOGO_FALLBACK_IMAGE;
-            }
-          }}
+          src={LOGO_IMAGE}
           alt="SCOUT21"
           className={`shrink-0 object-contain object-left ${retracted ? 'h-9 w-auto max-w-[2.75rem]' : 'h-11 md:h-12 w-auto'}`}
         />
