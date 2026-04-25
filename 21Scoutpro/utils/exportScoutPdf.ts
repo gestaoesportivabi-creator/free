@@ -79,38 +79,6 @@ function isLightModeActive(): boolean {
   return document.documentElement.getAttribute('data-theme') === 'light';
 }
 
-async function recolorMonochromeLogo(
-  logo: { dataUrl: string; width: number; height: number },
-  rgb: [number, number, number]
-): Promise<{ dataUrl: string; width: number; height: number }> {
-  try {
-    const img = new Image();
-    img.src = logo.dataUrl;
-    await new Promise<void>((resolve) => {
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-    });
-    const c = document.createElement('canvas');
-    c.width = logo.width;
-    c.height = logo.height;
-    const ctx = c.getContext('2d');
-    if (!ctx) return logo;
-    ctx.drawImage(img, 0, 0);
-    const id = ctx.getImageData(0, 0, c.width, c.height);
-    const px = id.data;
-    for (let i = 0; i < px.length; i += 4) {
-      if (px[i + 3] === 0) continue;
-      px[i] = rgb[0];
-      px[i + 1] = rgb[1];
-      px[i + 2] = rgb[2];
-    }
-    ctx.putImageData(id, 0, 0);
-    return { dataUrl: c.toDataURL('image/png'), width: logo.width, height: logo.height };
-  } catch {
-    return logo;
-  }
-}
-
 function applyPdfThemeFromUi(): void {
   if (isLightModeActive()) {
     COLORS.black = [255, 255, 255];
@@ -454,13 +422,10 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
 
     try {
       const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
-      const [logoPdfRaw, teamShieldPdf] = await Promise.all([
+      const [logoPdf, teamShieldPdf] = await Promise.all([
         loadLogoForPdf(),
         loadTeamShieldForPdf(data.teamShieldUrl),
       ]);
-      const logoPdf = logoPdfRaw
-        ? await recolorMonochromeLogo(logoPdfRaw, isLightModeActive() ? [0, 0, 0] : [255, 255, 255])
-        : null;
       const logoBase64 = logoPdf?.dataUrl ?? null;
       const logoDims = logoPdf ? { width: logoPdf.width, height: logoPdf.height } : null;
 
