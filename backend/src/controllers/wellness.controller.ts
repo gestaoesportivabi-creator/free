@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { randomUUID } from 'crypto';
 import prisma from '../config/database';
 
-type WellnessType = 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono' | 'bem-estar-diario';
+type WellnessType = 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono';
 
 const getModelInfo = (type: WellnessType) => {
   switch (type) {
@@ -23,87 +22,10 @@ function isAdminUser(req: Request): boolean {
   return req.user?.role_id === 'ADMINISTRADOR';
 }
 
-async function getBemEstarDiario(req: Request, res: Response): Promise<void> {
-  const equipeIds = tenantEquipeIds(req);
-  const admin = isAdminUser(req);
-  if (!admin && equipeIds.length === 0) {
-    res.json({ success: true, data: [] });
-    return;
-  }
-  const where = admin && equipeIds.length === 0 ? {} : { equipe_id: { in: equipeIds } };
-  const data = await prisma.bem_estar_diario.findMany({
-    where,
-    orderBy: { created_at: 'desc' },
-  });
-  res.json({ success: true, data });
-}
-
-async function saveBemEstarDiarioBulk(req: Request, res: Response): Promise<void> {
-  const { items } = req.body as { items?: Array<Record<string, unknown>> };
-  if (!Array.isArray(items) || items.length === 0) {
-    res.status(400).json({ success: false, error: 'Lista de dados inválida.' });
-    return;
-  }
-  const equipeIds = tenantEquipeIds(req);
-  const admin = isAdminUser(req);
-  const results: unknown[] = [];
-  for (const item of items) {
-    const equipeId = item.equipeId;
-    const jogadorId = item.jogadorId;
-    const data = item.data;
-    if (
-      typeof equipeId !== 'string' ||
-      typeof jogadorId !== 'string' ||
-      (!admin && (equipeIds.length === 0 || !equipeIds.includes(equipeId))) ||
-      (typeof data !== 'string' && typeof data !== 'number')
-    ) {
-      continue;
-    }
-    const day = new Date(data as string);
-    const existing = await prisma.bem_estar_diario.findFirst({
-      where: { equipe_id: equipeId, jogador_id: jogadorId, data: day },
-      select: { id: true },
-    });
-    const updateData = {
-      nivel_stress: typeof item.stress === 'number' ? item.stress : null,
-      qual_sono: typeof item.sono === 'number' ? item.sono : null,
-      humor_mot: typeof item.humor === 'number' ? item.humor : null,
-      dor_muscular: typeof item.dor === 'number' ? item.dor : null,
-      satisfacao: typeof item.satisfacao === 'number' ? item.satisfacao : null,
-      observacoes: typeof item.observacoes === 'string' ? item.observacoes : null,
-      updated_at: new Date(),
-    };
-    if (existing) {
-      const updated = await prisma.bem_estar_diario.update({
-        where: { id: existing.id },
-        data: updateData,
-      });
-      results.push(updated);
-    } else {
-      const created = await prisma.bem_estar_diario.create({
-        data: {
-          id: randomUUID(),
-          equipe_id: equipeId,
-          jogador_id: jogadorId,
-          data: day,
-          created_at: new Date(),
-          ...updateData,
-        },
-      });
-      results.push(created);
-    }
-  }
-  res.status(200).json({ success: true, data: results });
-}
-
 export const wellnessController = {
   async getAll(req: Request, res: Response) {
     try {
       const { type } = req.params as { type: WellnessType };
-      if (type === 'bem-estar-diario') {
-        await getBemEstarDiario(req, res);
-        return;
-      }
       const { model, dateField } = getModelInfo(type);
 
       const equipeIds = tenantEquipeIds(req);
@@ -139,10 +61,6 @@ export const wellnessController = {
   async saveBulk(req: Request, res: Response): Promise<void> {
     try {
       const { type } = req.params as { type: WellnessType };
-      if (type === 'bem-estar-diario') {
-        await saveBemEstarDiarioBulk(req, res);
-        return;
-      }
       const { items } = req.body;
       const { model, idField, dateField } = getModelInfo(type);
 

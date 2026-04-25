@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown, Save } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronRight, Calendar, Trophy, Search, ChevronsUpDown } from 'lucide-react';
 import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
@@ -71,8 +71,6 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [playerSearch, setPlayerSearch] = useState('');
-  const [savingEventKey, setSavingEventKey] = useState<string | null>(null);
-  const [savedAtByEvent, setSavedAtByEvent] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -142,7 +140,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     return () => { mounted = false; };
   }, []);
 
-  const saveJogo = (matchId: string, playerId: string, value: number | '') => {
+  const saveJogo = async (matchId: string, playerId: string, value: number | '') => {
     setPsrJogos(prev => {
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
@@ -152,9 +150,21 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     });
     window.dispatchEvent(new Event('wellness-updated'));
 
+    if (value !== '') {
+      try {
+        await wellnessApi.saveBulk('psr-jogo', [{
+          jogoId: matchId,
+          jogadorId: playerId,
+          value,
+          valor: value,
+        }]);
+      } catch (e) {
+        console.error('Falha ao salvar PSR jogo', e);
+      }
+    }
   };
 
-  const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
+  const saveTreino = async (sessionKey: string, playerId: string, value: number | '') => {
     setPsrTreinos(prev => {
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
@@ -164,6 +174,25 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     });
     window.dispatchEvent(new Event('wellness-updated'));
 
+    if (value !== '') {
+      const equipeId = resolveEquipeIdFromSchedules(schedules);
+      if (!equipeId) {
+        console.warn('[PSR treino] Sem equipeId nas programações; dados ficam só no navegador.');
+      } else {
+        try {
+          const datePart = sessionKey.split('_')[0];
+          await wellnessApi.saveBulk('psr-treino', [{
+            equipeId,
+            data: datePart,
+            jogadorId: playerId,
+            value,
+            valor: value,
+          }]);
+        } catch (e) {
+          console.error('Falha ao salvar PSR treino', e);
+        }
+      }
+    }
   };
 
   const events = useMemo((): PsrEvent[] => {
@@ -232,52 +261,6 @@ export const PsrTab: React.FC<PsrTabProps> = ({
   const saveValue = (ev: PsrEvent, playerId: string, value: number | '') => {
     if (ev.type === 'jogo') saveJogo(ev.eventKey, playerId, value);
     else saveTreino(ev.eventKey, playerId, value);
-  };
-
-  const saveSessionToApi = async (ev: PsrEvent) => {
-    const entries = Object.entries(resolveEventData(ev) || {}).filter(([, v]) => typeof v === 'number' && v >= 0 && v <= 10);
-    if (entries.length === 0) {
-      alert('Preencha ao menos um atleta para salvar esta sessão.');
-      return;
-    }
-    try {
-      setSavingEventKey(ev.eventKey);
-      if (ev.type === 'jogo') {
-        await wellnessApi.saveBulk(
-          'psr-jogo',
-          entries.map(([jogadorId, valor]) => ({
-            jogoId: ev.eventKey,
-            jogadorId,
-            value: valor,
-            valor,
-          }))
-        );
-      } else {
-        const equipeId = resolveEquipeIdFromSchedules(schedules);
-        if (!equipeId) {
-          alert('Não foi possível identificar a equipe da programação para sincronizar esta sessão.');
-          return;
-        }
-        const datePart = ev.eventKey.split('_')[0];
-        await wellnessApi.saveBulk(
-          'psr-treino',
-          entries.map(([jogadorId, valor]) => ({
-            equipeId,
-            data: datePart,
-            jogadorId,
-            value: valor,
-            valor,
-          }))
-        );
-      }
-      setSavedAtByEvent(prev => ({ ...prev, [ev.eventKey]: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }));
-      alert('Sessão salva com sucesso e sincronizada para outros dispositivos.');
-    } catch (err) {
-      console.error('Erro ao salvar sessão de PSR:', err);
-      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
-    } finally {
-      setSavingEventKey(null);
-    }
   };
 
   const activePlayers = useMemo(() => {
@@ -393,25 +376,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                 </button>
                 {isExpanded && (
                   <div className="p-4 pt-0 border-t border-zinc-800">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">PSR por atleta (0-10, mais perto de 10 = melhor recuperado)</p>
-                      <div className="flex items-center gap-2">
-                        {savedAtByEvent[ev.eventKey] && (
-                          <span className="text-[10px] font-bold uppercase text-emerald-400">
-                            Salvo {savedAtByEvent[ev.eventKey]}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => saveSessionToApi(ev)}
-                          disabled={savingEventKey === ev.eventKey}
-                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-600 bg-emerald-900/30 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-300 transition hover:bg-emerald-800/40 disabled:opacity-60"
-                        >
-                          <Save size={12} />
-                          {savingEventKey === ev.eventKey ? 'Salvando...' : 'Salvar sessão'}
-                        </button>
-                      </div>
-                    </div>
+                    <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3">PSR por atleta (0-10, mais perto de 10 = melhor recuperado)</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {activePlayers.map(player => {
                         const val = getStoredValue(ev, player.id);
