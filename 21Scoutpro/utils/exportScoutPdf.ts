@@ -49,7 +49,7 @@ function loadWhatsAppIconPng(): Promise<string | null> {
 }
 
 // Cores da marca (RGB para jsPDF)
-let COLORS = {
+const COLORS = {
   cyan: [0, 240, 255] as [number, number, number],
   blueDark: [37, 99, 235] as [number, number, number],
   blueMedium: [59, 130, 246] as [number, number, number],
@@ -73,25 +73,6 @@ let COLORS = {
   white: [255, 255, 255] as [number, number, number],
   gray: [100, 100, 100] as [number, number, number],
 };
-
-function isLightModeActive(): boolean {
-  if (typeof document === 'undefined') return false;
-  return document.documentElement.getAttribute('data-theme') === 'light';
-}
-
-function applyPdfThemeFromUi(): void {
-  if (isLightModeActive()) {
-    COLORS.black = [255, 255, 255];
-    COLORS.white = [17, 24, 39];
-    COLORS.gray = [82, 82, 91];
-    COLORS.slate = [82, 82, 91];
-  } else {
-    COLORS.black = [0, 0, 0];
-    COLORS.white = [255, 255, 255];
-    COLORS.gray = [100, 100, 100];
-    COLORS.slate = [113, 113, 122];
-  }
-}
 
 // Cores para donuts (hex -> RGB)
 const PIE_COLORS_SCORED = [[0, 153, 163], [74, 141, 232], [45, 106, 216], [29, 79, 214], [22, 51, 140], [10, 139, 196], [90, 90, 98]] as [number, number, number][];
@@ -407,7 +388,6 @@ function newPageWithWatermark(
 
 export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
   return new Promise(async (resolve, reject) => {
-    applyPdfThemeFromUi();
     const overlay = document.createElement('div');
     overlay.id = 'pdf-export-overlay';
     overlay.style.cssText = `
