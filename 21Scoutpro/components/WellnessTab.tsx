@@ -4,6 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
+import { WELLNESS_PAIN_LOCATION_OPTIONS } from '../utils/injuryLocations';
 
 export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
@@ -70,7 +71,30 @@ const COMMIT_LABELS: Record<CommitType, string> = {
   musculacao: 'Musculação',
 };
 
-type WellnessData = Record<string, Record<string, Partial<Record<WellnessDimensionKey, number>>>>;
+type WellnessPlayerEntry = Partial<Record<WellnessDimensionKey, number>> & {
+  painLocations?: string[];
+};
+type WellnessData = Record<string, Record<string, WellnessPlayerEntry>>;
+
+function parsePainLocationsFromObservacoes(observacoes: unknown): string[] {
+  if (typeof observacoes !== 'string' || !observacoes.trim()) return [];
+  try {
+    const parsed = JSON.parse(observacoes);
+    const list = parsed?.painLocations;
+    if (!Array.isArray(list)) return [];
+    return list.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function buildObservacoesPayload(entry: WellnessPlayerEntry): string | null {
+  const painLocations = Array.isArray(entry.painLocations)
+    ? entry.painLocations.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    : [];
+  if (painLocations.length === 0) return null;
+  return JSON.stringify({ painLocations });
+}
 
 interface WellnessTabProps {
   players: Player[];
@@ -154,6 +178,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
               humor: row.humor_mot ?? undefined,
               dor: row.dor_muscular ?? undefined,
               satisfacao: row.satisfacao ?? undefined,
+              painLocations: parsePainLocationsFromObservacoes(row.observacoes),
             };
           });
           const merged = mergeWellnessData(fromApi, localData);
@@ -189,6 +214,24 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     });
   };
 
+  const setPainLocations = (playerId: string, locations: string[]) => {
+    if (!commitmentByDate[selectedDate]?.size) return;
+    setData(prev => {
+      const next = { ...prev };
+      if (!next[selectedDate]) next[selectedDate] = {};
+      if (!next[selectedDate][playerId]) next[selectedDate][playerId] = {};
+      next[selectedDate][playerId] = {
+        ...next[selectedDate][playerId],
+        painLocations: Array.from(new Set(locations)),
+      };
+      try {
+        localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(next));
+      } catch (_) {}
+      window.dispatchEvent(new Event('wellness-updated'));
+      return next;
+    });
+  };
+
   const saveSelectedDateToApi = async () => {
     try {
       if (!selectedDayHasCommitment) {
@@ -210,6 +253,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
         humor_mot: values.humor ?? null,
         dor_muscular: values.dor ?? null,
         satisfacao: values.satisfacao ?? null,
+        observacoes: buildObservacoesPayload(values),
       })).filter(item =>
         [item.nivel_stress, item.qual_sono, item.humor_mot, item.dor_muscular, item.satisfacao]
           .some(v => typeof v === 'number')
@@ -266,10 +310,61 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     return scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null;
   }, [activePlayers, getPlayerScore]);
 
+  const averageByIndicator = useMemo(() => {
+    const out: Record<WellnessDimensionKey, number | null> = {
+      stress: null,
+      sono: null,
+      humor: null,
+      dor: null,
+      satisfacao: null,
+    };
+    WELLNESS_DIMENSION_KEYS.forEach((key) => {
+      const values = activePlayers
+        .map((p) => data[selectedDate]?.[p.id]?.[key])
+        .filter((v): v is number => typeof v === 'number');
+      out[key] = values.length > 0
+        ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10
+        : null;
+    });
+    return out;
+  }, [activePlayers, data, selectedDate]);
+
+  const painLocationStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const denominator = Math.max(activePlayers.length, 1);
+    activePlayers.forEach((player) => {
+      const entry = data[selectedDate]?.[player.id];
+      if (!entry || typeof entry.dor !== 'number') return;
+      const unique = Array.from(new Set(entry.painLocations || []));
+      unique.forEach((loc) => {
+        counts[loc] = (counts[loc] || 0) + 1;
+      });
+    });
+    return Object.entries(counts)
+      .map(([location, count]) => ({
+        location,
+        count,
+        percentage: Math.round((count / denominator) * 100),
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [activePlayers, data, selectedDate]);
+
   const scoreColor = (s: number | null) => {
     if (s === null) return 'text-zinc-500';
     if (s >= 4) return 'text-emerald-400';
     if (s >= 3) return 'text-amber-400';
+    return 'text-red-400';
+  };
+
+  const indicatorAvgColor = (dim: WellnessDimensionKey, value: number | null) => {
+    if (value === null) return 'text-zinc-500';
+    if (LOWER_IS_BETTER_DIMS.has(dim)) {
+      if (value <= 2) return 'text-emerald-400';
+      if (value <= 3) return 'text-amber-400';
+      return 'text-red-400';
+    }
+    if (value >= 4) return 'text-emerald-400';
+    if (value >= 3) return 'text-amber-400';
     return 'text-red-400';
   };
 
@@ -323,6 +418,34 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
               Dia salvo no servidor às {savedAtByDate[selectedDate]}.
             </p>
           )}
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {WELLNESS_DIMENSIONS.map((dim) => (
+              <div key={dim.key} className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+                <p className="text-[10px] text-zinc-500 font-bold uppercase truncate">{dim.label}</p>
+                <p className={`text-base font-black ${indicatorAvgColor(dim.key, averageByIndicator[dim.key])}`}>
+                  {averageByIndicator[dim.key] != null ? averageByIndicator[dim.key] : '—'}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+            <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">
+              Alerta · percentual de atletas com dor por local
+            </p>
+            {painLocationStats.length === 0 ? (
+              <p className="text-[11px] text-zinc-500">Sem locais de dor apontados no dia selecionado.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {painLocationStats.slice(0, 8).map((item) => (
+                  <span key={item.location} className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-semibold">
+                    {item.location}: {item.percentage}%
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4 space-y-3">
             <label htmlFor="wellness-date" className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
@@ -394,6 +517,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                         {WELLNESS_DIMENSIONS.map(dim => {
                           const current = data[selectedDate]?.[player.id]?.[dim.key];
+                          const selectedPainLocations = data[selectedDate]?.[player.id]?.painLocations || [];
                           return (
                             <div key={dim.key} className="bg-black/50 rounded-xl p-3 border border-zinc-800">
                               <p className="text-[10px] text-zinc-500 font-bold uppercase mb-2">
@@ -416,6 +540,37 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
                                   </button>
                                 ))}
                               </div>
+                              {dim.key === 'dor' && typeof current === 'number' && (
+                                <div className="mt-3 space-y-2">
+                                  <p className="text-[10px] text-zinc-500 font-bold uppercase">
+                                    Locais de dor / trauma / articulações (aba médica)
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-auto pr-1">
+                                    {WELLNESS_PAIN_LOCATION_OPTIONS.map((location) => {
+                                      const active = selectedPainLocations.includes(location);
+                                      return (
+                                        <button
+                                          key={location}
+                                          type="button"
+                                          onClick={() => {
+                                            const next = active
+                                              ? selectedPainLocations.filter((x) => x !== location)
+                                              : [...selectedPainLocations, location];
+                                            setPainLocations(player.id, next);
+                                          }}
+                                          className={`px-2 py-1 rounded-md text-[10px] border transition-colors ${
+                                            active
+                                              ? 'bg-red-500/20 border-red-500/50 text-red-200'
+                                              : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'
+                                          }`}
+                                        >
+                                          {location}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

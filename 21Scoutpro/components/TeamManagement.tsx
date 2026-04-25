@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
 import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
+import { INJURY_LOCATIONS_BY_TYPE } from '../utils/injuryLocations';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
 const BIRTH_DATE_MIN_ISO = '1950-01-01';
@@ -221,44 +222,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
     const birthDateMaxIso = getBirthDateMaxIsoLocal();
 
-    // Mapeamento de tipos de lesão para locais possíveis (heatmap: utils/physiologyHeatmapMap.ts)
-    const INJURY_LOCATIONS_BY_TYPE: Record<string, string[]> = {
-        'Muscular': [
-            'Coxa Posterior', 'Coxa Anterior', 'Quadríceps', 'Isquiostibiais',
-            'Panturrilha', 'Glúteo', 'Adutor', 'Bíceps Braquial', 'Tríceps',
-            'Tendão de Aquiles', 'Tendão Patelar'
-        ],
-        'Trauma': [
-            'Tornozelo', 'Joelho', 'Pé', 'Dedos do Pé', 'Calcâneo', 'Metatarso',
-            'Fêmur', 'Tíbia', 'Fíbula', 'Ombro', 'Braço', 'Antebraço', 'Punho',
-            'Mão', 'Dedos da Mão', 'Úmero', 'Rádio', 'Ulna', 'Clavícula',
-            'Escápula', 'Esternão', 'Costelas', 'Cabeça', 'Face', 'Mandíbula',
-            'Dentes', 'Nariz', 'Olho', 'Orelha'
-        ],
-        'Articular': [
-            'Joelho', 'Tornozelo', 'Ombro', 'Punho', 'Quadril', 'Cotovelo',
-            'Ligamento Cruzado Anterior', 'Ligamento Cruzado Posterior',
-            'Ligamento Colateral Medial', 'Ligamento Colateral Lateral',
-            'Menisco', 'Coluna Cervical', 'Coluna Torácica', 'Coluna Lombar'
-        ],
-        'Outros': [
-            'Coxa Posterior', 'Coxa Anterior', 'Quadríceps', 'Isquiostibiais',
-            'Panturrilha', 'Tornozelo', 'Joelho', 'Pé', 'Dedos do Pé', 'Calcâneo',
-            'Metatarso', 'Fêmur', 'Tíbia', 'Fíbula', 'Glúteo', 'Adutor',
-            'Ombro', 'Braço', 'Bíceps Braquial', 'Tríceps', 'Antebraço', 'Punho',
-            'Mão', 'Dedos da Mão', 'Úmero', 'Rádio', 'Ulna', 'Clavícula',
-            'Escápula', 'Tórax', 'Costas', 'Lombar', 'Coluna Cervical',
-            'Coluna Torácica', 'Coluna Lombar', 'Pescoço', 'Esternão', 'Costelas',
-            'Pelve', 'Sacro', 'Cabeça', 'Face', 'Mandíbula', 'Dentes', 'Nariz',
-            'Olho', 'Orelha', 'Ligamento Cruzado Anterior', 'Ligamento Cruzado Posterior',
-            'Ligamento Colateral Medial', 'Ligamento Colateral Lateral', 'Menisco',
-            'Tendão de Aquiles', 'Tendão Patelar', 'Outros'
-        ]
-    };
-    
     // Obter locais disponíveis baseado no tipo selecionado
     const getAvailableLocations = (type: string): string[] => {
-        return INJURY_LOCATIONS_BY_TYPE[type] || INJURY_LOCATIONS_BY_TYPE['Outros'];
+        return INJURY_LOCATIONS_BY_TYPE[type] || INJURY_LOCATIONS_BY_TYPE.Outros;
     };
 
     const resetForm = () => {
