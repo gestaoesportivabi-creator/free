@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Player, MatchRecord, PhysicalAssessment, PlayerTimeControl, MatchStats, InjuryRecord } from '../types';
-import { FileText, Calendar, User, Download, Activity, Trophy, AlertTriangle, BarChart3, Users, HeartPulse, Rotate3d, Brain } from 'lucide-react';
+import { FileText, Calendar, User, Download, Activity, Trophy, AlertTriangle, BarChart3, Users, HeartPulse, Rotate3d, Brain, Lock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
@@ -579,8 +579,20 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                   <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Total de Jogos</p><p className="text-white font-black text-2xl">{playerStats.games}</p></div>
                   <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Jogos Perdidos</p><p className="text-white font-black text-2xl">{injuryInfo?.injuries.length ? injuryInfo.injuries.length : 0}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Minutos Totais</p><p className="text-white font-black text-2xl">{playerStats.minutes}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Média Minutos</p><p className="text-white font-black text-2xl">{playerStats.avgMinutes}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4">
+                    <p className="text-zinc-500 font-bold uppercase text-xs mb-2">Minutos Totais</p>
+                    <p className="text-zinc-400 font-black text-2xl flex items-center justify-center gap-2">
+                      <Lock size={18} className="text-zinc-500" />
+                      Bloqueado
+                    </p>
+                  </div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4">
+                    <p className="text-zinc-500 font-bold uppercase text-xs mb-2">Média Minutos</p>
+                    <p className="text-zinc-400 font-black text-2xl flex items-center justify-center gap-2">
+                      <Lock size={18} className="text-zinc-500" />
+                      Bloqueado
+                    </p>
+                  </div>
                   <div className="text-center border border-zinc-900 rounded-xl p-4">
                     <p className="text-zinc-500 font-bold uppercase text-xs mb-2">Período mais produtivo</p>
                     <p className="text-white font-black text-lg">{goalInsights.bestPeriod}</p>
