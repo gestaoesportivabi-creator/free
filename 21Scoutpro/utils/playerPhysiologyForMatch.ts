@@ -10,6 +10,7 @@ const PSR_TREINOS_KEY = 'scout21_psr_treinos';
 const PSE_JOGOS_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_KEY = 'scout21_pse_treinos';
 const QUALIDADE_SONO_KEY = 'scout21_qualidade_sono';
+const WELLNESS_KEY = 'scout21_wellness';
 
 type EventWithDate = { date: string; eventKey: string; type: 'treino' | 'jogo' };
 
@@ -43,6 +44,15 @@ function getPseTreinos(): Record<string, Record<string, number>> {
 function getQualidadeSono(): Record<string, Record<string, number>> {
   try {
     const raw = localStorage.getItem(QUALIDADE_SONO_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getWellness(): Record<string, Record<string, { dor?: number }>> {
+  try {
+    const raw = localStorage.getItem(WELLNESS_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -95,6 +105,8 @@ export interface PlayerPhysiology {
   pseAfterLastTraining: number | null;
   /** Qualidade do sono no dia do jogo (evento jogo_${matchDate}) */
   sleepMatchDay: number | null;
+  /** Dor muscular no dia do jogo (escala 1 a 5) */
+  dorMuscularMatchDay: number | null;
 }
 
 /**
@@ -111,12 +123,13 @@ export function getPlayerPhysiologyForMatch(
 ): Record<string, PlayerPhysiology> {
   const result: Record<string, PlayerPhysiology> = {};
   playerIds.forEach((id) => {
-    result[id] = { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+    result[id] = { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null, dorMuscularMatchDay: null };
   });
 
   const psrJogos = getPsrJogos();
   const pseTreinos = getPseTreinos();
   const sono = getQualidadeSono();
+  const wellness = getWellness();
 
   const events = buildEventsWithDates(schedules, championshipMatches);
   const matchDayEvent = events.find((e) => e.date === matchDate && e.type === 'jogo');
@@ -154,6 +167,11 @@ export function getPlayerPhysiologyForMatch(
     const sleepVal = sono[sleepEventKey]?.[pid];
     if (typeof sleepVal === 'number' && sleepVal >= 1 && sleepVal <= 5) {
       result[playerId].sleepMatchDay = sleepVal;
+    }
+
+    const dorVal = wellness[matchDate]?.[pid]?.dor;
+    if (typeof dorVal === 'number' && dorVal >= 1 && dorVal <= 5) {
+      result[playerId].dorMuscularMatchDay = dorVal;
     }
   });
 

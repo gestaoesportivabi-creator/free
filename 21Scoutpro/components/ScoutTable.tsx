@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
+import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe } from '../utils/dateUtils';
 import { timeControlsApi } from '../services/api';
@@ -113,6 +114,8 @@ interface ScoutTableProps {
     currentUser?: import('../types').User | null;
     onScoutWindowOpenChange?: (open: boolean) => void;
 }
+
+const emptyPhysiology = { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null, dorMuscularMatchDay: null };
 
 export const ScoutTable: React.FC<ScoutTableProps> = ({
   onSave,
@@ -1978,7 +1981,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         const champs: Championship[] = [...championships];
         const match = selectedScheduledMatch;
         if (!match || !players.length) {
-            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
+            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
         const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
@@ -2003,7 +2006,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         const champs2: Championship[] = [...championships];
         const match = selectedMatch;
         if (!match || !players.length) {
-            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
+            return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
         const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
@@ -2301,7 +2304,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const suspended = preparationDataSavedMatch.suspendedIds.has(player.id);
                                         const pendurado = preparationDataSavedMatch.penduradoIds.has(player.id);
                                         const unavailable = injured || suspended;
-                                        const ph = preparationDataSavedMatch.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const ph = preparationDataSavedMatch.physiology[id] ?? emptyPhysiology;
+                                        const indiceFisico = (ph.dorMuscularMatchDay != null && ph.pseAfterLastTraining != null && ph.psrMatchDay != null && ph.sleepMatchDay != null)
+                                            ? calcularIndiceFisico(ph.dorMuscularMatchDay, ph.pseAfterLastTraining, ph.psrMatchDay, ph.sleepMatchDay)
+                                            : null;
                                         const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
@@ -2327,6 +2333,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                             <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
                                                             <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
                                                             <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
+                                                            {'error' in (indiceFisico || {}) ? (
+                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
+                                                            ) : (
+                                                                <span className="text-zinc-400">
+                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
+                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2454,7 +2469,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const suspended = preparationData.suspendedIds.has(player.id);
                                         const pendurado = preparationData.penduradoIds.has(player.id);
                                         const unavailable = injured || suspended;
-                                        const ph = preparationData.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const ph = preparationData.physiology[id] ?? emptyPhysiology;
+                                        const indiceFisico = (ph.dorMuscularMatchDay != null && ph.pseAfterLastTraining != null && ph.psrMatchDay != null && ph.sleepMatchDay != null)
+                                            ? calcularIndiceFisico(ph.dorMuscularMatchDay, ph.pseAfterLastTraining, ph.psrMatchDay, ph.sleepMatchDay)
+                                            : null;
                                         const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
@@ -2480,6 +2498,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                             <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
                                                             <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
                                                             <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
+                                                            {'error' in (indiceFisico || {}) ? (
+                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
+                                                            ) : (
+                                                                <span className="text-zinc-400">
+                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
+                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2630,7 +2657,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const suspended = preparationData.suspendedIds.has(player.id);
                                         const pendurado = preparationData.penduradoIds.has(player.id);
                                         const unavailable = injured || suspended;
-                                        const ph = preparationData.physiology[id] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+                                        const ph = preparationData.physiology[id] ?? emptyPhysiology;
+                                        const indiceFisico = (ph.dorMuscularMatchDay != null && ph.pseAfterLastTraining != null && ph.psrMatchDay != null && ph.sleepMatchDay != null)
+                                            ? calcularIndiceFisico(ph.dorMuscularMatchDay, ph.pseAfterLastTraining, ph.psrMatchDay, ph.sleepMatchDay)
+                                            : null;
                                         const baseBorderClass = suspended ? 'border-red-500' : injured ? 'border-orange-500' : pendurado ? 'border-amber-500' : 'border-zinc-700 hover:border-[#00f0ff]/50';
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
@@ -2662,6 +2692,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                             <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
                                                             <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
                                                             <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
+                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
+                                                            {'error' in (indiceFisico || {}) ? (
+                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
+                                                            ) : (
+                                                                <span className="text-zinc-400">
+                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
+                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">

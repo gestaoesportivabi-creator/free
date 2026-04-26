@@ -98,7 +98,7 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
     const displayName = (p: Player) => (p.nickname && p.nickname.trim() !== '') ? p.nickname.trim() : p.name;
 
     const formatPhysio = (v: number | null) => (v != null ? String(v) : '—');
-    const physio = (playerId: string) => playerPhysiology[String(playerId).trim()] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null };
+    const physio = (playerId: string) => playerPhysiology[String(playerId).trim()] ?? { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null, dorMuscularMatchDay: null };
 
     const renderPlayerCards = (list: Player[]) => (
         <div className="max-h-[22rem] overflow-y-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
