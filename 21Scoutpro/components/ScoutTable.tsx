@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2 } from 'lucide-react';
+import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2, ArrowUp, ArrowDownRight, ArrowDown } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
@@ -116,6 +116,42 @@ interface ScoutTableProps {
 }
 
 const emptyPhysiology = { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null, dorMuscularMatchDay: null };
+
+function renderIndiceFisicoInfo(indiceFisico: ReturnType<typeof calcularIndiceFisico> | null): React.ReactNode {
+    if (!indiceFisico) {
+        return <span className="text-zinc-400">IF <span className="font-bold text-[10px]">—</span></span>;
+    }
+    if ('error' in indiceFisico) {
+        return <span className="text-red-400 text-[8px] font-bold">IF inválido</span>;
+    }
+
+    let colorClass = 'text-red-400';
+    let Icon: React.ComponentType<{ size?: number; className?: string }> = ArrowDown;
+    let iconClass = 'text-red-400';
+
+    if (indiceFisico.indice >= 85) {
+        colorClass = 'text-emerald-400';
+        Icon = ArrowUp;
+        iconClass = 'text-emerald-400';
+    } else if (indiceFisico.indice >= 70) {
+        colorClass = 'text-sky-400';
+        Icon = Minus;
+        iconClass = 'text-sky-400';
+    } else if (indiceFisico.indice >= 50) {
+        colorClass = 'text-amber-400';
+        Icon = ArrowDownRight;
+        iconClass = 'text-amber-400';
+    }
+
+    return (
+        <span className="inline-flex items-center justify-end gap-1 text-zinc-300">
+            <span className="text-zinc-400">IF</span>
+            <span className={`font-bold text-[10px] ${colorClass}`}>{indiceFisico.indice}%</span>
+            <Icon size={10} className={iconClass} />
+            <span className={`text-[8px] font-bold ${colorClass}`}>{indiceFisico.status}</span>
+        </span>
+    );
+}
 
 export const ScoutTable: React.FC<ScoutTableProps> = ({
   onSave,
@@ -2330,18 +2366,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                         </div>
                                                     ) : (
                                                         <div className="flex flex-col gap-0 text-[9px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
-                                                            {'error' in (indiceFisico || {}) ? (
-                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
-                                                            ) : (
-                                                                <span className="text-zinc-400">
-                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
-                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
-                                                                </span>
-                                                            )}
+                                                            {renderIndiceFisicoInfo(indiceFisico)}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2495,18 +2520,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                         </div>
                                                     ) : (
                                                         <div className="flex flex-col gap-0 text-[9px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
-                                                            {'error' in (indiceFisico || {}) ? (
-                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
-                                                            ) : (
-                                                                <span className="text-zinc-400">
-                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
-                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
-                                                                </span>
-                                                            )}
+                                                            {renderIndiceFisicoInfo(indiceFisico)}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
@@ -2689,18 +2703,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                         </div>
                                                     ) : (
                                                         <div className="flex flex-col gap-0 text-[9px] text-right">
-                                                            <span className="text-zinc-400">PSE <span className="text-[#00f0ff] font-bold text-[10px]">{ph.pseAfterLastTraining != null ? ph.pseAfterLastTraining : '—'}</span></span>
-                                                            <span className="text-zinc-400">PSR <span className="text-[#00f0ff] font-bold text-[10px]">{ph.psrMatchDay != null ? ph.psrMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Sono <span className="text-[#00f0ff] font-bold text-[10px]">{ph.sleepMatchDay != null ? ph.sleepMatchDay : '—'}</span></span>
-                                                            <span className="text-zinc-400">Dor <span className="text-[#00f0ff] font-bold text-[10px]">{ph.dorMuscularMatchDay != null ? ph.dorMuscularMatchDay : '—'}</span></span>
-                                                            {'error' in (indiceFisico || {}) ? (
-                                                                <span className="text-red-400 text-[8px] font-bold">Índice inválido</span>
-                                                            ) : (
-                                                                <span className="text-zinc-400">
-                                                                    IF <span className="text-[#00f0ff] font-bold text-[10px]">{indiceFisico && 'indice' in indiceFisico ? indiceFisico.indice : '—'}</span>
-                                                                    <span className="text-[8px] ml-1">{indiceFisico && 'status' in indiceFisico ? indiceFisico.status : ''}</span>
-                                                                </span>
-                                                            )}
+                                                            {renderIndiceFisicoInfo(indiceFisico)}
                                                         </div>
                                                     )}
                                                     <div className="flex items-center gap-0.5 justify-end mt-0.5">
