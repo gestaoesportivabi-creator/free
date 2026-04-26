@@ -408,9 +408,56 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     [athleteFilterId, athleteOptions]
   );
 
+  const athleteFilteredMatches = useMemo(() => {
+    if (athleteFilterIdSafe === 'Todos') return scopedMatches;
+    return scopedMatches
+      .map((match) => {
+        const playerStatsForAthlete = match.playerStats?.[athleteFilterIdSafe];
+        if (!playerStatsForAthlete) return null;
+        const normalizedAthleteStats: MatchStats = {
+          ...playerStatsForAthlete,
+          goals: playerStatsForAthlete.goals || 0,
+          assists: playerStatsForAthlete.assists || 0,
+          passesCorrect: playerStatsForAthlete.passesCorrect || 0,
+          passesWrong: playerStatsForAthlete.passesWrong || 0,
+          shotsOnTarget: playerStatsForAthlete.shotsOnTarget || 0,
+          shotsOffTarget: playerStatsForAthlete.shotsOffTarget || 0,
+          tacklesWithBall: playerStatsForAthlete.tacklesWithBall || 0,
+          tacklesWithoutBall: playerStatsForAthlete.tacklesWithoutBall || 0,
+          tacklesCounterAttack: playerStatsForAthlete.tacklesCounterAttack || 0,
+          transitionErrors: playerStatsForAthlete.transitionErrors || (playerStatsForAthlete as any).wrongPassesTransition || 0,
+        };
+        const filteredLog = Array.isArray(match.postMatchEventLog)
+          ? match.postMatchEventLog.filter((e) => {
+              const pid = String(e?.playerId ?? '').trim();
+              return pid === athleteFilterIdSafe || String(e?.assistPlayerId ?? '').trim() === athleteFilterIdSafe;
+            })
+          : [];
+        return {
+          ...match,
+          goalsFor: normalizedAthleteStats.goals || 0,
+          goalsAgainst: normalizedAthleteStats.goalsConceded || 0,
+          playerStats: { [athleteFilterIdSafe]: normalizedAthleteStats },
+          teamStats: {
+            ...normalizedAthleteStats,
+            goals: normalizedAthleteStats.goals || 0,
+            goalsConceded: normalizedAthleteStats.goalsConceded || 0,
+            fouls: normalizedAthleteStats.fouls || 0,
+            saves: normalizedAthleteStats.saves || 0,
+            yellowCards: normalizedAthleteStats.yellowCards || 0,
+            redCards: normalizedAthleteStats.redCards || 0,
+          },
+          postMatchEventLog: filteredLog,
+          possessionSecondsWith: 0,
+          possessionSecondsWithout: 0,
+        } as MatchRecord;
+      })
+      .filter((m): m is MatchRecord => m != null);
+  }, [athleteFilterIdSafe, scopedMatches]);
+
   // KPIs
   const stats = useMemo(() => {
-    const acc = scopedMatches.reduce((acc, curr) => {
+    const acc = athleteFilteredMatches.reduce((acc, curr) => {
       // Validar se teamStats existe antes de acessar
       if (!curr || !curr.teamStats) {
         console.warn('⚠️ Match sem teamStats encontrado:', curr);
@@ -527,7 +574,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       goalMethodsScored: acc.goalMethodsScored,
       goalMethodsConceded: acc.goalMethodsConceded
     };
-  }, [scopedMatches]);
+  }, [athleteFilteredMatches]);
 
   /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
   const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
@@ -584,7 +631,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
     
-    scopedMatches.forEach(match => {
+    athleteFilteredMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalTimes) return;
       match.teamStats.goalTimes.forEach(goalTime => {
         const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
@@ -594,7 +641,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       });
     });
     
-    scopedMatches.forEach(match => {
+    athleteFilteredMatches.forEach(match => {
       if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
       match.teamStats.goalsConcededTimes.forEach(goalConceded => {
         const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
@@ -654,10 +701,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       maxScoredPeriod: { period: maxScoredPeriod.period, percentage: scoredPercentage },
       maxConcededPeriod: { period: maxConcededPeriod.period, percentage: concededPercentage }
     };
-  }, [scopedMatches]);
+  }, [athleteFilteredMatches]);
 
   const chartData = useMemo(() => {
-    return scopedMatches.map(match => ({
+    return athleteFilteredMatches.map(match => ({
       ...(() => {
         const opp = getOpponentShotsFromLog(match);
         return {
@@ -692,7 +739,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       })(),
       result: match.result
     }));
-  }, [scopedMatches]);
+  }, [athleteFilteredMatches]);
 
   /** Percentuais exibidos à esquerda do total nos gráficos da seção Distribuição */
   const distributionChartPercentages = useMemo(() => {
@@ -816,7 +863,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const gaugeMeta = useMemo(() => {
     let targetSum = 0;
     let tacklesSum = 0;
-    scopedMatches.forEach(m => {
+    athleteFilteredMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -833,7 +880,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
       percentage: Math.min(pct, 100),
       percentageDisplay: hasTarget ? pct.toFixed(2) : '0.00',
     };
-  }, [scopedMatches]);
+  }, [athleteFilteredMatches]);
 
   const TACKLE_TARGET = gaugeMeta.TACKLE_TARGET;
   const totalTackles = gaugeMeta.totalTackles;
@@ -857,7 +904,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   // Alerta: partidas em que a meta foi alcançada e quantas resultaram em vitória
   const tackleTargetAlert = useMemo(() => {
     const matchesWithTarget: Array<{ achieved: boolean; victory: boolean }> = [];
-    scopedMatches.forEach(m => {
+    athleteFilteredMatches.forEach(m => {
       if (!m.scoreTarget || !m.teamStats) return;
       const num = parseFloat(m.scoreTarget.replace(/[^0-9.]/g, ''));
       if (isNaN(num) || num <= 0) return;
@@ -871,7 +918,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     const achievedCount = matchesWithTarget.filter(x => x.achieved).length;
     const achievedAndVictory = matchesWithTarget.filter(x => x.achieved && x.victory).length;
     return { total, achievedCount, achievedAndVictory };
-  }, [scopedMatches]);
+  }, [athleteFilteredMatches]);
 
   // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
   const possessionDonutData = useMemo(() => {
@@ -894,13 +941,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   }, [filteredMatches]);
 
   const hasPossessionData = useMemo(() => 
-    scopedMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
-    [scopedMatches]
+    athleteFilteredMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
+    [athleteFilteredMatches]
   );
 
   const goalkeeperDefenseRows = useMemo(() => {
     const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
-    for (const match of scopedMatches) {
+    for (const match of athleteFilteredMatches) {
       const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
       for (const e of log as any[]) {
         if (e?.action !== 'save') continue;
@@ -927,7 +974,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     return Array.from(map.values())
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total);
-  }, [scopedMatches, players]);
+  }, [athleteFilteredMatches, players]);
 
   // Fonte padrão para legendas e rótulos de dados em todos os gráficos do Scout Coletivo
   const CHART_FONT = 'Calibri';
@@ -1045,13 +1092,13 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 teamShieldUrl: teamSettings.teamShieldUrl || undefined,
                 teamName: teamSettings.teamName || undefined,
                 playerTables: {
-                  passes: buildPlayerTop10ForPdf(scopedMatches, pl, 'passes'),
-                  shots: buildPlayerTop10ForPdf(scopedMatches, pl, 'shots'),
-                  tackles: buildPlayerTop10ForPdf(scopedMatches, pl, 'tackles'),
-                  criticalErrors: buildPlayerTop10ForPdf(scopedMatches, pl, 'criticalErrors'),
-                  saves: buildPlayerTop10ForPdf(scopedMatches, pl, 'saves'),
-                  fouls: buildPlayerTop10ForPdf(scopedMatches, pl, 'fouls'),
-                  cards: buildPlayerTop10ForPdf(scopedMatches, pl, 'cards'),
+                  passes: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'passes'),
+                  shots: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'shots'),
+                  tackles: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'tackles'),
+                  criticalErrors: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'criticalErrors'),
+                  saves: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'saves'),
+                  fouls: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'fouls'),
+                  cards: buildPlayerTop10ForPdf(athleteFilteredMatches, pl, 'cards'),
                 },
                 stats,
                 timePeriodData: {
@@ -1318,7 +1365,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={scopedMatches} statType="passes" players={players} athleteFilterId={athleteFilterIdSafe} />
+           <PlayerStatsTable matches={athleteFilteredMatches} statType="passes" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1370,7 +1417,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </BarChart>
              </ResponsiveContainer>
            </div>
-           <PlayerStatsTable matches={scopedMatches} statType="criticalErrors" players={players} athleteFilterId={athleteFilterIdSafe} />
+           <PlayerStatsTable matches={athleteFilteredMatches} statType="criticalErrors" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
       </div>
 
@@ -1432,7 +1479,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
              </ResponsiveContainer>
            </div>
            {/* Tabela de estatísticas por jogador */}
-           <PlayerStatsTable matches={scopedMatches} statType="tackles" players={players} athleteFilterId={athleteFilterIdSafe} />
+           <PlayerStatsTable matches={athleteFilteredMatches} statType="tackles" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1574,7 +1621,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 </BarChart>
              </ResponsiveContainer>
       </div>
-           <PlayerStatsTable matches={scopedMatches} statType="shots" players={players} athleteFilterId={athleteFilterIdSafe} />
+           <PlayerStatsTable matches={athleteFilteredMatches} statType="shots" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1688,7 +1735,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <PlayerStatsTable matches={scopedMatches} statType="fouls" players={players} athleteFilterId={athleteFilterIdSafe} />
+          <PlayerStatsTable matches={athleteFilteredMatches} statType="fouls" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -1772,7 +1819,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <PlayerStatsTable matches={scopedMatches} statType="cards" players={players} athleteFilterId={athleteFilterIdSafe} />
+          <PlayerStatsTable matches={athleteFilteredMatches} statType="cards" players={players} athleteFilterId={athleteFilterIdSafe} />
         </ExpandableCard>
       </div>
 
