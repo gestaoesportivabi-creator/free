@@ -567,13 +567,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   }, [athleteFilterIdSafe, scopedMatches, isGoalkeeperAthleteFilter]);
 
   const highlightedMatchForAnalysis = useMemo(() => {
+    if (opponentFilter === 'Todos') return null;
     if (!athleteFilteredMatches.length) return null;
     return [...athleteFilteredMatches].sort((a, b) => {
       const byDate = new Date(b.date).getTime() - new Date(a.date).getTime();
       if (byDate !== 0) return byDate;
       return String(b.id || '').localeCompare(String(a.id || ''));
     })[0];
-  }, [athleteFilteredMatches]);
+  }, [athleteFilteredMatches, opponentFilter]);
 
   // KPIs
   const stats = useMemo(() => {
@@ -1232,7 +1233,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 goalMethodsConcededData,
                 goalOriginScoredData,
                 goalOriginConcededData,
-                technicalAnalysis: highlightedMatchForAnalysis
+                technicalAnalysis: opponentFilter !== 'Todos' && highlightedMatchForAnalysis
                   ? {
                       matchLabel: `${highlightedMatchForAnalysis.date} · ${highlightedMatchForAnalysis.competition || 'Sem competição'} · vs ${highlightedMatchForAnalysis.opponent || '—'}`,
                       tactical: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.tactical || '',
@@ -2230,60 +2231,62 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         </ExpandableCard>
       </div>
 
-      {/* Última sessão: análise técnica da partida selecionada pelos filtros */}
-      <ExpandableCard
-        title="Análise Técnica da Partida"
-        icon={BookOpen}
-        headerColor="text-cyan-300"
-        scoutTitleStyle
-      >
-        {highlightedMatchForAnalysis ? (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                Partida selecionada pelos filtros
-              </p>
-              <p className="text-white text-sm mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                {highlightedMatchForAnalysis.date} · {highlightedMatchForAnalysis.competition || 'Sem competição'} · vs {highlightedMatchForAnalysis.opponent || '—'}
-              </p>
-            </div>
-            {highlightedMatchForAnalysis.lineup?.technicalAnalysis ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  { key: 'tactical', label: 'Sessão tática' },
-                  { key: 'technical', label: 'Sessão técnica' },
-                  { key: 'physical', label: 'Sessão física' },
-                  { key: 'behavioral', label: 'Sessão comportamental' },
-                  { key: 'mental', label: 'Sessão mental' },
-                ].map((section) => {
-                  const value = String(
-                    (highlightedMatchForAnalysis.lineup?.technicalAnalysis as Record<string, string>)[section.key] || ''
-                  ).trim();
-                  return (
-                    <div
-                      key={section.key}
-                      className={`rounded-xl border border-zinc-800 bg-black/40 p-3 ${section.key === 'mental' ? 'md:col-span-2' : ''}`}
-                    >
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">{section.label}</p>
-                      <p className="text-sm text-zinc-200 whitespace-pre-wrap" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                        {value || 'Sem observações.'}
-                      </p>
-                    </div>
-                  );
-                })}
+      {/* Última sessão: análise técnica só com adversário específico */}
+      {opponentFilter !== 'Todos' && (
+        <ExpandableCard
+          title="Análise Técnica da Partida"
+          icon={BookOpen}
+          headerColor="text-cyan-300"
+          scoutTitleStyle
+        >
+          {highlightedMatchForAnalysis ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+                <p className="text-xs text-zinc-500 uppercase tracking-wider" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                  Partida selecionada pelos filtros
+                </p>
+                <p className="text-white text-sm mt-1" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                  {highlightedMatchForAnalysis.date} · {highlightedMatchForAnalysis.competition || 'Sem competição'} · vs {highlightedMatchForAnalysis.opponent || '—'}
+                </p>
               </div>
-            ) : (
-              <p className="text-zinc-500 text-sm py-2 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-                Esta partida ainda não possui análise técnica salva na aba Dados do Jogo.
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="text-zinc-500 text-sm py-8 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
-            Não há partidas no recorte atual para exibir análise técnica.
-          </p>
-        )}
-      </ExpandableCard>
+              {highlightedMatchForAnalysis.lineup?.technicalAnalysis ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { key: 'tactical', label: 'Sessão tática' },
+                    { key: 'technical', label: 'Sessão técnica' },
+                    { key: 'physical', label: 'Sessão física' },
+                    { key: 'behavioral', label: 'Sessão comportamental' },
+                    { key: 'mental', label: 'Sessão mental' },
+                  ].map((section) => {
+                    const value = String(
+                      (highlightedMatchForAnalysis.lineup?.technicalAnalysis as Record<string, string>)[section.key] || ''
+                    ).trim();
+                    return (
+                      <div
+                        key={section.key}
+                        className={`rounded-xl border border-zinc-800 bg-black/40 p-3 ${section.key === 'mental' ? 'md:col-span-2' : ''}`}
+                      >
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold mb-2">{section.label}</p>
+                        <p className="text-sm text-zinc-200 whitespace-pre-wrap" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                          {value || 'Sem observações.'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-zinc-500 text-sm py-2 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+                  Esta partida ainda não possui análise técnica salva na aba Dados do Jogo.
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-zinc-500 text-sm py-8 text-center" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+              Não há partidas no recorte atual para exibir análise técnica.
+            </p>
+          )}
+        </ExpandableCard>
+      )}
       </div>
     </div>
   );

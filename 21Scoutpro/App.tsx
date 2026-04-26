@@ -3,7 +3,6 @@ import { Sidebar } from './components/Sidebar';
 import { Login } from './components/Login';
 import { LandingPage } from './components/LandingPage';
 import { GeneralScout } from './components/GeneralScout';
-import { IndividualScout } from './components/IndividualScout';
 import { PhysicalScout } from './components/PhysicalScout';
 import { PhysicalAssessmentTab } from './components/PhysicalAssessment'; 
 import { VideoScout } from './components/VideoScout';
@@ -1622,22 +1621,15 @@ export default function App() {
       case 'general':
         return <GeneralScout config={config} matches={matchesWithScoreTarget} players={players} isFreePlan={essentialRestricted} />; 
       case 'individual':
-        if (essentialRestricted) {
-          return (
-            <TabBackgroundWrapper>
-              <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
-                <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
-                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Scout Individual</h2>
-                <p className="text-zinc-400 text-sm max-w-md">
-                  Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                </p>
-              </div>
-            </TabBackgroundWrapper>
-          );
-        }
         return (
           <TabBackgroundWrapper>
-            <IndividualScout config={config} currentUser={currentUser} matches={matchesFinalizedForScout} players={players} timeControls={timeControls} />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
+              <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
+              <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Scout Individual</h2>
+              <p className="text-zinc-400 text-sm max-w-md">
+                Em breve, estamos desenvolvendo. Entre em contato para mais informações.
+              </p>
+            </div>
           </TabBackgroundWrapper>
         );
       case 'physical':
