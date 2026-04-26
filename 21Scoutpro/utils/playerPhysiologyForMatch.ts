@@ -186,7 +186,9 @@ export function getPlayerPhysiologyForMatch(
     }
 
     for (const ev of treinoEventsOnOrBeforeMatch) {
-      const data = pseTreinos[ev.eventKey];
+      // Compatibilidade: alguns ambientes armazenam PSE treino por sessão
+      // (YYYY-MM-DD_HH:mm_Atividade) e outros por bucket diário (YYYY-MM-DD).
+      const data = pseTreinos[ev.eventKey] || pseTreinos[ev.date];
       const val = data?.[pid];
       if (typeof val === 'number' && val >= 0 && val <= 10) {
         result[playerId].pseAfterLastTraining = val;

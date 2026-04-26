@@ -254,7 +254,13 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     return { min: sorted[0], max: sorted[sorted.length - 1] };
   }, [commitmentByDate]);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = (() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  })();
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
   useEffect(() => {
@@ -268,7 +274,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
           if (!mounted || !Array.isArray(apiRows)) return;
           const fromApi: WellnessData = {};
           apiRows.forEach((row) => {
-            const date = new Date(row.data).toISOString().split('T')[0];
+            const date = toLocalYmd(row.data);
             const playerId = String(row.jogador_id || '');
             if (!date || !playerId) return;
             if (!fromApi[date]) fromApi[date] = {};
