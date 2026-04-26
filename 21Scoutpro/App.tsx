@@ -1609,7 +1609,14 @@ export default function App() {
       case 'ranking': 
         return (
           <TabBackgroundWrapper>
-            <StatsRanking players={players} matches={matchesFinalizedForScout} />
+            <StatsRanking
+              players={players}
+              matches={matchesFinalizedForScout}
+              competitionOptions={[
+                ...championships.map((c) => c.name),
+                ...championshipMatches.map((m) => m.competition),
+              ]}
+            />
           </TabBackgroundWrapper>
         ); 
       case 'quarteto':

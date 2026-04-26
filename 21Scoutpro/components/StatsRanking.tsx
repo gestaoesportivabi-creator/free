@@ -5,22 +5,42 @@ import { Trophy, Medal, Filter, Crown } from 'lucide-react';
 interface StatsRankingProps {
     players: Player[];
     matches: MatchRecord[];
+    competitionOptions?: string[];
 }
 
 const STAT_CATEGORIES: { key: keyof MatchStats; label: string; color: string }[] = [
     { key: 'goals', label: 'Gols Marcados', color: 'text-[#ccff00]' },
     { key: 'assists', label: 'Assistências', color: 'text-[#10b981]' },
-    { key: 'tacklesWithBall', label: 'Desarmes (Posse)', color: 'text-emerald-400' },
     { key: 'passesCorrect', label: 'Passes Certos', color: 'text-blue-400' },
+    { key: 'passesWrong', label: 'Passes Errados', color: 'text-red-400' },
+    { key: 'passesTransition', label: 'Passes Transição', color: 'text-rose-400' },
+    { key: 'passesProgression', label: 'Passes Progressão', color: 'text-cyan-300' },
     { key: 'shotsOnTarget', label: 'Chutes no Gol', color: 'text-purple-400' },
-    { key: 'minutesPlayed', label: 'Minutagem Total', color: 'text-orange-400' },
+    { key: 'shotsOffTarget', label: 'Chutes Fora', color: 'text-violet-300' },
+    { key: 'shotsShootZone', label: 'Finalização Zona de Chute', color: 'text-indigo-300' },
+    { key: 'tacklesWithBall', label: 'Desarmes (Posse)', color: 'text-emerald-400' },
+    { key: 'tacklesWithoutBall', label: 'Desarmes (Sem Posse)', color: 'text-emerald-300' },
     { key: 'tacklesCounterAttack', label: 'Desarme Contra-Ataque', color: 'text-yellow-400' },
-    { key: 'passesWrong', label: 'Passes Errados', color: 'text-red-400' }, // Negative stat usually, but ranked high to low
+    { key: 'transitionErrors', label: 'Erros de Transição', color: 'text-red-500' },
+    { key: 'fouls', label: 'Faltas', color: 'text-orange-400' },
+    { key: 'saves', label: 'Defesas', color: 'text-sky-300' },
+    { key: 'yellowCards', label: 'Cartões Amarelos', color: 'text-amber-300' },
+    { key: 'redCards', label: 'Cartões Vermelhos', color: 'text-rose-500' },
+    { key: 'goalsConceded', label: 'Gols Sofridos', color: 'text-fuchsia-400' },
 ];
 
-export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches }) => {
+export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, competitionOptions = [] }) => {
     const [selectedStat, setSelectedStat] = useState<keyof MatchStats>('goals');
     const [competitionFilter, setCompetitionFilter] = useState('Todas');
+
+    const competitionSelectOptions = useMemo(() => {
+        const fromTable = (competitionOptions || []).map((name) => String(name || '').trim()).filter(Boolean);
+        const fromMatches = matches
+            .map((m) => String(m.competition || '').trim())
+            .filter(Boolean);
+        const merged = Array.from(new Set([...fromTable, ...fromMatches]));
+        return merged.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }, [competitionOptions, matches]);
 
     const aggregatedStats = useMemo(() => {
         const statsMap: Record<string, { value: number, games: number, minutes: number }> = {};
@@ -35,7 +55,7 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches }) 
                 
                 statsMap[playerId].value += (stats[selectedStat] || 0);
                 statsMap[playerId].games += 1;
-                statsMap[playerId].minutes += stats.minutesPlayed;
+                statsMap[playerId].minutes += stats.minutesPlayed || 0;
             });
         });
 
@@ -88,9 +108,9 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches }) 
                             className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white text-xs font-bold outline-none focus:border-[#10b981] uppercase"
                         >
                             <option value="Todas">Todas</option>
-                            <option value="Copa Santa Catarina">Copa SC</option>
-                            <option value="Série Prata">Série Prata</option>
-                            <option value="JASC">JASC</option>
+                            {competitionSelectOptions.map(comp => (
+                                <option key={comp} value={comp}>{comp}</option>
+                            ))}
                         </select>
                     </div>
 
@@ -148,7 +168,6 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches }) 
                             <th className="p-4">Atleta</th>
                             <th className="p-4 hidden md:table-cell">Posição</th>
                             <th className="p-4 text-center">Jogos</th>
-                            <th className="p-4 text-center">Min/Jogo</th>
                             <th className="p-4 text-right pr-8">{currentStatConfig?.label}</th>
                         </tr>
                     </thead>
@@ -186,9 +205,6 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches }) 
                                 </td>
                                 <td className="p-4 text-center text-xs font-bold text-white">
                                     {player.games}
-                                </td>
-                                <td className="p-4 text-center text-xs font-bold text-zinc-400">
-                                    {player.avgMinutes}'
                                 </td>
                                 <td className="p-4 text-right pr-8">
                                     <span className={`text-2xl font-black italic tracking-tighter ${currentStatConfig?.color}`}>
