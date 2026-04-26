@@ -455,7 +455,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       .map(([location, count]) => ({
         location,
         count,
-        percentage: Math.round((count / denominator) * 100),
+        percentage: (count / denominator) * 100,
       }))
       .sort((a, b) => b.count - a.count);
   }, [activePlayers, data, selectedDate]);
@@ -471,7 +471,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
     const rosterCount = Math.max(activePlayers.length, 1);
     return {
       count: affectedAthletes,
-      percentage: Math.round((affectedAthletes / rosterCount) * 100),
+      percentage: (affectedAthletes / rosterCount) * 100,
     };
   }, [activePlayers, data, selectedDate]);
 
@@ -566,13 +566,13 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
               <div className="flex flex-wrap gap-2">
                 {painLocationStats.slice(0, 8).map((item) => (
                   <span key={item.location} className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] font-semibold">
-                    {item.location}: {item.count} atleta(s) ({item.percentage}%)
+                    {item.location}: {item.count} atleta(s) ({item.percentage.toFixed(2)}%)
                   </span>
                 ))}
               </div>
             )}
             <p className="mt-2 text-[11px] text-amber-300">
-              Atletas com mais de 1 desconforto muscular: {multipleDiscomfortStats.count} ({multipleDiscomfortStats.percentage}% do elenco)
+              Atletas com mais de 1 desconforto muscular: {multipleDiscomfortStats.count} ({multipleDiscomfortStats.percentage.toFixed(2)}% do elenco)
             </p>
           </div>
 
