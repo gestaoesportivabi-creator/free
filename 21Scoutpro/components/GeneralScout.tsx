@@ -5,7 +5,7 @@ import { SportConfig, MatchRecord, MatchStats, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
-import { postMatchEventClockToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
+import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -299,6 +299,51 @@ function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchR
   };
 }
 
+const SET_PIECE_METHODS = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
+
+function isPlayerOnCourtAtSecond(match: MatchRecord, playerId: string, absoluteSecond: number): boolean {
+  const normalizedPlayerId = String(playerId || '').trim();
+  if (!normalizedPlayerId) return false;
+
+  const lineupPlayers = Array.isArray(match.lineup?.players)
+    ? match.lineup.players.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
+  const startedOnCourt = lineupPlayers.includes(normalizedPlayerId);
+
+  const substitutionHistory = Array.isArray(match.substitutionHistory)
+    ? match.substitutionHistory
+    : [];
+
+  if (substitutionHistory.length === 0) {
+    if (startedOnCourt) return true;
+    const minutesPlayed = match.playerStats?.[normalizedPlayerId]?.minutesPlayed ?? 0;
+    return minutesPlayed > 0;
+  }
+
+  let onCourt = startedOnCourt;
+  const sortedSubs = substitutionHistory
+    .map((sub) => {
+      const rel = Number((sub as any)?.time);
+      if (!Number.isFinite(rel) || rel < 0) return null;
+      const half: MatchHalf = (sub as any)?.period === '2T' ? '2T' : '1T';
+      return {
+        playerOutId: String((sub as any)?.playerOutId ?? '').trim(),
+        playerInId: String((sub as any)?.playerInId ?? '').trim(),
+        absoluteSecond: storedToAbsoluteSeconds(half, rel),
+      };
+    })
+    .filter((s): s is { playerOutId: string; playerInId: string; absoluteSecond: number } => s !== null)
+    .sort((a, b) => a.absoluteSecond - b.absoluteSecond);
+
+  for (const sub of sortedSubs) {
+    if (sub.absoluteSecond > absoluteSecond) break;
+    if (sub.playerOutId === normalizedPlayerId) onCourt = false;
+    if (sub.playerInId === normalizedPlayerId) onCourt = true;
+  }
+
+  return onCourt;
+}
+
 export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
@@ -407,6 +452,14 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     () => (athleteFilterId === 'Todos' || athleteOptions.some((a) => a.id === athleteFilterId) ? athleteFilterId : 'Todos'),
     [athleteFilterId, athleteOptions]
   );
+  const selectedAthlete = useMemo(
+    () => players.find((p) => String(p.id).trim() === athleteFilterIdSafe),
+    [players, athleteFilterIdSafe]
+  );
+  const isGoalkeeperAthleteFilter = useMemo(
+    () => athleteFilterIdSafe !== 'Todos' && selectedAthlete?.position === 'Goleiro',
+    [athleteFilterIdSafe, selectedAthlete]
+  );
 
   const athleteFilteredMatches = useMemo(() => {
     if (athleteFilterIdSafe === 'Todos') return scopedMatches;
@@ -446,29 +499,64 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           acc[m] = (acc[m] || 0) + 1;
           return acc;
         }, {});
+        const goalsConcededTimes = isGoalkeeperAthleteFilter
+          ? (Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [])
+              .filter((e) => {
+                const action = String((e as any)?.action ?? '').trim().toLowerCase();
+                const isOpponentGoal = (e as any)?.isOpponentGoal === true
+                  || String((e as any)?.subtipo ?? '').trim().toUpperCase() === 'CONTRA';
+                if (action !== 'goal' || !isOpponentGoal) return false;
+                const period = (e as any)?.period === '2T' ? '2T' : '1T';
+                const eventTime = String((e as any)?.time ?? '').trim();
+                const absoluteSecond = postMatchEventClockToAbsoluteSeconds(eventTime, period);
+                return isPlayerOnCourtAtSecond(match, athleteFilterIdSafe, absoluteSecond);
+              })
+              .map((e) => {
+                const period = (e as any)?.period ?? '';
+                const method = String((e as any)?.goalMethod ?? (e as any)?.subtipo ?? '').trim();
+                return {
+                  time: period ? `${(e as any).time} (${period})` : String((e as any).time || ''),
+                  method: method || undefined,
+                };
+              })
+          : [];
+        const goalMethodsConceded = goalsConcededTimes.reduce<Record<string, number>>((acc, g) => {
+          const m = String(g.method || '').trim().toUpperCase();
+          if (!m) return acc;
+          acc[m] = (acc[m] || 0) + 1;
+          return acc;
+        }, {});
+        const goalsConcededSetPiece = Object.entries(goalMethodsConceded).reduce(
+          (sum, [method, count]) => sum + (SET_PIECE_METHODS.includes(method) ? count : 0),
+          0
+        );
+        const goalsConcededOpenPlay = Math.max(0, goalsConcededTimes.length - goalsConcededSetPiece);
+
         return {
           ...match,
           goalsFor: normalizedAthleteStats.goals || 0,
-          goalsAgainst: normalizedAthleteStats.goalsConceded || 0,
+          goalsAgainst: isGoalkeeperAthleteFilter ? goalsConcededTimes.length : (normalizedAthleteStats.goalsConceded || 0),
           playerStats: { [athleteFilterIdSafe]: normalizedAthleteStats },
           teamStats: {
             ...normalizedAthleteStats,
             goals: normalizedAthleteStats.goals || 0,
-            goalsConceded: normalizedAthleteStats.goalsConceded || 0,
+            goalsConceded: isGoalkeeperAthleteFilter ? goalsConcededTimes.length : (normalizedAthleteStats.goalsConceded || 0),
             fouls: normalizedAthleteStats.fouls || 0,
             saves: normalizedAthleteStats.saves || 0,
             yellowCards: normalizedAthleteStats.yellowCards || 0,
             redCards: normalizedAthleteStats.redCards || 0,
             goalTimes,
-            goalsConcededTimes: [],
+            goalsConcededTimes,
             goalMethodsScored,
-            goalMethodsConceded: {},
+            goalMethodsConceded,
             goalsScoredSetPiece: normalizedAthleteStats.goalsScoredSetPiece || 0,
             goalsScoredOpenPlay:
               normalizedAthleteStats.goalsScoredOpenPlay ??
               Math.max(0, (normalizedAthleteStats.goals || 0) - (normalizedAthleteStats.goalsScoredSetPiece || 0)),
-            goalsConcededSetPiece: 0,
-            goalsConcededOpenPlay: normalizedAthleteStats.goalsConcededOpenPlay || 0,
+            goalsConcededSetPiece: isGoalkeeperAthleteFilter ? goalsConcededSetPiece : 0,
+            goalsConcededOpenPlay: isGoalkeeperAthleteFilter
+              ? goalsConcededOpenPlay
+              : (normalizedAthleteStats.goalsConcededOpenPlay || 0),
           },
           postMatchEventLog: filteredLog,
           possessionSecondsWith: 0,
@@ -476,7 +564,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         } as MatchRecord;
       })
       .filter((m): m is MatchRecord => m != null);
-  }, [athleteFilterIdSafe, scopedMatches]);
+  }, [athleteFilterIdSafe, scopedMatches, isGoalkeeperAthleteFilter]);
 
   const highlightedMatchForAnalysis = useMemo(() => {
     if (!athleteFilteredMatches.length) return null;
@@ -1199,6 +1287,15 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
         
         <KPICard title="Gols Feitos (Méd)" value={stats.avgGoalsScored} icon={Goal} color="text-[#60a5fa]" bg="bg-[#60a5fa]/10 border-[#60a5fa]/20" />
         <KPICard title="Gols Sofridos (Méd)" value={stats.avgGoalsConceded} icon={ShieldAlert} color="text-[#2563eb]" bg="bg-[#2563eb]/10 border-[#2563eb]/20" />
+        {isGoalkeeperAthleteFilter && (
+          <KPICard
+            title="Gols Tomados em Quadra"
+            value={stats.goalsConceded}
+            icon={ShieldAlert}
+            color="text-[#ff0055]"
+            bg="bg-[#ff0055]/10 border-[#ff0055]/20"
+          />
+        )}
         
         {/* Cards de porcentagem de tempo que mais é feito/tomado gol */}
         <KPICard 
