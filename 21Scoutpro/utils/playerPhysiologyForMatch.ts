@@ -1,5 +1,5 @@
 /**
- * Lê PSR, PSE e qualidade do sono do localStorage (mesmas chaves das abas de fisiologia)
+ * Lê PSR, PSE e bem-estar diário do localStorage (fontes oficiais atuais)
  * e retorna, por atleta, os valores relevantes para o dia do jogo.
  */
 
@@ -10,7 +10,6 @@ const PSR_JOGOS_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_KEY = 'scout21_psr_treinos';
 const PSE_JOGOS_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_KEY = 'scout21_pse_treinos';
-const QUALIDADE_SONO_KEY = 'scout21_qualidade_sono';
 const WELLNESS_KEY = 'scout21_wellness';
 
 type EventWithDate = { date: string; eventKey: string; type: 'treino' | 'jogo' };
@@ -56,16 +55,7 @@ function getPseTreinos(): Record<string, Record<string, number>> {
   }
 }
 
-function getQualidadeSono(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(QUALIDADE_SONO_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function getWellness(): Record<string, Record<string, { dor?: number }>> {
+function getWellness(): Record<string, Record<string, { dor?: number; sono?: number }>> {
   try {
     const raw = localStorage.getItem(WELLNESS_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -129,7 +119,7 @@ export interface PlayerPhysiology {
  * Para cada playerId, retorna:
  * - psrMatchDay: PSR armazenada no dia do jogo (jogo da data da partida)
  * - pseAfterLastTraining: PSE da última sessão de treino (inclui treino no dia do jogo se for antes do jogo)
- * - sleepMatchDay: qualidade do sono no dia do jogo
+ * - sleepMatchDay: qualidade do sono no dia do jogo (sempre via Bem-Estar Diário)
  */
 export function getPlayerPhysiologyForMatch(
   matchDate: string,
@@ -147,7 +137,6 @@ export function getPlayerPhysiologyForMatch(
 
   const psrJogos = getPsrJogos();
   const pseTreinos = getPseTreinos();
-  const sono = getQualidadeSono();
   const wellness = getWellness();
 
   const events = buildEventsWithDates(schedules, championshipMatches);
@@ -196,24 +185,22 @@ export function getPlayerPhysiologyForMatch(
       }
     }
 
-    const sleepEventKey = `jogo_${normalizedMatchDate}`;
-    const sleepVal = sono[sleepEventKey]?.[pid];
-    if (typeof sleepVal === 'number' && sleepVal >= 1 && sleepVal <= 5) {
-      result[playerId].sleepMatchDay = sleepVal;
+    const wellnessSleepVal = wellness[normalizedMatchDate]?.[pid]?.sono;
+    if (typeof wellnessSleepVal === 'number' && wellnessSleepVal >= 1 && wellnessSleepVal <= 5) {
+      result[playerId].sleepMatchDay = wellnessSleepVal;
     }
     if (result[playerId].sleepMatchDay == null) {
-      const fallbackSleepDate = Object.keys(sono)
-        .filter((k) => k.startsWith('jogo_'))
-        .map((k) => toLocalYmd(k.replace('jogo_', '')))
+      const fallbackWellnessSleepDate = Object.keys(wellness)
+        .map((d) => toLocalYmd(d))
         .filter((d): d is string => Boolean(d))
         .filter((d) => compareYmdAsc(d, normalizedMatchDate) <= 0)
         .sort((a, b) => compareYmdAsc(b, a))
         .find((d) => {
-          const v = sono[`jogo_${d}`]?.[pid];
+          const v = wellness[d]?.[pid]?.sono;
           return typeof v === 'number' && v >= 1 && v <= 5;
         });
-      if (fallbackSleepDate) {
-        result[playerId].sleepMatchDay = sono[`jogo_${fallbackSleepDate}`]?.[pid] ?? null;
+      if (fallbackWellnessSleepDate) {
+        result[playerId].sleepMatchDay = wellness[fallbackWellnessSleepDate]?.[pid]?.sono ?? null;
       }
     }
 
