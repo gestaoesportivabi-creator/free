@@ -1144,6 +1144,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
                 goalMethodsConcededData,
                 goalOriginScoredData,
                 goalOriginConcededData,
+                technicalAnalysis: highlightedMatchForAnalysis
+                  ? {
+                      matchLabel: `${highlightedMatchForAnalysis.date} · ${highlightedMatchForAnalysis.competition || 'Sem competição'} · vs ${highlightedMatchForAnalysis.opponent || '—'}`,
+                      tactical: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.tactical || '',
+                      technical: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.technical || '',
+                      physical: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.physical || '',
+                      behavioral: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.behavioral || '',
+                      mental: highlightedMatchForAnalysis.lineup?.technicalAnalysis?.mental || '',
+                    }
+                  : undefined,
                 gaugeData: {
                   percentageDisplay,
                   totalTackles,

@@ -195,6 +195,14 @@ export interface ScoutPdfData {
   gaugeData?: { percentageDisplay: number | string; totalTackles: number; tackleTarget: number; hasTackleTarget: boolean };
   teamShieldUrl?: string;
   teamName?: string;
+  technicalAnalysis?: {
+    matchLabel?: string;
+    tactical?: string;
+    technical?: string;
+    physical?: string;
+    behavioral?: string;
+    mental?: string;
+  };
   /** Top 10 jogadores por gráfico (mesma lógica da tabela na tela) */
   playerTables?: PlayerTablesPdf;
 }
@@ -674,6 +682,15 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
         }
       );
 
+      const ta = data.technicalAnalysis;
+      const hasTechnicalAnalysis = Boolean(
+        ta && (ta.tactical || ta.technical || ta.physical || ta.behavioral || ta.mental)
+      );
+      if (hasTechnicalAnalysis) {
+        newPageWithWatermark(doc, logoBase64, logoDims);
+        drawTechnicalAnalysisPage(doc, TOP_CHART_Y, ta);
+      }
+
       // Capa: contato centralizado na base. Demais páginas: número inferior direito + logo canto esquerdo (sem contato)
       const whatsAppIconPng = await loadWhatsAppIconPng();
       const pageCount = doc.getNumberOfPages();
@@ -695,6 +712,58 @@ export function exportScoutToPdf(data: ScoutPdfData): Promise<void> {
       cleanup();
       reject(err);
     }
+  });
+}
+
+function drawTechnicalAnalysisPage(
+  doc: jsPDF,
+  startY: number,
+  analysis?: ScoutPdfData['technicalAnalysis']
+): void {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...COLORS.white);
+  doc.text('ANÁLISE TÉCNICA', MARGIN, startY, { charSpace: -0.2 });
+  startY += 7;
+
+  if (analysis?.matchLabel) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.slate);
+    doc.text(`Partida: ${analysis.matchLabel}`, MARGIN, startY);
+    startY += 6;
+  }
+
+  const sections: Array<{ title: string; value?: string }> = [
+    { title: 'Sessão tática', value: analysis?.tactical },
+    { title: 'Sessão técnica', value: analysis?.technical },
+    { title: 'Sessão física', value: analysis?.physical },
+    { title: 'Sessão comportamental', value: analysis?.behavioral },
+    { title: 'Sessão mental', value: analysis?.mental },
+  ];
+
+  sections.forEach((section) => {
+    const text = (section.value || '').trim() || 'Sem observações.';
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...COLORS.cyan);
+    doc.text(section.title.toUpperCase(), MARGIN, startY);
+    startY += 4.5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...COLORS.white);
+    const wrapped = doc.splitTextToSize(text, CONTENT_WIDTH);
+    wrapped.forEach((line: string) => {
+      if (startY > PAGE_HEIGHT - 18) {
+        doc.addPage();
+        fillBackground(doc);
+        startY = TOP_CHART_Y;
+      }
+      doc.text(line, MARGIN, startY);
+      startY += 4;
+    });
+    startY += 3.5;
   });
 }
 
