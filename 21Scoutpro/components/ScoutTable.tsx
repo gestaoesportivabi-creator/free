@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2, ArrowUp, ArrowDownRight, ArrowDown } from 'lucide-react';
+import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2, ArrowUp, ArrowDownRight, ArrowDown, BookOpen } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent, TechnicalAnalysis } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
