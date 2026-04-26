@@ -18,7 +18,7 @@ import {
   PolarRadiusAxis,
 } from 'recharts';
 import html2canvas from 'html2canvas';
-import { Activity, Brain, HeartPulse, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, Shield, Users } from 'lucide-react';
+import { Activity, Brain, HeartPulse, AlertTriangle, Printer, Rotate3d, UserMinus, RefreshCw, Users } from 'lucide-react';
 import { ExpandableCard } from './ExpandableCard';
 import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
@@ -744,66 +744,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     return { direito, esquerdo };
   }, [filteredInjuries]);
 
-  // P1: ACWR (Acute:Chronic Workload Ratio) per athlete
-  type AcwrEntry = { playerId: string; name: string; nickname: string; position: string; acwr: number | null; acute: number; chronic: number; risk: 'green' | 'yellow' | 'red' | 'none' };
-
-  const acwrData = useMemo((): AcwrEntry[] => {
-    const acuteStartStr = (() => {
-      const t = new Date(dateTo + 'T12:00:00');
-      t.setDate(t.getDate() - 7);
-      const s = t.toISOString().slice(0, 10);
-      return s > dateFrom ? s : dateFrom;
-    })();
-    const chronicStartStr = (() => {
-      const t = new Date(dateTo + 'T12:00:00');
-      t.setDate(t.getDate() - 28);
-      const s = t.toISOString().slice(0, 10);
-      return s > dateFrom ? s : dateFrom;
-    })();
-
-    const allDates: { date: string; data: Record<string, number> }[] = [];
-    Object.entries(pseTreinosStored).forEach(([key, data]) => {
-      const datePart = key.split('_')[0];
-      if (datePart && dateInRange(datePart)) allDates.push({ date: datePart, data });
-    });
-    Object.entries(pseJogosStored).forEach(([_matchId, data]) => {
-      const match = championshipMatches.find(m => m.id === _matchId);
-      if (match && dateInRange(match.date)) allDates.push({ date: match.date, data });
-    });
-
-    const activePlayers = players.filter(p => !p.isTransferred);
-    const playersForAcwr = playerFilterId ? activePlayers.filter(p => p.id === playerFilterId) : activePlayers;
-
-    return playersForAcwr.map(p => {
-      let acute = 0, acuteCount = 0, chronic = 0, chronicCount = 0;
-      allDates.forEach(({ date, data }) => {
-        const val = data[p.id];
-        if (typeof val !== 'number' || val < 0) return;
-        if (date >= acuteStartStr && date <= dateTo) {
-          acute += val;
-          acuteCount++;
-        }
-        if (date >= chronicStartStr && date <= dateTo) {
-          chronic += val;
-          chronicCount++;
-        }
-      });
-      const acuteAvg = acuteCount > 0 ? acute / acuteCount : 0;
-      const chronicAvg = chronicCount > 0 ? chronic / chronicCount : 0;
-      const acwr = chronicAvg > 0 ? Math.round((acuteAvg / chronicAvg) * 100) / 100 : null;
-      let risk: AcwrEntry['risk'] = 'none';
-      if (acwr !== null) {
-        if (acwr >= 0.8 && acwr <= 1.3) risk = 'green';
-        else if (acwr > 1.3 && acwr <= 1.5) risk = 'yellow';
-        else risk = 'red';
-      }
-      return { playerId: p.id, name: p.name, nickname: p.nickname, position: p.position, acwr, acute: Math.round(acuteAvg * 10) / 10, chronic: Math.round(chronicAvg * 10) / 10, risk };
-    }).sort((a, b) => {
-      const riskOrder = { red: 0, yellow: 1, green: 2, none: 3 };
-      return riskOrder[a.risk] - riskOrder[b.risk];
-    });
-  }, [players, pseTreinosStored, pseJogosStored, championshipMatches, dateFrom, dateTo, playerFilterId]);
-
   const handlePrint = async () => {
     try {
       const playerLabel = playerFilterId
@@ -858,16 +798,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
         wellnessRadarCloseness: wellnessRadarCloseness,
         injuryTypeData,
         injurySideData,
-        acwrRows: acwrData
-          .filter(a => a.acwr !== null)
-          .map(a => ({
-            name: a.nickname || a.name,
-            position: a.position,
-            acute: a.acute,
-            chronic: a.chronic,
-            acwr: a.acwr as number,
-            risk: a.risk,
-          })),
         heatmapImageDataUrl,
       };
       await exportPhysiologyPdf(pdfData);
@@ -1378,48 +1308,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
            </div>
         </ExpandableCard>
       </div>
-
-      {/* ACWR reposicionado abaixo do mapa de calor */}
-      <ExpandableCard title="ACWR — Risco de Lesão por Atleta" icon={Shield} headerColor="text-[#00f0ff]">
-        <p className="text-xs text-zinc-500 mb-4 font-medium">
-          Razão Carga Aguda (7d) / Crônica (28d). <strong>Verde</strong> 0.8–1.3 (seguro), <strong>Amarelo</strong> 1.3–1.5 (atenção), <strong>Vermelho</strong> &gt;1.5 ou &lt;0.8 (risco elevado).
-        </p>
-        {acwrData.filter(a => a.acwr !== null).length === 0 ? (
-          <p className="text-zinc-500 text-sm py-6 text-center">Preencha PSE em treinos e jogos para calcular o ACWR dos atletas.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-800">
-                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Atleta</th>
-                  <th className="text-left text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Posição</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Aguda (7d)</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Crônica (28d)</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">ACWR</th>
-                  <th className="text-center text-zinc-500 text-[10px] uppercase tracking-wider py-2 px-3">Risco</th>
-                </tr>
-              </thead>
-              <tbody>
-                {acwrData.filter(a => a.acwr !== null).map(a => (
-                  <tr key={a.playerId} className="border-b border-zinc-900/50 hover:bg-zinc-900/30 cursor-pointer transition-colors" onClick={() => setPlayerFilterId(prev => prev === a.playerId ? '' : a.playerId)}>
-                    <td className="py-2.5 px-3 text-white font-bold">{a.nickname || a.name}</td>
-                    <td className="py-2.5 px-3 text-zinc-400">{a.position}</td>
-                    <td className="py-2.5 px-3 text-center text-white">{a.acute}</td>
-                    <td className="py-2.5 px-3 text-center text-white">{a.chronic}</td>
-                    <td className="py-2.5 px-3 text-center font-black text-lg">{a.acwr}</td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className={`inline-block w-3 h-3 rounded-full ${a.risk === 'green' ? 'bg-emerald-500' : a.risk === 'yellow' ? 'bg-amber-400' : 'bg-red-500'}`} />
-                      <span className={`ml-2 text-xs font-bold ${a.risk === 'green' ? 'text-emerald-400' : a.risk === 'yellow' ? 'text-amber-400' : 'text-red-400'}`}>
-                        {a.risk === 'green' ? 'Seguro' : a.risk === 'yellow' ? 'Atenção' : 'Risco'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </ExpandableCard>
 
     </div>
   );
