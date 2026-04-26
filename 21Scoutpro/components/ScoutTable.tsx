@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2, ArrowUp, ArrowDownRight, ArrowDown } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent } from '../types';
+import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent, TechnicalAnalysis } from '../types';
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
@@ -11,8 +11,16 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { isMatchFinalizedForScout } from '../utils/matchStatus';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
+const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
+    tactical: '',
+    technical: '',
+    physical: '',
+    behavioral: '',
+    mental: '',
+};
 
 /** IDs de atletas nossos (não adversário) a partir do log — fallback quando não há `lineup.selectedPlayerIds` legado */
 function collectPlayerIdsFromPostMatchLog(log: PostMatchEvent[] | undefined): string[] {
@@ -247,6 +255,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     });
     const [viewMode, setViewMode] = useState<'calendar' | 'form' | 'analysis'>('calendar');
     const [selectedMatch, setSelectedMatch] = useState<MatchRecord | null>(null);
+    const [technicalAnalysis, setTechnicalAnalysis] = useState<TechnicalAnalysis>(EMPTY_TECHNICAL_ANALYSIS);
+    const [isSavingTechnicalAnalysis, setIsSavingTechnicalAnalysis] = useState(false);
     
     // Header state for the Match Record - tudo neutro por padrão
     const [opponent, setOpponent] = useState('');
@@ -1955,6 +1965,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         }
     };
 
+    useEffect(() => {
+        if (!selectedMatch) {
+            setTechnicalAnalysis(EMPTY_TECHNICAL_ANALYSIS);
+            return;
+        }
+        const fromMatch = selectedMatch.lineup?.technicalAnalysis;
+        setTechnicalAnalysis({
+            tactical: fromMatch?.tactical || '',
+            technical: fromMatch?.technical || '',
+            physical: fromMatch?.physical || '',
+            behavioral: fromMatch?.behavioral || '',
+            mental: fromMatch?.mental || '',
+        });
+    }, [selectedMatch]);
+
     // Função helper para verificar se é partida programada
     const isScheduledMatch = (): boolean => {
         return selectedScheduledMatch !== null;
@@ -1982,6 +2007,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         setShowScoutingWindow(false);
         setShowMatchTypeModal(false);
         setShowStartScoutConfirmation(false);
+        setTechnicalAnalysis(EMPTY_TECHNICAL_ANALYSIS);
         setEntries([{
             id: '1',
             date: getTodayLocalYmd(),
@@ -2004,6 +2030,37 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             card: 'Nenhum',
             rpe: 5,
         }]);
+    };
+
+    const handleSaveTechnicalAnalysis = async () => {
+        if (!selectedMatch || !onSave) return;
+        try {
+            setIsSavingTechnicalAnalysis(true);
+            const lineup = selectedMatch.lineup
+                ? { ...selectedMatch.lineup, technicalAnalysis: { ...technicalAnalysis } }
+                : {
+                    players: [],
+                    bench: [],
+                    ballPossessionStart: 'us' as const,
+                    technicalAnalysis: { ...technicalAnalysis },
+                };
+            const updatedMatch: MatchRecord = {
+                ...selectedMatch,
+                lineup,
+            };
+            const saveResult = await onSave(updatedMatch, { source: 'manual' });
+            if (saveResult && typeof saveResult === 'object' && 'id' in saveResult) {
+                setSelectedMatch(saveResult as MatchRecord);
+            } else {
+                setSelectedMatch(updatedMatch);
+            }
+            alert('Análise técnica salva com sucesso.');
+        } catch (error) {
+            console.error('Erro ao salvar análise técnica:', error);
+            alert('Não foi possível salvar a análise técnica.');
+        } finally {
+            setIsSavingTechnicalAnalysis(false);
+        }
     };
     
     // Lesão ativa = sem data de retorno real nem alta (em recuperação)
@@ -2902,6 +2959,57 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             </div>
                         </div>
                     </div>
+
+                    {isMatchFinalizedForScout(selectedMatch) && (
+                        <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">
+                            <div className="flex items-center justify-between gap-3 mb-4">
+                                <h3 className="text-white font-bold uppercase text-sm flex items-center gap-2">
+                                    <BookOpen className="text-[#00f0ff]" size={16} /> Análise Técnica
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveTechnicalAnalysis}
+                                    disabled={isSavingTechnicalAnalysis}
+                                    className={`flex items-center gap-2 font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors ${
+                                        isSavingTechnicalAnalysis
+                                            ? 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
+                                            : 'bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff]'
+                                    }`}
+                                >
+                                    <Save size={14} />
+                                    {isSavingTechnicalAnalysis ? 'Salvando...' : 'Salvar análise'}
+                                </button>
+                            </div>
+                            <p className="text-zinc-400 text-xs mb-4">
+                                Campo livre para parecer pós-jogo da comissão técnica. Preencha e salve para aparecer no Scout Coletivo.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {[
+                                    { key: 'tactical', label: 'Sessão tática' },
+                                    { key: 'technical', label: 'Sessão técnica' },
+                                    { key: 'physical', label: 'Sessão física' },
+                                    { key: 'behavioral', label: 'Sessão comportamental' },
+                                    { key: 'mental', label: 'Sessão mental' },
+                                ].map((section) => (
+                                    <div key={section.key} className={section.key === 'mental' ? 'md:col-span-2' : ''}>
+                                        <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-2">{section.label}</label>
+                                        <textarea
+                                            value={technicalAnalysis[section.key as keyof TechnicalAnalysis]}
+                                            onChange={(e) =>
+                                                setTechnicalAnalysis((prev) => ({
+                                                    ...prev,
+                                                    [section.key]: e.target.value,
+                                                }))
+                                            }
+                                            rows={section.key === 'mental' ? 5 : 4}
+                                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-white text-sm outline-none focus:border-[#00f0ff] resize-y"
+                                            placeholder={`Digite observações da ${section.label.toLowerCase()}...`}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Estatísticas Resumidas da Equipe */}
                     <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">

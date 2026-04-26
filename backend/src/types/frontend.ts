@@ -73,6 +73,14 @@ export interface MatchRecord {
     ballPossessionStart: string;
     /** Elenco convocado (persistido no JSON `lineup`) */
     selectedPlayerIds?: string[];
+    /** Análise técnica livre da comissão pós-jogo */
+    technicalAnalysis?: {
+      tactical: string;
+      technical: string;
+      physical: string;
+      behavioral: string;
+      mental: string;
+    };
   };
   substitutionHistory?: Array<{ playerOutId: string; playerInId: string; time: number; period: string }>;
   status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';

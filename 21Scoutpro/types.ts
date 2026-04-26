@@ -207,6 +207,14 @@ export interface PostMatchEvent {
   wrongPassGeneratedTransition?: boolean;
 }
 
+export interface TechnicalAnalysis {
+  tactical: string;
+  technical: string;
+  physical: string;
+  behavioral: string;
+  mental: string;
+}
+
 export interface MatchRecord {
   id: string;
   opponent: string;
@@ -235,6 +243,8 @@ export interface MatchRecord {
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
+    /** Análise técnica livre da comissão pós-jogo */
+    technicalAnalysis?: TechnicalAnalysis;
   };
   postMatchEventLog?: PostMatchEvent[];
   /** Histórico de substituições da partida */
