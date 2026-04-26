@@ -307,6 +307,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
   const [periodFilter, setPeriodFilter] = useState<string>('Todos');
   const [pdfExporting, setPdfExporting] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
+  const [athleteFocusId, setAthleteFocusId] = useState<string>('Todos');
+  const [athleteCompareId, setAthleteCompareId] = useState<string>('Nenhum');
 
   // Filtros responsivos: quando competição muda, resetar outros filtros
   const handleCompFilterChange = (value: string) => {
@@ -384,6 +386,117 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
     }
     return filteredMatches;
   }, [filteredMatches, periodFilter]);
+
+  const athleteOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    players
+      .filter((p) => !p.isTransferred)
+      .forEach((p) => byId.set(String(p.id), p.nickname || p.name));
+    scopedMatches.forEach((m) => {
+      const pStats = m.playerStats || {};
+      Object.keys(pStats).forEach((id) => {
+        const normalized = String(id).trim();
+        if (!normalized || normalized === OPPONENT_FAKE_PLAYER_ID) return;
+        if (!byId.has(normalized)) byId.set(normalized, normalized);
+      });
+    });
+    return Array.from(byId.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [players, scopedMatches]);
+
+  const athleteFocusIdSafe = useMemo(
+    () => (athleteFocusId === 'Todos' || athleteOptions.some((a) => a.id === athleteFocusId) ? athleteFocusId : 'Todos'),
+    [athleteFocusId, athleteOptions]
+  );
+  const athleteCompareIdSafe = useMemo(
+    () => (athleteCompareId === 'Nenhum' || athleteOptions.some((a) => a.id === athleteCompareId) ? athleteCompareId : 'Nenhum'),
+    [athleteCompareId, athleteOptions]
+  );
+
+  const buildAthleteMatchIndicators = (match: MatchRecord, athleteId: string) => {
+    const p = match.playerStats?.[athleteId];
+    if (!p) return null;
+    const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
+    const foulsCommitted = log.reduce((acc, e: any) => {
+      const action = String(e?.action ?? '').trim().toLowerCase();
+      const tipo = String(e?.tipo ?? '').trim().toLowerCase();
+      const pid = String(e?.playerId ?? '').trim();
+      if ((action !== 'falta' && tipo !== 'falta') || e?.foulTeam === 'against' || pid !== athleteId) return acc;
+      return acc + 1;
+    }, 0);
+    return {
+      passesCorrect: p.passesCorrect || 0,
+      passesWrong: p.passesWrong || 0,
+      shotsOn: p.shotsOnTarget || 0,
+      shotsOff: p.shotsOffTarget || 0,
+      shotsBlocked: p.shotsShootZone || 0,
+      tacklesWith: p.tacklesWithBall || 0,
+      tacklesWithout: p.tacklesWithoutBall || 0,
+      tacklesCounter: p.tacklesCounterAttack || 0,
+      criticalErrors: (p as any).wrongPassesTransition ?? (p as any).transitionErrors ?? 0,
+      foulsCommitted,
+      yellow: p.yellowCards || 0,
+      red: p.redCards || 0,
+    };
+  };
+
+  const athleteFocusSummary = useMemo(() => {
+    if (athleteFocusIdSafe === 'Todos') return null;
+    const total = {
+      matches: 0,
+      passes: 0,
+      shots: 0,
+      tackles: 0,
+      criticalErrors: 0,
+      fouls: 0,
+      cards: 0,
+    };
+    const perMatch = scopedMatches
+      .map((m) => {
+        const row = buildAthleteMatchIndicators(m, athleteFocusIdSafe);
+        if (!row) return null;
+        total.matches += 1;
+        total.passes += row.passesCorrect + row.passesWrong;
+        total.shots += row.shotsOn + row.shotsOff + row.shotsBlocked;
+        total.tackles += row.tacklesWith + row.tacklesWithout + row.tacklesCounter;
+        total.criticalErrors += row.criticalErrors;
+        total.fouls += row.foulsCommitted;
+        total.cards += row.yellow + row.red;
+        return {
+          id: m.id,
+          label: `${new Date(m.date).toLocaleDateString('pt-BR')} vs ${m.opponent}`,
+          ...row,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    return { total, perMatch };
+  }, [athleteFocusIdSafe, scopedMatches]);
+
+  const athleteCompareSummary = useMemo(() => {
+    if (athleteCompareIdSafe === 'Nenhum') return null;
+    const total = {
+      matches: 0,
+      passes: 0,
+      shots: 0,
+      tackles: 0,
+      criticalErrors: 0,
+      fouls: 0,
+      cards: 0,
+    };
+    scopedMatches.forEach((m) => {
+      const row = buildAthleteMatchIndicators(m, athleteCompareIdSafe);
+      if (!row) return;
+      total.matches += 1;
+      total.passes += row.passesCorrect + row.passesWrong;
+      total.shots += row.shotsOn + row.shotsOff + row.shotsBlocked;
+      total.tackles += row.tacklesWith + row.tacklesWithout + row.tacklesCounter;
+      total.criticalErrors += row.criticalErrors;
+      total.fouls += row.foulsCommitted;
+      total.cards += row.yellow + row.red;
+    });
+    return total;
+  }, [athleteCompareIdSafe, scopedMatches]);
 
   // KPIs
   const stats = useMemo(() => {
@@ -1073,6 +1186,89 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
       {/* Conteúdo do Scout Coletivo */}
       <div id="scout-coletivo-export-content" className="space-y-8">
+      <ExpandableCard
+        title="Raio-X por Atleta"
+        icon={Activity}
+        headerColor="text-[#00f0ff]"
+        scoutTitleStyle
+      >
+        <div className="space-y-4">
+          <p className="text-zinc-400 text-xs" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+            Selecione um atleta para analisar o desempenho por jogo e, opcionalmente, comparar com outro atleta no mesmo conjunto de filtros.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Select
+              value={athleteFocusIdSafe}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAthleteFocusId(e.target.value)}
+              options={[{ value: 'Todos', label: 'Atleta principal (todos)' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name }))]}
+            />
+            <Select
+              value={athleteCompareIdSafe}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAthleteCompareId(e.target.value)}
+              options={[{ value: 'Nenhum', label: 'Comparar com (nenhum)' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name }))]}
+            />
+          </div>
+
+          {athleteFocusIdSafe !== 'Todos' && athleteFocusSummary && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Jogos</p><p className="text-white font-black">{athleteFocusSummary.total.matches}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Passes</p><p className="text-white font-black">{athleteFocusSummary.total.passes}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Finalizações</p><p className="text-white font-black">{athleteFocusSummary.total.shots}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Desarmes</p><p className="text-white font-black">{athleteFocusSummary.total.tackles}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Erros críticos</p><p className="text-white font-black">{athleteFocusSummary.total.criticalErrors}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Faltas</p><p className="text-white font-black">{athleteFocusSummary.total.fouls}</p></div>
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2"><p className="text-zinc-500 text-[10px] uppercase">Cartões</p><p className="text-white font-black">{athleteFocusSummary.total.cards}</p></div>
+            </div>
+          )}
+
+          {athleteFocusIdSafe !== 'Todos' && athleteFocusSummary && (
+            <div className="overflow-x-auto border border-zinc-800 rounded-xl">
+              <table className="w-full text-xs">
+                <thead className="bg-zinc-950/80">
+                  <tr className="border-b border-zinc-800">
+                    <th className="text-left py-2 px-3 text-zinc-400 uppercase">Jogo</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Passes</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Finalizações</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Desarmes</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Erros críticos</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Faltas</th>
+                    <th className="text-right py-2 px-3 text-zinc-400 uppercase">Cartões</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {athleteFocusSummary.perMatch.map((row) => (
+                    <tr key={row.id} className="border-b border-zinc-900/60">
+                      <td className="py-2 px-3 text-white">{row.label}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.passesCorrect + row.passesWrong}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.shotsOn + row.shotsOff + row.shotsBlocked}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.tacklesWith + row.tacklesWithout + row.tacklesCounter}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.criticalErrors}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.foulsCommitted}</td>
+                      <td className="py-2 px-3 text-right text-zinc-300">{row.yellow + row.red}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {athleteFocusIdSafe !== 'Todos' && athleteCompareIdSafe !== 'Nenhum' && athleteCompareSummary && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-zinc-400 text-[11px] uppercase mb-2">Comparação rápida (filtros atuais)</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs">
+                <div><p className="text-zinc-500 uppercase">Jogos</p><p className="text-white">{athleteFocusSummary.total.matches} vs {athleteCompareSummary.matches}</p></div>
+                <div><p className="text-zinc-500 uppercase">Passes</p><p className="text-white">{athleteFocusSummary.total.passes} vs {athleteCompareSummary.passes}</p></div>
+                <div><p className="text-zinc-500 uppercase">Finalizações</p><p className="text-white">{athleteFocusSummary.total.shots} vs {athleteCompareSummary.shots}</p></div>
+                <div><p className="text-zinc-500 uppercase">Desarmes</p><p className="text-white">{athleteFocusSummary.total.tackles} vs {athleteCompareSummary.tackles}</p></div>
+                <div><p className="text-zinc-500 uppercase">Erros críticos</p><p className="text-white">{athleteFocusSummary.total.criticalErrors} vs {athleteCompareSummary.criticalErrors}</p></div>
+                <div><p className="text-zinc-500 uppercase">Faltas</p><p className="text-white">{athleteFocusSummary.total.fouls} vs {athleteCompareSummary.fouls}</p></div>
+                <div><p className="text-zinc-500 uppercase">Cartões</p><p className="text-white">{athleteFocusSummary.total.cards} vs {athleteCompareSummary.cards}</p></div>
+              </div>
+            </div>
+          )}
+        </div>
+      </ExpandableCard>
+
       {/* KPI Cards - Shaded Colors */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard title="Total de Jogos" value={stats.totalGames} icon={Trophy} color="text-[#00f0ff]" bg="bg-[#00f0ff]/10 border-[#00f0ff]/20" />
