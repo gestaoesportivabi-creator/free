@@ -60,6 +60,33 @@ function buildSessionKeysByDate(store: StoredPsrTreinos): Record<string, string[
   return out;
 }
 
+function buildScheduleSessionKeysByDate(schedules: WeeklySchedule[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const active = (Array.isArray(schedules) ? schedules : []).filter(
+    s => s && (s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true')
+  );
+  const seen = new Set<string>();
+  active.forEach(s => {
+    try {
+      const flat = normalizeScheduleDays(s);
+      if (!Array.isArray(flat)) return;
+      flat.forEach(day => {
+        const act = (day?.activity || '').trim();
+        if (act !== 'Treino' && act !== 'Musculação') return;
+        const date = day?.date || '';
+        const time = day?.time || '00:00';
+        if (!date) return;
+        const key = `${date}_${time}_${act}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (!out[date]) out[date] = [];
+        out[date].push(key);
+      });
+    } catch (_) {}
+  });
+  return out;
+}
+
 export const PsrTab: React.FC<PsrTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -112,16 +139,21 @@ export const PsrTab: React.FC<PsrTabProps> = ({
              if (!newTreinos[key]) newTreinos[key] = {};
              newTreinos[key][item.jogadorId] = item.valor;
           });
+          const scheduleSessionKeysByDate = buildScheduleSessionKeysByDate(schedules);
           
           if (Object.keys(localTreinos).length > 0) {
             const merged = { ...localTreinos };
             const sessionKeysByDate = buildSessionKeysByDate(merged);
             // Evita replicar valor diário em múltiplas sessões no mesmo dia.
             Object.entries(newTreinos).forEach(([date, byPlayer]) => {
-              const sessionKeys = sessionKeysByDate[date] || [];
+              const sessionKeys = sessionKeysByDate[date] || scheduleSessionKeysByDate[date] || [];
               if (sessionKeys.length === 1) {
                 const onlyKey = sessionKeys[0];
                 merged[onlyKey] = { ...(merged[onlyKey] || {}), ...byPlayer };
+              } else if (sessionKeys.length > 1) {
+                // Sem sessão local prévia: ancora no primeiro treino do dia para exibição cross-device.
+                const firstKey = sessionKeys[0];
+                merged[firstKey] = { ...(merged[firstKey] || {}), ...byPlayer };
               } else if (sessionKeys.length === 0) {
                 merged[date] = { ...(merged[date] || {}), ...byPlayer };
               }
@@ -129,8 +161,17 @@ export const PsrTab: React.FC<PsrTabProps> = ({
             setPsrTreinos(merged);
             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(merged));
           } else {
-             setPsrTreinos(newTreinos);
-             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(newTreinos));
+             const mapped: StoredPsrTreinos = {};
+             Object.entries(newTreinos).forEach(([date, byPlayer]) => {
+               const sessionKeys = scheduleSessionKeysByDate[date] || [];
+               if (sessionKeys.length > 0) {
+                 mapped[sessionKeys[0]] = { ...(mapped[sessionKeys[0]] || {}), ...byPlayer };
+               } else {
+                 mapped[date] = { ...(mapped[date] || {}), ...byPlayer };
+               }
+             });
+             setPsrTreinos(mapped);
+             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(mapped));
           }
         }
 
@@ -140,7 +181,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     };
     loadFromApi();
     return () => { mounted = false; };
-  }, []);
+  }, [schedules]);
 
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
     setPsrJogos(prev => {

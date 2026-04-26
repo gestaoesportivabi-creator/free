@@ -60,6 +60,33 @@ function buildSessionKeysByDate(store: StoredPseTreinos): Record<string, string[
   return out;
 }
 
+function buildScheduleSessionKeysByDate(schedules: WeeklySchedule[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const active = (Array.isArray(schedules) ? schedules : []).filter(
+    s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true')
+  );
+  const seen = new Set<string>();
+  active.forEach(s => {
+    try {
+      const flat = normalizeScheduleDays(s);
+      if (!Array.isArray(flat)) return;
+      flat.forEach(day => {
+        const act = (day?.activity || '').trim();
+        if (act !== 'Treino' && act !== 'Musculação') return;
+        const date = day?.date || '';
+        const time = day?.time || '00:00';
+        if (!date) return;
+        const key = `${date}_${time}_${act}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (!out[date]) out[date] = [];
+        out[date].push(key);
+      });
+    } catch (_) {}
+  });
+  return out;
+}
+
 export const PseTab: React.FC<PseTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -109,16 +136,21 @@ export const PseTab: React.FC<PseTabProps> = ({
             if (!treinosApi[yyyyMmDd]) treinosApi[yyyyMmDd] = {};
             treinosApi[yyyyMmDd][item.jogadorId] = item.valor;
           });
+          const scheduleSessionKeysByDate = buildScheduleSessionKeysByDate(schedules);
           if (Object.keys(localTreinos).length > 0) {
             const local = { ...localTreinos };
             const sessionKeysByDate = buildSessionKeysByDate(local);
             // Evita duplicação entre múltiplas sessões no mesmo dia:
             // quando há mais de uma sessão para a data, não espalhamos payload diário da API para todas.
             Object.entries(treinosApi).forEach(([date, byPlayer]) => {
-              const sessionKeys = sessionKeysByDate[date] || [];
+              const sessionKeys = sessionKeysByDate[date] || scheduleSessionKeysByDate[date] || [];
               if (sessionKeys.length === 1) {
                 const onlyKey = sessionKeys[0];
                 local[onlyKey] = { ...(local[onlyKey] || {}), ...byPlayer };
+              } else if (sessionKeys.length > 1) {
+                // Sem sessão local prévia: ancora no primeiro treino do dia para exibição cross-device.
+                const firstKey = sessionKeys[0];
+                local[firstKey] = { ...(local[firstKey] || {}), ...byPlayer };
               } else if (sessionKeys.length === 0) {
                 // Sem sessão local correspondente: mantém bucket diário isolado (não exibido como sessão).
                 local[date] = { ...(local[date] || {}), ...byPlayer };
@@ -127,8 +159,17 @@ export const PseTab: React.FC<PseTabProps> = ({
             setPseTreinos(local);
             try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(local)); } catch (_) {}
           } else {
-            setPseTreinos(treinosApi);
-            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(treinosApi)); } catch (_) {}
+            const mapped: StoredPseTreinos = {};
+            Object.entries(treinosApi).forEach(([date, byPlayer]) => {
+              const sessionKeys = scheduleSessionKeysByDate[date] || [];
+              if (sessionKeys.length > 0) {
+                mapped[sessionKeys[0]] = { ...(mapped[sessionKeys[0]] || {}), ...byPlayer };
+              } else {
+                mapped[date] = { ...(mapped[date] || {}), ...byPlayer };
+              }
+            });
+            setPseTreinos(mapped);
+            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(mapped)); } catch (_) {}
           }
         }
       } catch (err) {
@@ -137,7 +178,7 @@ export const PseTab: React.FC<PseTabProps> = ({
     };
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [schedules]);
 
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
     setPseJogos(prev => {
