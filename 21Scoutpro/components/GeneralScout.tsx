@@ -428,11 +428,24 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
           transitionErrors: playerStatsForAthlete.transitionErrors || (playerStatsForAthlete as any).wrongPassesTransition || 0,
         };
         const filteredLog = Array.isArray(match.postMatchEventLog)
-          ? match.postMatchEventLog.filter((e) => {
-              const pid = String(e?.playerId ?? '').trim();
-              return pid === athleteFilterIdSafe || String(e?.assistPlayerId ?? '').trim() === athleteFilterIdSafe;
-            })
+          ? match.postMatchEventLog.filter((e) => String(e?.playerId ?? '').trim() === athleteFilterIdSafe)
           : [];
+        const goalTimes = filteredLog
+          .filter((e) => String((e as any)?.action ?? '').toLowerCase() === 'goal' && !(e as any)?.isOpponentGoal)
+          .map((e) => {
+            const period = (e as any)?.period ?? '';
+            const method = String((e as any)?.goalMethod ?? (e as any)?.subtipo ?? '').trim();
+            return {
+              time: period ? `${(e as any).time} (${period})` : String((e as any).time || ''),
+              method: method || undefined,
+            };
+          });
+        const goalMethodsScored = goalTimes.reduce<Record<string, number>>((acc, g) => {
+          const m = String(g.method || '').trim().toUpperCase();
+          if (!m) return acc;
+          acc[m] = (acc[m] || 0) + 1;
+          return acc;
+        }, {});
         return {
           ...match,
           goalsFor: normalizedAthleteStats.goals || 0,
@@ -446,6 +459,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             saves: normalizedAthleteStats.saves || 0,
             yellowCards: normalizedAthleteStats.yellowCards || 0,
             redCards: normalizedAthleteStats.redCards || 0,
+            goalTimes,
+            goalsConcededTimes: [],
+            goalMethodsScored,
+            goalMethodsConceded: {},
+            goalsScoredSetPiece: normalizedAthleteStats.goalsScoredSetPiece || 0,
+            goalsScoredOpenPlay:
+              normalizedAthleteStats.goalsScoredOpenPlay ??
+              Math.max(0, (normalizedAthleteStats.goals || 0) - (normalizedAthleteStats.goalsScoredSetPiece || 0)),
+            goalsConcededSetPiece: 0,
+            goalsConcededOpenPlay: normalizedAthleteStats.goalsConcededOpenPlay || 0,
           },
           postMatchEventLog: filteredLog,
           possessionSecondsWith: 0,
