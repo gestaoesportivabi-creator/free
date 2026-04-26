@@ -144,11 +144,11 @@ function renderIndiceFisicoInfo(indiceFisico: ReturnType<typeof calcularIndiceFi
     }
 
     return (
-        <span className="inline-flex items-center justify-end gap-1 text-zinc-300">
-            <span className="text-zinc-400">IF</span>
-            <span className={`font-bold text-[10px] ${colorClass}`}>{indiceFisico.indice}%</span>
-            <Icon size={10} className={iconClass} />
-            <span className={`text-[8px] font-bold ${colorClass}`}>{indiceFisico.status}</span>
+        <span className="inline-flex items-center justify-end gap-1.5 text-zinc-300">
+            <span className="text-zinc-400 text-[10px]">IF</span>
+            <span className={`font-black text-[14px] leading-none ${colorClass}`}>{indiceFisico.indice}%</span>
+            <Icon size={12} className={iconClass} />
+            <span className={`text-[10px] font-black ${colorClass}`}>{indiceFisico.status}</span>
         </span>
     );
 }
@@ -2020,7 +2020,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
-        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
+        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id);
         const suspendedIds = new Set<string>();
         const penduradoIds = new Set<string>();
         if (match.competition && championships.length) {
@@ -2045,7 +2045,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
-        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches);
+        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id);
         const suspendedIds = new Set<string>();
         const penduradoIds = new Set<string>();
         if (match.competition && championships.length) {

@@ -5,6 +5,7 @@ import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 import { INJURY_LOCATIONS_BY_TYPE, WELLNESS_PAIN_SIDE_OPTIONS, WELLNESS_PAIN_TYPE_OPTIONS } from '../utils/injuryLocations';
+import { parseLocalDateOnly } from '../utils/dateUtils';
 
 export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
 
@@ -179,6 +180,7 @@ function buildObservacoesPayload(entry: WellnessPlayerEntry): string | null {
 interface WellnessTabProps {
   players: Player[];
   schedules?: WeeklySchedule[];
+  championshipMatches?: { id: string; date: string; time?: string; opponent?: string; competition?: string }[];
 }
 
 function mergeWellnessData(base: WellnessData, incoming: WellnessData): WellnessData {
@@ -192,11 +194,24 @@ function mergeWellnessData(base: WellnessData, incoming: WellnessData): Wellness
   return out;
 }
 
-function buildCommitmentByDate(schedules: WeeklySchedule[]): Record<string, Set<CommitType>> {
+function toLocalYmd(dateInput: string | undefined): string | null {
+  if (!dateInput || typeof dateInput !== 'string') return null;
+  const parsed = parseLocalDateOnly(dateInput);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildCommitmentByDate(
+  schedules: WeeklySchedule[],
+  championshipMatches: { id: string; date: string; time?: string; opponent?: string; competition?: string }[]
+): Record<string, Set<CommitType>> {
   const map: Record<string, Set<CommitType>> = {};
   const add = (date: string, t: CommitType) => {
-    if (!date || date.length < 10) return;
-    const d = date.slice(0, 10);
+    const d = toLocalYmd(date);
+    if (!d) return;
     if (!map[d]) map[d] = new Set();
     map[d].add(t);
   };
@@ -209,6 +224,8 @@ function buildCommitmentByDate(schedules: WeeklySchedule[]): Record<string, Set<
       else if (act === 'Jogo') add(day.date || '', 'jogo');
     });
   });
+  // Fallback e referência principal para dias de jogo: tabela de campeonato.
+  (championshipMatches || []).forEach((m) => add(m?.date || '', 'jogo'));
   return map;
 }
 
@@ -220,13 +237,16 @@ function firstAllowedDate(commitmentByDate: Record<string, Set<CommitType>>, pre
   return ge ?? sorted[sorted.length - 1];
 }
 
-export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [] }) => {
+export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [], championshipMatches = [] }) => {
   const [data, setData] = useState<WellnessData>({});
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
   const [savingDate, setSavingDate] = useState<string | null>(null);
   const [savedAtByDate, setSavedAtByDate] = useState<Record<string, string>>({});
 
-  const commitmentByDate = useMemo(() => buildCommitmentByDate(schedules), [schedules]);
+  const commitmentByDate = useMemo(
+    () => buildCommitmentByDate(schedules, championshipMatches),
+    [schedules, championshipMatches]
+  );
 
   const commitmentDateBounds = useMemo(() => {
     const sorted = Object.keys(commitmentByDate).sort();

@@ -4,6 +4,7 @@
  */
 
 import { normalizeScheduleDays } from './scheduleUtils';
+import { parseLocalDateOnly } from './dateUtils';
 
 const PSR_JOGOS_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_KEY = 'scout21_psr_treinos';
@@ -13,6 +14,20 @@ const QUALIDADE_SONO_KEY = 'scout21_qualidade_sono';
 const WELLNESS_KEY = 'scout21_wellness';
 
 type EventWithDate = { date: string; eventKey: string; type: 'treino' | 'jogo' };
+
+function toLocalYmd(dateInput: string | undefined): string | null {
+  if (!dateInput || typeof dateInput !== 'string') return null;
+  const parsed = parseLocalDateOnly(dateInput);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function compareYmdAsc(a: string, b: string): number {
+  return parseLocalDateOnly(a).getTime() - parseLocalDateOnly(b).getTime();
+}
 
 function getPsrJogos(): Record<string, Record<string, number>> {
   try {
@@ -77,7 +92,7 @@ function buildEventsWithDates(
       flat.forEach((day: any) => {
         const act = (day?.activity || '').trim();
         if (act !== 'Treino' && act !== 'Musculação') return;
-        const date = day?.date || '';
+        const date = toLocalYmd(day?.date || '') || '';
         const time = day?.time || '00:00';
         const sessionKey = `${date}_${time}_${act}`;
         if (!date || seenTreino.has(sessionKey)) return;
@@ -90,11 +105,12 @@ function buildEventsWithDates(
   });
 
   (championshipMatches || []).forEach((m) => {
-    if (!m?.id || !m?.date) return;
-    list.push({ date: m.date, eventKey: m.id, type: 'jogo' });
+    const date = toLocalYmd(m?.date || '');
+    if (!m?.id || !date) return;
+    list.push({ date, eventKey: m.id, type: 'jogo' });
   });
 
-  list.sort((a, b) => a.date.localeCompare(b.date));
+  list.sort((a, b) => compareYmdAsc(a.date, b.date));
   return list;
 }
 
@@ -119,12 +135,15 @@ export function getPlayerPhysiologyForMatch(
   matchDate: string,
   playerIds: string[],
   schedules: { days?: unknown[]; isActive?: unknown }[],
-  championshipMatches: { id: string; date: string; time?: string; opponent?: string }[]
+  championshipMatches: { id: string; date: string; time?: string; opponent?: string }[],
+  matchId?: string
 ): Record<string, PlayerPhysiology> {
+  const normalizedMatchDate = toLocalYmd(matchDate);
   const result: Record<string, PlayerPhysiology> = {};
   playerIds.forEach((id) => {
     result[id] = { psrMatchDay: null, pseAfterLastTraining: null, sleepMatchDay: null, dorMuscularMatchDay: null };
   });
+  if (!normalizedMatchDate) return result;
 
   const psrJogos = getPsrJogos();
   const pseTreinos = getPseTreinos();
@@ -132,14 +151,17 @@ export function getPlayerPhysiologyForMatch(
   const wellness = getWellness();
 
   const events = buildEventsWithDates(schedules, championshipMatches);
-  const matchDayEvent = events.find((e) => e.date === matchDate && e.type === 'jogo');
-  const matchEventKey = matchDayEvent?.eventKey;
+  const matchDayEvent = events.find((e) => e.date === normalizedMatchDate && e.type === 'jogo');
+  const matchEventKey = (typeof matchId === 'string' && matchId.trim()) || matchDayEvent?.eventKey;
+  const jogoEventsOnOrBeforeMatch = events
+    .filter((e) => e.type === 'jogo' && compareYmdAsc(e.date, normalizedMatchDate) <= 0)
+    .sort((a, b) => compareYmdAsc(b.date, a.date));
 
   // Última sessão de treino: inclui treinos no dia do jogo (ex.: treino de manhã, jogo à noite)
   const treinoEventsOnOrBeforeMatch = events
-    .filter((e) => e.type === 'treino' && e.date <= matchDate)
+    .filter((e) => e.type === 'treino' && compareYmdAsc(e.date, normalizedMatchDate) <= 0)
     .sort((a, b) => {
-      const byDate = b.date.localeCompare(a.date);
+      const byDate = compareYmdAsc(b.date, a.date);
       if (byDate !== 0) return byDate;
       return b.eventKey.localeCompare(a.eventKey);
     });
@@ -153,6 +175,15 @@ export function getPlayerPhysiologyForMatch(
         result[playerId].psrMatchDay = psrVal;
       }
     }
+    if (result[playerId].psrMatchDay == null) {
+      for (const ev of jogoEventsOnOrBeforeMatch) {
+        const psrVal = psrJogos[ev.eventKey]?.[pid];
+        if (typeof psrVal === 'number' && psrVal >= 0 && psrVal <= 10) {
+          result[playerId].psrMatchDay = psrVal;
+          break;
+        }
+      }
+    }
 
     for (const ev of treinoEventsOnOrBeforeMatch) {
       const data = pseTreinos[ev.eventKey];
@@ -163,15 +194,44 @@ export function getPlayerPhysiologyForMatch(
       }
     }
 
-    const sleepEventKey = `jogo_${matchDate}`;
+    const sleepEventKey = `jogo_${normalizedMatchDate}`;
     const sleepVal = sono[sleepEventKey]?.[pid];
     if (typeof sleepVal === 'number' && sleepVal >= 1 && sleepVal <= 5) {
       result[playerId].sleepMatchDay = sleepVal;
     }
+    if (result[playerId].sleepMatchDay == null) {
+      const fallbackSleepDate = Object.keys(sono)
+        .filter((k) => k.startsWith('jogo_'))
+        .map((k) => toLocalYmd(k.replace('jogo_', '')))
+        .filter((d): d is string => Boolean(d))
+        .filter((d) => compareYmdAsc(d, normalizedMatchDate) <= 0)
+        .sort((a, b) => compareYmdAsc(b, a))
+        .find((d) => {
+          const v = sono[`jogo_${d}`]?.[pid];
+          return typeof v === 'number' && v >= 1 && v <= 5;
+        });
+      if (fallbackSleepDate) {
+        result[playerId].sleepMatchDay = sono[`jogo_${fallbackSleepDate}`]?.[pid] ?? null;
+      }
+    }
 
-    const dorVal = wellness[matchDate]?.[pid]?.dor;
+    const dorVal = wellness[normalizedMatchDate]?.[pid]?.dor;
     if (typeof dorVal === 'number' && dorVal >= 1 && dorVal <= 5) {
       result[playerId].dorMuscularMatchDay = dorVal;
+    }
+    if (result[playerId].dorMuscularMatchDay == null) {
+      const fallbackDorDate = Object.keys(wellness)
+        .map((d) => toLocalYmd(d))
+        .filter((d): d is string => Boolean(d))
+        .filter((d) => compareYmdAsc(d, normalizedMatchDate) <= 0)
+        .sort((a, b) => compareYmdAsc(b, a))
+        .find((d) => {
+          const v = wellness[d]?.[pid]?.dor;
+          return typeof v === 'number' && v >= 1 && v <= 5;
+        });
+      if (fallbackDorDate) {
+        result[playerId].dorMuscularMatchDay = wellness[fallbackDorDate]?.[pid]?.dor ?? null;
+      }
     }
   });
 
