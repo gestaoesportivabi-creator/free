@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag, Lock } from 'lucide-react';
 import { Championship } from '../types';
 import { setChampionshipCards } from '../utils/championshipCards';
-import { parseLocalDateOnly, isDateInPast, formatDateSafe } from '../utils/dateUtils';
+import { parseLocalDateOnly, isDateInPast, formatDateSafe, getTodayLocalYmd } from '../utils/dateUtils';
 
 export interface ChampionshipMatch {
     id: string;
@@ -74,7 +74,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
 
     const [formData, setFormData] = useState<ChampionshipMatch>({
         id: '',
-        date: new Date().toISOString().split('T')[0],
+        date: getTodayLocalYmd(),
         time: '20:00',
         opponent: '',
         competition: competitionOptions.length > 0 ? competitionOptions[0] : '',
@@ -154,7 +154,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         // Reset form
         setFormData({
             id: '',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             time: '20:00',
             opponent: '',
             competition: competitionOptions.length > 0 ? competitionOptions[0] : '',
@@ -181,7 +181,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const handleCancel = () => {
         setFormData({
             id: '',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             time: '20:00',
             opponent: '',
             competition: competitionOptions.length > 0 ? competitionOptions[0] : '',
@@ -224,7 +224,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         setCurrentChampionshipName(championshipToSave.name);
         setChampionshipMatchesForm([{
             id: '',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             time: '20:00',
             opponent: '',
             competition: championshipToSave.name,
@@ -239,7 +239,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         const competitionName = currentChampionshipName || championship?.name || '';
         setChampionshipMatchesForm([...championshipMatchesForm, {
             id: '',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             time: '20:00',
             opponent: '',
             competition: competitionName,
@@ -512,7 +512,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                 onClick={() => {
                                     setFormData({
                                         id: '',
-                                        date: new Date().toISOString().split('T')[0],
+                                        date: getTodayLocalYmd(),
                                         time: '20:00',
                                         opponent: '',
                                         competition: competitionOptions.length > 0 ? competitionOptions[0] : '',

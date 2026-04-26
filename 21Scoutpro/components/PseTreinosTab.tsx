@@ -5,6 +5,7 @@ import { normalizeScheduleDays } from '../utils/scheduleUtils';
 
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
+import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
 
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
 
@@ -59,8 +60,8 @@ export const PseTreinosTab: React.FC<PseTreinosTabProps> = ({ schedules, players
         // Como o backend salva equipeId e data, a view mapeará isso buscando por dia
         apiData.forEach((item: any) => {
            // Formata timestamp do DB para YYYY-MM-DD local
-           const dbDate = new Date(item.data);
-           const yyyyMmDd = dbDate.toISOString().split('T')[0];
+           const yyyyMmDd = toLocalYmd(item.data);
+           if (!yyyyMmDd) return;
            
            // Para parear corretamente, associamos a data. Como a PK do frontend é Date_Time_Act
            // Vamos encontrar as chaves parciais na tela... 
@@ -215,7 +216,7 @@ export const PseTreinosTab: React.FC<PseTreinosTabProps> = ({ schedules, players
                         {isExpanded ? <ChevronDown size={18} className="text-zinc-500" /> : <ChevronRight size={18} className="text-zinc-500" />}
                       </td>
                       <td className="p-3 font-medium text-white">
-                        {new Date(session.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {formatDateSafe(session.date)}
                       </td>
                       <td className="p-3">{session.time || '—'}</td>
                       <td className="p-3">

@@ -4,6 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
+import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
 
 export const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
 
@@ -61,8 +62,9 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
 
         const newData: StoredQualidadeSono = {};
         apiData.forEach((item: any) => {
-          // A data no backend é salva como timestamp, vamos padronizar pra o formato da string eventKey
-          const date = new Date(item.data).toISOString().split('T')[0];
+          // A data no backend é salva como timestamp; normalizar para o calendário local.
+          const date = toLocalYmd(item.data);
+          if (!date) return;
           // O frontend junta a string treino_YYYY-MM-DD
           const eventKey = `treino_${date}`; 
           
@@ -145,7 +147,7 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
             eventKey,
             date,
             type: 'treino',
-            label: `Noite anterior a ${new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+            label: `Noite anterior a ${formatDateSafe(date)}`,
             sublabel: `Treino (manhã)`,
           });
         });
@@ -163,7 +165,7 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
         eventKey,
         date: m.date,
         type: 'jogo',
-        label: `Noite anterior a ${new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}`,
+        label: `Noite anterior a ${formatDateSafe(m.date)}`,
         sublabel: `Jogo vs ${m.opponent || '—'}`,
       });
     });

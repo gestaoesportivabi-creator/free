@@ -4,6 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
+import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
 
 const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
 const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
@@ -135,7 +136,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
         if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
           const newTreinos: StoredPsrTreinos = {};
           apiTreinos.forEach((item: any) => {
-             const key = new Date(item.data).toISOString().split('T')[0];
+             const key = toLocalYmd(item.data);
+             if (!key) return;
              if (!newTreinos[key]) newTreinos[key] = {};
              newTreinos[key][item.jogadorId] = item.valor;
           });
@@ -396,7 +398,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-bold text-sm">
-                      {new Date(ev.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      {formatDateSafe(ev.date)}
                       {ev.type === 'treino' ? ` · ${ev.activity}` : ` · vs ${ev.opponent}`}
                     </p>
                     <p className="text-zinc-500 text-xs">

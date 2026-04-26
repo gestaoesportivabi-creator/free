@@ -4,6 +4,7 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
+import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
 
 const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
 const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
@@ -132,7 +133,8 @@ export const PseTab: React.FC<PseTabProps> = ({
         if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
           const treinosApi: StoredPseTreinos = {};
           apiTreinos.forEach((item: any) => {
-            const yyyyMmDd = new Date(item.data).toISOString().split('T')[0];
+            const yyyyMmDd = toLocalYmd(item.data);
+            if (!yyyyMmDd) return;
             if (!treinosApi[yyyyMmDd]) treinosApi[yyyyMmDd] = {};
             treinosApi[yyyyMmDd][item.jogadorId] = item.valor;
           });
@@ -394,7 +396,7 @@ export const PseTab: React.FC<PseTabProps> = ({
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-bold text-sm">
-                      {new Date(ev.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      {formatDateSafe(ev.date)}
                       {ev.type === 'treino' ? ` · ${ev.activity}` : ` · vs ${ev.opponent}`}
                     </p>
                     <p className="text-zinc-500 text-xs">

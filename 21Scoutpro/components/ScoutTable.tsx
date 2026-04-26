@@ -4,7 +4,7 @@ import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship,
 import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
-import { parseLocalDateOnly, formatDateSafe } from '../utils/dateUtils';
+import { parseLocalDateOnly, formatDateSafe, getTodayLocalYmd, toLocalYmd } from '../utils/dateUtils';
 import { timeControlsApi } from '../services/api';
 import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
@@ -239,11 +239,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     // Calendário: filtro de datas (default: mês atual) e modo de visualização
     const [startDate, setStartDate] = useState<string>(() => {
         const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        return toLocalYmd(new Date(now.getFullYear(), now.getMonth(), 1));
     });
     const [endDate, setEndDate] = useState<string>(() => {
         const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        return toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
     });
     const [viewMode, setViewMode] = useState<'calendar' | 'form' | 'analysis'>('calendar');
     const [selectedMatch, setSelectedMatch] = useState<MatchRecord | null>(null);
@@ -275,7 +275,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     const [entries, setEntries] = useState<ScoutEntry[]>([
         {
             id: '1',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             athleteId: '',
             athleteName: '',
             jerseyNumber: '',
@@ -331,7 +331,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         if (activePlayers.length === 0) return;
         
         // Criar entries para todos os jogadores ativos
-        const currentDate = entries[0]?.date || new Date().toISOString().split('T')[0];
+        const currentDate = entries[0]?.date || getTodayLocalYmd();
         const newEntries = activePlayers.map((player, index) => ({
             id: `${Date.now()}-${index}`,
             date: currentDate,
@@ -694,7 +694,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             try {
                 const date = new Date(dateStr);
                 if (isNaN(date.getTime())) return '';
-                return date.toISOString().split('T')[0];
+                return toLocalYmd(date);
             } catch {
                 return '';
             }
@@ -944,7 +944,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
 
                 const newEntry: ScoutEntry = {
                     id: Date.now().toString(),
-                    date: entries[0]?.date || new Date().toISOString().split('T')[0],
+                    date: entries[0]?.date || getTodayLocalYmd(),
                     athleteId: String(player.id).trim(),
                     athleteName: player.name,
                     jerseyNumber: player.jerseyNumber,
@@ -994,7 +994,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
 
             const newEntry: ScoutEntry = {
                 id: Date.now().toString(),
-                date: entries[0]?.date || new Date().toISOString().split('T')[0],
+                date: entries[0]?.date || getTodayLocalYmd(),
                 athleteId: String(player.id).trim(),
                 athleteName: player.name,
                 jerseyNumber: player.jerseyNumber,
@@ -1059,7 +1059,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
 
             const newEntry: ScoutEntry = {
                 id: Date.now().toString(),
-                date: entries[0]?.date || new Date().toISOString().split('T')[0],
+                date: entries[0]?.date || getTodayLocalYmd(),
                 athleteId: String(player.id).trim(),
                 athleteName: player.name,
                 jerseyNumber: player.jerseyNumber,
@@ -1688,7 +1688,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             // Limpar entries mas manter pelo menos uma linha
             setEntries([{
                 id: Date.now().toString(),
-                date: new Date().toISOString().split('T')[0],
+                date: getTodayLocalYmd(),
                 athleteId: '',
                 athleteName: '',
                 jerseyNumber: '',
@@ -1932,8 +1932,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
 
     const handleResetToCurrentMonth = () => {
         const now = new Date();
-        setStartDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]);
-        setEndDate(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]);
+        setStartDate(toLocalYmd(new Date(now.getFullYear(), now.getMonth(), 1)));
+        setEndDate(toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     };
 
     const handleMatchClick = (item: CalendarMatchItem) => {
@@ -1984,7 +1984,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         setShowStartScoutConfirmation(false);
         setEntries([{
             id: '1',
-            date: new Date().toISOString().split('T')[0],
+            date: getTodayLocalYmd(),
             athleteId: '',
             athleteName: '',
             jerseyNumber: '',

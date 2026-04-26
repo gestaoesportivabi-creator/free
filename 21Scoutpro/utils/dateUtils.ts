@@ -73,3 +73,27 @@ export function formatDateSafe(dateStr: string | undefined): string {
 
   return String(dateStr);
 }
+
+/**
+ * Converte Date/string para YYYY-MM-DD no calendário local.
+ * Útil para evitar deslocamentos ao usar toISOString() em datas-only.
+ */
+export function toLocalYmd(value: Date | string | undefined | null): string {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10);
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Data de hoje no formato YYYY-MM-DD usando calendário local.
+ */
+export function getTodayLocalYmd(): string {
+  return toLocalYmd(new Date());
+}
