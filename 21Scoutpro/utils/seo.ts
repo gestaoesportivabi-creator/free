@@ -4,7 +4,7 @@
  * index.html garante o fallback canónico + hreflang para `/` e `/blog/{lang}`.
  */
 
-const CANONICAL_ORIGIN = 'https://scout21.vercel.app';
+export const CANONICAL_ORIGIN = 'https://scout21.vercel.app';
 
 type RouteMeta = {
   title: string;
