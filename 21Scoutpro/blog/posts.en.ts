@@ -1139,5 +1139,230 @@ export const POSTS_EN: BlogPost[] = [
       },
       { type: 'cta-product', text: 'See how SCOUT 21 connects scout, training and tactical analysis in a single flow.' },
     ],
+   },
+  {
+    slug: 'technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing',
+    lang: 'en',
+    title: 'Technical SEO for futsal club sites: how to improve performance and indexing',
+    subtitle:
+      'Many clubs invest in content and keywords, but forget the foundation: speed, structure, and site accessibility. Fixing simple technical points can double organic traffic without spending a cent on ads.',
+    date: '2026-04-27',
+    updatedDate: '2026-04-27',
+    readMinutes: 11,
+    author: 'SCOUT21 Editorial',
+    heroEmoji: '⚙️',
+    tags: ['technical SEO', 'web performance', 'indexing', 'sports site'],
+    excerpt:
+      'A slow site, with confusing structure or tracking errors loses Google positions even with good content. This guide shows how to audit and fix the technical points that most affect futsal clubs: Core Web Vitals, information architecture, schema.org and accessibility.',
+    keywords: [
+      'technical SEO for clubs',
+      'sports site performance',
+      'Core Web Vitals futsal',
+      'schema.org club',
+      'accessibility sports site',
+    ],
+    translations: {
+      pt: 'seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao',
+      es: 'seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion',
+    },
+    coverImage: '/blog-covers/technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Rafael Guajardo',
+      photographerUrl: 'https://www.pexels.com/@rafa-guajardo',
+      photoUrl: 'https://www.pexels.com/photo/close-up-of-laptop-and-notebook-1181403/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Futsal clubs often focus on creating quality content and choosing the right keywords, but overlook the foundation of SEO: the technical aspects of the site. A slow site, with confusing structure or tracking errors can sabotage all content work, making the club lose Google positions even when producing excellent materials.',
+      },
+      { type: 'h2', text: 'Why technical SEO is the first step' },
+      {
+        type: 'p',
+        text:
+          'Think of technical SEO as the foundation of a house. You can have the most beautiful furniture (content) and the best location (keywords), but if the structure is cracked (slow or inaccessible site), everything collapses. Google prioritizes sites that offer good technical experience because they tend to retain more users.',
+        },
+      {
+        type: 'list',
+        items: [
+          'Sites that load in up to 2 seconds have 50% lower bounce rate than those taking 5 seconds or more',
+          '70% of users say page speed influences their willingness to buy from a site',
+          'Google has used mobile performance as a ranking factor since 2018',
+        ],
+      },
+      { type: 'callout', kind: 'tip', title: 'Quick test', text: 'Access your site on mobile and count to 3. If it has not fully loaded, you have a performance problem affecting your SEO.' },
+      { type: 'h2', text: 'The 4 pillars of technical SEO for clubs' },
+      {
+        type: 'h3',
+        text: '1. Core Web Vitals: user experience measured by Google',
+      },
+      {
+        type: 'p',
+        text:
+          'Google measures three essential performance metrics: LCP (largest contentful paint), FID (first input delay) and CLS (cumulative layout shift). Improving these indicators not only helps ranking but also leaves parents and athletes more satisfied when navigating the site.',
+      },
+      {
+        type: 'list',
+        items: [
+          'LCP (Largest Contentful Paint): measures when main content appears. Target: less than 2.5 seconds',
+          'FID (First Input Delay): measures interactivity. Target: less than 100 milliseconds',
+          'CLS (Cumulative Layout Shift): measures visual stability. Target: less than 0.1',
+        ],
+      },
+      {
+        type: 'h3',
+        text: '2. Information structure and site architecture',
+      },
+      {
+        type: 'p',
+        text:
+          'A well-structured site helps both users and search bots find what they need. For futsal clubs, this means logically organizing information about modalities, schedules, teachers, location and enrollment processes.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Clear hierarchy: homepage → modalities → specific (adult futsal, childrens, womens) → class details',
+          'Friendly URLs: use /futsal-children instead of ?page_id=123',
+          'Consistent navigation: fixed menu on all pages with links for enrollment, contact and location',
+          'Updated XML sitemap submitted to Google Search Console',
+        ],
+      },
+      {
+        type: 'h3',
+        text: '3. Schema.org: speaking the language of search engines',
+      },
+      {
+        type: 'p',
+        text:
+          'Structured markup (schema.org) helps Google understand exactly what your site offers. For clubs, there are specific types that can appear in rich results, increasing click-through rates.',
+      },
+      {
+        type: 'list',
+        items: [
+          'SportsClub: defines name, location, sport practiced and contact',
+          'SportsActivityLayer: details the modalities offered (futsal, indoor soccer)',
+          'Course: describes classes, schedules, levels and prices',
+          'FAQPage: for common questions about enrollment, schedules and policies',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Simple implementation',
+        text: 'You don\'t need to be a developer to add schema. Many site builders (WordPress, Wix, Squarespace) have specific sports plugins or you can use Google Tag Manager to insert the JSON-LD.',
+      },
+      {
+        type: 'h3',
+        text: '4. Accessibility: SEO that includes everyone',
+      },
+      {
+        type: 'p',
+        text:
+          'Accessible sites are not only legally required in many places, but also tend to have better search engine performance. Google interprets good accessibility practices as a quality signal.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Descriptive alternative text (alt) on all images',
+          'Adequate contrast between text and background (check with tools like WebAIM)',
+          'Keyboard navigation possible on all interactive elements',
+          'Captions in training or testimonial videos',
+          'Adjustable font size without breaking layout',
+        ],
+      },
+      { type: 'h2', text: 'How to audit your site in 30 minutes' },
+      {
+        type: 'p',
+        text:
+          'You don\'t need expensive tools or deep technical expertise to identify the main problems. With free tools and attention to detail, you can do a basic audit that reveals 80% of improvement points.',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Speed test: use PageSpeed Insights (developers.google.com/speed/pagespeed/insights/) and note weak points for both mobile and desktop',
+          'Check mobile-friendly: test on your own phone and use Google\'s Mobile Friendly Test',
+          'Track errors: in Google Search Console, check coverage and look for 404 errors, looping redirects or pages blocked by robots.txt',
+          'Review URL structure: navigate the site as a new visitor and note where it\'s confusing or where you\'d have difficulty finding enrollment information',
+          'Check fundamental tags: right-click → \'View page source\' and look for <title>, <meta description> and header tags (h1, h2, h3)',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Prioritizing corrections: what to do first',
+      },
+      {
+        type: 'p',
+        text:
+          'Not all technical problems have the same impact. Initially focus on those affecting both users and search engines, leaving more specific adjustments for later.',
+      },
+      {
+        type: 'list',
+        items: [
+          'First: any errors preventing full site access (downtime, redirect loops, robots.txt blocks)',
+          'Second: critical performance points affecting real experience (LCP > 4s, high CLS making \'enroll now\' button disappear)',
+          'Third: structural improvements helping navigation (confusing menu, orphan pages without internal links)',
+          'Fourth: fine adjustments to schema, metadata and advanced accessibility',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Free tools every club should use',
+      },
+      {
+        type: 'list',
+        items: [
+          'Google Search Console: monitors performance, crawling errors and provides search insights',
+          'Google Analytics 4: understands how users find and navigate the site',
+          'PageSpeed Insights: measures Core Web Vitals and suggests specific improvements',
+          'GTmetrix or Pingdom: for more detailed and historical speed tests',
+          'Screaming Frog SEO Spider (free version up to 500 URLs): crawls your site like Google does',
+        ],
+      },
+      { type: 'cta-newsletter' },
+      { type: 'h2', text: 'Ongoing maintenance: turning audit into habit' },
+      {
+        type: 'p',
+        text:
+          'Technical SEO is not a one-time task. Sites are updated, plugins added and content published constantly — all this can introduce new technical problems. The key is turning checks into routine.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Check PageSpeed Insights monthly to track trends',
+          'Review Google Search Console weekly for new errors',
+          'Test enrollment process monthly on different devices',
+          'Update schema.org when launching new modality or significantly changing schedules',
+          'Do a complete audit every quarter with a personalized checklist for your club',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'When to seek specialized help',
+      },
+      {
+        type: 'p',
+        text:
+          'Many technical problems can be solved with good practices and free tools, but there are moments when it\'s worth investing in specific expertise.',
+      },
+      {
+        type: 'list',
+        items: [
+          'If your site takes more than 5 seconds to load even after basic optimizations',
+          'When needing complex schema.org implementations or advanced markup',
+          'For platform migration (ex: changing from Wix to WordPress) without losing positioning',
+          'If you notice sudden organic traffic drop without recent content changes',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'Critical reminder',
+        text: 'No technical adjustment compensates for lack of relevant and updated content. Think of technical SEO as preparing the ground: it allows your content to flourish, but doesn\'t replace the need to plant quality seeds.',
+      },
+      { type: 'cta-product' },
+    ],
   },
 ];

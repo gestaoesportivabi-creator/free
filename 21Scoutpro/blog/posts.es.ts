@@ -1139,5 +1139,95 @@ export const POSTS_ES: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Mirá cómo SCOUT 21 conecta scout, entrenamiento y análisis táctico en un solo flujo.' },
     ],
+   },
+  {
+    slug: 'seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion',
+    lang: 'es',
+    title: 'SEO técnico para sitios de clubes de futsal: cómo mejorar rendimiento e indexación',
+    subtitle:
+      'Muchos clubes invierten en contenido y palabras clave, pero olvidan la base: velocidad, estructura y accesibilidad del sitio. Corregir puntos técnicos simples puede duplicar el tráfico orgánico sin gastar un centavo en anuncios.',
+    date: '2026-04-27',
+    updatedDate: '2026-04-27',
+    readMinutes: 11,
+    author: 'Redacción SCOUT21',
+    heroEmoji: '⚙️',
+    tags: ['SEO técnico', 'rendimiento web', 'indexación', 'sitio deportivo'],
+    excerpt:
+      'Un sitio lento, con estructura confusa o errores de rastreamiento pierde posiciones en Google incluso con buen contenido. Esta guía muestra cómo auditarlos y corregir los puntos técnicos que más afectan a los clubes de futsal: Core Web Vitals, arquitectura de información, schema.org y accesibilidad.',
+    keywords: [
+      'SEO técnico para clubes',
+      'rendimiento sitio deportivo',
+      'Core Web Vitals futsal',
+      'schema.org club',
+      'accesibilidad sitio deportivo',
+    ],
+    translations: {
+      pt: 'seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao',
+      en: 'technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing',
+    },
+    coverImage: '/blog-covers/seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Rafael Guajardo',
+      photographerUrl: 'https://www.pexels.com/@rafa-guajardo',
+      photoUrl: 'https://www.pexels.com/photo/close-up-of-laptop-and-notebook-1181403/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Los clubes de futsal a menudo se enfocan en crear contenido de calidad y elegir las palabras clave correctas, pero dejan de lado la fundación del SEO: los aspectos técnicos del sitio. Un sitio lento, con estructura confusa o errores de rastreimiento puede sabotear todo el trabajo de contenido, haciendo que el club pierda posiciones en Google incluso produciendo materiales excelentes.',
+      },
+      { type: 'h2', text: 'Por qué el SEO técnico es el primer paso' },
+      {
+        type: 'p',
+        text:
+          'Piensa en el SEO técnico como la fundación de una casa. Puedes tener los muebles más bonitos (contenido) y la mejor ubicación (palabras clave), pero si la estructura está agrietada (sitio lento o inaccesible), todo se derrumba. Google prioriza sitios que ofrecen buena experiencia técnica porque tienden a retener más usuarios.',
+        },
+      {
+        type: 'list',
+        items: [
+          'Los sitios que cargan en hasta 2 segundos tienen una tasa de rebote 50% menor que aquellos que tardan 5 segundos o más',
+          'El 70% de los usuarios dice que la velocidad de la página influye en su disposición para comprar en un sitio',
+          'Google ha utilizado el rendimiento móvil como factor de clasificación desde 2018',
+        ],
+      },
+      { type: 'callout', kind: 'tip', title: 'Prueba rápida', text: 'Accede a tu sitio desde el celular y cuenta hasta 3. Si aún no se ha cargado completamente, tienes un problema de rendimiento que está afectando tu SEO.' },
+      { type: 'h2', text: 'Los 4 pilares del SEO técnico para clubes' },
+      {
+        type: 'h3',
+        text: '1. Core Web Vitals: la experiencia del usuario medida por Google',
+      },
+      {
+        type: 'p',
+        text:
+          'Google mide tres métricas esenciales de rendimiento: LCP (mayor contenido pintado), FID (primer retraso de entrada) y CLS (desplazamiento de diseño acumulativo). Mejorar estos indicadores no solo ayuda en el posicionamiento sino que deja a los padres y atletas más satisfechos al navegar por el sitio.',
+      },
+      {
+        type: 'list',
+        items: [
+          'LCP (Largest Contentful Paint): mide cuándo aparece el contenido principal. Meta: menos de 2.5 segundos',
+          'FID (First Input Delay): mide la interactividad. Meta: menos de 100 milisegundos',
+          'CLS (Cumulative Layout Shift): mide la estabilidad visual. Meta: menos de 0.1',
+        ],
+      },
+      {
+        type: 'h3',
+        text: '2. Estructura de información y arquitectura del sitio',
+      },
+      {
+        type: 'p',
+        text:
+          'Un sitio bien estructurado ayuda tanto a usuarios como a robots de búsqueda a encontrar lo que necesitan. Para clubes de futsal, esto significa organizar lógicamente la información sobre modalidades, horarios, profesores, ubicación y procesos de inscripción.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Audita menús, URLs y enlaces internos para que cada página clave esté a tres clics o menos',
+          'Mantén títulos y metadatos consistentes para modalidad, edad y ubicación',
+          'Revisa páginas huérfanas y consolida contenidos duplicados por temporada',
+        ],
+      },
+    ],
   },
 ];

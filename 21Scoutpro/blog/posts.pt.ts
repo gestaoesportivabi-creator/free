@@ -1138,5 +1138,230 @@ export const POSTS_PT: BlogPost[] = [
       },
       { type: 'cta-product', text: 'Veja como o SCOUT 21 conecta scout, treino e análise tática no mesmo fluxo.' },
     ],
+   },
+  {
+    slug: 'seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao',
+    lang: 'pt-BR',
+    title: 'SEO técnico para sites de clubes de futsal: como melhorar performance e indexação',
+    subtitle:
+      'Muitos clubes investem em conteúdo e palavras-chave, mas esquecem da base: velocidade, estrutura e acessibilidade do site. Corrigir pontos técnicos simples pode dobrar o tráfego orgânico sem gastar um centavo em ads.',
+    date: '2026-04-27',
+    updatedDate: '2026-04-27',
+    readMinutes: 11,
+    author: 'Redação SCOUT21',
+    heroEmoji: '⚙️',
+    tags: ['SEO técnico', 'performance web', 'indexação', 'site esportivo'],
+    excerpt:
+      'Um site lento, com estrutura confusa ou erros de rastreamento perde posições no Google mesmo com bom conteúdo. Este guia mostra como auditoria e corrigir os pontos técnicos que mais afetam clubes de futsal: Core Web Vitals, arquitetura de informações, schema.org e acessibilidade.',
+    keywords: [
+      'SEO técnico para clubes',
+      'performance site esportivo',
+      'Core Web Vitals futsal',
+      'schema.org clube',
+      'acessibilidade site esportivo',
+    ],
+    translations: {
+      en: 'technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing',
+      es: 'seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion',
+    },
+    coverImage: '/blog-covers/seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Rafael Guajardo',
+      photographerUrl: 'https://www.pexels.com/@rafa-guajardo',
+      photoUrl: 'https://www.pexels.com/photo/close-up-of-laptop-and-notebook-1181403/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Clubes de futsal frequentemente focam em criar conteúdo de qualidade e escolher as palavras-chave certas, mas deixam de lado a fundação do SEO: os aspectos técnicos do site. Um site lento, com estrutura confusa ou erros de rastreamento pode sabotar todo o trabalho de conteúdo, fazendo com que o clube perca posições no Google mesmo produzindo materiais excelentes.',
+      },
+      { type: 'h2', text: 'Por que o SEO técnico é o primeiro passo' },
+      {
+        type: 'p',
+        text:
+          'Pense no SEO técnico como a fundação de uma casa. Você pode ter os móveis mais bonitos (conteúdo) e a melhor localização (palavras-chave), mas se a estrutura estiver rachada (site lento ou inacessível), tudo desaba. O Google prioriza sites que oferecem boa experiência técnica porque eles tendem a reter mais usuários.',
+        },
+      {
+        type: 'list',
+        items: [
+          'Sites que carregam em até 2 segundos têm taxa de rejeição 50% menor que aqueles que levam 5 segundos ou mais',
+          '70% dos usuários dizem que a velocidade da página influencia na disposição para comprar de um site',
+          'O Google usa o desempenho móvel como fator de ranking desde 2018',
+        ],
+      },
+      { type: 'callout', kind: 'tip', title: 'Teste rápido', text: 'Acesse seu site pelo celular e conte até 3. Se ainda não carregou totalmente, você tem um problema de performance que está afetando seu SEO.' },
+      { type: 'h2', text: 'Os 4 pilares do SEO técnico para clubes' },
+      {
+        type: 'h3',
+        text: '1. Core Web Vitals: a experiência do usuário medida pelo Google',
+      },
+      {
+        type: 'p',
+        text:
+          'O Google mede três métricas essenciais de desempenho: LCP (maior conteúdo pintado), FID (primeiro atraso de entrada) e CLS (deslocamento layout cumulativo). Melhorar esses indicadores não só ajuda no ranking como deixa os pais e atletas mais satisfeitos ao navegar pelo site.',
+      },
+      {
+        type: 'list',
+        items: [
+          'LCP (Largest Contentful Paint): mede quando o conteúdo principal aparece. Meta: menos de 2.5 segundos',
+          'FID (First Input Delay): mede a interatividade. Meta: menos de 100 milissegundos',
+          'CLS (Cumulative Layout Shift): mede a estabilidade visual. Meta: menos de 0.1',
+        ],
+      },
+      {
+        type: 'h3',
+        text: '2. Estrutura de informações e arquitetura do site',
+      },
+      {
+        type: 'p',
+        text:
+          'Um site bem estruturado ajuda tanto usuários quanto robôs de busca a encontrar o que precisam. Para clubes de futsal, isso significa organizar logicamente informações sobre modalidades, horários, professores, localização e processos de matrícula.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Hierarquia clara: homepage → modalidades → específicas (futsal adulto, infantil, feminino) → detalhes da turma',
+          'URLs amigáveis: use /futsal-infantil ao invés de ?page_id=123',
+          'Navegação consistente: menu fixo em todas as páginas com links para matrícula, contato e localização',
+          'Mapa do site XML atualizado e enviado ao Google Search Console',
+        ],
+      },
+      {
+        type: 'h3',
+        text: '3. Schema.org: falando a língua dos mecanismos de busca',
+      },
+      {
+        type: 'p',
+        text:
+          'Marcação estruturada (schema.org) ajuda o Google a entender exatamente o que seu site oferece. Para clubes, existem tipos específicos que podem aparecer em rich results, aumentando a taxa de cliques.',
+      },
+      {
+        type: 'list',
+        items: [
+          'SportsClub: define nome, localização, esporte praticado e contato',
+          'SportsActivityLayer: detalha as modalidades oferecidas (futsal, futebol de salão)',
+          'Course: descreve turmas, horários, níveis e preços',
+          'FAQPage: para perguntas comuns sobre matrícula, horários e políticas',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Implementação simples',
+        text: 'Você não precisa ser desenvolvedor para adicionar schema. Muitos construtores de sites (WordPress, Wix, Squarespace) têm plugins específicos para esportes ou você pode usar o Google Tag Manager para inserir o JSON-LD.',
+      },
+      {
+        type: 'h3',
+        text: '4. Acessibilidade: SEO que inclui todos',
+      },
+      {
+        type: 'p',
+        text:
+          'Sites acessíveis não só são obrigatórios por lei em muitos lugares, como também tendem a ter melhor desempenho em buscadores. O Google interpreta boas práticas de acessibilidade como sinal de qualidade.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Textos alternativos (alt) descritivos em todas as imagens',
+          'Contraste adequado entre texto e fundo (verifique com ferramentas como WebAIM)',
+          'Navegação por teclado possível em todos os elementos interativos',
+          'Legendas em vídeos de treinos ou depoimentos',
+          'Tamanho de fonte ajustável sem quebrar o layout',
+        ],
+      },
+      { type: 'h2', text: 'Como auditor seu site em 30 minutos' },
+      {
+        type: 'p',
+        text:
+          'Você não precisa de ferramentas caras ou expertise técnica profunda para identificar os principais problemas. Com ferramentas gratuitas e atenção aos detalhes, é possível fazer uma auditoria básica que revela 80% dos pontos de melhoria.',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Teste de velocidade: use PageSpeed Insights (developers.google.com/speed/pagespeed/insights/) e anote os pontos fracos tanto para mobile quanto desktop',
+          'Verifique mobile-friendly: teste no próprio celular e use o Mobile Friendly Test do Google',
+          'Rastreie erros: no Google Search Console, veja a cobertura e procure por erros 404, redirecionamentos looping ou páginas bloqueadas por robots.txt',
+          'Revise estrutura de URLs: navegue pelo site como um novo visitante e anote onde fica confuso ou onde você teria dificuldade para encontrar informações de matrícula',
+          'Cheque tags fundamentais: clique com botão direito → \"Ver source da página\" e procure por <title>, <meta description> e tags de cabeçalho (h1, h2, h3)',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Priorizando correções: o que fazer primeiro',
+      },
+      {
+        type: 'p',
+        text:
+          'Nem todos os problemas técnicos têm o mesmo impacto. Foque inicialmente nos que afetam tanto usuários quanto buscadores, deixando ajustes mais específicos para depois.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Primeiro: quaisquer erros que impedam o acesso completo ao site (down-time, loops de redirecionamento, bloqueios no robots.txt)',
+          'Segundo: pontos críticos de performance que afetam a experiência real (LCP > 4s, CLS alto que faz botão \"matricule-se\" sumir)',
+          'Terceiro: melhorias de estrutura que ajudam na navegação (menu confuso, páginas órfãs sem links internos)',
+          'Quarto: ajustes finos de schema, metadata e acessibilidade avançada',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Ferramentas gratuitas que todo clube deveria usar',
+      },
+      {
+        type: 'list',
+        items: [
+          'Google Search Console: monitora desempenho, erros de rastreamento e fornece insights de busca',
+          'Google Analytics 4: entende como usuários encontram e navegam pelo site',
+          'PageSpeed Insights: mede Core Web Vitals e sugere melhorias específicas',
+          'GTmetrix ou Pingdom: para testes de velocidade mais detalhados e históricos',
+          'Screaming Frog SEO Spider (versão gratuita até 500 URLs): rastreia seu site como o Google faz',
+        ],
+      },
+      { type: 'cta-newsletter' },
+      { type: 'h2', text: 'Manutenção contínua: transformando auditoria em hábito' },
+      {
+        type: 'p',
+        text:
+          'SEO técnico não é uma tarefa única. Sites são atualizados, plugins são adicionados e conteúdo é publicado constantemente — tudo isso pode introduzir novos problemas técnicos. A chave é transformar verificações em rotina.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Verifique PageSpeed Insights mensalmente para acompanhar tendências',
+          'Revise o Google Search Console semanalmente em busca de novos erros',
+          'Teste o processo de matrícula mensalmente em diferentes dispositivos',
+          'Atualize schema.org sempre que lançar nova modalidade ou alterar horários significativamente',
+          'Faça uma auditoria completa a cada trimestre com checklist personalizada para seu clube',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Quando procurar ajuda especializada',
+      },
+      {
+        type: 'p',
+        text:
+          'Muitos problemas técnicos podem ser resolvidos com boas práticas e ferramentas gratuitas, mas há momentos em que vale a pena investir em expertise específica.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Se seu site levar mais de 5 segundos para carregar mesmo após otimizações básicas',
+          'Quando precisar de implementações complexas de schema.org ou marcação avançada',
+          'Para migração de plataforma (ex: mudar de Wix para WordPress) sem perder posicionamento',
+          'Se notar queda súbita de tráfego orgânico sem alterações recentes de conteúdo',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'Lembre-se crítico',
+        text: 'Nenhum ajuste técnico compensa a falta de conteúdo relevante e atualizado. Pense no SEO técnico como preparar o terreno: ele permite que seu conteúdo floresça, mas não substitui a necessidade de plantar sementes de qualidade.',
+      },
+      { type: 'cta-product' },
+    ],
   },
 ];

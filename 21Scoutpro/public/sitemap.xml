@@ -91,6 +91,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao</loc>
+    <lastmod>2026-04-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/en/why-database-beats-spreadsheet</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -157,6 +163,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/en/technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing</loc>
+    <lastmod>2026-04-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/es/por-que-datos-en-la-base</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -219,6 +231,12 @@
   <url>
     <loc>https://scout21.vercel.app/blog/es/ciclo-de-feedback-scout-entrenamiento-72h-futsal</loc>
     <lastmod>2026-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion</loc>
+    <lastmod>2026-04-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

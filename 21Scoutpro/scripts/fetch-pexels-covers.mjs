@@ -93,6 +93,30 @@ const POSTS = [
       'player stretching recovery',
     ],
   },
+  {
+    slug: 'seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google',
+    queries: [
+      'local business google maps',
+      'computer screen showing google maps',
+      'person using laptop for local search',
+    ],
+  },
+  {
+    slug: 'seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao',
+    queries: [
+      'website optimization',
+      'technical SEO audit',
+      'website performance improvement',
+    ],
+  },
+  {
+    slug: 'ciclo-de-feedback-scout-treino-72h-futsal',
+    queries: [
+      'coach feedback session',
+      'sports training feedback',
+      'performance review meeting',
+    ],
+  },
 ];
 
 const OUT_DIR = path.resolve('public/blog-covers');

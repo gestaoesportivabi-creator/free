@@ -10,7 +10,7 @@ import {
 } from '../blog/posts';
 import { blocksOf, slugify, tocOf } from '../blog/types';
 import type { User } from '../types';
-import { applyRouteMeta, canonicalUrl, injectJsonLd } from '../utils/seo';
+import { applyRouteMeta, canonicalUrl, injectJsonLd, CANONICAL_ORIGIN } from '../utils/seo';
 import { onScrollPercent, track } from '../utils/analytics';
 import { NewsletterStickyBar, NewsletterTriggerButton, openNewsletter } from './NewsletterPopup';
 
@@ -177,24 +177,26 @@ export const BlogPage: React.FC<BlogPageProps> = ({
          image: post.coverImage ?? '/og-cover.jpg',
          alternates,
        });
-        injectJsonLd('jsonld-article', {
-          '@context': 'https://schema.org',
-          '@type': 'Article',
-          '@id': canonicalUrl(selfPath),
-          headline: post.title,
-          description: post.excerpt,
-          inLanguage: post.lang,
-          datePublished: post.date,
-          dateModified: post.updatedDate ?? post.date,
-          author: { '@type': 'Organization', name: post.author ?? 'SCOUT21' },
-          publisher: {
-            '@type': 'Organization',
-            name: 'SCOUT 21 PRO',
-            logo: { '@type': 'ImageObject', url: canonicalUrl('/public-logo.png.png') },
-          },
-          mainEntityOfPage: { '@type': 'WebPage', '@id': canonicalUrl(selfPath) },
-          keywords: post.keywords?.join(', '),
-        });
+         injectJsonLd('jsonld-article', {
+           '@context': 'https://schema.org',
+           '@type': 'Article',
+           '@id': canonicalUrl(selfPath),
+           headline: post.title,
+           description: post.excerpt,
+           inLanguage: post.lang,
+           datePublished: post.date,
+           dateModified: post.updatedDate ?? post.date,
+           author: { '@type': 'Organization', name: post.author ?? 'SCOUT21' },
+           publisher: {
+             '@type': 'Organization',
+             name: 'SCOUT 21 PRO',
+             logo: { '@type': 'ImageObject', url: canonicalUrl('/public-logo.png.png') },
+           },
+           mainEntityOfPage: { '@type': 'WebPage', '@id': canonicalUrl(selfPath) },
+           image: post.coverImage ? `${CANONICAL_ORIGIN}${post.coverImage}` : `${CANONICAL_ORIGIN}/og-cover.jpg`,
+           articleSection: post.tags?.[0] ?? 'Blog',
+           keywords: post.keywords?.join(', '),
+         });
       injectJsonLd('jsonld-breadcrumb', {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
@@ -229,20 +231,20 @@ export const BlogPage: React.FC<BlogPageProps> = ({
       image: '/og-cover.jpg',
       alternates: listAlternates,
     });
-     injectJsonLd('jsonld-blog', {
-       '@context': 'https://schema.org',
-       '@type': 'Blog',
-       name: t.blogTitle,
-       url: canonicalUrl(LANG_PATH[lang]),
-       inLanguage: lang,
-       blogPost: listPosts.map((p) => ({
-         '@type': 'BlogPosting',
-         headline: p.title,
-         url: canonicalUrl(`${LANG_PATH[lang]}/${p.slug}`),
-         datePublished: p.date,
-         image: p.coverImage ?? '/og-cover.jpg',
-       })),
-     });
+      injectJsonLd('jsonld-blog', {
+        '@context': 'https://schema.org',
+        '@type': 'Blog',
+        name: t.blogTitle,
+        url: canonicalUrl(LANG_PATH[lang]),
+        inLanguage: lang,
+        blogPost: listPosts.map((p) => ({
+          '@type': 'BlogPosting',
+          headline: p.title,
+          url: canonicalUrl(`${LANG_PATH[lang]}/${p.slug}`),
+          datePublished: p.date,
+          image: p.coverImage ? `${CANONICAL_ORIGIN}${p.coverImage}` : `${CANONICAL_ORIGIN}/og-cover.jpg`,
+        })),
+      });
   }, [slug, lang, post, listPosts, t]);
 
   const LangSelector = (
