@@ -2,25 +2,25 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://scout21.vercel.app/</loc>
-    <lastmod>2026-04-23</lastmod>
+    <lastmod>2026-04-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://scout21.vercel.app/blog</loc>
-    <lastmod>2026-04-23</lastmod>
+    <lastmod>2026-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://scout21.vercel.app/blog/en</loc>
-    <lastmod>2026-04-23</lastmod>
+    <lastmod>2026-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://scout21.vercel.app/blog/es</loc>
-    <lastmod>2026-04-23</lastmod>
+    <lastmod>2026-04-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
@@ -57,6 +57,12 @@
   <url>
     <loc>https://scout21.vercel.app/blog/gestao-de-equipe-no-futsal-como-parar-de-gerir-no-grupo</loc>
     <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -121,6 +127,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/en/local-seo-for-futsal-clubs-how-to-be-found-on-google</loc>
+    <lastmod>2026-04-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/en/weekly-planning-trainings-matches-without-whatsapp</loc>
     <lastmod>2026-04-21</lastmod>
     <changefreq>monthly</changefreq>
@@ -177,6 +189,12 @@
   <url>
     <loc>https://scout21.vercel.app/blog/es/gestion-de-equipo-futsal-sin-grupo-de-whatsapp</loc>
     <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/seo-local-para-clubes-de-futsal-como-ser-encontrado-en-google</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

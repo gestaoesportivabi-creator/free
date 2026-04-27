@@ -621,6 +621,172 @@ export const POSTS_PT: BlogPost[] = [
     ],
   },
   {
+    slug: 'seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google',
+    lang: 'pt-BR',
+    title: 'SEO local para clubes de futsal: como ser encontrado no Google',
+    subtitle:
+      'A maioria dos clubes de futsal nem aparece no Google Maps quando pais procuram por opções perto de casa. Com ajustes simples de SEO local, seu clube pode dominar as buscas regionais e atrair mais atletas sem gastar com anúncios.',
+    date: '2026-04-22',
+    updatedDate: '2026-04-22',
+    readMinutes: 10,
+    author: 'Redação SCOUT21',
+    heroEmoji: '🔍',
+    tags: ['SEO local', 'marketing esportivo', 'google my business', 'futebol de salão'],
+    excerpt:
+      'Clubes de futsal que investem em otimização para mecanismos de busca locais veem aumento de 300% nas consultas orgânicas em até 3 meses. Este guia prático mostra como configurar seu perfil, obter avaliações e otimizar seu site para ser encontrado por pais e atletas na sua região.',
+    keywords: [
+      'SEO local para clubes',
+      'futebol de salão google',
+      'clubes futsal perto de mim',
+      'otimização site esportivo',
+      'google my business futsal',
+    ],
+    translations: {
+      en: 'local-seo-for-futsal-clubs-how-to-be-found-on-google',
+      es: 'seo-local-para-clubes-de-futsal-como-ser-encontrado-en-google',
+    },
+    coverImage: '/blog-covers/seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Mikhail Nilov',
+      photographerUrl: 'https://www.pexels.com/@mikhailnilov',
+      photoUrl: 'https://www.pexels.com/photo/top-view-football-football-stadium-1810162/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Quando um pai procura por "clube de futsal perto de mim" ou "escolinha de futebol de salão", ele espera encontrar opções relevantes nos primeiros resultados do Google. Porém, muitos clubes esportivos nem aparecem no Google Maps, muito menos nos resultados orgânicos de busca.',
+      },
+      {
+        type: 'h2',
+        text: 'Por que o SEO local é crucial para clubes de futsal',
+      },
+      {
+        type: 'p',
+        text:
+          'Diferente de negócios que atendem a nível nacional ou internacional, clubes de futsal têm público hiperlocal: pais e atletas que residem a poucos quilômetros de distância. Aparecer nas buscas locais não é apenas sobre visibilidade — é sobre acessibilidade e conveniência para seu público-alvo.',
+      },
+      {
+        type: 'list',
+        items: [
+          '76% das pessoas que fazem uma busca local visitam um estabelecimento dentro de 24 horas',
+          '28% das buscas locais resultam em uma compra ou matrícula',
+          'Clubes com perfil completo no Google Maps recebem 7x mais cliques que perfis incompletos',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Passo a passo: configurando seu perfil no Google Meu Negócio',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Crie ou reivindique seu perfil no Google Meu Negócio (business.google.com)',
+          'Preencha todas as informações: nome completo, endereço, telefone, website e horários',
+          'Selecione categorias relevantes como "Clube de esportes", "Escolinha de futebol" e "Academia de esportes"',
+          'Adiciona fotos de alta qualidade das instalações, treinamentos e eventos',
+          'Incentiva pais e atletas a deixarem avaliações após cada aula ou jogo',
+          'Responde a todas as avaliações, tanto positivas quanto negativas, de forma profissional',
+          'Publica atualizações semanais sobre atividades, resultados e inscrições abertas',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Otimizando seu site para buscas locais',
+      },
+      {
+        type: 'p',
+        text:
+          'Além do Google Meu Negócio, seu site precisa estar otimizado para que o Google entenda sua localização e relevância para buscas regionais.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Inclua o nome da sua cidade e região nos títulos das páginas (title tags)',
+          'Adicione seu endereço completo no rodapé de todas as páginas',
+          'Crie páginas específicas para cada modalidade ou categoria de idade que oferece',
+          'Use marcação estruturada (schema.org) para destacar informações do clube',
+          'Garanta que seu site seja mobile-friendly, já que mais de 60% das buscas locais vem de smartphones',
+          'Inclua palavras-chave locais naturalmente no conteúdo, como "futsal em [sua cidade]"',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Construindo autoridade através de citações locais',
+      },
+      {
+        type: 'p',
+        text:
+          'Citações são menções ao nome, endereço e telefone do seu clube em outros sites, mesmo que não incluam um link direto para seu site.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Cadastre seu clube em diretórios locais de esportes e recreação',
+          'Garanta consistência total nas informações (NAP: Name, Address, Phone) em todos os cadastros',
+          'Procure por parcerias com escolas, academias e lojas de artigos esportivos locais',
+          'Participação em eventos comunitários costuma gerar menções em sites de notícias locais',
+          'Monitore e corrige qualquer informação inconsistente que encontrar online',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'A importância das avaliações online',
+      },
+      {
+        type: 'p',
+        text:
+          'Avaliações são um dos fatores mais importantes para classificação em buscas locais e influenciam diretamente a decisão de pais em potencial.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Peça avaliações logo após aulas experimentais ou jogos importantes',
+          'Responda sempre às avaliações, agrando pelo feedback positivo e abordando construtivamente quaisquer críticas',
+          'Never ofereça incentivos em troca de avaliações, pois isso viola as diretrizes do Google e pode resultar em penalização',
+          'Use feedback negativo como oportunidade para melhorar seus serviços e mostre que você se importa com a experiência dos clientes',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Medindo resultados e ajustando sua estratégia',
+      },
+      {
+        type: 'list',
+        items: [
+          'Monitore suas classificações para termos como "futsal [sua cidade]" e "escolinha de futebol de salão [região]"',
+          'Use o Google Analytics para ver quanto tráfego vem de buscas locais',
+          'Acompanhe o aumento de ligações e mensagens provenientes do seu perfil no Google Maps',
+          'Ajuste sua estratégia a cada trimestre com base nos dados coletados',
+          'Lembre-se: SEO local é um processo contínuo, não uma tarefa única',
+        ],
+      },
+      {
+        type: 'cta-newsletter',
+        text: 'Receba mais dicas práticas de marketing esportivo para crescimento do seu clube',
+      },
+      {
+        type: 'h2',
+        text: 'Começando hoje: ações imediatas para melhorar sua visibilidade local',
+      },
+      {
+        type: 'list',
+        items: [
+          'Hoje: reivindique e complete seu perfil no Google Meu Negócio',
+          'Esta semana: tire 20 fotos de qualidade das suas instalações e treinos',
+          'Este mês: peça avaliações para 10 pais satisfeitos e responda a cada uma',
+          'Próximos meses: monitore seus resultados e expanda para diretórios locais relevantes',
+        ],
+      },
+      {
+        type: 'cta-product',
+        text: 'Quer ver como o SCOUT 21 pode ajudar na gestão e divulgação do seu clube?',
+      },
+    ],
+  },
+  {
     slug: 'programacao-semanal-de-treinos-e-jogos-sem-whatsapp',
     lang: 'pt-BR',
     title: 'Programação semanal de treinos e jogos: como organizar a semana sem depender do WhatsApp',

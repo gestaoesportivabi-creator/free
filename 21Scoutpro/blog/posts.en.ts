@@ -622,6 +622,172 @@ export const POSTS_EN: BlogPost[] = [
     ],
   },
   {
+    slug: 'local-seo-for-futsal-clubs-how-to-be-found-on-google',
+    lang: 'en',
+    title: 'Local SEO for Futsal Clubs: How to Be Found on Google',
+     subtitle:
+        "Most futsal clubs don't even appear on Google Maps when parents search for nearby options. With simple local SEO adjustments, your club can dominate regional searches and attract more athletes without spending on ads.",
+    date: '2026-04-22',
+    updatedDate: '2026-04-22',
+    readMinutes: 10,
+    author: 'SCOUT21 editorial',
+    heroEmoji: '🔍',
+    tags: ['local seo', 'sports marketing', 'google my business', 'futsal'],
+    excerpt:
+      'Futsal clubs that invest in local search optimization see a 300% increase in organic inquiries within 3 months. This practical guide shows how to set up your profile, get reviews, and optimize your site to be found by parents and athletes in your region.',
+    keywords: [
+      'local seo for clubs',
+      'futsal google maps',
+      'futsal clubs near me',
+      'sports website optimization',
+      'google my business futsal',
+    ],
+    translations: {
+      'pt-BR': 'seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google',
+      es: 'local-seo-para-clubes-de-futsal-como-encontrar-en-google',
+    },
+    coverImage: '/blog-covers/seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Mikhail Nilov',
+      photographerUrl: 'https://www.pexels.com/@mikhailnilov',
+      photoUrl: 'https://www.pexels.com/photo/top-view-football-football-stadium-1810162/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+            "When a parent searches for \"futsal club near me\" or \"indoor soccer school\", they expect to find relevant options in the first Google results. However, many sports clubs don't even appear on Google Maps, much less in organic search results.",
+      },
+      {
+        type: 'h2',
+        text: 'Why Local SEO Is Crucial for Futsal Clubs',
+      },
+      {
+        type: 'p',
+        text:
+           'Unlike businesses that serve national or international audiences, futsal clubs have a hyperlocal audience: parents and athletes living just a few kilometers away. Appearing in local searches is not just about visibility—it is about accessibility and convenience for your target audience.',
+      },
+      {
+        type: 'list',
+        items: [
+          '76% of people who make a local search visit a business within 24 hours',
+          '28% of local searches result in a purchase or enrollment',
+          'Clubs with complete Google Maps profiles get 7x more clicks than incomplete profiles',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Step-by-Step: Setting Up Your Google Business Profile',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Create or claim your profile on Google Business (business.google.com)',
+          'Fill in all information: full name, address, phone, website, and hours',
+          'Select relevant categories like "Sports Club", "Soccer School", and "Sports Academy"',
+          'Add high-quality photos of your facilities, training sessions, and events',
+          'Encourage parents and athletes to leave reviews after each class or game',
+          'Respond to all reviews, both positive and negative, professionally',
+          'Post weekly updates about activities, results, and open registrations',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Optimizing Your Website for Local Search',
+      },
+      {
+        type: 'p',
+        text:
+          'Beyond Google Business, your website needs optimization so Google understands your location and relevance for regional searches.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Include your city and region in page titles (title tags)',
+          'Add your full address in the footer of all pages',
+          'Create specific pages for each modality or age group you offer',
+          'Use structured data (schema.org) to highlight club information',
+          'Ensure your site is mobile-friendly, as over 60% of local searches come from smartphones',
+          'Include local keywords naturally in content, like "futsal in [your city]"',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Building Authority Through Local Citations',
+      },
+      {
+        type: 'p',
+        text:
+          'Citations are mentions of your club\'s name, address, and phone number on other sites, even without a direct link to your site.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Register your club in local sports and recreation directories',
+          'Ensure total consistency in information (NAP: Name, Address, Phone) across all listings',
+          'Seek partnerships with local schools, academies, and sporting goods stores',
+          'Participation in community events often generates mentions in local news sites',
+          'Monitor and correct any inconsistent information you find online',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'The Importance of Online Reviews',
+      },
+      {
+        type: 'p',
+        text:
+          'Reviews are among the most important factors for local search rankings and directly influence parents\' decisions.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Ask for reviews right after trial classes or important games',
+          'Always respond to reviews, thanking for positive feedback and constructively addressing any criticism',
+          'Never offer incentives for reviews, as this violates Google guidelines and can result in penalties',
+          'Use negative feedback as an opportunity to improve services and show you care about customer experience',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Measuring Results and Adjusting Your Strategy',
+      },
+      {
+        type: 'list',
+        items: [
+          'Monitor your rankings for terms like "futsal [your city]" and "indoor soccer school [region]"',
+          'Use Google Analytics to see how much traffic comes from local searches',
+          'Track increases in calls and messages from your Google Business profile',
+          'Adjust your strategy quarterly based on collected data',
+          'Remember: local SEO is an ongoing process, not a one-time task',
+        ],
+      },
+      {
+        type: 'cta-newsletter',
+        text: 'Get more practical sports marketing tips for club growth',
+      },
+      {
+        type: 'h2',
+        text: 'Starting Today: Immediate Actions to Improve Local Visibility',
+      },
+      {
+        type: 'list',
+        items: [
+          'Today: claim and complete your Google Business profile',
+          'This week: take 20 quality photos of your facilities and training',
+          'This month: get reviews from 10 satisfied parents and respond to each',
+          'Coming months: monitor results and expand to relevant local directories',
+        ],
+      },
+      {
+        type: 'cta-product',
+        text: 'Want to see how SCOUT 21 can help with club management and promotion?',
+      },
+    ],
+  },
+  {
     slug: 'weekly-planning-trainings-matches-without-whatsapp',
     lang: 'en',
     title: 'Weekly training and match planning: how to run the week without depending on WhatsApp',

@@ -622,6 +622,172 @@ export const POSTS_ES: BlogPost[] = [
     ],
   },
   {
+    slug: 'seo-local-para-clubes-de-futsal-como-ser-encontrado-en-google',
+    lang: 'es',
+    title: 'SEO local para clubes de futsal: cómo ser encontrado en Google',
+    subtitle:
+      'La mayoría de los clubes de futsal ni siquiera aparecen en Google Maps cuando los padres buscan opciones cerca de casa. Con ajustes simples de SEO local, su club puede dominar las búsquedas regionales y atraer más atletas sin gastar en anuncios.',
+    date: '2026-04-22',
+    updatedDate: '2026-04-22',
+    readMinutes: 10,
+    author: 'Redacción SCOUT21',
+    heroEmoji: '🔍',
+    tags: ['SEO local', 'marketing deportivo', 'google my business', 'fútbol sala'],
+    excerpt:
+      'Los clubes de futsal que invierten en optimización para motores de búsqueda locales ven un aumento del 300% en consultas orgánicas en hasta 3 meses. Esta guía práctica muestra cómo configurar su perfil, obtener reseñas y optimizar su sitio para ser encontrado por padres y atletas en su región.',
+    keywords: [
+      'SEO local para clubes',
+      'fútbol sala google',
+      'clubes fútbol sala cerca de mí',
+      'optimización sitio deportivo',
+      'google my business fútbol sala',
+    ],
+    translations: {
+      'pt-BR': 'seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google',
+      en: 'local-seo-for-futsal-clubs-how-to-be-found-on-google',
+    },
+    coverImage: '/blog-covers/seo-local-para-clubes-de-futsal-como-ser-encontrado-no-google.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Mikhail Nilov',
+      photographerUrl: 'https://www.pexels.com/@mikhailnilov',
+      photoUrl: 'https://www.pexels.com/photo/top-view-football-football-stadium-1810162/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Cuando un padre busca por "club de futsal cerca de mí" o "escuela de fútbol sala", espera encontrar opciones relevantes en los primeros resultados de Google. Sin embargo, muchos clubes deportivos ni siquiera aparecen en Google Maps, mucho menos en los resultados orgánicos de búsqueda.',
+      },
+      {
+        type: 'h2',
+        text: 'Por qué el SEO local es crucial para clubes de futsal',
+      },
+      {
+        type: 'p',
+        text:
+          'A diferencia de negocios que atienden a nivel nacional o internacional, los clubes de futsal tienen un público hiperlocal: padres y atletas que viven a pocos kilómetros de distancia. Aparecer en las búsquedas locales no es solo sobre visibilidad — es sobre accesibilidad y conveniencia para su público objetivo.',
+      },
+      {
+        type: 'list',
+        items: [
+          'El 76% de las personas que hacen una búsqueda local visitan un establecimiento dentro de 24 horas',
+          'El 28% de las búsquedas locales resultan en una compra o matrícula',
+          'Los clubes con perfil completo en Google Maps reciben 7x más clics que perfiles incompletos',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Paso a paso: configurando su perfil en Google Mi Negocio',
+      },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Cree o reclame su perfil en Google Mi Negocio (business.google.com)',
+          'Complete toda la información: nombre completo, dirección, teléfono, sitio web y horarios',
+          'Seleccione categorías relevantes como "Club de deportes", "Escuela de fútbol" y "Academia de deportes"',
+          'Agrega fotos de alta calidad de las instalaciones, entrenamientos y eventos',
+          'Incentiva a padres y atletas a dejar reseñas después de cada clase o juego',
+          'Responde a todas las reseñas, tanto positivas como negativas, de forma profesional',
+          'Publica actualizaciones semanales sobre actividades, resultados e inscripciones abiertas',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Optimizando su sitio para búsquedas locales',
+      },
+      {
+        type: 'p',
+        text:
+          'Además de Google Mi Negocio, su sitio necesita estar optimizado para que Google entienda su ubicación y relevancia para búsquedas regionales.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Incluya el nombre de su ciudad y región en los títulos de las páginas (title tags)',
+          'Agregue su dirección completa en el pie de página de todas las páginas',
+          'Cree páginas específicas para cada modalidad o categoría de edad que ofrece',
+          'Use marcado estructurado (schema.org) para destacar información del club',
+          'Asegúrese de que su sitio sea compatible con dispositivos móviles, ya que más del 60% de las búsquedas locales provienen de smartphones',
+          'Incluya palabras clave locales naturalmente en el contenido, como "futsal en [su ciudad]"',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Construyendo autoridad mediante citas locales',
+      },
+      {
+        type: 'p',
+        text:
+          'Las citas son menciones al nombre, dirección y teléfono de su club en otros sitios, incluso sin incluir un enlace directo a su sitio.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Regístrese su club en directorios locales de deportes y recreación',
+          'Garantiza consistencia total en la información (NAP: Nombre, Dirección, Teléfono) en todos los registros',
+          'Busque asociaciones con escuelas, academias y tiendas de artículos deportivos locales',
+          'Participación en eventos comunitarios suele generar menciones en sitios de noticias locales',
+          'Monitoree y corrija cualquier información inconsistente que encuentre en línea',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'La importancia de las reseñas en línea',
+      },
+      {
+        type: 'p',
+        text:
+          'Las reseñas son uno de los factores más importantes para el posicionamiento en búsquedas locales e influyen directamente en la decisión de padres potenciales.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Pida reseñas justo después de clases de prueba o juegos importantes',
+          'Responda siempre a las reseñas, agradeciendo el feedback positivo y abordando constructivamente cualquier crítica',
+          'Nunca ofrezca incentivos a cambio de reseñas, ya que esto viola las directrices de Google y puede resultar en penalización',
+          'Utilice el feedback negativo como oportunidad para mejorar sus servicios y demuestre que le importa la experiencia de los clientes',
+        ],
+      },
+      {
+        type: 'h2',
+        text: 'Midiendo resultados y ajustando su estrategia',
+      },
+      {
+        type: 'list',
+        items: [
+          'Monitoree sus clasificaciones para términos como "futsal [su ciudad]" y "escuela de fútbol sala [región]"',
+          'Use Google Analytics para ver cuánto tráfico proviene de búsquedas locales',
+          'Controle el aumento de llamadas y mensajes provenientes de su perfil en Google Maps',
+          'Ajuste su estrategia cada trimestre basado en los datos recopilados',
+          'Recuerde: el SEO local es un proceso continuo, no una tarea única',
+        ],
+      },
+      {
+        type: 'cta-newsletter',
+        text: 'Reciba más consejos prácticos de marketing deportivo para el crecimiento de su club',
+      },
+      {
+        type: 'h2',
+        text: 'Empezando hoy: acciones inmediatas para mejorar su visibilidad local',
+      },
+      {
+        type: 'list',
+        items: [
+          'Hoy: reclame y complete su perfil en Google Mi Negocio',
+          'Esta semana: tome 20 fotos de calidad de sus instalaciones y entrenamientos',
+          'Este mes: pida reseñas a 10 padres satisfechos y responda a cada una',
+          'Próximos meses: monitoree sus resultados y expanda a directorios locales relevantes',
+        ],
+      },
+      {
+        type: 'cta-product',
+        text: '¿Quiere ver cómo SCOUT 21 puede ayudar en la gestión y divulgación de su club?',
+      },
+    ],
+  },
+  {
     slug: 'programacion-semanal-entrenamientos-y-partidos-sin-whatsapp',
     lang: 'es',
     title: 'Programación semanal de entrenamientos y partidos: organizar la semana sin depender del WhatsApp',
