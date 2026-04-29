@@ -1365,4 +1365,48 @@ export const POSTS_EN: BlogPost[] = [
       { type: 'cta-product' },
     ],
   },
+  {
+    slug: 'practical-seo-for-technical-blogs-structure-optimize-and-convert',
+    lang: 'en',
+    title: 'Practical SEO for technical blogs: structure, optimize and convert',
+    subtitle: 'A direct playbook to turn technical posts into acquisition assets with editorial structure, keyword intent and quick performance wins.',
+    date: '2026-04-29',
+    updatedDate: '2026-04-29',
+    readMinutes: 8,
+    author: 'SCOUT21 Editorial',
+    heroEmoji: '🚀',
+    tags: ['practical SEO', 'technical blog', 'content', 'conversion'],
+    excerpt: 'Use a simple framework to plan, write and optimize technical posts for search intent and demand generation.',
+    keywords: ['technical blog seo', 'content optimization', 'search intent keyword', 'post structure'],
+    translations: {
+      pt: 'seo-pratico-para-blogs-tecnicos-estruture-otimize-e-converta',
+      es: 'seo-practico-para-blogs-tecnicos-estructura-optimiza-y-convierte',
+    },
+    coverImage: '/blog-covers/seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Rafael Guajardo',
+      photographerUrl: 'https://www.pexels.com/@rafa-guajardo',
+      photoUrl: 'https://www.pexels.com/photo/close-up-of-laptop-and-notebook-1181403/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text: 'This article introduces a practical SEO approach for technical blogs. You will learn how to structure content around reader intent, select aligned keywords and apply quick optimizations that improve ranking and user experience.',
+      },
+      { type: 'h2', text: 'Simple 4-step framework' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Define one primary intent and one primary keyword per post.',
+          'Structure with short blocks, concrete examples and clear CTAs.',
+          'Optimize title, metadata, internal linking and semantic coverage.',
+          'Review performance, indexing and recurring content refreshes.',
+        ],
+      },
+      { type: 'cta-newsletter', text: 'Get weekly frameworks for content, SEO and growth operations.' },
+      { type: 'cta-product', text: 'See how SCOUT21 turns data and routine into predictable growth.' },
+    ],
+  }
 ];

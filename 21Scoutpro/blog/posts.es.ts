@@ -1230,4 +1230,48 @@ export const POSTS_ES: BlogPost[] = [
       },
     ],
   },
+  {
+    slug: 'seo-practico-para-blogs-tecnicos-estructura-optimiza-y-convierte',
+    lang: 'es',
+    title: 'SEO práctico para blogs técnicos: estructura, optimiza y convierte',
+    subtitle: 'Una guía directa para convertir posts técnicos en activos de adquisición con estructura editorial, intención de búsqueda y mejoras rápidas de rendimiento.',
+    date: '2026-04-29',
+    updatedDate: '2026-04-29',
+    readMinutes: 8,
+    author: 'Redacción SCOUT21',
+    heroEmoji: '🚀',
+    tags: ['SEO práctico', 'blog técnico', 'contenido', 'conversión'],
+    excerpt: 'Aplica un framework simple para planificar, producir y optimizar posts técnicos con foco en intención de búsqueda y generación de demanda.',
+    keywords: ['seo para blog técnico', 'optimización de contenido', 'palabra clave intención', 'estructura de post'],
+    translations: {
+      pt: 'seo-pratico-para-blogs-tecnicos-estruture-otimize-e-converta',
+      en: 'practical-seo-for-technical-blogs-structure-optimize-and-convert',
+    },
+    coverImage: '/blog-covers/seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'Rafael Guajardo',
+      photographerUrl: 'https://www.pexels.com/@rafa-guajardo',
+      photoUrl: 'https://www.pexels.com/photo/close-up-of-laptop-and-notebook-1181403/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text: 'En este post presentamos un enfoque práctico de SEO para blogs técnicos. Aprenderás a estructurar contenidos con foco en la intención del lector, elegir palabras clave alineadas con la búsqueda y aplicar optimizaciones rápidas para mejorar ranking y experiencia.',
+      },
+      { type: 'h2', text: 'Framework simple de 4 pasos' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Define una intención principal y una palabra clave principal por post.',
+          'Estructura con bloques cortos, ejemplos concretos y CTAs claros.',
+          'Optimiza título, metadatos, enlazado interno y cobertura semántica.',
+          'Revisa rendimiento, indexación y actualización periódica.',
+        ],
+      },
+      { type: 'cta-newsletter', text: 'Recibe frameworks semanales de contenido, SEO y operación de growth.' },
+      { type: 'cta-product', text: 'Descubre cómo SCOUT21 convierte datos y rutina en crecimiento predecible.' },
+    ],
+  }
 ];

@@ -97,6 +97,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/seo-pratico-para-blogs-tecnicos-estruture-otimize-e-converta</loc>
+    <lastmod>2026-04-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/en/why-database-beats-spreadsheet</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -169,6 +175,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.vercel.app/blog/en/practical-seo-for-technical-blogs-structure-optimize-and-convert</loc>
+    <lastmod>2026-04-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.vercel.app/blog/es/por-que-datos-en-la-base</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -237,6 +249,12 @@
   <url>
     <loc>https://scout21.vercel.app/blog/es/seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion</loc>
     <lastmod>2026-04-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.vercel.app/blog/es/seo-practico-para-blogs-tecnicos-estructura-optimiza-y-convierte</loc>
+    <lastmod>2026-04-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
