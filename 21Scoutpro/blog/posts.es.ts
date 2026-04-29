@@ -1165,7 +1165,7 @@ export const POSTS_ES: BlogPost[] = [
       pt: 'seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao',
       en: 'technical-seo-for-futsal-club-sites-how-to-improve-performance-and-indexing',
     },
-    coverImage: '/blog-covers/seo-tecnico-para-sitios-de-clubes-de-futsal-como-mejorar-rendimiento-e-indexacion.jpg',
+    coverImage: '/blog-covers/seo-tecnico-para-sites-de-clubes-de-futsal-como-melhorar-performance-e-indexacao.jpg',
     coverCredit: {
       source: 'Pexels',
       photographer: 'Rafael Guajardo',
