@@ -92,7 +92,13 @@ function stageAllowedChanges() {
   const changed = workingTreeFiles();
   const allowed = changed.filter(isAllowed);
   if (allowed.length === 0) return [];
-  const forced = allowed.filter((file) => file === 'dist/index.html');
+  // Normalize paths before checking for forced additions
+  // In some environments, files may be reported with a project prefix (e.g. "21Scoutpro/dist/index.html").
+  // We want to force-add the file that corresponds to the normalized path "dist/index.html".
+  const forced = allowed.filter((file) => {
+    const normalized = file.startsWith(PROJECT_PREFIX) ? file.slice(PROJECT_PREFIX.length) : file;
+    return normalized === 'dist/index.html';
+  });
   const normal = allowed.filter((file) => file !== 'dist/index.html');
   if (normal.length > 0) git(['add', '--', ...normal]);
   if (forced.length > 0) git(['add', '-f', '--', ...forced]);
