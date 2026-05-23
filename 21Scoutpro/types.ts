@@ -14,6 +14,8 @@ export interface User {
   isPlatformAdmin?: boolean;
   photoUrl?: string;
   linkedPlayerId?: string;
+  jogadorId?: string;
+  equipeId?: string;
   /** Nome do time (exibição) — persiste no backend para outro dispositivo */
   teamDisplayName?: string;
   /** URL ou base64 do escudo — persiste no backend para outro dispositivo */
@@ -103,6 +105,13 @@ export interface Player {
   injuryHistory?: InjuryRecord[];
   birthDate?: string; // YYYY-MM-DD
   maxLoads?: MaxLoad[];
+  /** Conta de acesso do atleta (staff) */
+  createAccess?: boolean;
+  accessEmail?: string;
+  accessPassword?: string;
+  accessActive?: boolean;
+  revokeAccess?: boolean;
+  hasAccess?: boolean;
 }
 
 // Match Types

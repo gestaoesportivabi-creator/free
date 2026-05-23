@@ -67,15 +67,24 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
         if (result.success && result.data) {
           localStorage.setItem('token', result.data.token);
           
+          const roleRaw = result.data.user.role;
           const user: User = {
             id: result.data.user.id,
             name: result.data.user.name,
             email: result.data.user.email,
-            role: result.data.user.role === 'TECNICO' ? 'Treinador' : result.data.user.role,
+            role:
+              roleRaw === 'TECNICO'
+                ? 'Treinador'
+                : roleRaw === 'ATLETA'
+                  ? 'Atleta'
+                  : roleRaw,
             planName: result.data.user.planName as SubscriptionPlanName | undefined,
             isPlatformAdmin:
               result.data.user.isPlatformAdmin ??
               (result.data.user.planName === 'ADMINISTRADOR'),
+            linkedPlayerId: result.data.user.linkedPlayerId ?? result.data.user.jogadorId,
+            jogadorId: result.data.user.jogadorId ?? result.data.user.linkedPlayerId,
+            equipeId: result.data.user.equipeId,
           };
           
           console.log('👤 Usuário criado:', user);

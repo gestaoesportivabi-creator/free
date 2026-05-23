@@ -10,6 +10,7 @@ import { env } from './config/env';
 import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 import { tenantMiddleware } from './middleware/tenant.middleware';
+import { requireStaff } from './middleware/athleteScope.middleware';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -25,6 +26,7 @@ import teamsRoutes from './routes/teams.routes';
 import wellnessRoutes from './routes/wellness.routes';
 import championshipsRoutes from './routes/championships.routes';
 import leadsRoutes from './routes/leads.routes';
+import meRoutes from './routes/me.routes';
 
 const app: Express = express();
 
@@ -70,20 +72,23 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
 
-// Rotas protegidas (com autenticação e tenant)
-app.use('/api/teams', authMiddleware, tenantMiddleware(), teamsRoutes);
-app.use('/api/players', authMiddleware, tenantMiddleware(), playersRoutes);
-app.use('/api/matches', authMiddleware, tenantMiddleware(), matchesRoutes);
-app.use('/api/schedules', authMiddleware, tenantMiddleware(), schedulesRoutes);
-app.use('/api/assessments', authMiddleware, tenantMiddleware(), assessmentsRoutes);
-app.use('/api/stat-targets', authMiddleware, tenantMiddleware(), statTargetsRoutes);
-app.use('/api/championship-matches', authMiddleware, tenantMiddleware(), championshipMatchesRoutes);
-app.use('/api/time-controls', authMiddleware, tenantMiddleware(), timeControlsRoutes);
-app.use('/api/wellness', authMiddleware, tenantMiddleware(), wellnessRoutes);
-app.use('/api/championships', authMiddleware, tenantMiddleware(), championshipsRoutes);
+// Portal do atleta
+app.use('/api/me', authMiddleware, tenantMiddleware(), meRoutes);
 
-// Competições são globais (sem tenant, mas com auth)
-app.use('/api/competitions', authMiddleware, competitionsRoutes);
+// Rotas protegidas (staff — com autenticação e tenant)
+app.use('/api/teams', authMiddleware, tenantMiddleware(), requireStaff, teamsRoutes);
+app.use('/api/players', authMiddleware, tenantMiddleware(), requireStaff, playersRoutes);
+app.use('/api/matches', authMiddleware, tenantMiddleware(), requireStaff, matchesRoutes);
+app.use('/api/schedules', authMiddleware, tenantMiddleware(), requireStaff, schedulesRoutes);
+app.use('/api/assessments', authMiddleware, tenantMiddleware(), requireStaff, assessmentsRoutes);
+app.use('/api/stat-targets', authMiddleware, tenantMiddleware(), requireStaff, statTargetsRoutes);
+app.use('/api/championship-matches', authMiddleware, tenantMiddleware(), requireStaff, championshipMatchesRoutes);
+app.use('/api/time-controls', authMiddleware, tenantMiddleware(), requireStaff, timeControlsRoutes);
+app.use('/api/wellness', authMiddleware, tenantMiddleware(), requireStaff, wellnessRoutes);
+app.use('/api/championships', authMiddleware, tenantMiddleware(), requireStaff, championshipsRoutes);
+
+// Competições são globais (sem tenant, mas com auth) — staff only
+app.use('/api/competitions', authMiddleware, requireStaff, competitionsRoutes);
 
 // Middleware de tratamento de erros (deve ser o último)
 app.use(errorMiddleware);

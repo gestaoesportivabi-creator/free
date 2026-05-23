@@ -555,3 +555,51 @@ export const championshipsApi = {
   update: (id: string, championship: any) => put<any>('championships', id, championship),
   delete: (id: string) => del('championships', id),
 };
+
+export type MeWellnessType =
+  | 'pse-treino'
+  | 'pse-jogo'
+  | 'psr-treino'
+  | 'psr-jogo'
+  | 'bem-estar-diario';
+
+async function meFetch<T>(path: string, options?: RequestInit): Promise<T | null> {
+  try {
+    const url = `${getApiUrl()}/me/${path}`;
+    const token = localStorage.getItem('token') || '';
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...(options?.headers || {}),
+      },
+    });
+    const text = await response.text();
+    let parsed: ApiResponse<T> | null = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      return null;
+    }
+    if (!response.ok || !parsed?.success) {
+      throw new Error(parsed?.error || `Erro ${response.status}`);
+    }
+    return (parsed.data ?? null) as T | null;
+  } catch (e) {
+    if (import.meta.env.DEV) console.error(`meApi ${path}:`, e);
+    throw e;
+  }
+}
+
+export const meApi = {
+  getProfile: () => meFetch<Record<string, unknown>>('profile'),
+  updateProfile: (body: { name?: string; photoUrl?: string; password?: string }) =>
+    meFetch<{ ok: boolean }>('profile', { method: 'PUT', body: JSON.stringify(body) }),
+  getScheduleContext: () =>
+    meFetch<{ schedule: unknown; recentMatches: unknown[] }>('schedule-context'),
+  getWellnessToday: () => meFetch<Record<string, unknown>>('wellness/today'),
+  getWellness: (type: MeWellnessType) => meFetch<unknown[]>(`wellness/${type}`),
+  saveWellness: (type: MeWellnessType, body: Record<string, unknown>) =>
+    meFetch<unknown>(`wellness/${type}`, { method: 'POST', body: JSON.stringify(body) }),
+};

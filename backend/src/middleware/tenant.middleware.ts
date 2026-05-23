@@ -19,6 +19,8 @@ declare global {
         role_id: string;
         email: string;
         name: string;
+        jogador_id?: string;
+        user_type?: 'staff' | 'athlete';
       };
     }
   }
@@ -84,6 +86,13 @@ export function tenantMiddleware() {
             select: { id: true },
           });
           return equipes;
+        },
+        async (jogadorId: string) => {
+          const links = await prisma.equipesJogadores.findMany({
+            where: { jogadorId, dataFim: null },
+            select: { equipeId: true },
+          });
+          return links.map((l) => ({ id: l.equipeId }));
         }
       );
 
@@ -111,12 +120,24 @@ export function tenantMiddleware() {
         }
       }
 
-      // Verificar se usuário tem tenant associado
-      if (!tenantInfo.tecnico_id && !tenantInfo.clube_id) {
+      // Atleta: exige jogador_id e pelo menos uma equipe ativa
+      if (tenantInfo.user_type === 'athlete') {
+        if (!tenantInfo.jogador_id) {
+          return res.status(403).json({
+            success: false,
+            error: 'Conta de atleta sem vínculo ao elenco',
+          });
+        }
+        if (!tenantInfo.equipe_ids?.length) {
+          return res.status(403).json({
+            success: false,
+            error: 'Atleta sem equipe ativa vinculada',
+          });
+        }
+      } else if (!tenantInfo.tecnico_id && !tenantInfo.clube_id) {
         // Usuários ADMIN podem não ter tenant (acesso total)
-        // Outros roles devem ter tenant
         const isAdmin = req.user.role_id === 'ADMINISTRADOR';
-        
+
         if (!isAdmin) {
           console.error('[TENANT_MIDDLEWARE] ERRO: Usuário não possui técnico ou clube associado:', {
             userId: req.user.id,
@@ -128,6 +149,12 @@ export function tenantMiddleware() {
             error: 'Usuário não possui técnico ou clube associado',
           });
         }
+      }
+
+      if (tenantInfo.user_type === 'athlete') {
+        req.tenantInfo = tenantInfo;
+        next();
+        return;
       }
 
       // Validação crítica: garantir que tecnico_id não seja undefined ou null se o usuário é técnico

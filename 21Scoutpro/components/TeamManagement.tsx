@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
-import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock } from 'lucide-react';
+import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock, Eye, EyeOff } from 'lucide-react';
 import { INJURY_LOCATIONS_BY_TYPE } from '../utils/injuryLocations';
+import { playersApi } from '../services/api';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
 const BIRTH_DATE_MIN_ISO = '1950-01-01';
@@ -215,6 +216,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     /** Nº de camisa já usado por outro atleta (lista atual) */
     const [jerseyDuplicateMessage, setJerseyDuplicateMessage] = useState<string | null>(null);
 
+    const [createAccess, setCreateAccess] = useState(true);
+    const [accessEmail, setAccessEmail] = useState('');
+    const [accessPassword, setAccessPassword] = useState('');
+    const [showAccessPassword, setShowAccessPassword] = useState(false);
+    const [accessActive, setAccessActive] = useState(true);
+    const [resetAccessPassword, setResetAccessPassword] = useState(false);
+
     const displayAgeFromBirth = useMemo(
         () => (birthDate ? calculateAgeFromBirthDateIso(birthDate) : null),
         [birthDate]
@@ -261,10 +269,16 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setActiveTab('profile');
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
+        setCreateAccess(true);
+        setAccessEmail('');
+        setAccessPassword('');
+        setShowAccessPassword(false);
+        setAccessActive(true);
+        setResetAccessPassword(false);
     };
 
 
-    const handleEditClick = (player: Player) => {
+    const handleEditClick = async (player: Player) => {
         setEditMode(true);
         setEditPlayerId(player.id);
         setActiveTab('profile');
@@ -290,6 +304,23 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setMaxLoads(player.maxLoads || []);
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
+        setCreateAccess(!!(player as Player & { hasAccess?: boolean }).hasAccess);
+        setAccessEmail((player as Player & { accessEmail?: string }).accessEmail || '');
+        setAccessPassword('');
+        setAccessActive((player as Player & { accessActive?: boolean }).accessActive !== false);
+        setResetAccessPassword(false);
+
+        try {
+            const full = await playersApi.getById(player.id);
+            if (full) {
+                const ext = full as Player & { accessEmail?: string; accessActive?: boolean; hasAccess?: boolean };
+                setCreateAccess(!!ext.hasAccess);
+                setAccessEmail(ext.accessEmail || '');
+                setAccessActive(ext.accessActive !== false);
+            }
+        } catch {
+            /* lista local sem backend */
+        }
 
         setIsFormOpen(true);
     };
@@ -459,6 +490,21 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         const { ageToSave, weightParsed } = validation;
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
+
+        if (createAccess) {
+            const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accessEmail.trim());
+            if (!emailOk) {
+                alert('Informe um email de acesso válido para o atleta.');
+                setActiveTab('profile');
+                return;
+            }
+            const needsPassword = !editMode || resetAccessPassword;
+            if (needsPassword && (!accessPassword || accessPassword.length < 8)) {
+                alert('A senha de acesso deve ter no mínimo 8 caracteres.');
+                setActiveTab('profile');
+                return;
+            }
+        }
         
         // Recalculate days out for all injuries before saving
         const today = new Date();
@@ -501,7 +547,15 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             transferDate: isTransferred ? transferDate : undefined,
             injuryHistory: updatedInjuryHistory,
             birthDate: birthDate || undefined,
-            maxLoads: maxLoads.length > 0 ? maxLoads : undefined
+            maxLoads: maxLoads.length > 0 ? maxLoads : undefined,
+            createAccess,
+            accessEmail: createAccess ? accessEmail.trim() : undefined,
+            accessPassword:
+                createAccess && accessPassword && (resetAccessPassword || !editMode)
+                    ? accessPassword
+                    : undefined,
+            accessActive: createAccess ? accessActive : undefined,
+            revokeAccess: createAccess ? !accessActive : undefined,
         };
 
         if (editMode) {
@@ -1035,6 +1089,87 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                             </div>
                                         )}
                                     </div>
+                                </div>
+
+                                <div className="col-span-1 md:col-span-2 border-t border-zinc-800 pt-4 mt-2">
+                                    <label className="flex items-center gap-2 cursor-pointer mb-4">
+                                        <input
+                                            type="checkbox"
+                                            checked={createAccess}
+                                            onChange={(e) => setCreateAccess(e.target.checked)}
+                                            className="w-5 h-5 accent-[#10b981]"
+                                        />
+                                        <span className="text-white text-sm font-bold">Permitir login do atleta no app</span>
+                                    </label>
+
+                                    {createAccess && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
+                                                    Email de acesso
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    value={accessEmail}
+                                                    onChange={(e) => setAccessEmail(e.target.value)}
+                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]"
+                                                    placeholder="atleta@email.com"
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
+                                                    {editMode ? 'Nova senha (opcional)' : 'Senha inicial'}
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showAccessPassword ? 'text' : 'password'}
+                                                        value={accessPassword}
+                                                        onChange={(e) => setAccessPassword(e.target.value)}
+                                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 pr-12 text-white outline-none focus:border-[#10b981]"
+                                                        placeholder="Mínimo 8 caracteres"
+                                                        autoComplete="new-password"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowAccessPassword((v) => !v)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                                                        aria-label={showAccessPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                                                    >
+                                                        {showAccessPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {editMode && (
+                                                <>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={accessActive}
+                                                            onChange={(e) => setAccessActive(e.target.checked)}
+                                                            className="w-5 h-5 accent-[#10b981]"
+                                                            id="access-active"
+                                                        />
+                                                        <label htmlFor="access-active" className="text-white text-sm">
+                                                            Acesso ativo
+                                                        </label>
+                                                    </div>
+                                                    <div className="flex items-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setResetAccessPassword(true);
+                                                                setAccessPassword('');
+                                                            }}
+                                                            className="text-xs font-bold uppercase text-[#10b981] hover:text-[#34d399]"
+                                                        >
+                                                            Redefinir senha
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

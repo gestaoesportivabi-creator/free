@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen, Home } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -92,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
 
   // Itens que não pertencem a categorias
   const standaloneItems: MenuItem[] = [
-    { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard, restricted: false },
+    { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard, restricted: !isAthlete },
   ];
 
   const toggleCategory = (categoryId: string) => {
@@ -111,12 +111,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
   const isItemActive = (itemId: string) => activeTab === itemId;
   const isCategoryActive = (category: Category) => category.items.some(item => activeTab === item.id && !item.restricted);
 
-  const visibleCategories = categories.map(cat => ({
-    ...cat,
-    items: cat.items.filter(item => !item.restricted)
-  })).filter(cat => cat.items.length > 0);
+  const athleteStandalone: MenuItem[] = [
+    { id: 'athlete-home', label: 'Hoje', icon: Home, restricted: false },
+  ];
 
-  const visibleStandaloneItems = standaloneItems.filter(item => !item.restricted);
+  const athleteCategory: Category = {
+    id: 'athlete-fisio',
+    label: 'Meu registro',
+    icon: HeartPulse,
+    items: [
+      { id: 'athlete-pse', label: 'PSE', icon: Activity, restricted: false },
+      { id: 'athlete-psr', label: 'PSR', icon: RefreshCw, restricted: false },
+      { id: 'athlete-wellness', label: 'Bem-Estar', icon: Brain, restricted: false },
+      { id: 'athlete-profile', label: 'Meu perfil', icon: UserIcon, restricted: false },
+    ],
+  };
+
+  const visibleCategories = isAthlete
+    ? [athleteCategory]
+    : categories
+        .map((cat) => ({
+          ...cat,
+          items: cat.items.filter((item) => !item.restricted),
+        }))
+        .filter((cat) => cat.items.length > 0);
+
+  const visibleStandaloneItems = isAthlete
+    ? athleteStandalone
+    : standaloneItems.filter((item) => !item.restricted);
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {

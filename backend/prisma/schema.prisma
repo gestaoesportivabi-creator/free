@@ -31,10 +31,13 @@ model User {
   teamDisplayName String?   @map("team_display_name") @db.VarChar(255)
   teamShieldUrl   String?   @map("team_shield_url")
   lastLoginAt     DateTime? @map("last_login_at")
+  jogadorId       String?   @unique @map("jogador_id") @db.Text
   clube           Clube?
   tecnico         Tecnico?
+  jogador         Jogador?  @relation(fields: [jogadorId], references: [id], onDelete: SetNull)
   role            Role      @relation(fields: [roleId], references: [id])
 
+  @@index([jogadorId])
   @@map("users")
 }
 
@@ -120,6 +123,7 @@ model Jogador {
   psrJogos            PsrJogo[]
   psrTreinos          PsrTreino[]
   qualidadesSono      QualidadeSono[]
+  user                User?
 
   @@map("jogadores")
 }

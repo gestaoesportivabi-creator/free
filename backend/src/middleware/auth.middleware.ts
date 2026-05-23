@@ -17,6 +17,8 @@ declare global {
         email: string;
         name: string;
         role_id: string;
+        jogador_id?: string;
+        user_type?: 'staff' | 'athlete';
       };
     }
   }
@@ -41,6 +43,8 @@ export async function authMiddleware(
     const decoded = jwt.verify(token, env.JWT_SECRET) as {
       userId: string;
       email: string;
+      userType?: 'staff' | 'athlete';
+      jogadorId?: string;
     };
 
     // Buscar usuário no banco (select evita depender de colunas opcionais que podem não existir no DB)
@@ -51,6 +55,7 @@ export async function authMiddleware(
         email: true,
         name: true,
         isActive: true,
+        jogadorId: true,
         role: { select: { name: true } },
       },
     });
@@ -60,6 +65,7 @@ export async function authMiddleware(
     }
 
     const roleName = user.role?.name ?? 'ESSENCIAL';
+    const isAthlete = roleName === 'ATLETA' && !!user.jogadorId;
 
     // Adicionar user ao request
     req.user = {
@@ -67,6 +73,8 @@ export async function authMiddleware(
       email: user.email,
       name: user.name,
       role_id: roleName,
+      jogador_id: user.jogadorId ?? undefined,
+      user_type: isAthlete ? 'athlete' : 'staff',
     };
 
     next();

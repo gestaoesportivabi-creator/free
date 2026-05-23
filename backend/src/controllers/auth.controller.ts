@@ -10,12 +10,14 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { env } from '../config/env';
 import { UnauthorizedError } from '../utils/errors';
+import { getAthleteEquipeId } from '../utils/athleteAccount.helper';
 
 const ALLOWED_REGISTER_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
 /** Planos que podem ser atribuídos pelo admin (não inclui ADMINISTRADOR) */
 const ADMIN_ASSIGNABLE_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
 
 function mapRoleForFrontend(roleName: string): string {
+  if (roleName === 'ATLETA') return 'ATLETA';
   const MAP: Record<string, string> = {
     'ADMINISTRADOR': 'TECNICO',
     'ESSENCIAL': 'TECNICO',
@@ -69,6 +71,7 @@ export const authController = {
           name: true,
           passwordHash: true,
           isActive: true,
+          jogadorId: true,
           role: { select: { name: true } },
         },
       });
@@ -82,6 +85,7 @@ export const authController = {
             name: true,
             passwordHash: true,
             isActive: true,
+            jogadorId: true,
             role: { select: { name: true } },
           },
         });
@@ -103,9 +107,20 @@ export const authController = {
         data: { lastLoginAt: new Date() },
       }).catch(() => { /* coluna pode não existir antes da migration */ });
 
+      const roleName = user.role.name;
+      const isAthlete = roleName === 'ATLETA' && !!user.jogadorId;
+      const equipeId = isAthlete && user.jogadorId
+        ? await getAthleteEquipeId(user.jogadorId)
+        : null;
+
       // Gerar token JWT
       const token = jwt.sign(
-        { userId: user.id, email: user.email },
+        {
+          userId: user.id,
+          email: user.email,
+          userType: isAthlete ? 'athlete' : 'staff',
+          jogadorId: user.jogadorId ?? undefined,
+        },
         env.JWT_SECRET,
         { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions
       );
@@ -118,9 +133,16 @@ export const authController = {
             id: user.id,
             email: user.email,
             name: user.name,
-            role: mapRoleForFrontend(user.role.name),
-            planName: user.role.name,
-            isPlatformAdmin: user.role.name === 'ADMINISTRADOR',
+            role: mapRoleForFrontend(roleName),
+            planName: isAthlete ? undefined : roleName,
+            isPlatformAdmin: roleName === 'ADMINISTRADOR',
+            ...(isAthlete && user.jogadorId
+              ? {
+                  jogadorId: user.jogadorId,
+                  linkedPlayerId: user.jogadorId,
+                  equipeId,
+                }
+              : {}),
           },
         },
       });
@@ -165,7 +187,7 @@ export const authController = {
         });
       }
 
-      if (!ALLOWED_REGISTER_ROLES.includes(roleName)) {
+      if (roleName === 'ATLETA' || !ALLOWED_REGISTER_ROLES.includes(roleName)) {
         return res.status(400).json({
           success: false,
           error: 'Role não permitida para auto-registro',
@@ -438,6 +460,7 @@ export const authController = {
           email: true,
           photoUrl: true,
           isActive: true,
+          jogadorId: true,
           role: { select: { name: true } },
         },
       });
@@ -449,24 +472,39 @@ export const authController = {
         });
       }
 
+      const roleName = user.role.name;
+      const isAthlete = roleName === 'ATLETA' && !!user.jogadorId;
+      const equipeId =
+        isAthlete && user.jogadorId ? await getAthleteEquipeId(user.jogadorId) : null;
+
       const data: {
         id: string;
         name: string;
         email: string;
         role: string;
-        planName: string;
+        planName?: string;
         isPlatformAdmin: boolean;
         photoUrl?: string;
         teamDisplayName?: string;
         teamShieldUrl?: string;
+        jogadorId?: string;
+        linkedPlayerId?: string;
+        equipeId?: string | null;
       } = {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: mapRoleForFrontend(user.role.name),
-        planName: user.role.name,
-        isPlatformAdmin: user.role.name === 'ADMINISTRADOR',
+        role: mapRoleForFrontend(roleName),
+        planName: isAthlete ? undefined : roleName,
+        isPlatformAdmin: roleName === 'ADMINISTRADOR',
         photoUrl: user.photoUrl ?? undefined,
+        ...(isAthlete && user.jogadorId
+          ? {
+              jogadorId: user.jogadorId,
+              linkedPlayerId: user.jogadorId,
+              equipeId,
+            }
+          : {}),
       };
       // Incluir team* se as colunas existirem (após migração 018) — busca em segundo passo para não quebrar sem migração
       try {

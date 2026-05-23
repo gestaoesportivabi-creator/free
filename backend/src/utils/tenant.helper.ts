@@ -9,6 +9,7 @@ interface User {
   role_id: string;
   email: string;
   name: string;
+  jogador_id?: string;
 }
 
 interface Tecnico {
@@ -23,9 +24,13 @@ interface Clube {
   razao_social: string;
 }
 
+export type TenantUserType = 'staff' | 'athlete';
+
 export interface TenantInfo {
+  user_type?: TenantUserType;
   tecnico_id?: string;
   clube_id?: string;
+  jogador_id?: string;
   equipe_ids?: string[];
 }
 
@@ -38,13 +43,24 @@ export async function getTenantInfo(
   getTecnicoByUserId: (userId: string) => Promise<Tecnico | null>,
   getClubeByUserId: (userId: string) => Promise<Clube | null>,
   getEquipesByTecnicoId: (tecnicoId: string) => Promise<{ id: string }[]>,
-  getEquipesByClubeId: (clubeId: string) => Promise<{ id: string }[]>
+  getEquipesByClubeId: (clubeId: string) => Promise<{ id: string }[]>,
+  getEquipesByJogadorId?: (jogadorId: string) => Promise<{ id: string }[]>
 ): Promise<TenantInfo> {
+  if (user.role_id === 'ATLETA' && user.jogador_id && getEquipesByJogadorId) {
+    const equipes = await getEquipesByJogadorId(user.jogador_id);
+    return {
+      user_type: 'athlete',
+      jogador_id: user.jogador_id,
+      equipe_ids: equipes.map((e) => e.id),
+    };
+  }
+
   // Buscar técnico associado ao usuário
   const tecnico = await getTecnicoByUserId(user.id);
   if (tecnico) {
     const equipes = await getEquipesByTecnicoId(tecnico.id);
     return {
+      user_type: 'staff',
       tecnico_id: tecnico.id,
       equipe_ids: equipes.map((e) => e.id),
     };
@@ -55,13 +71,14 @@ export async function getTenantInfo(
   if (clube) {
     const equipes = await getEquipesByClubeId(clube.id);
     return {
+      user_type: 'staff',
       clube_id: clube.id,
       equipe_ids: equipes.map((e) => e.id),
     };
   }
 
   // Se não encontrou técnico nem clube, retornar vazio (usuário sem tenant)
-  return {};
+  return { user_type: 'staff' };
 }
 
 /**

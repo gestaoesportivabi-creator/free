@@ -10,8 +10,13 @@ import { lesoesRepository } from '../repositories/lesoes.repository';
 import { assessmentsRepository } from '../repositories/assessments.repository';
 import { transformPlayerToFrontend } from '../adapters/player.adapter';
 import { Player } from '../types/frontend';
-import { NotFoundError } from '../utils/errors';
+import { NotFoundError, AppError } from '../utils/errors';
 import prisma from '../config/database';
+import {
+  createAthleteUserAccount,
+  updateAthleteUserAccount,
+  normalizeAccessEmail,
+} from '../utils/athleteAccount.helper';
 
 function db(tx?: TransactionClient) {
   return tx ?? prisma;
@@ -75,11 +80,21 @@ export const playersService = {
       assessmentsRepository.findByJogador(id, tenantInfo, tx),
     ]);
 
-    return transformPlayerToFrontend(
+    const player = transformPlayerToFrontend(
       jogador as any,
       lesoes as any,
       avaliacoes as any
     );
+    const accessUser = await db(tx).user.findUnique({
+      where: { jogadorId: id },
+      select: { email: true, isActive: true },
+    });
+    return {
+      ...player,
+      accessEmail: accessUser?.email,
+      accessActive: accessUser?.isActive ?? false,
+      hasAccess: !!accessUser,
+    } as Player & { accessEmail?: string; accessActive?: boolean; hasAccess?: boolean };
   },
 
   /**
@@ -101,6 +116,9 @@ export const playersService = {
     dataTransferencia?: Date;
     isAtivo?: boolean;
     equipeId?: string; // ID da equipe para vincular o jogador
+    createAccess?: boolean;
+    accessEmail?: string;
+    accessPassword?: string;
   }, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<Player> {
     try {
       console.log('[PLAYERS_SERVICE] create - Iniciando criação de jogador:', {
@@ -149,8 +167,23 @@ export const playersService = {
         throw new Error('Configuração do tenant inválida. Entre em contato com o suporte.');
       }
 
+      const raw = data as any;
+      const createAccess = raw.createAccess !== false && !!(raw.accessEmail || raw.createAccess === true);
+      const accessEmail = raw.accessEmail ? normalizeAccessEmail(String(raw.accessEmail)) : undefined;
+      const accessPassword = raw.accessPassword ? String(raw.accessPassword) : undefined;
+
+      if (createAccess) {
+        if (!accessEmail || !accessPassword) {
+          throw new AppError('Email e senha de acesso são obrigatórios para criar login do atleta', 400);
+        }
+      }
+
       // Remover equipeId, id, injuryHistory e maxLoads dos dados antes de criar o jogador
-      const { equipeId, injuryHistory: injuryHistoryPayload, maxLoads: maxLoadsPayload, ...dadosRecebidos } = data as any;
+      const { equipeId, injuryHistory: injuryHistoryPayload, maxLoads: maxLoadsPayload, ...dadosRecebidos } = raw;
+      delete dadosRecebidos.createAccess;
+      delete dadosRecebidos.accessEmail;
+      delete dadosRecebidos.accessPassword;
+      delete dadosRecebidos.revokeAccess;
       delete (dadosRecebidos as any).id;
 
       // Validar que o nome está presente
@@ -349,6 +382,18 @@ export const playersService = {
         throw new Error(`Erro ao vincular jogador à equipe: ${error.message || 'Equipe não encontrada'}`);
       }
 
+      if (createAccess && accessEmail && accessPassword) {
+        await createAthleteUserAccount(
+          {
+            jogadorId: jogador.id,
+            name: dadosJogador.apelido || dadosJogador.nome,
+            accessEmail,
+            accessPassword,
+          },
+          tx
+        );
+      }
+
       // Retornar transformado (sem lesões/avaliações ainda)
       return transformPlayerToFrontend(
         jogador as any,
@@ -396,6 +441,19 @@ export const playersService = {
     if (Array.isArray(d.maxLoads) && d.maxLoads.length > 0) payload.maxLoadsJson = d.maxLoads;
 
     const jogador = await playersRepository.update(id, payload as any, tx);
+
+    await updateAthleteUserAccount(
+      id,
+      {
+        accessEmail: d.accessEmail ? normalizeAccessEmail(String(d.accessEmail)) : undefined,
+        accessPassword: d.accessPassword ? String(d.accessPassword) : undefined,
+        createAccess: d.createAccess === true,
+        revokeAccess: d.revokeAccess === true || d.accessActive === false,
+        name: (payload.nome as string) || existing.nome,
+        isTransferido: payload.isTransferido as boolean | undefined,
+      },
+      tx
+    );
 
     const injuryHistory = (d as any).injuryHistory;
     if (Array.isArray(injuryHistory)) {

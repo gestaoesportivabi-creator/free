@@ -30,7 +30,12 @@ import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
-import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi } from './services/api';
+import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi, meApi } from './services/api';
+import { AthleteHome, type AthleteTodayData } from './components/athlete/AthleteHome';
+import { AthletePseForm } from './components/athlete/AthletePseForm';
+import { AthletePsrForm } from './components/athlete/AthletePsrForm';
+import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
+import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -103,6 +108,11 @@ const TAB_LABELS: Record<string, string> = {
   academia: 'Musculação',
   settings: 'Configurações',
   admin: 'Todos os Usuários',
+  'athlete-home': 'Hoje',
+  'athlete-pse': 'PSE',
+  'athlete-psr': 'PSR',
+  'athlete-wellness': 'Bem-Estar',
+  'athlete-profile': 'Meu perfil',
 };
 
 /** Recursos necessários por aba (carregamento sob demanda). Abas "Em breve" = [] para render instantâneo */
@@ -198,6 +208,9 @@ export default function App() {
   const essentialRestricted = useMemo(() => isEssentialPlanUser(currentUser), [currentUser]);
   /** Fisiologia: telas reais só Performance / admin */
   const performanceTier = useMemo(() => isPerformanceTierUser(currentUser), [currentUser]);
+  const isAthleteUser = currentUser?.role === 'Atleta';
+  const [athleteProfile, setAthleteProfile] = useState<Record<string, unknown> | null>(null);
+  const [athleteToday, setAthleteToday] = useState<AthleteTodayData | null>(null);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
@@ -738,11 +751,28 @@ export default function App() {
     }
   };
 
-  // Carregamento inicial: apenas dados do dashboard (ao fazer login)
+  const loadAthletePortalData = async () => {
+    try {
+      const [profile, today] = await Promise.all([
+        meApi.getProfile(),
+        meApi.getWellnessToday(),
+      ]);
+      setAthleteProfile(profile);
+      setAthleteToday(today as AthleteTodayData | null);
+    } catch (e) {
+      console.error('Erro ao carregar portal do atleta:', e);
+    }
+  };
+
+  // Carregamento inicial: apenas dados do dashboard (ao fazer login) — staff
   useEffect(() => {
     if (!currentUser) return;
     const token = localStorage.getItem('token');
     if (!token) return;
+    if (currentUser.role === 'Atleta') {
+      loadAthletePortalData();
+      return;
+    }
     if (dashboardDataLoadStarted.current) return;
     const loadDashboard = async () => {
       await Promise.all([
@@ -828,6 +858,8 @@ export default function App() {
     setOverviewTeamSettings({ teamName: '', teamShieldUrl: '' });
     setLoadedResources({ ...INITIAL_LOADED_RESOURCES });
     dashboardDataLoadStarted.current = false;
+    setAthleteProfile(null);
+    setAthleteToday(null);
   };
 
   const handleLogin = (user: User) => {
@@ -836,7 +868,7 @@ export default function App() {
       const token = localStorage.getItem('token');
       console.log('🔑 Token no localStorage:', token ? 'PRESENTE' : 'AUSENTE');
       setCurrentUser(user);
-      setActiveTab('dashboard'); 
+      setActiveTab(user.role === 'Atleta' ? 'athlete-home' : 'dashboard');
       console.log('✅ currentUser atualizado, useEffect deve ser disparado');
   };
 
@@ -1078,6 +1110,11 @@ export default function App() {
           }
         }
       } catch (error) {
+        const msg = error instanceof Error ? error.message : '';
+        if (msg.includes('já cadastrado') || msg.includes('Email')) {
+          alert(msg);
+          return;
+        }
         if (import.meta.env.PROD) {
           console.error('Erro ao criar atleta:', error);
           alert("Erro ao salvar atleta no servidor. Os dados não foram gravados. Verifique o console (F12) e as variáveis de ambiente em produção.");
@@ -1345,17 +1382,26 @@ export default function App() {
         if (cancelled) return;
         if (result.success && result.data) {
           const u = result.data;
-          const nextUser = {
+          const nextUser: User = {
             id: u.id,
             name: u.name,
             email: u.email,
-            role: u.role === 'TECNICO' ? 'Treinador' : u.role,
+            role:
+              u.role === 'TECNICO'
+                ? 'Treinador'
+                : u.role === 'ATLETA'
+                  ? 'Atleta'
+                  : u.role,
             planName: u.planName as SubscriptionPlanName | undefined,
             isPlatformAdmin: u.isPlatformAdmin ?? (u.planName === 'ADMINISTRADOR'),
             photoUrl: u.photoUrl,
             teamDisplayName: u.teamDisplayName,
             teamShieldUrl: u.teamShieldUrl,
+            linkedPlayerId: u.linkedPlayerId ?? u.jogadorId,
+            jogadorId: u.jogadorId ?? u.linkedPlayerId,
+            equipeId: u.equipeId,
           };
+          const isAthleteRestore = nextUser.role === 'Atleta';
           if (isBlogPath) {
             setCurrentUser(nextUser);
             if (u.teamDisplayName != null || u.teamShieldUrl != null) {
@@ -1372,21 +1418,28 @@ export default function App() {
             setBlogLang(initialBlogLang);
             setIsInitializing(false);
             restored = true;
-            void Promise.all([loadPlayers(), loadMatches(), loadChampionshipMatches()]).then(() => {
-              loadSchedules();
-              loadChampionships();
-            });
+            if (!isAthleteRestore) {
+              void Promise.all([loadPlayers(), loadMatches(), loadChampionshipMatches()]).then(() => {
+                loadSchedules();
+                loadChampionships();
+              });
+            }
             return;
           }
-          await Promise.all([
-            loadPlayers(),
-            loadMatches(),
-            loadChampionshipMatches(),
-          ]);
-          if (cancelled) return;
-          loadSchedules();
-          loadChampionships();
+          if (!isAthleteRestore) {
+            await Promise.all([
+              loadPlayers(),
+              loadMatches(),
+              loadChampionshipMatches(),
+            ]);
+            if (cancelled) return;
+            loadSchedules();
+            loadChampionships();
+          }
           setCurrentUser(nextUser);
+          if (isAthleteRestore) {
+            setActiveTab('athlete-home');
+          }
           if (u.teamDisplayName != null || u.teamShieldUrl != null) {
             try {
               const cur = JSON.parse(localStorage.getItem('scout21_settings_current_team') || '{}');
@@ -1592,6 +1645,55 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (isAthleteUser) {
+      switch (activeTab) {
+        case 'athlete-home':
+          return (
+            <AthleteHome
+              profileName={String(athleteProfile?.name || currentUser?.name || '')}
+              equipeName={athleteProfile?.equipeName as string | undefined}
+              today={athleteToday}
+              onNavigate={handleTabChange}
+            />
+          );
+        case 'athlete-pse':
+          return (
+            <AthletePseForm
+              today={athleteToday}
+              equipeId={(athleteToday?.equipeId ?? currentUser?.equipeId) as string | undefined}
+              onSaved={loadAthletePortalData}
+            />
+          );
+        case 'athlete-psr':
+          return (
+            <AthletePsrForm
+              today={athleteToday}
+              equipeId={(athleteToday?.equipeId ?? currentUser?.equipeId) as string | undefined}
+              onSaved={loadAthletePortalData}
+            />
+          );
+        case 'athlete-wellness':
+          return (
+            <AthleteWellnessForm
+              equipeId={(athleteToday?.equipeId ?? currentUser?.equipeId) as string | undefined}
+              defaultDate={athleteToday?.date}
+              onSaved={loadAthletePortalData}
+            />
+          );
+        case 'athlete-profile':
+          return <AthleteProfile profile={athleteProfile} onUpdated={loadAthletePortalData} />;
+        default:
+          return (
+            <AthleteHome
+              profileName={String(athleteProfile?.name || currentUser?.name || '')}
+              equipeName={athleteProfile?.equipeName as string | undefined}
+              today={athleteToday}
+              onNavigate={handleTabChange}
+            />
+          );
+      }
+    }
+
     switch (activeTab) {
       case 'team':
         return (
