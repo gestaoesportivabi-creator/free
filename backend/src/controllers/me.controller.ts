@@ -8,6 +8,10 @@ import bcrypt from 'bcrypt';
 import prisma from '../config/database';
 import { ForbiddenError, ValidationError } from '../utils/errors';
 import { validateAccessPassword } from '../utils/athleteAccount.helper';
+import {
+  getAthleteTodaySummary,
+  todayDateString,
+} from '../services/athleteWellness.service';
 
 export type MeWellnessType =
   | 'pse-treino'
@@ -21,11 +25,6 @@ function athleteContext(req: Request) {
   const equipeIds = req.tenantInfo?.equipe_ids ?? [];
   if (!jogadorId) throw new ForbiddenError('Conta de atleta inválida');
   return { jogadorId, equipeId: equipeIds[0] ?? null, equipeIds };
-}
-
-function todayDateString(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
 }
 
 function parseDay(input: string | number | undefined): Date {
@@ -195,72 +194,21 @@ export const meController = {
   async getWellnessToday(req: Request, res: Response) {
     try {
       const { jogadorId, equipeId } = athleteContext(req);
-      const today = parseDay(todayDateString());
-
-      const hasTrainingToday = equipeId
-        ? await prisma.programacoesDias.findFirst({
-            where: {
-              programacao: { equipeId, isAtivo: true },
-              data: today,
-              atividade: { contains: 'Treino', mode: 'insensitive' },
-            },
-          })
-        : null;
+      const summary = await getAthleteTodaySummary(jogadorId);
 
       const recentMatch = equipeId
         ? await prisma.jogo.findFirst({
-            where: {
-              equipeId,
-              data: { lte: today },
-            },
+            where: { equipeId, data: { lte: new Date(summary.date + 'T12:00:00.000Z') } },
             orderBy: { data: 'desc' },
           })
         : null;
 
-      const [bemEstar, pseTreino, psrTreino, pseJogo, psrJogo] = await Promise.all([
-        equipeId
-          ? prisma.bem_estar_diario.findFirst({
-              where: { jogador_id: jogadorId, equipe_id: equipeId, data: today },
-            })
-          : null,
-        equipeId
-          ? prisma.pseTreino.findFirst({
-              where: { jogadorId, equipeId, data: today },
-            })
-          : null,
-        equipeId
-          ? prisma.psrTreino.findFirst({
-              where: { jogadorId, equipeId, data: today },
-            })
-          : null,
-        recentMatch
-          ? prisma.pseJogo.findFirst({
-              where: { jogadorId, jogoId: recentMatch.id },
-            })
-          : null,
-        recentMatch
-          ? prisma.psrJogo.findFirst({
-              where: { jogadorId, jogoId: recentMatch.id },
-            })
-          : null,
-      ]);
-
       return res.json({
         success: true,
         data: {
-          date: todayDateString(),
-          equipeId,
-          hasTrainingToday: !!hasTrainingToday,
+          ...summary,
           recentMatchId: recentMatch?.id ?? null,
           recentMatchDate: recentMatch?.data.toISOString().slice(0, 10) ?? null,
-          recentMatchOpponent: recentMatch?.adversario ?? null,
-          tasks: {
-            bemEstarDiario: { required: true, completed: !!bemEstar },
-            pseTreino: { required: !!hasTrainingToday, completed: !!pseTreino },
-            psrTreino: { required: !!hasTrainingToday, completed: !!psrTreino },
-            pseJogo: { required: !!recentMatch, completed: !!pseJogo },
-            psrJogo: { required: !!recentMatch, completed: !!psrJogo },
-          },
         },
       });
     } catch (error: unknown) {

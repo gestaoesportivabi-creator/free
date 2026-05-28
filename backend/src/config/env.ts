@@ -28,6 +28,16 @@ export const env = {
   MAX_REGISTERED_USERS: process.env.MAX_REGISTERED_USERS
     ? parseInt(process.env.MAX_REGISTERED_USERS, 10)
     : null as number | null,
+
+  // Telegram (@scout21bot)
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  /** Token secreto no header X-Telegram-Bot-Api-Secret-Token (setWebhook) */
+  TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || '',
+  /** Desenvolvimento local: long polling em vez de webhook */
+  TELEGRAM_POLLING: process.env.TELEGRAM_POLLING === 'true',
+
+  /** URL pública da API (webhook Telegram), ex. https://seu-app.vercel.app */
+  PUBLIC_API_URL: process.env.PUBLIC_API_URL || '',
 };
 
 // Validações

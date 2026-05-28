@@ -27,6 +27,8 @@ import wellnessRoutes from './routes/wellness.routes';
 import championshipsRoutes from './routes/championships.routes';
 import leadsRoutes from './routes/leads.routes';
 import meRoutes from './routes/me.routes';
+import telegramRoutes from './routes/telegram.routes';
+import { startTelegramPolling } from './services/telegram/telegramPolling';
 
 const app: Express = express();
 
@@ -71,6 +73,7 @@ app.get('/health', (_req, res) => {
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 // Portal do atleta
 app.use('/api/me', authMiddleware, tenantMiddleware(), meRoutes);
@@ -101,6 +104,7 @@ if (process.env.VERCEL !== '1') {
     console.log(`🚀 SCOUT 21 PRO Backend rodando em http://localhost:${PORT}`);
     console.log(`📚 Ambiente: ${env.NODE_ENV}`);
     console.log(`🔗 CORS habilitado para: ${env.CORS_ORIGIN}`);
+    startTelegramPolling();
   });
 }
 
