@@ -37,6 +37,13 @@ npx prisma generate
 
 Dados gravados no **mesmo Supabase** do app; cada dia renova tarefas; dias anteriores permanecem no banco.
 
+## Bot não responde?
+
+1. Vercel → `TELEGRAM_BOT_TOKEN` (token novo do BotFather) + redeploy.
+2. Abra no navegador: `https://gestaoesportiva-free.vercel.app/api/telegram/diagnose`
+3. Se `webhookMatches: false`, rode register-webhook (abaixo).
+4. Se `last_error_message` aparecer, copie e corrija (geralmente token ou URL errada).
+
 ## Produção
 
 1. Env vars no Vercel.

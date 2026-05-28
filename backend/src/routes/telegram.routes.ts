@@ -5,6 +5,7 @@ import { telegramWebhookSecretMiddleware } from '../middleware/telegramWebhook.m
 const router = Router();
 
 router.get('/status', telegramController.status);
+router.get('/diagnose', telegramController.diagnose);
 router.post('/webhook', telegramWebhookSecretMiddleware, telegramController.webhook);
 router.post('/register-webhook', telegramController.registerWebhook);
 router.post('/delete-webhook', telegramController.deleteWebhook);

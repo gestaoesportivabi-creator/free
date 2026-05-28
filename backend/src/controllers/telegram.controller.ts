@@ -7,6 +7,8 @@ import { env } from '../config/env';
 import { handleTelegramUpdate } from '../services/telegram/telegramBot.service';
 import {
   deleteTelegramWebhook,
+  getTelegramMe,
+  getTelegramWebhookInfo,
   isTelegramConfigured,
   setTelegramWebhook,
   TelegramUpdate,
@@ -15,13 +17,10 @@ import { sendMorningReminders } from '../services/telegram/telegramReminders.ser
 
 export const telegramController = {
   async webhook(req: Request, res: Response) {
-    try {
-      await handleTelegramUpdate(req.body as TelegramUpdate);
-      return res.json({ ok: true });
-    } catch (error) {
+    res.status(200).json({ ok: true });
+    void handleTelegramUpdate(req.body as TelegramUpdate).catch((error) => {
       console.error('[Telegram webhook]', error);
-      return res.json({ ok: true });
-    }
+    });
   },
 
   async status(_req: Request, res: Response) {
@@ -36,11 +35,46 @@ export const telegramController = {
   },
 
   /** POST body: { "url": "https://..." } — requer TELEGRAM_WEBHOOK_SECRET */
-  async registerWebhook(req: Request, res: Response) {
-    if (!isTelegramConfigured() || !env.TELEGRAM_WEBHOOK_SECRET) {
+  async diagnose(_req: Request, res: Response) {
+    if (!isTelegramConfigured()) {
       return res.status(400).json({
         success: false,
-        error: 'Configure TELEGRAM_BOT_TOKEN e TELEGRAM_WEBHOOK_SECRET',
+        error: 'TELEGRAM_BOT_TOKEN não configurado na Vercel',
+      });
+    }
+    try {
+      const [me, webhookInfo] = await Promise.all([getTelegramMe(), getTelegramWebhookInfo()]);
+      const expectedUrl = `${(env.PUBLIC_API_URL || 'https://gestaoesportiva-free.vercel.app').replace(/\/$/, '')}/api/telegram/webhook`;
+      return res.json({
+        success: true,
+        data: {
+          bot: me,
+          webhook: webhookInfo,
+          expectedWebhookUrl: expectedUrl,
+          webhookMatches: webhookInfo.url === expectedUrl,
+          env: {
+            webhookSecretSet: Boolean(env.TELEGRAM_WEBHOOK_SECRET?.trim()),
+            publicApiUrl: env.PUBLIC_API_URL || null,
+          },
+          hint:
+            webhookInfo.url !== expectedUrl
+              ? 'Rode POST /api/telegram/register-webhook após o deploy'
+              : webhookInfo.last_error_message
+                ? `Erro Telegram: ${webhookInfo.last_error_message}`
+                : 'OK — envie /start no bot',
+        },
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Erro ao consultar Telegram';
+      return res.status(500).json({ success: false, error: msg });
+    }
+  },
+
+  async registerWebhook(req: Request, res: Response) {
+    if (!isTelegramConfigured()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Configure TELEGRAM_BOT_TOKEN na Vercel',
       });
     }
     const base =
@@ -48,8 +82,15 @@ export const telegramController = {
       env.PUBLIC_API_URL.replace(/\/$/, '') ||
       `https://${req.get('host')}`;
     const webhookUrl = `${base}/api/telegram/webhook`;
-    await setTelegramWebhook(webhookUrl, env.TELEGRAM_WEBHOOK_SECRET);
-    return res.json({ success: true, data: { webhookUrl } });
+    try {
+      await deleteTelegramWebhook();
+      await setTelegramWebhook(webhookUrl, env.TELEGRAM_WEBHOOK_SECRET || undefined);
+      const webhookInfo = await getTelegramWebhookInfo();
+      return res.json({ success: true, data: { webhookUrl, webhookInfo } });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Falha ao registrar webhook';
+      return res.status(500).json({ success: false, error: msg });
+    }
   },
 
   async deleteWebhook(_req: Request, res: Response) {

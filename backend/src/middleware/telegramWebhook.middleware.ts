@@ -10,15 +10,16 @@ export function telegramWebhookSecretMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  if (!env.TELEGRAM_WEBHOOK_SECRET) {
-    if (env.NODE_ENV === 'production') {
-      return res.status(503).json({ success: false, error: 'Webhook Telegram não configurado' });
-    }
+  if (!env.TELEGRAM_WEBHOOK_SECRET?.trim()) {
+    console.warn(
+      '[Telegram] TELEGRAM_WEBHOOK_SECRET ausente — webhook aceito sem validação. Defina o secret e rode register-webhook.'
+    );
     return next();
   }
 
   const header = req.get('X-Telegram-Bot-Api-Secret-Token');
   if (header !== env.TELEGRAM_WEBHOOK_SECRET) {
+    console.error('[Telegram] Webhook rejeitado: secret não confere com TELEGRAM_WEBHOOK_SECRET');
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
   next();

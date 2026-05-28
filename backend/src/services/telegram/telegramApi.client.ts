@@ -54,16 +54,36 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
   });
 }
 
-export async function setTelegramWebhook(webhookUrl: string, secretToken: string): Promise<void> {
-  await telegramApi('setWebhook', {
+export async function setTelegramWebhook(webhookUrl: string, secretToken?: string): Promise<void> {
+  const body: Record<string, unknown> = {
     url: webhookUrl,
-    secret_token: secretToken,
     allowed_updates: ['message', 'callback_query'],
-  });
+    drop_pending_updates: true,
+  };
+  if (secretToken?.trim()) {
+    body.secret_token = secretToken.trim();
+  }
+  await telegramApi('setWebhook', body);
 }
 
 export async function deleteTelegramWebhook(): Promise<void> {
   await telegramApi('deleteWebhook', { drop_pending_updates: false });
+}
+
+export async function getTelegramMe(): Promise<{ username?: string; first_name?: string }> {
+  return telegramApi('getMe');
+}
+
+export type TelegramWebhookInfo = {
+  url?: string;
+  has_custom_certificate?: boolean;
+  pending_update_count?: number;
+  last_error_date?: number;
+  last_error_message?: string;
+};
+
+export async function getTelegramWebhookInfo(): Promise<TelegramWebhookInfo> {
+  return telegramApi<TelegramWebhookInfo>('getWebhookInfo');
 }
 
 export type TelegramUpdate = {
