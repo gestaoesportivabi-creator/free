@@ -95,6 +95,53 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
 }
 
 /**
+ * GET de um único recurso (data é objeto, não array)
+ */
+async function getOne<T>(resource: string, id: string): Promise<T | null> {
+  try {
+    const url = `${getApiUrl()}/${resource}/${id}`;
+    const token = localStorage.getItem('token') || '';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const responseText = await response.text();
+    let result: ApiResponse<T>;
+    try {
+      result = responseText ? JSON.parse(responseText) : { success: false };
+    } catch {
+      return null;
+    }
+
+    if (!result.success || result.data == null) {
+      return null;
+    }
+
+    return result.data;
+  } catch (error: unknown) {
+    if (import.meta.env.DEV) {
+      console.error(`Error fetching ${resource}/${id}:`, error);
+    }
+    return null;
+  }
+}
+
+/**
  * Função genérica para fazer requisições POST
  * 
  * Usa Content-Type: text/plain para evitar requisições preflight OPTIONS
@@ -266,7 +313,7 @@ async function del(resource: string, id: string): Promise<boolean> {
  */
 export const playersApi = {
   getAll: () => get<Player>(API_RESOURCES.players),
-  getById: (id: string) => get<Player>(API_RESOURCES.players, id).then(arr => arr[0] || null),
+  getById: (id: string) => getOne<Player>(API_RESOURCES.players, id),
   create: (player: Player) => post<Player>(API_RESOURCES.players, player),
   update: (id: string, player: Partial<Player>) => put<Player>(API_RESOURCES.players, id, player),
   delete: (id: string) => del(API_RESOURCES.players, id),

@@ -280,55 +280,50 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     };
 
 
+    const applyPlayerToForm = (p: Player) => {
+        setName(p.name);
+        setNickname(p.nickname || '');
+        setPosition(p.position);
+        setJerseyNumber(
+            p.jerseyNumber != null && p.jerseyNumber !== '' ? String(p.jerseyNumber) : ''
+        );
+        setDominantFoot(p.dominantFoot || '');
+        setHeight(p.height?.toString() || '');
+        setLastClub(p.lastClub || '');
+        setPhotoUrl(p.photoUrl || '');
+        setIsTransferred(p.isTransferred || false);
+        setTransferDate(p.transferDate || '');
+        setInjuryHistory(p.injuryHistory || []);
+        setBirthDate(p.birthDate || '');
+        setWeight(p.weight != null ? String(p.weight) : '');
+        setMaxLoads(p.maxLoads || []);
+        const playerHasAccess = !!p.hasAccess;
+        setHasAccess(playerHasAccess);
+        setCreateAccess(playerHasAccess);
+        setAccessEmail(p.accessEmail || '');
+        setAccessPassword('');
+        setAccessActive(p.accessActive !== false);
+        setResetAccessPassword(false);
+    };
+
     const handleEditClick = async (player: Player) => {
         setEditMode(true);
         setEditPlayerId(player.id);
         setActiveTab('profile');
-
-        // Populate fields (mesmas regras do novo atleta ao salvar — estado alinhado ao formulário)
-        setName(player.name);
-        setNickname(player.nickname || '');
-        setPosition(player.position);
-        setJerseyNumber(
-            player.jerseyNumber != null && player.jerseyNumber !== ''
-                ? String(player.jerseyNumber)
-                : ''
-        );
-        setDominantFoot(player.dominantFoot || '');
-        setHeight(player.height?.toString() || '');
-        setLastClub(player.lastClub || '');
-        setPhotoUrl(player.photoUrl || '');
-        setIsTransferred(player.isTransferred || false);
-        setTransferDate(player.transferDate || '');
-        setInjuryHistory(player.injuryHistory || []);
-        setBirthDate(player.birthDate || '');
-        setWeight((player as any).weight != null ? String((player as any).weight) : '');
-        setMaxLoads(player.maxLoads || []);
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
-        const initialHasAccess = !!(player as Player & { hasAccess?: boolean }).hasAccess;
-        setHasAccess(initialHasAccess);
-        setCreateAccess(initialHasAccess);
-        setAccessEmail((player as Player & { accessEmail?: string }).accessEmail || '');
-        setAccessPassword('');
-        setAccessActive((player as Player & { accessActive?: boolean }).accessActive !== false);
-        setResetAccessPassword(false);
 
         try {
             const full = await playersApi.getById(player.id);
-            if (full) {
-                const ext = full as Player & { accessEmail?: string; accessActive?: boolean; hasAccess?: boolean };
-                setHasAccess(!!ext.hasAccess);
-                setCreateAccess(!!ext.hasAccess);
-                setAccessEmail(ext.accessEmail || '');
-                setAccessActive(ext.accessActive !== false);
+            if (!full) {
+                alert('Não foi possível carregar os dados do atleta no servidor. Tente novamente.');
+                return;
             }
+            applyPlayerToForm(full);
+            setIsFormOpen(true);
         } catch {
             alert('Não foi possível carregar os dados do atleta no servidor. Tente novamente.');
-            return;
         }
-
-        setIsFormOpen(true);
     };
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -556,13 +551,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             birthDate: birthDate || undefined,
             maxLoads: maxLoads.length > 0 ? maxLoads : undefined,
             createAccess,
-            accessEmail: createAccess ? accessEmail.trim() : undefined,
+            accessEmail: createAccess || hasAccess ? accessEmail.trim() : undefined,
             accessPassword:
                 createAccess && accessPassword && (resetAccessPassword || !editMode || !hasAccess)
                     ? accessPassword
                     : undefined,
-            accessActive: createAccess ? accessActive : undefined,
-            revokeAccess: createAccess ? !accessActive : undefined,
+            accessActive: createAccess || hasAccess ? accessActive : undefined,
+            revokeAccess:
+                editMode && hasAccess && !createAccess
+                    ? true
+                    : (createAccess || hasAccess)
+                      ? !accessActive
+                      : undefined,
         };
 
         const ok = editMode
@@ -1096,7 +1096,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                 </div>
 
                                 <div className="col-span-1 md:col-span-2 border-t border-zinc-800 pt-4 mt-2">
-                                    <label className="flex items-center gap-2 cursor-pointer mb-4">
+                                    <label className="flex items-center gap-2 cursor-pointer mb-2">
                                         <input
                                             type="checkbox"
                                             checked={createAccess}
@@ -1106,7 +1106,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                         <span className="text-white text-sm font-bold">Permitir login do atleta no app</span>
                                     </label>
 
-                                    {createAccess && (
+                                    {editMode && hasAccess && (
+                                        <p className="text-xs mb-4">
+                                            {accessActive ? (
+                                                <span className="text-emerald-400 font-bold">Conta ativa no servidor</span>
+                                            ) : (
+                                                <span className="text-amber-400 font-bold">Conta desativada — o atleta não consegue entrar</span>
+                                            )}
+                                        </p>
+                                    )}
+
+                                    {(createAccess || (editMode && hasAccess)) && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
@@ -1116,37 +1126,44 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                                     type="email"
                                                     value={accessEmail}
                                                     onChange={(e) => setAccessEmail(e.target.value)}
-                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981]"
+                                                    readOnly={editMode && hasAccess && !createAccess}
+                                                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white outline-none focus:border-[#10b981] disabled:opacity-70"
                                                     placeholder="atleta@email.com"
                                                     autoComplete="off"
                                                 />
                                             </div>
-                                            <div>
-                                                <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
-                                                    {editMode ? 'Nova senha (opcional)' : 'Senha inicial'}
-                                                </label>
-                                                <div className="relative">
-                                                    <input
-                                                        type={showAccessPassword ? 'text' : 'password'}
-                                                        value={accessPassword}
-                                                        onChange={(e) => setAccessPassword(e.target.value)}
-                                                        className="w-full bg-black border border-zinc-800 rounded-xl p-3 pr-12 text-white outline-none focus:border-[#10b981]"
-                                                        placeholder="Mínimo 8 caracteres"
-                                                        autoComplete="new-password"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setShowAccessPassword((v) => !v)}
-                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-                                                        aria-label={showAccessPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                                                    >
-                                                        {showAccessPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                                    </button>
+                                            {(createAccess || !editMode) && (
+                                                <div>
+                                                    <label className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">
+                                                        {editMode && hasAccess
+                                                            ? 'Nova senha (use Redefinir senha)'
+                                                            : editMode
+                                                              ? 'Senha de acesso'
+                                                              : 'Senha inicial'}
+                                                    </label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type={showAccessPassword ? 'text' : 'password'}
+                                                            value={accessPassword}
+                                                            onChange={(e) => setAccessPassword(e.target.value)}
+                                                            className="w-full bg-black border border-zinc-800 rounded-xl p-3 pr-12 text-white outline-none focus:border-[#10b981]"
+                                                            placeholder="Mínimo 8 caracteres"
+                                                            autoComplete="new-password"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowAccessPassword((v) => !v)}
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                                                            aria-label={showAccessPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                                                        >
+                                                            {showAccessPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            {editMode && (
+                                            )}
+                                            {editMode && hasAccess && createAccess && (
                                                 <>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 md:col-span-2">
                                                         <input
                                                             type="checkbox"
                                                             checked={accessActive}
@@ -1155,10 +1172,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                                             id="access-active"
                                                         />
                                                         <label htmlFor="access-active" className="text-white text-sm">
-                                                            Acesso ativo
+                                                            Acesso ativo (desmarque para bloquear o login do atleta)
                                                         </label>
                                                     </div>
-                                                    <div className="flex items-center">
+                                                    <div className="flex items-center md:col-span-2">
                                                         <button
                                                             type="button"
                                                             onClick={() => {

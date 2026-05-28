@@ -22,6 +22,23 @@ function db(tx?: TransactionClient) {
   return tx ?? prisma;
 }
 
+async function withPlayerAccessFields(
+  player: Player,
+  jogadorId: string,
+  tx?: TransactionClient
+): Promise<Player> {
+  const accessUser = await db(tx).user.findUnique({
+    where: { jogadorId },
+    select: { email: true, isActive: true },
+  });
+  return {
+    ...player,
+    accessEmail: accessUser?.email,
+    accessActive: accessUser?.isActive ?? false,
+    hasAccess: !!accessUser,
+  };
+}
+
 export const playersService = {
   /**
    * Buscar todos os jogadores do tenant
@@ -85,16 +102,7 @@ export const playersService = {
       lesoes as any,
       avaliacoes as any
     );
-    const accessUser = await db(tx).user.findUnique({
-      where: { jogadorId: id },
-      select: { email: true, isActive: true },
-    });
-    return {
-      ...player,
-      accessEmail: accessUser?.email,
-      accessActive: accessUser?.isActive ?? false,
-      hasAccess: !!accessUser,
-    } as Player & { accessEmail?: string; accessActive?: boolean; hasAccess?: boolean };
+    return withPlayerAccessFields(player, id, tx);
   },
 
   /**
@@ -394,12 +402,8 @@ export const playersService = {
         );
       }
 
-      // Retornar transformado (sem lesões/avaliações ainda)
-      return transformPlayerToFrontend(
-        jogador as any,
-        [],
-        []
-      );
+      const player = transformPlayerToFrontend(jogador as any, [], []);
+      return withPlayerAccessFields(player, jogador.id, tx);
     } catch (error: any) {
       console.error('Erro ao criar jogador:', error);
       throw error;
@@ -483,11 +487,12 @@ export const playersService = {
       assessmentsRepository.findByJogador(id, tenantInfo, tx),
     ]);
 
-    return transformPlayerToFrontend(
+    const player = transformPlayerToFrontend(
       jogador as any,
       lesoes as any,
       avaliacoes as any
     );
+    return withPlayerAccessFields(player, id, tx);
   },
 
   /**
