@@ -557,18 +557,16 @@ export default function App() {
 
   // --- Funções de carregamento por recurso (sob demanda) ---
   const loadPlayers = async () => {
-      try {
-        const token = localStorage.getItem('token');
+    try {
+      const token = localStorage.getItem('token');
       if (!token) return;
-      const apiPlayers = await playersApi.getAll().catch(err => { console.error('❌ Erro ao carregar players:', err); return []; });
-        const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-        const apiIds = new Set(apiPlayers.map(p => p.id));
-        const localOnly = localPlayers.filter((p: Player) => !apiIds.has(p.id));
-        setPlayers([...apiPlayers, ...localOnly]);
+      localStorage.removeItem('scout21_players_local');
+      const apiPlayers = await playersApi.getAll();
+      setPlayers(apiPlayers);
       setLoadedResources(prev => ({ ...prev, players: true }));
-    } catch {
-      const localPlayers = JSON.parse(localStorage.getItem('scout21_players_local') || '[]');
-      setPlayers(localPlayers);
+    } catch (err) {
+      console.error('❌ Erro ao carregar atletas:', err);
+      setPlayers([]);
       setLoadedResources(prev => ({ ...prev, players: true }));
     }
   };
@@ -830,7 +828,6 @@ export default function App() {
 
   const USER_DATA_LOCALSTORAGE_KEYS = [
     'user',
-    'scout21_players_local',
     'scout21_schedules_local',
     'championships',
     // Não limpar PSE/PSR no logout para manter os lançamentos locais entre sessões
@@ -1089,88 +1086,48 @@ export default function App() {
       }
   };
 
-  const PLAYERS_LOCAL_KEY = 'scout21_players_local';
-
-  const handleAddPlayer = async (newPlayer: Player) => {
-      try {
-        const saved = await playersApi.create(newPlayer);
-        if (saved) {
-          setPlayers(prev => [...prev, saved]);
-          alert("Atleta cadastrado com sucesso!");
-        } else {
-          if (import.meta.env.PROD) {
-            alert("Não foi possível salvar o atleta no servidor. Verifique sua conexão e as variáveis de ambiente (DATABASE_URL) em produção. Os dados não foram gravados.");
-          } else {
-            const localPlayers = JSON.parse(localStorage.getItem(PLAYERS_LOCAL_KEY) || '[]');
-            const playerWithId = { ...newPlayer, id: newPlayer.id || `p${Date.now()}` };
-            localPlayers.push(playerWithId);
-            localStorage.setItem(PLAYERS_LOCAL_KEY, JSON.stringify(localPlayers));
-            setPlayers(prev => [...prev, playerWithId]);
-            alert("Atleta cadastrado localmente (backend indisponível).");
-          }
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : '';
-        if (msg.includes('já cadastrado') || msg.includes('Email')) {
-          alert(msg);
-          return;
-        }
-        if (import.meta.env.PROD) {
-          console.error('Erro ao criar atleta:', error);
-          alert("Erro ao salvar atleta no servidor. Os dados não foram gravados. Verifique o console (F12) e as variáveis de ambiente em produção.");
-        } else {
-          console.warn('Backend indisponível, salvando localmente:', error);
-          const localPlayers = JSON.parse(localStorage.getItem(PLAYERS_LOCAL_KEY) || '[]');
-          const playerWithId = { ...newPlayer, id: newPlayer.id || `p${Date.now()}` };
-          localPlayers.push(playerWithId);
-          localStorage.setItem(PLAYERS_LOCAL_KEY, JSON.stringify(localPlayers));
-          setPlayers(prev => [...prev, playerWithId]);
-          alert("Atleta cadastrado localmente (backend indisponível).");
-        }
-      }
+  const playerApiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    return fallback;
   };
 
-  // Function to handle updates (edit, transfer, injury)
-  const handleUpdatePlayer = async (updatedPlayer: Player) => {
-      try {
-        const saved = await playersApi.update(updatedPlayer.id, updatedPlayer);
-        if (saved) {
-          setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? saved : p));
-          alert("Dados do atleta atualizados com sucesso!");
-        } else {
-          if (import.meta.env.PROD) {
-            alert("Não foi possível atualizar o atleta no servidor. Os dados não foram gravados.");
-          } else {
-            const localPlayers = JSON.parse(localStorage.getItem(PLAYERS_LOCAL_KEY) || '[]');
-            const idx = localPlayers.findIndex((p: Player) => p.id === updatedPlayer.id);
-            if (idx >= 0) {
-              localPlayers[idx] = updatedPlayer;
-            } else {
-              localPlayers.push(updatedPlayer);
-            }
-            localStorage.setItem(PLAYERS_LOCAL_KEY, JSON.stringify(localPlayers));
-            setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
-            alert("Dados do atleta atualizados localmente (backend indisponível).");
-          }
-        }
-      } catch (error) {
-        if (import.meta.env.PROD) {
-          console.error('Erro ao atualizar atleta:', error);
-          alert("Erro ao atualizar atleta no servidor. Os dados não foram gravados.");
-        } else {
-          console.warn('Backend indisponível, atualizando localmente:', error);
-          const localPlayers = JSON.parse(localStorage.getItem(PLAYERS_LOCAL_KEY) || '[]');
-          const idx = localPlayers.findIndex((p: Player) => p.id === updatedPlayer.id);
-          if (idx >= 0) {
-            localPlayers[idx] = updatedPlayer;
-          } else {
-            localPlayers.push(updatedPlayer);
-          }
-          localStorage.setItem(PLAYERS_LOCAL_KEY, JSON.stringify(localPlayers));
-          setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
-          alert("Dados do atleta atualizados localmente (backend indisponível).");
-        }
+  const handleAddPlayer = async (newPlayer: Player): Promise<boolean> => {
+    try {
+      const saved = await playersApi.create(newPlayer);
+      if (!saved) {
+        alert('Não foi possível salvar o atleta no servidor. Verifique sua conexão e tente novamente.');
+        return false;
       }
+      setPlayers(prev => [...prev, saved]);
+      alert('Atleta cadastrado com sucesso!');
+      return true;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '';
+      if (msg.includes('já cadastrado') || msg.includes('Email')) {
+        alert(msg);
+      } else {
+        console.error('Erro ao criar atleta:', error);
+        alert(playerApiErrorMessage(error, 'Erro ao salvar atleta no servidor. Os dados não foram gravados.'));
+      }
+      return false;
+    }
+  };
+
+  const handleUpdatePlayer = async (updatedPlayer: Player): Promise<boolean> => {
+    try {
+      const saved = await playersApi.update(updatedPlayer.id, updatedPlayer);
+      if (!saved) {
+        alert('Não foi possível atualizar o atleta no servidor. Os dados não foram gravados.');
+        return false;
+      }
+      setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? saved : p));
+      alert('Dados do atleta atualizados com sucesso!');
+      return true;
+    } catch (error) {
+      console.error('Erro ao atualizar atleta:', error);
+      alert(playerApiErrorMessage(error, 'Erro ao atualizar atleta no servidor. Os dados não foram gravados.'));
+      return false;
+    }
   };
 
   const handleDeletePlayer = async (player: Player) => {

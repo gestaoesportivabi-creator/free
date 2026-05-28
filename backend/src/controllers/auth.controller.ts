@@ -10,7 +10,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { env } from '../config/env';
 import { UnauthorizedError } from '../utils/errors';
-import { getAthleteEquipeId } from '../utils/athleteAccount.helper';
+import { getAthleteEquipeId, normalizeAccessEmail } from '../utils/athleteAccount.helper';
 
 const ALLOWED_REGISTER_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
 /** Planos que podem ser atribuídos pelo admin (não inclui ADMINISTRADOR) */
@@ -61,20 +61,23 @@ export const authController = {
         identifier = 'admin@admin.com';
       }
 
-      // Buscar por email primeiro; se não encontrar, buscar por nome
+      // Buscar por email (normalizado) primeiro; se não encontrar, buscar por nome
       // Usar select para não depender de colunas opcionais (ex.: team_display_name) que podem não existir no DB
-      let user = await prisma.user.findUnique({
-        where: { email: identifier },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          passwordHash: true,
-          isActive: true,
-          jogadorId: true,
-          role: { select: { name: true } },
-        },
-      });
+      let user =
+        identifier.includes('@')
+          ? await prisma.user.findUnique({
+              where: { email: normalizeAccessEmail(identifier) },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                passwordHash: true,
+                isActive: true,
+                jogadorId: true,
+                role: { select: { name: true } },
+              },
+            })
+          : null;
 
       if (!user) {
         user = await prisma.user.findFirst({

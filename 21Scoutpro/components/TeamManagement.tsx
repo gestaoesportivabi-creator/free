@@ -144,8 +144,8 @@ function formatPlayerAgeDisplay(player: Player): string {
 
 interface TeamManagementProps {
     players: Player[];
-    onAddPlayer: (player: Player) => void;
-    onUpdatePlayer: (player: Player) => void;
+    onAddPlayer: (player: Player) => Promise<boolean>;
+    onUpdatePlayer: (player: Player) => Promise<boolean>;
     onDeletePlayer?: (player: Player) => void;
     onClearDemoData?: () => Promise<void>;
     config: SportConfig;
@@ -222,6 +222,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     const [showAccessPassword, setShowAccessPassword] = useState(false);
     const [accessActive, setAccessActive] = useState(true);
     const [resetAccessPassword, setResetAccessPassword] = useState(false);
+    const [hasAccess, setHasAccess] = useState(false);
 
     const displayAgeFromBirth = useMemo(
         () => (birthDate ? calculateAgeFromBirthDateIso(birthDate) : null),
@@ -275,6 +276,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setShowAccessPassword(false);
         setAccessActive(true);
         setResetAccessPassword(false);
+        setHasAccess(false);
     };
 
 
@@ -304,7 +306,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setMaxLoads(player.maxLoads || []);
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
-        setCreateAccess(!!(player as Player & { hasAccess?: boolean }).hasAccess);
+        const initialHasAccess = !!(player as Player & { hasAccess?: boolean }).hasAccess;
+        setHasAccess(initialHasAccess);
+        setCreateAccess(initialHasAccess);
         setAccessEmail((player as Player & { accessEmail?: string }).accessEmail || '');
         setAccessPassword('');
         setAccessActive((player as Player & { accessActive?: boolean }).accessActive !== false);
@@ -314,12 +318,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             const full = await playersApi.getById(player.id);
             if (full) {
                 const ext = full as Player & { accessEmail?: string; accessActive?: boolean; hasAccess?: boolean };
+                setHasAccess(!!ext.hasAccess);
                 setCreateAccess(!!ext.hasAccess);
                 setAccessEmail(ext.accessEmail || '');
                 setAccessActive(ext.accessActive !== false);
             }
         } catch {
-            /* lista local sem backend */
+            alert('Não foi possível carregar os dados do atleta no servidor. Tente novamente.');
+            return;
         }
 
         setIsFormOpen(true);
@@ -414,7 +420,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setEditInjuryReturnDateActual('');
     };
 
-    const saveEditInjury = () => {
+    const saveEditInjury = async () => {
         if (!editingInjuryId || !editPlayerId) return;
         let daysOut = 0;
         const inj = injuryHistory.find(i => i.id === editingInjuryId);
@@ -456,11 +462,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                 ...currentPlayer,
                 injuryHistory: updatedInjuryHistory,
             };
-            onUpdatePlayer(playerToSave);
+            const ok = await onUpdatePlayer(playerToSave);
+            if (!ok) return;
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         const validation = validateCadastroFields({
@@ -498,7 +505,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                 setActiveTab('profile');
                 return;
             }
-            const needsPassword = !editMode || resetAccessPassword;
+            const needsPassword = !editMode || resetAccessPassword || (editMode && createAccess && !hasAccess);
             if (needsPassword && (!accessPassword || accessPassword.length < 8)) {
                 alert('A senha de acesso deve ter no mínimo 8 caracteres.');
                 setActiveTab('profile');
@@ -551,20 +558,17 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
             createAccess,
             accessEmail: createAccess ? accessEmail.trim() : undefined,
             accessPassword:
-                createAccess && accessPassword && (resetAccessPassword || !editMode)
+                createAccess && accessPassword && (resetAccessPassword || !editMode || !hasAccess)
                     ? accessPassword
                     : undefined,
             accessActive: createAccess ? accessActive : undefined,
             revokeAccess: createAccess ? !accessActive : undefined,
         };
 
-        if (editMode) {
-            onUpdatePlayer(playerData);
-            alert("Atleta atualizado com sucesso!");
-        } else {
-            onAddPlayer(playerData);
-            alert("Atleta cadastrado com sucesso!");
-        }
+        const ok = editMode
+            ? await onUpdatePlayer(playerData)
+            : await onAddPlayer(playerData);
+        if (!ok) return;
 
         setIsFormOpen(false);
         resetForm();
