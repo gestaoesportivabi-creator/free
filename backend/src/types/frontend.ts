@@ -22,6 +22,13 @@ export interface Player {
   transferDate?: string;
   injuryHistory?: InjuryRecord[];
   maxLoads?: unknown[];
+  /** Conta de acesso do atleta (staff) */
+  createAccess?: boolean;
+  accessEmail?: string;
+  accessPassword?: string;
+  accessActive?: boolean;
+  revokeAccess?: boolean;
+  hasAccess?: boolean;
 }
 
 export interface InjuryRecord {
