@@ -29,15 +29,28 @@ export async function telegramApi<T>(
   return json.result as T;
 }
 
+export type TelegramReplyMarkup = {
+  inline_keyboard: { text: string; callback_data: string }[][];
+};
+
 export async function sendTelegramMessage(
   chatId: number | string,
   text: string,
-  options?: { parse_mode?: 'Markdown' | 'HTML' }
+  options?: { parse_mode?: 'Markdown' | 'HTML'; reply_markup?: TelegramReplyMarkup }
 ): Promise<void> {
   await telegramApi('sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: options?.parse_mode,
+    reply_markup: options?.reply_markup,
+  });
+}
+
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  await telegramApi('answerCallbackQuery', {
+    callback_query_id: callbackQueryId,
+    text,
+    show_alert: false,
   });
 }
 
@@ -45,7 +58,7 @@ export async function setTelegramWebhook(webhookUrl: string, secretToken: string
   await telegramApi('setWebhook', {
     url: webhookUrl,
     secret_token: secretToken,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query'],
   });
 }
 
@@ -61,6 +74,12 @@ export type TelegramUpdate = {
     from?: { id: number; first_name?: string };
     text?: string;
   };
+  callback_query?: {
+    id: string;
+    from: { id: number };
+    message?: { chat: { id: number } };
+    data?: string;
+  };
 };
 
 export async function getTelegramUpdates(
@@ -70,6 +89,6 @@ export async function getTelegramUpdates(
   return telegramApi<TelegramUpdate[]>('getUpdates', {
     offset,
     timeout: timeoutSeconds,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query'],
   });
 }

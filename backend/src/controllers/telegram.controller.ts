@@ -9,12 +9,14 @@ import {
   deleteTelegramWebhook,
   isTelegramConfigured,
   setTelegramWebhook,
+  TelegramUpdate,
 } from '../services/telegram/telegramApi.client';
+import { sendMorningReminders } from '../services/telegram/telegramReminders.service';
 
 export const telegramController = {
   async webhook(req: Request, res: Response) {
     try {
-      await handleTelegramUpdate(req.body);
+      await handleTelegramUpdate(req.body as TelegramUpdate);
       return res.json({ ok: true });
     } catch (error) {
       console.error('[Telegram webhook]', error);
@@ -53,5 +55,24 @@ export const telegramController = {
   async deleteWebhook(_req: Request, res: Response) {
     await deleteTelegramWebhook();
     return res.json({ success: true });
+  },
+
+  /** Vercel Cron — header Authorization: Bearer CRON_SECRET */
+  async cronReminders(req: Request, res: Response) {
+    const auth = req.get('authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '');
+    if (!env.CRON_SECRET || token !== env.CRON_SECRET) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+    if (!isTelegramConfigured()) {
+      return res.json({ success: true, data: { sent: 0, skipped: 0, reason: 'telegram_not_configured' } });
+    }
+    try {
+      const result = await sendMorningReminders();
+      return res.json({ success: true, data: result });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Erro no cron';
+      return res.status(500).json({ success: false, error: msg });
+    }
   },
 };

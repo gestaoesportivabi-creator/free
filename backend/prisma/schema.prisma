@@ -8,6 +8,15 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model TelegramSession {
+  chatId    String   @id @map("chat_id") @db.Text
+  step      String   @default("idle") @db.Text
+  payload   Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("telegram_sessions")
+}
+
 model Role {
   id          String   @id @default(uuid())
   name        String   @unique @db.VarChar(50)

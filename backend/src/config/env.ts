@@ -38,6 +38,9 @@ export const env = {
 
   /** URL pública da API (webhook Telegram), ex. https://seu-app.vercel.app */
   PUBLIC_API_URL: process.env.PUBLIC_API_URL || '',
+
+  /** Protege POST /api/telegram/cron/reminders (Vercel Cron) */
+  CRON_SECRET: process.env.CRON_SECRET || '',
 };
 
 // Validações

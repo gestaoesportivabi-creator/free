@@ -1,43 +1,48 @@
 # Bot Telegram — Scout 21 Pro (@scout21bot)
 
-## Segurança do token
+## Segurança
 
-- **Nunca** commite `TELEGRAM_BOT_TOKEN` no Git.
-- Se o token vazou (chat, print, etc.), revogue em [@BotFather](https://t.me/BotFather) → `/revoke` e gere um novo.
-- Configure só em variáveis de ambiente (local `.env`, Vercel).
+- **Nunca** commite `TELEGRAM_BOT_TOKEN` nem `CRON_SECRET` no Git.
+- Token vazado → [@BotFather](https://t.me/BotFather) `/revoke` e token novo.
 
-## Variáveis de ambiente (backend)
+## Variáveis (Vercel / `backend/.env`)
 
 ```env
-TELEGRAM_BOT_TOKEN=          # BotFather
-TELEGRAM_WEBHOOK_SECRET=     # string aleatória longa (ex. openssl rand -hex 32)
-TELEGRAM_POLLING=false       # true só em dev local
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=     # openssl rand -hex 32
 PUBLIC_API_URL=https://gestaoesportiva-free.vercel.app
+CRON_SECRET=                 # openssl rand -hex 32 (lembretes 7h BRT)
+TELEGRAM_POLLING=false       # true só em dev local
 ```
 
-## Migration
+## Migrations
 
 ```bash
 cd backend
 npx prisma db execute --file migrations/022_add_telegram_chat_id.sql
+npx prisma db execute --file migrations/023_telegram_sessions.sql
 npx prisma generate
 ```
 
-## Comandos do bot (atleta)
+## O que o bot faz (completo)
 
-| Comando | Descrição |
-|---------|-----------|
-| `/start` ou `/ajuda` | Ajuda |
-| `/vincular email@x.com senha` | Liga o Telegram à conta ATLETA |
-| `/hoje` | O que falta preencher hoje (bem-estar, PSE, PSR) |
-| `/sair` | Desvincula este chat |
+| Comando / ação | Função |
+|----------------|--------|
+| `/vincular email senha` | Liga Telegram à conta ATLETA |
+| `/hoje` | Status do dia + botões do que falta |
+| `/preencher` | Menu para registrar pendências |
+| Botões 0–10 | Bem-estar (5 dimensões), PSE/PSR treino e jogo |
+| Cron 10:00 UTC | Lembrete matinal (7h Brasil) se houver pendências |
+| `/sair` | Desvincular |
 
-Preenchimento completo de escalas pelo Telegram virá em fase 2; por ora use o app web após ver `/hoje`.
+Dados gravados no **mesmo Supabase** do app; cada dia renova tarefas; dias anteriores permanecem no banco.
 
-## Produção (Vercel + webhook)
+## Produção
 
-1. Deploy com as env vars acima.
-2. Registre o webhook (uma vez):
+1. Env vars no Vercel.
+2. Migrations no banco.
+3. Deploy.
+4. Registrar webhook:
 
 ```bash
 curl -X POST "https://gestaoesportiva-free.vercel.app/api/telegram/register-webhook" \
@@ -45,29 +50,22 @@ curl -X POST "https://gestaoesportiva-free.vercel.app/api/telegram/register-webh
   -d '{"url":"https://gestaoesportiva-free.vercel.app"}'
 ```
 
-3. Teste no Telegram: [@scout21bot](https://t.me/scout21bot)
+5. Testar [@scout21bot](https://t.me/scout21bot).
 
-## Desenvolvimento local (polling)
-
-Sem HTTPS público, use long polling:
+## Dev local (polling)
 
 ```env
 TELEGRAM_POLLING=true
 TELEGRAM_BOT_TOKEN=...
-# TELEGRAM_WEBHOOK_SECRET opcional em dev
 ```
 
 ```bash
 cd backend && npm run dev
 ```
 
-Mensagens ao bot são recebidas via `getUpdates`.
+## Cron manual (teste)
 
-## Endpoints
-
-| Método | Rota | Uso |
-|--------|------|-----|
-| POST | `/api/telegram/webhook` | Telegram envia updates (header `X-Telegram-Bot-Api-Secret-Token`) |
-| GET | `/api/telegram/status` | Diagnóstico |
-| POST | `/api/telegram/register-webhook` | Configura webhook na Meta API |
-| POST | `/api/telegram/delete-webhook` | Remove webhook |
+```bash
+curl -X POST "https://gestaoesportiva-free.vercel.app/api/telegram/cron/reminders" \
+  -H "Authorization: Bearer SEU_CRON_SECRET"
+```

@@ -193,23 +193,21 @@ export const meController = {
 
   async getWellnessToday(req: Request, res: Response) {
     try {
-      const { jogadorId, equipeId } = athleteContext(req);
+      const { jogadorId } = athleteContext(req);
       const summary = await getAthleteTodaySummary(jogadorId);
 
-      const recentMatch = equipeId
-        ? await prisma.jogo.findFirst({
-            where: { equipeId, data: { lte: new Date(summary.date + 'T12:00:00.000Z') } },
-            orderBy: { data: 'desc' },
-          })
-        : null;
+      let recentMatchDate: string | null = null;
+      if (summary.recentMatchId) {
+        const m = await prisma.jogo.findUnique({
+          where: { id: summary.recentMatchId },
+          select: { data: true },
+        });
+        recentMatchDate = m?.data.toISOString().slice(0, 10) ?? null;
+      }
 
       return res.json({
         success: true,
-        data: {
-          ...summary,
-          recentMatchId: recentMatch?.id ?? null,
-          recentMatchDate: recentMatch?.data.toISOString().slice(0, 10) ?? null,
-        },
+        data: { ...summary, recentMatchDate },
       });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Erro ao buscar status do dia';

@@ -7,6 +7,12 @@
   "env": {
     "PRISMA_SCHEMA_CACHE_BUST": "v6"
   },
+  "crons": [
+    {
+      "path": "/api/telegram/cron/reminders",
+      "schedule": "0 10 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
