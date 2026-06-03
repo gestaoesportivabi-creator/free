@@ -28,6 +28,7 @@ import championshipsRoutes from './routes/championships.routes';
 import leadsRoutes from './routes/leads.routes';
 import meRoutes from './routes/me.routes';
 import telegramRoutes from './routes/telegram.routes';
+import assistantRoutes from './routes/assistant.routes';
 import { startTelegramPolling } from './services/telegram/telegramPolling';
 
 const app: Express = express();
@@ -74,6 +75,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 // Portal do atleta
 app.use('/api/me', authMiddleware, tenantMiddleware(), meRoutes);

@@ -41,6 +41,9 @@ export const env = {
 
   /** Protege POST /api/telegram/cron/reminders (Vercel Cron) */
   CRON_SECRET: process.env.CRON_SECRET || '',
+
+  /** Token de serviço Hermes → Assistant API (/api/assistant/*) */
+  ASSISTANT_SERVICE_TOKEN: process.env.ASSISTANT_SERVICE_TOKEN || '',
 };
 
 // Validações
