@@ -9,10 +9,12 @@ import {
   linkCoachTelegramAccount,
   linkCoachTelegramOpen,
   resolveCoachOrUserFromRequest,
+  resolveUserFromServiceContext,
   unlinkCoachTelegramAccount,
   validateAssistantServiceToken,
 } from '../middleware/assistantAuth.middleware';
 import { logCoachAssistantActivity } from '../middleware/assistantAudit.middleware';
+import { requireAssistantPlatformAdmin } from '../middleware/admin.middleware';
 import {
   getLastMatchSummary,
   getMatchHistory,
@@ -35,6 +37,13 @@ import {
 import prisma from '../config/database';
 import { getTenantInfo } from '../utils/tenant.helper';
 import { loadCoachTenantByChatId } from '../utils/coachAdmin.helper';
+import {
+  getAssistantActivity,
+  getPlatformOverview,
+  getUserInsightsPack,
+  listPlatformTenants,
+  listPlatformUsersForAssistant,
+} from '../services/platformAdmin.service';
 
 async function loadTenantForUser(userId: string, roleName: string) {
   const user = { id: userId, role_id: roleName, email: '', name: '' };
@@ -329,7 +338,7 @@ export const assistantController = {
     });
   },
 
-  /** GET — admin: atividade recente da Assistant API */
+  /** GET — admin (service key): atividade recente da Assistant API */
   async adminActivity(req: Request, res: Response) {
     const limit = Math.min(parseInt(String(req.query.limit || '50'), 10) || 50, 200);
     const chatId = (req.query.chatId as string | undefined)?.trim();
@@ -357,6 +366,46 @@ export const assistantController = {
         activity: rows,
       },
     });
+  },
+
+  /** GET — admin plataforma (Hermes web, role ADMINISTRADOR na sessão) */
+  async adminPlatformOverview(_req: Request, res: Response) {
+    const data = await getPlatformOverview();
+    return res.json({ success: true, data });
+  },
+
+  async adminPlatformUsers(req: Request, res: Response) {
+    const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 200);
+    const data = await listPlatformUsersForAssistant(limit);
+    return res.json({ success: true, data: { users: data, total: data.length } });
+  },
+
+  async adminPlatformTenants(req: Request, res: Response) {
+    const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 200);
+    const data = await listPlatformTenants(limit);
+    return res.json({ success: true, data: { tenants: data, total: data.length } });
+  },
+
+  async adminPlatformActivity(req: Request, res: Response) {
+    const source = req.query.source as 'web' | 'telegram' | 'all' | undefined;
+    const data = await getAssistantActivity({
+      limit: parseInt(String(req.query.limit || '50'), 10) || 50,
+      userId: (req.query.userId as string | undefined)?.trim(),
+      source: source && source !== 'all' ? source : undefined,
+    });
+    return res.json({ success: true, data });
+  },
+
+  async adminPlatformUserInsights(req: Request, res: Response) {
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'userId obrigatório' });
+    }
+    const data = await getUserInsightsPack(userId);
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Usuário não encontrado ou inativo' });
+    }
+    return res.json({ success: true, data });
   },
 
   async cronBriefings(_req: Request, res: Response) {
@@ -401,5 +450,13 @@ export const assistantController = {
 export const assistantProtectedChain = [
   validateAssistantServiceToken,
   resolveCoachOrUserFromRequest,
+  logCoachAssistantActivity,
+];
+
+/** Admin plataforma via assistente web — X-Scout21-User-Id deve ser ADMINISTRADOR */
+export const assistantPlatformAdminChain = [
+  validateAssistantServiceToken,
+  resolveUserFromServiceContext,
+  requireAssistantPlatformAdmin,
   logCoachAssistantActivity,
 ];

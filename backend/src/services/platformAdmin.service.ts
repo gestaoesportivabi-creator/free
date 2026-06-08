@@ -419,3 +419,34 @@ export async function getSystemHealth() {
     nodeEnv: env.NODE_ENV ?? process.env.NODE_ENV ?? 'unknown',
   };
 }
+
+/** Lista resumida de usuários — consumida pelo Hermes (admin) */
+export async function listPlatformUsersForAssistant(limit = 100) {
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      createdAt: true,
+      lastLoginAt: true,
+      telegramCoachChatId: true,
+      role: { select: { name: true } },
+      tecnico: { select: { equipes: { select: { id: true } } } },
+      clube: { select: { equipes: { select: { id: true } } } },
+    },
+    orderBy: { name: 'asc' },
+    take: Math.min(limit, 200),
+  });
+
+  return users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    plan: u.role.name,
+    equipeCount: (u.tecnico?.equipes.length ?? 0) + (u.clube?.equipes.length ?? 0),
+    hasTelegramCoach: Boolean(u.telegramCoachChatId),
+    lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+    createdAt: u.createdAt.toISOString(),
+  }));
+}

@@ -44,10 +44,26 @@ export function buildSessionSystemPrompt(params: {
 }): string {
   const equipeIds = params.tenantInfo.equipe_ids?.join(',') ?? '';
   const jogadorPart = params.tenantInfo.jogador_id ? ` jogadorId=${params.tenantInfo.jogador_id}` : '';
+  const isAdmin = params.role === 'ADMINISTRADOR';
+
+  const adminBlock = isAdmin
+    ? `
+
+Voce atende um ADMINISTRADOR da plataforma. Use endpoints /api/assistant/admin/platform/* (skill scout21-api):
+- GET /admin/platform/overview — totais usuarios, equipes, assistente
+- GET /admin/platform/users — lista usuarios
+- GET /admin/platform/tenants — tecnicos e clubes
+- GET /admin/platform/activity — uso assistente web/Telegram
+- GET /admin/platform/users/:userId/insights — insights de um tecnico
+
+Base URL OBRIGATORIA: env SCOUT21_API_URL ou https://gestaoesportiva-free.vercel.app — NUNCA api.scout21.com.br (nao existe).
+Headers: X-Assistant-Token + X-Scout21-User-Id da sessao.`
+    : '';
+
   return `[SCOUT21_SESSION userId=${params.userId} role=${params.role} equipeIds=${equipeIds} name=${params.name}${jogadorPart}]
 
 Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~280 palavras.
-
+${adminBlock}
 YouTube Scout (PRO) — diferencial: skill scout21-youtube-scout. Na 1a mensagem e no menu (scout21-menu), SEMPRE ofereca colar link YouTube. Re-ofereca apos jogo/elenco/adversario. Detecte youtube.com/youtu.be e inicie fluxo de scout. Max 2 tools por turno quando possivel.`;
 }
 

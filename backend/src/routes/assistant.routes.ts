@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { env } from '../config/env';
 import {
   assistantController,
+  assistantPlatformAdminChain,
   assistantProtectedChain,
 } from '../controllers/assistant.controller';
 import { validateAssistantServiceToken } from '../middleware/assistantAuth.middleware';
@@ -51,6 +52,12 @@ router.post('/query', ...assistantProtectedChain, assistantController.query);
 router.get('/admin/coaches', validateCoachAdminAccess, assistantController.adminCoaches);
 router.get('/admin/coach/:chatId/pack', validateCoachAdminAccess, assistantController.adminCoachPack);
 router.get('/admin/activity', validateCoachAdminAccess, assistantController.adminActivity);
+
+router.get('/admin/platform/overview', ...assistantPlatformAdminChain, assistantController.adminPlatformOverview);
+router.get('/admin/platform/users', ...assistantPlatformAdminChain, assistantController.adminPlatformUsers);
+router.get('/admin/platform/tenants', ...assistantPlatformAdminChain, assistantController.adminPlatformTenants);
+router.get('/admin/platform/activity', ...assistantPlatformAdminChain, assistantController.adminPlatformActivity);
+router.get('/admin/platform/users/:userId/insights', ...assistantPlatformAdminChain, assistantController.adminPlatformUserInsights);
 
 router.get('/cron/briefings', cronAuth, assistantController.cronBriefings);
 router.post('/cron/briefings', cronAuth, assistantController.cronBriefings);

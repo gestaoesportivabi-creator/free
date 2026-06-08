@@ -14,3 +14,12 @@ export function requirePlatformAdmin(
   next();
   return;
 }
+
+/** Após resolveUserFromServiceContext — admin via assistente web/Hermes */
+export function requireAssistantPlatformAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  return requirePlatformAdmin(req, res, next);
+}
