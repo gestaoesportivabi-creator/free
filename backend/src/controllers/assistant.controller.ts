@@ -178,7 +178,7 @@ export const assistantController = {
         label,
         gameDate,
         opponentName,
-        fonte: 'telegram',
+        fonte: req.headers['x-scout21-user-id'] ? 'web-dashboard' : 'telegram',
       });
       return res.status(201).json({
         success: true,

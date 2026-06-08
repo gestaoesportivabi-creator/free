@@ -90,7 +90,7 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
 
       {messages.length === 0 && (
         <div className="px-3 sm:px-4 pb-2 shrink-0">
-          <AssistantWelcome status={status} loading={statusLoading} />
+          <AssistantWelcome status={status} loading={statusLoading} onSuggest={sendMessage} />
         </div>
       )}
 

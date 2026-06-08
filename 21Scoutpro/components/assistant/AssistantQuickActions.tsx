@@ -10,7 +10,12 @@ const STAFF_ACTIONS = [
   { label: 'Último jogo', message: 'Qual foi o último jogo da minha equipe? Resuma placar, desempenho e destaques.' },
   { label: 'Elenco', message: 'Mostre um resumo do elenco atual: titulares, reservas e situação física.' },
   { label: 'Adversário', message: 'Quem é o próximo adversário? Dê um panorama tático e estatístico.' },
-  { label: 'Menu', message: 'Mostre o menu de opções disponíveis no assistente Scout21.' },
+  {
+    label: 'YouTube Scout',
+    message:
+      'Quero usar o YouTube Scout PRO: cole aqui um link do YouTube (meu time ou adversário) para salvar e extrair scout com escalação, gols e insights táticos. Se eu ainda não enviei o link, explique como funciona.',
+  },
+  { label: 'Menu', message: 'Mostre o menu completo do assistente Scout21, incluindo YouTube Scout PRO.' },
 ];
 
 const ATHLETE_ACTIONS = [
@@ -35,7 +40,11 @@ export const AssistantQuickActions: React.FC<AssistantQuickActionsProps> = ({
           type="button"
           disabled={disabled}
           onClick={() => onSelect(action.message)}
-          className="shrink-0 min-h-[44px] px-4 py-2 rounded-full border border-[#00f0ff]/30 bg-[#00f0ff]/5 text-sm text-[#00f0ff] hover:bg-[#00f0ff]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-[#00f0ff]/50"
+          className={`shrink-0 min-h-[44px] px-4 py-2 rounded-full border text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-[#00f0ff]/50 ${
+            action.label === 'YouTube Scout'
+              ? 'border-[#00f0ff]/50 bg-[#00f0ff]/15 text-[#00f0ff] font-semibold'
+              : 'border-[#00f0ff]/30 bg-[#00f0ff]/5 text-[#00f0ff] hover:bg-[#00f0ff]/15'
+          }`}
         >
           {action.label}
         </button>

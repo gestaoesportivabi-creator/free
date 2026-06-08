@@ -38,7 +38,9 @@ export function buildSessionSystemPrompt(params: {
   const jogadorPart = params.tenantInfo.jogador_id ? ` jogadorId=${params.tenantInfo.jogador_id}` : '';
   return `[SCOUT21_SESSION userId=${params.userId} role=${params.role} equipeIds=${equipeIds} name=${params.name}${jogadorPart}]
 
-Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~350 palavras.`;
+Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~350 palavras.
+
+YouTube Scout (PRO) — diferencial: skill scout21-youtube-scout. Na 1a mensagem e no menu, SEMPRE ofereca colar link YouTube (time proprio ou adversario) para extrair scout. Re-ofereca apos respostas de jogo/elenco/adversario. Detecte URLs youtube.com/youtu.be e inicie fluxo de scout.`;
 }
 
 export async function streamChatToHermes(
