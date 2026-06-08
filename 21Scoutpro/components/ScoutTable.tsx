@@ -244,14 +244,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         return true;
     }, [players, selectedPlayersForMatch]);
 
-    // Calendário: filtro de datas (default: mês atual) e modo de visualização
+    // Calendário: default últimos 3 meses + mês seguinte (cobre temporada em andamento)
     const [startDate, setStartDate] = useState<string>(() => {
         const now = new Date();
-        return toLocalYmd(new Date(now.getFullYear(), now.getMonth(), 1));
+        return toLocalYmd(new Date(now.getFullYear(), now.getMonth() - 2, 1));
     });
     const [endDate, setEndDate] = useState<string>(() => {
         const now = new Date();
-        return toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+        return toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 2, 0));
     });
     const [viewMode, setViewMode] = useState<'calendar' | 'form' | 'analysis'>('calendar');
     const [selectedMatch, setSelectedMatch] = useState<MatchRecord | null>(null);

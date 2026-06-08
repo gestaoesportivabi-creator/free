@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen, Home } from 'lucide-react';
+import { LayoutDashboard, Users, User as UserIcon, LogOut, HeartPulse, Brain, MonitorPlay, Settings, Table2, Shirt, Trophy, Ruler, CalendarClock, ChevronDown, ChevronRight, ChevronLeft, Dumbbell, Activity, RefreshCw, X, Lock, ShieldCheck, Zap, FileText, BookOpen, Home, MessageCircle } from 'lucide-react';
 import { User } from '../types';
 
 // Importação explícita da logo oficial
@@ -40,9 +40,12 @@ interface SidebarProps {
   isFreePlan?: boolean;
   /** Performance / admin: Fisiologia sem ícone de cadeado no menu */
   fisiologiaUnlocked?: boolean;
+  /** Abre o assistente web (rota /dashboard/assistente) */
+  onOpenAssistant?: () => void;
+  assistantActive?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false, fisiologiaUnlocked = false }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, currentUser, open = false, onClose, onNavigate, retracted = false, onToggleRetract, isFreePlan = false, fisiologiaUnlocked = false, onOpenAssistant, assistantActive = false }) => {
   const canAccessAdminPanel = Boolean(
     currentUser?.isPlatformAdmin || currentUser?.planName === 'ADMINISTRADOR'
   );
@@ -207,6 +210,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
               <span className="text-xs uppercase tracking-wider font-bold whitespace-nowrap">Blog</span>
             )}
           </a>
+          <button
+            type="button"
+            title="Assistente Scout21"
+            onClick={() => {
+              onOpenAssistant?.();
+              onNavigate?.();
+            }}
+            className={`w-full flex items-center rounded-xl transition-all duration-200 ${
+              retracted ? 'justify-center p-2.5' : 'space-x-3 px-4 py-3'
+            } ${
+              assistantActive
+                ? 'bg-[#00f0ff] text-black shadow-[0_0_15px_rgba(0,240,255,0.4)]'
+                : 'text-zinc-500 hover:bg-zinc-900 hover:text-[#00f0ff] border border-transparent'
+            }`}
+          >
+            <MessageCircle size={20} className={`shrink-0 ${assistantActive ? 'text-black' : 'text-zinc-600'}`} />
+            {!retracted && (
+              <span className={`text-xs uppercase tracking-wider whitespace-nowrap ${assistantActive ? 'font-black' : 'font-bold'}`}>
+                Assistente
+              </span>
+            )}
+          </button>
           {/* Itens standalone (Visão Geral, Configurações) */}
           {visibleStandaloneItems.map((item) => {
             const Icon = item.icon;

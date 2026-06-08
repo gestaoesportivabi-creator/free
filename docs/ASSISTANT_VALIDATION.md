@@ -55,6 +55,11 @@ curl -X POST .../api/assistant/link \
 curl .../api/assistant/briefing \
   -H "X-Assistant-Token: $TOKEN" \
   -H "X-Telegram-Chat-Id: 123"
+
+# Historico de jogos
+curl .../api/assistant/matches?limit=20 \
+  -H "X-Assistant-Token: $TOKEN" \
+  -H "X-Telegram-Chat-Id: 123"
 ```
 
 ## 4. Isolamento multi-tenant

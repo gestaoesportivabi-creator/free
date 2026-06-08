@@ -29,6 +29,7 @@ import leadsRoutes from './routes/leads.routes';
 import meRoutes from './routes/me.routes';
 import telegramRoutes from './routes/telegram.routes';
 import assistantRoutes from './routes/assistant.routes';
+import webAssistantRoutes from './routes/webAssistant.routes';
 import { startTelegramPolling } from './services/telegram/telegramPolling';
 
 const app: Express = express();
@@ -76,6 +77,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/assistant', assistantRoutes);
+
+// Assistente web (dashboard) — JWT + tenant; todos os usuarios logados
+app.use('/api/web-assistant', authMiddleware, tenantMiddleware(), webAssistantRoutes);
 
 // Portal do atleta
 app.use('/api/me', authMiddleware, tenantMiddleware(), meRoutes);

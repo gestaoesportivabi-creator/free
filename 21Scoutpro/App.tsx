@@ -28,7 +28,7 @@ import { DashboardSquadAvailability } from './components/DashboardSquadAvailabil
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle } from 'lucide-react';
+import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi, meApi } from './services/api';
 import { AthleteHome, type AthleteTodayData } from './components/athlete/AthleteHome';
@@ -45,6 +45,7 @@ import { BlogPage } from './components/BlogPage';
 import type { BlogLang } from './blog/types';
 import { applyRouteMeta } from './utils/seo';
 import { track, trackPageView } from './utils/analytics';
+import { AssistantChatPage } from './components/assistant/AssistantChatPage';
 
 const SLIDES = [
     {
@@ -174,11 +175,24 @@ function matchBlogPath(p: string): { lang: BlogLang; slug: string | null } | nul
   return { lang, slug: maybeSlug || null };
 }
 
+function isAssistantPath(path?: string): boolean {
+  const p = path ?? normalizePathname();
+  return p === '/dashboard/assistente';
+}
+
 /** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
 function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
   const p = normalizePathname();
   if (matchBlogPath(p)) return 'blog';
-  if (p === '/login' || p === '/registro' || p === '/register' || p === '/dashboard') return 'login';
+  if (
+    p === '/login' ||
+    p === '/registro' ||
+    p === '/register' ||
+    p === '/dashboard' ||
+    p === '/dashboard/assistente'
+  ) {
+    return 'login';
+  }
   return 'landing';
 }
 
@@ -213,6 +227,7 @@ export default function App() {
   const [athleteToday, setAthleteToday] = useState<AthleteTodayData | null>(null);
 
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [assistantOpen, setAssistantOpen] = useState(() => isAssistantPath());
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
   const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
   const [sidebarRetracted, setSidebarRetracted] = useState(false); // desktop: true = recolhida, false = expandida (padrão expandida)
@@ -870,12 +885,25 @@ export default function App() {
   };
 
   const handleTabChange = (tab: string) => {
+      setAssistantOpen(false);
       setActiveTab(tab);
       const resources = TAB_REQUIRED_RESOURCES[tab] ?? [];
       const missing = resources.filter(r => !loadedResources[r]);
       if (missing.length === 0) return;
       setIsLoading(true);
       Promise.all(missing.map(r => Promise.resolve(loadResource(r)))).then(() => setIsLoading(false));
+  };
+
+  const openAssistant = () => {
+    setAssistantOpen(true);
+    window.history.pushState({}, '', '/dashboard/assistente');
+    trackPageView('/dashboard/assistente');
+  };
+
+  const closeAssistant = () => {
+    setAssistantOpen(false);
+    window.history.pushState({}, '', '/dashboard');
+    trackPageView('/dashboard');
   };
 
   const handleUpdateUser = async (updatedData: Partial<User>) => {
@@ -1319,7 +1347,10 @@ export default function App() {
         setBlogLang(initialBlogLang);
       } else if (p === '/registro' || p === '/register') setCurrentRoute('login');
       else if (p === '/login') setCurrentRoute('login');
-      else if (p === '/dashboard') setCurrentRoute('login');
+      else if (p === '/dashboard/assistente') {
+        setCurrentRoute('login');
+        setAssistantOpen(true);
+      } else if (p === '/dashboard') setCurrentRoute('login');
       else if (p === '/' || p === '') setCurrentRoute('landing');
     };
 
@@ -1407,6 +1438,7 @@ export default function App() {
             } catch (_) {}
           }
           setCurrentRoute('app');
+          if (p === '/dashboard/assistente') setAssistantOpen(true);
           setIsInitializing(false);
           restored = true;
         } else {
@@ -1456,8 +1488,9 @@ export default function App() {
       });
       trackPageView('/');
     } else if (currentRoute === 'app') {
-      window.history.pushState({}, '', '/dashboard');
-      trackPageView('/dashboard');
+      const appUrl = assistantOpen ? '/dashboard/assistente' : '/dashboard';
+      window.history.pushState({}, '', appUrl);
+      trackPageView(appUrl);
     }
   }, [currentRoute, isInitializing, blogSlug, blogLang]);
 
@@ -1472,7 +1505,14 @@ export default function App() {
         setBlogSlug(m.slug);
         return;
       }
+      if (path === '/dashboard/assistente') {
+        setAssistantOpen(true);
+        setCurrentRoute(currentUser ? 'app' : 'login');
+        setBlogSlug(null);
+        return;
+      }
       if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard') {
+        setAssistantOpen(false);
         setCurrentRoute('login');
         setBlogSlug(null);
       } else if (path === '/' || path === '') {
@@ -1482,7 +1522,7 @@ export default function App() {
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [currentUser]);
 
   // Redirecionar para login se estiver na rota 'app' mas não tiver usuário
   useEffect(() => {
@@ -1495,6 +1535,7 @@ export default function App() {
   const handleLoginWithRoute = (user: User) => {
     handleLogin(user);
     setCurrentRoute('app');
+    if (isAssistantPath()) setAssistantOpen(true);
   };
 
   // Mostrar loading enquanto inicializa (ANTES das verificações de rota para evitar flash da landing page)
@@ -1964,6 +2005,26 @@ export default function App() {
                 <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
               </header>
 
+              <section className="shrink-0">
+                <button
+                  type="button"
+                  onClick={openAssistant}
+                  className="w-full text-left rounded-xl border border-[#00f0ff]/40 bg-[#00f0ff]/10 p-4 sm:p-5 hover:bg-[#00f0ff]/15 transition-colors focus:outline-none focus:ring-2 focus:ring-[#00f0ff]/50 min-h-[44px]"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 w-11 h-11 rounded-xl bg-[#00f0ff]/20 flex items-center justify-center">
+                      <MessageCircle size={22} className="text-[#00f0ff]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-base font-bold text-white">Acessar Assistente Scout21</p>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        Consulte jogos, elenco e adversários por chat
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </section>
+
               {/* 1. Próxima Partida - início da visão geral */}
               <section className="shrink-0">
                 <DashboardNextGameCard
@@ -2016,6 +2077,11 @@ export default function App() {
     return null; // Os returns acima já cobrem esses casos
   }
 
+  // Assistente web — tela cheia (sem sidebar)
+  if (currentRoute === 'app' && currentUser && assistantOpen) {
+    return <AssistantChatPage onBack={closeAssistant} />;
+  }
+
   // Rota 'app' - renderizar com Sidebar (escondida quando a janela Scout da Partida está aberta)
   return (
     <div className="platform-font flex min-h-screen bg-black text-zinc-100 min-w-0">
@@ -2033,6 +2099,8 @@ export default function App() {
         <Sidebar 
           activeTab={activeTab} 
           setActiveTab={handleTabChange} 
+          onOpenAssistant={openAssistant}
+          assistantActive={assistantOpen}
           onLogout={() => {
               console.log('👋 Logout - Limpando dados e voltando para home');
               clearAllUserData(true);
@@ -2065,6 +2133,14 @@ export default function App() {
             <span className="font-bold text-white truncate text-sm uppercase tracking-wider flex-1 min-w-0">
               {TAB_LABELS[activeTab] ?? activeTab}
             </span>
+            <button
+              type="button"
+              onClick={openAssistant}
+              className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[#00f0ff] hover:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00f0ff]/50"
+              aria-label="Abrir assistente"
+            >
+              <MessageCircle size={22} />
+            </button>
             <a
               href="/blog"
               className="shrink-0 text-xs font-bold uppercase tracking-wider text-[#00f0ff] hover:text-white py-2 px-1"

@@ -133,6 +133,7 @@ export const matchesRepository = {
     golsPro?: number;
     golsContra?: number;
     videoUrl?: string;
+  observacoes?: string;
     postMatchEventLog?: object;
     playerRelationships?: object;
     lineup?: object;
@@ -151,6 +152,7 @@ export const matchesRepository = {
         golsPro: data.golsPro || 0,
         golsContra: data.golsContra || 0,
         videoUrl: data.videoUrl,
+        observacoes: data.observacoes,
         postMatchEventLog: data.postMatchEventLog as any,
         playerRelationships: data.playerRelationships as any,
         lineup: data.lineup as any,

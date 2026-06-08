@@ -44,6 +44,19 @@ export const env = {
 
   /** Token de serviço Hermes → Assistant API (/api/assistant/*) */
   ASSISTANT_SERVICE_TOKEN: process.env.ASSISTANT_SERVICE_TOKEN || '',
+
+  /** Admin: GET /api/assistant/admin/activity (header X-Coach-Admin-Key) */
+  COACH_ADMIN_AUDIT_KEY: process.env.COACH_ADMIN_AUDIT_KEY || '',
+
+  /** User IDs (UUID, vírgula) que podem vincular Telegram sem senha via POST /link-open */
+  ASSISTANT_AUTO_LINK_USER_IDS: (process.env.ASSISTANT_AUTO_LINK_USER_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+
+  /** Hermes Web API (dashboard chat) — URL pública do proxy VPS + Bearer key */
+  HERMES_WEB_API_URL: process.env.HERMES_WEB_API_URL || '',
+  HERMES_WEB_API_KEY: process.env.HERMES_WEB_API_KEY || '',
 };
 
 // Validações

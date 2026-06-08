@@ -40,6 +40,7 @@ npx prisma generate
 | `GET /readiness` | Prontidão 0-100 + alertas |
 | `GET /roster-status` | Elenco (disponível/lesionado) |
 | `GET /last-match` | Última partida |
+| `GET /matches` | Histórico de partidas (campanha, saldo V-E-D) |
 | `GET /player/:id` | Status de um jogador |
 | `GET /wellness-engagement` | Alertas bem-estar equipe |
 | `GET /pending-wellness` | Quem não preencheu hoje |

@@ -7,12 +7,15 @@ import { env } from '../config/env';
 import {
   getChatIdFromRequest,
   linkCoachTelegramAccount,
-  resolveCoachFromChat,
+  linkCoachTelegramOpen,
+  resolveCoachOrUserFromRequest,
   unlinkCoachTelegramAccount,
   validateAssistantServiceToken,
 } from '../middleware/assistantAuth.middleware';
+import { logCoachAssistantActivity } from '../middleware/assistantAudit.middleware';
 import {
   getLastMatchSummary,
+  getMatchHistory,
   getPendingWellnessPlayers,
   getPlayerStatus,
   getPreMatchBriefing,
@@ -21,8 +24,16 @@ import {
   getTeamReadiness,
   getWellnessEngagement,
 } from '../services/insights/coachInsights.service';
+import {
+  addOpponentVideo,
+  addYoutubeChannel,
+  getOpponentDetailWithSeed,
+  listOpponentsWithSeed,
+  listVideoRegistry,
+} from '../services/insights/coachOpponents.service';
 import prisma from '../config/database';
 import { getTenantInfo } from '../utils/tenant.helper';
+import { loadCoachTenantByChatId } from '../utils/coachAdmin.helper';
 
 async function loadTenantForUser(userId: string, roleName: string) {
   const user = { id: userId, role_id: roleName, email: '', name: '' };
@@ -76,6 +87,26 @@ export const assistantController = {
     });
   },
 
+  /** POST { chatId, userId } — vínculo sem senha (allowlist env) */
+  async linkOpen(req: Request, res: Response) {
+    const { chatId, userId } = req.body as { chatId?: string; userId?: string };
+    if (!chatId?.trim() || !userId?.trim()) {
+      return res.status(400).json({ success: false, error: 'chatId e userId são obrigatórios' });
+    }
+    const result = await linkCoachTelegramOpen(chatId.trim(), userId.trim());
+    if (!result.ok) {
+      return res.status(403).json({ success: false, error: result.message });
+    }
+    return res.json({
+      success: true,
+      data: {
+        message: `Conta vinculada, ${result.name}! ${result.equipeCount} equipe(s) ativa(s).`,
+        name: result.name,
+        equipeCount: result.equipeCount,
+      },
+    });
+  },
+
   /** POST { chatId } */
   async unlink(req: Request, res: Response) {
     const chatId = getChatIdFromRequest(req);
@@ -106,6 +137,92 @@ export const assistantController = {
     return res.json({ success: true, data });
   },
 
+  async matches(req: Request, res: Response) {
+    const raw = parseInt(String(req.query.limit || '50'), 10);
+    const limit = Number.isFinite(raw) ? raw : 50;
+    const data = await getMatchHistory(req.tenantInfo!, { limit });
+    return res.json({ success: true, data });
+  },
+
+  async opponents(req: Request, res: Response) {
+    const data = await listOpponentsWithSeed(req.tenantInfo!);
+    return res.json({ success: true, data });
+  },
+
+  async opponentDetail(req: Request, res: Response) {
+    const key = String(req.params.key || '').trim();
+    if (!key) {
+      return res.status(400).json({ success: false, error: 'Identificador do adversário obrigatório' });
+    }
+    const data = await getOpponentDetailWithSeed(req.tenantInfo!, key);
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Adversário não encontrado' });
+    }
+    return res.json({ success: true, data });
+  },
+
+  async addOpponentVideo(req: Request, res: Response) {
+    const key = String(req.params.key || '').trim();
+    const { url, label, gameDate, opponentName } = req.body as {
+      url?: string;
+      label?: string;
+      gameDate?: string;
+      opponentName?: string;
+    };
+    if (!key || !url?.trim()) {
+      return res.status(400).json({ success: false, error: 'key e url são obrigatórios' });
+    }
+    try {
+      const data = await addOpponentVideo(req.tenantInfo!, key, {
+        url: url.trim(),
+        label,
+        gameDate,
+        opponentName,
+        fonte: 'telegram',
+      });
+      return res.status(201).json({
+        success: true,
+        data: { message: 'Vídeo salvo com sucesso.', ...data },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar vídeo';
+      return res.status(400).json({ success: false, error: message });
+    }
+  },
+
+  async videoRegistry(req: Request, res: Response) {
+    const data = await listVideoRegistry(req.tenantInfo!);
+    return res.json({ success: true, data });
+  },
+
+  async addYoutubeChannel(req: Request, res: Response) {
+    const { label, channelUrl, tipo } = req.body as {
+      label?: string;
+      channelUrl?: string;
+      tipo?: string;
+    };
+    if (!channelUrl?.trim()) {
+      return res.status(400).json({ success: false, error: 'channelUrl é obrigatório' });
+    }
+    try {
+      const data = await addYoutubeChannel(req.tenantInfo!, {
+        label: label?.trim() || 'Canal YouTube',
+        channelUrl: channelUrl.trim(),
+        tipo,
+      });
+      return res.status(data.created ? 201 : 200).json({
+        success: true,
+        data: {
+          message: data.created ? 'Canal salvo.' : 'Canal já estava cadastrado.',
+          channel: data.channel,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar canal';
+      return res.status(400).json({ success: false, error: message });
+    }
+  },
+
   async playerStatus(req: Request, res: Response) {
     const { id } = req.params;
     const data = await getPlayerStatus(req.tenantInfo!, id);
@@ -128,10 +245,90 @@ export const assistantController = {
     return res.json({ success: true, data });
   },
 
-  /**
-   * Cron: briefings para todos os técnicos vinculados (Hermes consome e envia no Telegram)
-   * Authorization: Bearer CRON_SECRET
-   */
+  /** GET — admin: técnicos vinculados ao bot Catanduvas */
+  async adminCoaches(_req: Request, res: Response) {
+    const linked = await prisma.user.findMany({
+      where: { telegramCoachChatId: { not: null }, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        telegramCoachChatId: true,
+        role: { select: { name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+    return res.json({ success: true, data: { coaches: linked } });
+  },
+
+  /** GET — admin: pacote completo de um técnico (Hermes central consulta o “bot filho”) */
+  async adminCoachPack(req: Request, res: Response) {
+    const chatId = String(req.params.chatId || '').trim();
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'chatId obrigatório' });
+    }
+    const loaded = await loadCoachTenantByChatId(chatId);
+    if (!loaded) {
+      return res.status(404).json({
+        success: false,
+        error: 'Nenhum técnico vinculado a este chat_id',
+      });
+    }
+    const { tenantInfo, userName, email } = loaded;
+    const [briefing, readiness, lastMatch, matchHistory, roster, opponents] = await Promise.all([
+      getPreMatchBriefing(tenantInfo),
+      getTeamReadiness(tenantInfo),
+      getLastMatchSummary(tenantInfo),
+      getMatchHistory(tenantInfo),
+      getRosterStatus(tenantInfo),
+      listOpponentsWithSeed(tenantInfo),
+    ]);
+    return res.json({
+      success: true,
+      data: {
+        chatId,
+        userName,
+        email,
+        briefing,
+        readiness,
+        lastMatch,
+        matchHistory,
+        roster,
+        opponents,
+      },
+    });
+  },
+
+  /** GET — admin: atividade recente da Assistant API */
+  async adminActivity(req: Request, res: Response) {
+    const limit = Math.min(parseInt(String(req.query.limit || '50'), 10) || 50, 200);
+    const chatId = (req.query.chatId as string | undefined)?.trim();
+
+    const rows = await prisma.coachAssistantAudit.findMany({
+      where: chatId ? { telegramChatId: chatId } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    const linked = await prisma.user.findMany({
+      where: { telegramCoachChatId: { not: null }, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        telegramCoachChatId: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        linkedCoaches: linked,
+        activity: rows,
+      },
+    });
+  },
+
   async cronBriefings(_req: Request, res: Response) {
     const linked = await prisma.user.findMany({
       where: {
@@ -171,4 +368,8 @@ export const assistantController = {
   },
 };
 
-export const assistantProtectedChain = [validateAssistantServiceToken, resolveCoachFromChat];
+export const assistantProtectedChain = [
+  validateAssistantServiceToken,
+  resolveCoachOrUserFromRequest,
+  logCoachAssistantActivity,
+];

@@ -6,6 +6,7 @@
 import prisma from '../../config/database';
 import { TenantInfo } from '../../utils/tenant.helper';
 import { playersService } from '../players.service';
+import { listOpponentsWithSeed } from './coachOpponents.service';
 import type { Player } from '../../types/frontend';
 
 export type RiskLevel = 'green' | 'yellow' | 'red';
@@ -46,6 +47,24 @@ export interface WellnessEngagementAlert {
   dimension: string;
   severity: 'critical' | 'warning' | 'info';
   message: string;
+}
+
+export interface MatchHistoryItem {
+  id: string;
+  date: string;
+  opponent: string;
+  result: string | null;
+  goalsFor: number;
+  goalsAgainst: number;
+  competition: string | null;
+  location: string | null;
+  topScorer: { name: string; goals: number } | null;
+}
+
+export interface MatchHistoryResult {
+  total: number;
+  record: { wins: number; draws: number; losses: number };
+  matches: MatchHistoryItem[];
 }
 
 const STAFF_ROLES = new Set(['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE', 'ADMINISTRADOR']);
@@ -90,7 +109,7 @@ function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function requireEquipeIds(tenantInfo: TenantInfo): string[] {
+export function requireEquipeIds(tenantInfo: TenantInfo): string[] {
   const ids = tenantInfo.equipe_ids ?? [];
   if (ids.length === 0) throw new Error('Nenhuma equipe vinculada ao tenant');
   return ids;
@@ -605,6 +624,61 @@ export async function getRosterStatus(tenantInfo: TenantInfo): Promise<RosterPla
   });
 }
 
+export async function getMatchHistory(
+  tenantInfo: TenantInfo,
+  options?: { limit?: number }
+): Promise<MatchHistoryResult> {
+  const equipeIds = requireEquipeIds(tenantInfo);
+  const limit = Math.min(Math.max(options?.limit ?? 50, 1), 100);
+
+  const rows = await prisma.jogo.findMany({
+    where: { equipeId: { in: equipeIds } },
+    orderBy: { data: 'desc' },
+    take: limit,
+    include: {
+      competicao: { select: { nome: true } },
+      estatisticasJogador: {
+        where: { gols: { gt: 0 } },
+        orderBy: { gols: 'desc' },
+        take: 1,
+        include: { jogador: { select: { nome: true, apelido: true } } },
+      },
+    },
+  });
+
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+
+  const matches: MatchHistoryItem[] = rows.map((match) => {
+    const r = match.resultado;
+    if (r === 'V') wins += 1;
+    else if (r === 'E') draws += 1;
+    else if (r === 'D') losses += 1;
+
+    const top = match.estatisticasJogador[0];
+    return {
+      id: match.id,
+      date: formatDate(match.data),
+      opponent: match.adversario,
+      result: match.resultado,
+      goalsFor: match.golsPro,
+      goalsAgainst: match.golsContra,
+      competition: match.campeonato || match.competicao?.nome || null,
+      location: match.local,
+      topScorer: top
+        ? { name: top.jogador.apelido || top.jogador.nome, goals: top.gols }
+        : null,
+    };
+  });
+
+  return {
+    total: matches.length,
+    record: { wins, draws, losses },
+    matches,
+  };
+}
+
 export async function getLastMatchSummary(tenantInfo: TenantInfo) {
   const equipeIds = requireEquipeIds(tenantInfo);
   const match = await prisma.jogo.findFirst({
@@ -775,12 +849,15 @@ export async function getWellnessEngagement(tenantInfo: TenantInfo): Promise<Wel
 }
 
 export async function getQueryDataPack(tenantInfo: TenantInfo) {
-  const [readiness, briefing, roster, lastMatch, wellnessEngagement] = await Promise.all([
+  const [readiness, briefing, roster, lastMatch, matchHistory, wellnessEngagement, opponents] =
+    await Promise.all([
     getTeamReadiness(tenantInfo),
     getPreMatchBriefing(tenantInfo),
     getRosterStatus(tenantInfo),
     getLastMatchSummary(tenantInfo),
+    getMatchHistory(tenantInfo),
     getWellnessEngagement(tenantInfo),
+    listOpponentsWithSeed(tenantInfo).catch(() => null),
   ]);
 
   return {
@@ -789,7 +866,11 @@ export async function getQueryDataPack(tenantInfo: TenantInfo) {
     briefing,
     roster,
     lastMatch,
+    matchHistory,
     wellnessEngagement,
+    opponents: opponents
+      ? { total: opponents.total, items: opponents.opponents.slice(0, 12) }
+      : null,
   };
 }
 

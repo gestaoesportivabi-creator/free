@@ -11,6 +11,7 @@
     "migrate:create": "tsx scripts/create-migration.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
+    "seed:chopinzinho": "tsx scripts/seed-chopinzinho-lnf.ts",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
     "postinstall": "prisma generate"

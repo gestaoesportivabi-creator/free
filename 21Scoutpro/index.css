@@ -258,3 +258,45 @@ html {
   opacity: 0.55;
 }
 
+/* Web Assistant — mobile-first chat shell */
+.assistant-shell {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.assistant-safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.assistant-safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.assistant-typing-dots::after {
+  content: '...';
+  animation: assistant-dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes assistant-dots {
+  0%, 20% { content: ''; }
+  40% { content: '.'; }
+  60% { content: '..'; }
+  80%, 100% { content: '...'; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-typing-dots::after {
+    animation: none;
+    content: '...';
+  }
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+

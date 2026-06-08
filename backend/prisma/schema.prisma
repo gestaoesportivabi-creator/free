@@ -51,7 +51,25 @@ model User {
   @@index([jogadorId])
   @@index([telegramChatId])
   @@index([telegramCoachChatId])
+  coachAssistantAudits CoachAssistantAudit[]
   @@map("users")
+}
+
+model CoachAssistantAudit {
+  id               String   @id @default(uuid()) @db.Uuid
+  telegramChatId   String   @map("telegram_chat_id") @db.Text
+  userId           String?  @map("user_id") @db.Uuid
+  userName         String?  @map("user_name") @db.Text
+  endpoint         String   @db.Text
+  method           String   @db.VarChar(8)
+  question         String?  @db.Text
+  statusCode       Int?     @map("status_code")
+  createdAt        DateTime @default(now()) @map("created_at")
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([telegramChatId])
+  @@map("coach_assistant_audit")
 }
 
 model Tecnico {
@@ -100,6 +118,8 @@ model Equipe {
   pseTreinos        PseTreino[]
   psrTreinos        PsrTreino[]
   qualidadesSono    QualidadeSono[]
+  adversarios       Adversario[]
+  youtubeCanais     YoutubeCanal[]
 
   @@index([tecnicoId])
   @@index([clubeId])
@@ -169,6 +189,7 @@ model Jogo {
   golsPro             Int                        @default(0) @map("gols_pro")
   golsContra          Int                        @default(0) @map("gols_contra")
   videoUrl            String?                    @map("video_url")
+  observacoes         String?
   postMatchEventLog   Json?                      @map("post_match_event_log")
   playerRelationships Json?                      @map("player_relationships")
   lineup              Json?                      @map("lineup")
@@ -188,6 +209,63 @@ model Jogo {
   @@index([equipeId, data(sort: Desc)])
   @@index([competicaoId])
   @@map("jogos")
+}
+
+model Adversario {
+  id                  String    @id @default(uuid())
+  equipeId            String    @map("equipe_id")
+  nome                String    @db.VarChar(255)
+  apelidos            Json      @default("[]")
+  competicao          String?   @db.VarChar(255)
+  tecnicoNome         String?   @map("tecnico_nome") @db.VarChar(255)
+  youtubeChannelUrl   String?   @map("youtube_channel_url")
+  youtubeChannelId    String?   @map("youtube_channel_id") @db.VarChar(64)
+  pontosFortes        String?   @map("pontos_fortes")
+  pontosFracos        String?   @map("pontos_fracos")
+  analiseTexto        String?   @map("analise_texto")
+  analiseAtualizadaEm DateTime? @map("analise_atualizada_em")
+  videoUrl            String?   @map("video_url")
+  proximoJogoData     DateTime? @map("proximo_jogo_data") @db.Date
+  proximoJogoLocal    String?   @map("proximo_jogo_local") @db.VarChar(255)
+  observacoes         String?
+  monitorado          Boolean   @default(false)
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  equipe              Equipe    @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  videos              AdversarioVideo[]
+
+  @@index([equipeId])
+  @@index([equipeId, monitorado])
+  @@map("adversarios")
+}
+
+model AdversarioVideo {
+  id           String     @id @default(uuid())
+  adversarioId String     @map("adversario_id")
+  url          String
+  label        String?    @db.VarChar(255)
+  dataJogo     DateTime?  @map("data_jogo") @db.Date
+  fonte        String     @default("telegram") @db.VarChar(64)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  adversario   Adversario @relation(fields: [adversarioId], references: [id], onDelete: Cascade)
+
+  @@unique([adversarioId, url])
+  @@index([adversarioId])
+  @@map("adversario_videos")
+}
+
+model YoutubeCanal {
+  id          String   @id @default(uuid())
+  equipeId    String   @map("equipe_id")
+  label       String   @db.VarChar(255)
+  channelUrl  String   @map("channel_url")
+  channelId   String?  @map("channel_id") @db.VarChar(64)
+  tipo        String   @default("oficial") @db.VarChar(32)
+  createdAt   DateTime @default(now()) @map("created_at")
+  equipe      Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+
+  @@index([equipeId])
+  @@map("youtube_canais")
 }
 
 model JogosEstatisticasEquipe {
