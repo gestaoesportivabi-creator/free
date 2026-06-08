@@ -26,6 +26,7 @@ import {
 } from '../services/insights/coachInsights.service';
 import {
   addOpponentVideo,
+  addVideoFromPaste,
   addYoutubeChannel,
   getOpponentDetailWithSeed,
   listOpponentsWithSeed,
@@ -193,6 +194,35 @@ export const assistantController = {
   async videoRegistry(req: Request, res: Response) {
     const data = await listVideoRegistry(req.tenantInfo!);
     return res.json({ success: true, data });
+  },
+
+  /** POST — colar link YouTube (salva + retorna dossiê para scout) */
+  async youtubePaste(req: Request, res: Response) {
+    const { url, opponentName, label } = req.body as {
+      url?: string;
+      opponentName?: string;
+      label?: string;
+    };
+    if (!url?.trim()) {
+      return res.status(400).json({ success: false, error: 'url é obrigatório' });
+    }
+    try {
+      const data = await addVideoFromPaste(req.tenantInfo!, {
+        url: url.trim(),
+        opponentName,
+        label,
+      });
+      return res.status(201).json({
+        success: true,
+        data: {
+          message: 'Vídeo salvo. Scout disponível no dossiê.',
+          ...data,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar vídeo';
+      return res.status(400).json({ success: false, error: message });
+    }
   },
 
   async addYoutubeChannel(req: Request, res: Response) {

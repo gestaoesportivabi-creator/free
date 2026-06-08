@@ -17,7 +17,17 @@ export type WebAssistantStatus = {
   role: string;
   userType: 'staff' | 'athlete';
   equipeCount: number;
+  youtubeScoutEnabled?: boolean;
+  videoCount?: number;
+  lastMatch?: {
+    opponent: string;
+    date: string;
+    result: string | null;
+    videoUrl: string | null;
+  } | null;
 };
+
+export type StreamingPhase = 'idle' | 'thinking' | 'streaming';
 
 async function authHeaders(): Promise<HeadersInit> {
   const token = localStorage.getItem('token') || '';

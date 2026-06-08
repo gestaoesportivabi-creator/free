@@ -15,7 +15,16 @@ interface AssistantChatPageProps {
 }
 
 export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) => {
-  const { messages, streaming, error, sendMessage, setError } = useAssistantChat();
+  const {
+    messages,
+    streaming,
+    streamingPhase,
+    streamingHint,
+    error,
+    sendMessage,
+    sendWelcome,
+    setError,
+  } = useAssistantChat();
   const [status, setStatus] = useState<WebAssistantStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -34,6 +43,11 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
   }, []);
 
   useEffect(() => {
+    if (statusLoading || !status?.enabled || offline) return;
+    void sendWelcome();
+  }, [statusLoading, status?.enabled, offline, sendWelcome]);
+
+  useEffect(() => {
     const onOnline = () => setOffline(false);
     const onOffline = () => setOffline(true);
     window.addEventListener('online', onOnline);
@@ -46,6 +60,7 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
 
   const isAthlete = status?.userType === 'athlete';
   const assistantEnabled = status?.enabled !== false;
+  const hasUserMessages = messages.some((m) => m.role === 'user');
   const inputDisabled = streaming || offline || !assistantEnabled;
 
   return (
@@ -86,9 +101,14 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
         </div>
       )}
 
-      <AssistantMessageList messages={messages} streaming={streaming} />
+      <AssistantMessageList
+        messages={messages}
+        streaming={streaming}
+        streamingPhase={streamingPhase}
+        streamingHint={streamingHint}
+      />
 
-      {messages.length === 0 && (
+      {!hasUserMessages && !streaming && (
         <div className="px-3 sm:px-4 pb-2 shrink-0">
           <AssistantWelcome status={status} loading={statusLoading} onSuggest={sendMessage} />
         </div>

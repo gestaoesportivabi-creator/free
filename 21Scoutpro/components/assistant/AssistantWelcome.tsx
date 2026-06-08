@@ -77,6 +77,20 @@ export const AssistantWelcome: React.FC<AssistantWelcomeProps> = ({
         </div>
       </div>
 
+      {status?.lastMatch && (
+        <p className="text-[13px] text-zinc-500">
+          Último jogo: <span className="text-zinc-400">{status.lastMatch.opponent}</span>
+          {status.lastMatch.result ? ` (${status.lastMatch.result})` : ''}
+          {status.lastMatch.videoUrl ? ' · vídeo disponível' : ''}
+        </p>
+      )}
+
+      {status?.videoCount != null && status.videoCount > 0 && (
+        <p className="text-xs text-zinc-500">
+          {status.videoCount} vídeo{status.videoCount > 1 ? 's' : ''} no dossiê de adversários.
+        </p>
+      )}
+
       {status?.equipeCount != null && status.equipeCount > 0 && (
         <p className="text-xs text-zinc-500">
           {status.equipeCount} equipe{status.equipeCount > 1 ? 's' : ''} vinculada

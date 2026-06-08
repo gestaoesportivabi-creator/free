@@ -5,12 +5,20 @@
 import { Response } from 'express';
 import { env } from '../config/env';
 import { TenantInfo } from '../utils/tenant.helper';
+import {
+  containsYouTubeUrl,
+  enrichUserMessageForYouTubeScout,
+  extractYouTubeUrls,
+} from '../utils/youtubeUrl.helper';
+import { addVideoFromPaste } from './insights/coachOpponents.service';
 
 export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const HERMES_MAX_TOKENS = 1024;
+const MAX_HISTORY_MESSAGES = 12;
 
 export function isHermesWebConfigured(): boolean {
   return Boolean(env.HERMES_WEB_API_URL?.trim() && env.HERMES_WEB_API_KEY?.trim());
@@ -38,9 +46,38 @@ export function buildSessionSystemPrompt(params: {
   const jogadorPart = params.tenantInfo.jogador_id ? ` jogadorId=${params.tenantInfo.jogador_id}` : '';
   return `[SCOUT21_SESSION userId=${params.userId} role=${params.role} equipeIds=${equipeIds} name=${params.name}${jogadorPart}]
 
-Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~350 palavras.
+Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~280 palavras.
 
-YouTube Scout (PRO) — diferencial: skill scout21-youtube-scout. Na 1a mensagem e no menu, SEMPRE ofereca colar link YouTube (time proprio ou adversario) para extrair scout. Re-ofereca apos respostas de jogo/elenco/adversario. Detecte URLs youtube.com/youtu.be e inicie fluxo de scout.`;
+YouTube Scout (PRO) — diferencial: skill scout21-youtube-scout. Na 1a mensagem e no menu (scout21-menu), SEMPRE ofereca colar link YouTube. Re-ofereca apos jogo/elenco/adversario. Detecte youtube.com/youtu.be e inicie fluxo de scout. Max 2 tools por turno quando possivel.`;
+}
+
+export async function prepareMessagesForHermes(
+  messages: ChatMessage[],
+  tenantInfo: TenantInfo
+): Promise<ChatMessage[]> {
+  const trimmed = messages.slice(-MAX_HISTORY_MESSAGES);
+  const out: ChatMessage[] = [];
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const m = trimmed[i];
+    if (m.role !== 'user') {
+      out.push(m);
+      continue;
+    }
+    let content = m.content;
+    if (containsYouTubeUrl(content)) {
+      const urls = extractYouTubeUrls(content);
+      try {
+        const saved = await addVideoFromPaste(tenantInfo, { url: urls[0] });
+        content += `\n\n[SCOUT21_VIDEO_SAVED opponent="${saved.opponent?.name ?? ''}" key="${saved.opponent?.key ?? ''}"]`;
+      } catch {
+        /* Hermes pergunta adversário */
+      }
+      content = enrichUserMessageForYouTubeScout(content);
+    }
+    out.push({ ...m, content });
+  }
+  return out;
 }
 
 export async function streamChatToHermes(
@@ -59,9 +96,10 @@ export async function streamChatToHermes(
   }
 
   const systemPrompt = buildSessionSystemPrompt(params);
+  const prepared = await prepareMessagesForHermes(params.messages, params.tenantInfo);
   const apiMessages = [
     { role: 'system' as const, content: systemPrompt },
-    ...params.messages.filter((m) => m.role !== 'system'),
+    ...prepared.filter((m) => m.role !== 'system'),
   ];
 
   const baseUrl = env.HERMES_WEB_API_URL!.replace(/\/$/, '');
@@ -75,7 +113,7 @@ export async function streamChatToHermes(
     body: JSON.stringify({
       model: 'minimax/minimax-m3',
       stream: true,
-      max_tokens: 4096,
+      max_tokens: HERMES_MAX_TOKENS,
       messages: apiMessages,
     }),
   });

@@ -3,6 +3,8 @@
  */
 
 import { Request, Response } from 'express';
+import { getLastMatchSummary } from '../services/insights/coachInsights.service';
+import { listVideoRegistry } from '../services/insights/coachOpponents.service';
 import {
   checkRateLimit,
   isHermesWebConfigured,
@@ -13,7 +15,37 @@ import {
 export const webAssistantController = {
   async status(req: Request, res: Response) {
     const user = req.user!;
-    const tenant = req.tenantInfo;
+    const tenant = req.tenantInfo!;
+    const isStaff = (user.user_type ?? 'staff') !== 'athlete';
+
+    let lastMatch: {
+      opponent: string;
+      date: string;
+      result: string | null;
+      videoUrl: string | null;
+    } | null = null;
+    let videoCount = 0;
+
+    if (isStaff) {
+      try {
+        const [last, registry] = await Promise.all([
+          getLastMatchSummary(tenant),
+          listVideoRegistry(tenant),
+        ]);
+        if (last.match) {
+          lastMatch = {
+            opponent: last.match.opponent,
+            date: last.match.date,
+            result: last.match.result,
+            videoUrl: last.match.videoUrl,
+          };
+        }
+        videoCount = registry.total;
+      } catch {
+        /* status parcial ok */
+      }
+    }
+
     return res.json({
       success: true,
       data: {
@@ -22,6 +54,9 @@ export const webAssistantController = {
         role: user.role_id,
         userType: user.user_type ?? 'staff',
         equipeCount: tenant?.equipe_ids?.length ?? 0,
+        youtubeScoutEnabled: isStaff,
+        lastMatch,
+        videoCount,
       },
     });
   },
@@ -51,7 +86,7 @@ export const webAssistantController = {
 
     const sanitized: ChatMessage[] = messages
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-      .slice(-40)
+      .slice(-12)
       .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
     if (sanitized.length === 0) {

@@ -694,3 +694,26 @@ export async function addYoutubeChannel(
 
   return { channel, created: true };
 }
+
+/** Salva link YouTube — infere adversário do último jogo se omitido */
+export async function addVideoFromPaste(
+  tenantInfo: TenantInfo,
+  input: { url: string; opponentName?: string; label?: string }
+) {
+  const { getLastMatchSummary } = await import('./coachInsights.service');
+  let opponentName = input.opponentName?.trim();
+  if (!opponentName) {
+    const last = await getLastMatchSummary(tenantInfo);
+    opponentName = last.match?.opponent ?? undefined;
+  }
+  if (!opponentName) {
+    throw new Error('Informe o adversário junto com o link do YouTube');
+  }
+  const key = opponentKey(opponentName);
+  return addOpponentVideo(tenantInfo, key, {
+    url: input.url,
+    label: input.label,
+    opponentName,
+    fonte: 'web-dashboard',
+  });
+}

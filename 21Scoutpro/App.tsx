@@ -2018,7 +2018,7 @@ export default function App() {
                     <div className="min-w-0">
                       <p className="text-base font-bold text-white">Acessar Assistente Scout21</p>
                       <p className="text-sm text-zinc-400 mt-1">
-                        Consulte jogos, elenco e adversários por chat
+                        Chat com jogos, elenco, adversários e YouTube Scout PRO
                       </p>
                     </div>
                   </div>

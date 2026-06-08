@@ -41,6 +41,7 @@ router.get('/opponents', ...assistantProtectedChain, assistantController.opponen
 router.get('/opponents/:key', ...assistantProtectedChain, assistantController.opponentDetail);
 router.post('/opponents/:key/videos', ...assistantProtectedChain, assistantController.addOpponentVideo);
 router.get('/videos/registry', ...assistantProtectedChain, assistantController.videoRegistry);
+router.post('/youtube/paste', ...assistantProtectedChain, assistantController.youtubePaste);
 router.post('/youtube-channels', ...assistantProtectedChain, assistantController.addYoutubeChannel);
 router.get('/player/:id', ...assistantProtectedChain, assistantController.playerStatus);
 router.get('/wellness-engagement', ...assistantProtectedChain, assistantController.wellnessEngagement);
