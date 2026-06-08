@@ -475,6 +475,12 @@ export interface RegisteredUser {
   createdAt: string;
   updatedAt?: string;
   lastLoginAt?: string | null;
+  jogadorId?: string | null;
+  telegramCoachChatId?: string | null;
+  telegramChatId?: string | null;
+  equipeCount?: number;
+  hasAssistantTelegram?: boolean;
+  hasAthleteTelegram?: boolean;
 }
 
 export interface AdminStats {
@@ -488,6 +494,10 @@ export interface AdminUpdateUserPayload {
   email?: string;
   password?: string;
   roleName?: string;
+  name?: string;
+  isActive?: boolean;
+  unlinkTelegramCoach?: boolean;
+  unlinkTelegramAthlete?: boolean;
 }
 
 export interface AdminCreateUserPayload {
@@ -498,7 +508,13 @@ export interface AdminCreateUserPayload {
 }
 
 export const adminApi = {
-  getUsers: () => get<RegisteredUser>('auth/admin/users'),
+  getUsers: (opts?: { includeInactive?: boolean; includeSelf?: boolean }) => {
+    const params = new URLSearchParams();
+    if (opts?.includeInactive) params.set('includeInactive', '1');
+    if (opts?.includeSelf) params.set('includeSelf', '1');
+    const qs = params.toString();
+    return get<RegisteredUser>(`auth/admin/users${qs ? `?${qs}` : ''}`);
+  },
   createUser: async (
     body: AdminCreateUserPayload
   ): Promise<{
@@ -578,6 +594,98 @@ export const adminApi = {
       return null;
     }
   },
+};
+
+async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const url = `${getApiUrl()}/auth/admin/${path}`;
+  const token = localStorage.getItem('token') || '';
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(options?.headers || {}),
+    },
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((result as { error?: string }).error || `Erro ${response.status}`);
+  }
+  if (!(result as { success?: boolean }).success) {
+    throw new Error((result as { error?: string }).error || 'Resposta inválida');
+  }
+  return (result as { data: T }).data;
+}
+
+export type PlatformOverview = {
+  totalUsers: number;
+  inactiveUsers: number;
+  maxUsers: number | null;
+  remainingSlots: number | null;
+  usersByPlan: Record<string, number>;
+  equipeCount: number;
+  jogadorCount: number;
+  telegramCoachLinked: number;
+  athletePortalLinked: number;
+  leadsLast30d: number;
+  assistant: {
+    callsLast24h: number;
+    callsLast7d: number;
+    webCallsLast24h: number;
+    callsByDay: Record<string, number>;
+  };
+  webAssistantEnabled: boolean;
+  registrationsByDay: Record<string, number>;
+};
+
+export type AssistantActivityRow = {
+  id: string;
+  source: 'web' | 'telegram';
+  sessionKey: string;
+  userId: string | null;
+  userName: string | null;
+  endpoint: string;
+  method: string;
+  question: string | null;
+  statusCode: number | null;
+  createdAt: string;
+};
+
+export type PlatformTenant = {
+  userId: string;
+  name: string;
+  email: string;
+  plan: string;
+  tenantType: 'tecnico' | 'clube' | null;
+  tenantLabel: string | null;
+  equipeCount: number;
+  jogadorCount: number;
+  jogoCount: number;
+  equipes: { id: string; nome: string; categoria: string | null; jogadores: number; jogos: number }[];
+  telegramCoachChatId: string | null;
+  telegramAthleteChatId: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+};
+
+export const platformAdminApi = {
+  getOverview: () => adminFetch<PlatformOverview>('overview'),
+  getTenants: (limit = 100) => adminFetch<PlatformTenant[]>(`tenants?limit=${limit}`),
+  getAssistantActivity: (opts?: { limit?: number; userId?: string; source?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    if (opts?.userId) params.set('userId', opts.userId);
+    if (opts?.source) params.set('source', opts.source);
+    const qs = params.toString();
+    return adminFetch<{
+      activity: AssistantActivityRow[];
+      coachesWithTelegram: { userId: string; name: string; email: string; plan: string; telegramCoachChatId: string | null }[];
+      staffUsers: { userId: string; name: string; email: string; plan: string; telegramCoachChatId: string | null; webSessionKey: string }[];
+    }>(`assistant/activity${qs ? `?${qs}` : ''}`);
+  },
+  getUserInsights: (userId: string) => adminFetch<Record<string, unknown>>(`users/${encodeURIComponent(userId)}/insights`),
+  getUserDetail: (userId: string) => adminFetch<Record<string, unknown>>(`users/${encodeURIComponent(userId)}`),
+  getSystemHealth: () => adminFetch<Record<string, unknown>>('system/health'),
 };
 
 /**

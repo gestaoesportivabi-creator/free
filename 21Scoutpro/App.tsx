@@ -21,7 +21,7 @@ import { SuspensionsAlert } from './components/SuspensionsAlert';
 import { InjuredPlayersAlert } from './components/InjuredPlayersAlert';
 import { TabBackgroundWrapper } from './components/TabBackgroundWrapper';
 import { EmBreve } from './components/EmBreve';
-import { AdminPanel } from './components/AdminPanel';
+import { AdminHub } from './components/admin/AdminHub';
 import { NextMatchAlert } from './components/NextMatchAlert';
 import { DashboardTodayBlock } from './components/DashboardTodayBlock';
 import { DashboardSquadAvailability } from './components/DashboardSquadAvailability';
@@ -108,7 +108,7 @@ const TAB_LABELS: Record<string, string> = {
   assessment: 'Avaliação Física',
   academia: 'Musculação',
   settings: 'Configurações',
-  admin: 'Todos os Usuários',
+  admin: 'Painel Admin',
   'athlete-home': 'Hoje',
   'athlete-pse': 'PSE',
   'athlete-psr': 'PSR',
@@ -1968,7 +1968,7 @@ export default function App() {
       case 'admin':
         return (
           <TabBackgroundWrapper>
-            <AdminPanel currentUser={currentUser} />
+            <AdminHub currentUser={currentUser} />
           </TabBackgroundWrapper>
         );
       case 'settings':

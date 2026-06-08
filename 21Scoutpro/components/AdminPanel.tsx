@@ -5,6 +5,8 @@ import { ShieldCheck, Users, UserCheck, RefreshCw, AlertTriangle, Pencil, X, Use
 
 interface AdminPanelProps {
   currentUser: User | null;
+  /** Dentro do AdminHub — oculta cabeçalho duplicado */
+  embedded?: boolean;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -20,7 +22,7 @@ const PLAN_OPTIONS: { value: string; label: string }[] = [
   { value: 'PERFORMANCE', label: 'Performance' },
 ];
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, embedded = false }) => {
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -443,6 +445,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
       )}
 
       {/* Header */}
+      {!embedded ? (
       <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-white flex items-center gap-3 uppercase tracking-wide">
@@ -470,6 +473,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser }) => {
           </button>
         </div>
       </div>
+      ) : (
+      <div className="flex items-center justify-end gap-2 mb-2">
+        <button
+          type="button"
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-[#00f0ff]/10 border border-[#00f0ff]/40 text-[#00f0ff] px-3 py-1.5 rounded-lg text-xs font-bold uppercase"
+        >
+          <UserPlus size={14} /> Novo usuário
+        </button>
+        <button onClick={loadData} disabled={loading} className="p-2 text-zinc-400 hover:text-white">
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      )}
 
       {/* Stats Cards */}
       {stats && (

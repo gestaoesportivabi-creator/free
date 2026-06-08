@@ -3,7 +3,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import prisma from '../config/database';
+import { logAssistantAudit } from '../utils/assistantAudit.helper';
 
 function extractQuestion(req: Request): string | null {
   const body = req.body as { question?: string };
@@ -21,19 +21,15 @@ export function logCoachAssistantActivity(req: Request, res: Response, next: Nex
 
   res.on('finish', () => {
     if (!chatId || res.statusCode >= 500) return;
-    void prisma.coachAssistantAudit
-      .create({
-        data: {
-          telegramChatId: chatId,
-          userId: user?.id ?? null,
-          userName: user?.name ?? null,
-          endpoint,
-          method,
-          question: extractQuestion(req),
-          statusCode: res.statusCode,
-        },
-      })
-      .catch((err) => console.error('[assistantAudit]', err));
+    void logAssistantAudit({
+      sessionKey: chatId,
+      userId: user?.id ?? null,
+      userName: user?.name ?? null,
+      endpoint,
+      method,
+      question: extractQuestion(req),
+      statusCode: res.statusCode,
+    });
   });
 
   next();

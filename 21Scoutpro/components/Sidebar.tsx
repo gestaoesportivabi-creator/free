@@ -376,7 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         {canAccessAdminPanel && (
         <button 
           onClick={() => { setActiveTab('admin'); onNavigate?.(); }}
-          title={retracted ? 'Todos os Usuários' : undefined}
+          title={retracted ? 'Painel Admin' : undefined}
           className={`w-full flex items-center transition-colors font-bold rounded-lg uppercase tracking-wide whitespace-nowrap ${retracted ? 'justify-center p-2.5 mb-2' : 'justify-center space-x-2 px-3 py-2 mb-2 text-xs'} ${
             activeTab === 'admin'
               ? 'bg-[#00f0ff] text-black shadow-[0_0_15px_rgba(0,240,255,0.4)] border border-[#00f0ff]'
@@ -384,7 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
           }`}
         >
           <ShieldCheck size={retracted ? 20 : 14} />
-          {!retracted && <span>Todos os Usuários</span>}
+          {!retracted && <span>Painel Admin</span>}
         </button>
         )}
         <button 

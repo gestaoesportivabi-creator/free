@@ -546,10 +546,13 @@ export const authController = {
    */
   listUsers: async (req: Request, res: Response) => {
     try {
+      const includeInactive = req.query.includeInactive === '1' || req.query.includeInactive === 'true';
+      const includeSelf = req.query.includeSelf === '1' || req.query.includeSelf === 'true';
+
       const users = await prisma.user.findMany({
         where: {
-          isActive: true,
-          id: { not: req.user!.id },
+          ...(includeInactive ? {} : { isActive: true }),
+          ...(includeSelf ? {} : { id: { not: req.user!.id } }),
         },
         select: {
           id: true,
@@ -558,7 +561,12 @@ export const authController = {
           isActive: true,
           createdAt: true,
           updatedAt: true,
+          jogadorId: true,
+          telegramCoachChatId: true,
+          telegramChatId: true,
           role: { select: { name: true, description: true } },
+          tecnico: { select: { equipes: { select: { id: true } } } },
+          clube: { select: { equipes: { select: { id: true } } } },
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -591,6 +599,12 @@ export const authController = {
           createdAt: u.createdAt,
           updatedAt: u.updatedAt,
           lastLoginAt: lastLoginMap[u.id] ?? null,
+          jogadorId: u.jogadorId,
+          telegramCoachChatId: u.telegramCoachChatId,
+          telegramChatId: u.telegramChatId,
+          equipeCount: (u.tecnico?.equipes.length ?? 0) + (u.clube?.equipes.length ?? 0),
+          hasAssistantTelegram: Boolean(u.telegramCoachChatId),
+          hasAthleteTelegram: Boolean(u.telegramChatId),
         })),
       });
     } catch (error) {
@@ -635,10 +649,10 @@ export const authController = {
         },
       });
 
-      if (!target || !target.isActive) {
+      if (!target) {
         return res.status(404).json({
           success: false,
-          error: 'Usuário não encontrado ou inativo.',
+          error: 'Usuário não encontrado.',
         });
       }
 
@@ -646,7 +660,16 @@ export const authController = {
         email?: string;
         password?: string;
         roleName?: string;
+        name?: string;
+        isActive?: boolean;
+        unlinkTelegramCoach?: boolean;
+        unlinkTelegramAthlete?: boolean;
       };
+
+      const newName =
+        body.name != null && String(body.name).trim() !== ''
+          ? String(body.name).trim()
+          : undefined;
 
       const newEmail =
         body.email != null && String(body.email).trim() !== ''
@@ -661,10 +684,10 @@ export const authController = {
           ? String(body.roleName).trim()
           : undefined;
 
-      if (!newEmail && !newPassword && !newRoleName) {
+      if (!newEmail && !newPassword && !newRoleName && newName === undefined && body.isActive === undefined && !body.unlinkTelegramCoach && !body.unlinkTelegramAthlete) {
         return res.status(400).json({
           success: false,
-          error: 'Informe e-mail, senha ou plano para atualizar.',
+          error: 'Informe e-mail, senha, plano, nome ou status para atualizar.',
         });
       }
 
@@ -692,6 +715,62 @@ export const authController = {
         return res.status(400).json({
           success: false,
           error: 'Plano inválido. Use Essencial, Competição ou Performance.',
+        });
+      }
+
+      if (body.isActive === false && target.role.name === 'ADMINISTRADOR') {
+        return res.status(403).json({
+          success: false,
+          error: 'Não é possível desativar uma conta administradora.',
+        });
+      }
+
+      const simpleUpdate: {
+        email?: string;
+        passwordHash?: string;
+        name?: string;
+        isActive?: boolean;
+        telegramCoachChatId?: null;
+        telegramChatId?: null;
+      } = {};
+
+      if (newEmail) simpleUpdate.email = newEmail;
+      if (newPassword) simpleUpdate.passwordHash = await bcrypt.hash(newPassword, 10);
+      if (newName) simpleUpdate.name = newName;
+      if (body.isActive !== undefined) simpleUpdate.isActive = body.isActive;
+      if (body.unlinkTelegramCoach) simpleUpdate.telegramCoachChatId = null;
+      if (body.unlinkTelegramAthlete) simpleUpdate.telegramChatId = null;
+
+      if (newRoleName === undefined && Object.keys(simpleUpdate).length > 0) {
+        const updated = await prisma.user.update({
+          where: { id: targetId },
+          data: simpleUpdate,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            isActive: true,
+            role: { select: { name: true, description: true } },
+          },
+        });
+
+        return res.json({
+          success: true,
+          data: {
+            id: updated.id,
+            name: updated.name,
+            email: updated.email,
+            role: updated.role.name,
+            roleDescription: updated.role.description,
+            isActive: updated.isActive,
+          },
+        });
+      }
+
+      if (newRoleName === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Nenhuma alteração aplicável.',
         });
       }
 

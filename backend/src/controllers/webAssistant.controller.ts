@@ -11,6 +11,7 @@ import {
   streamChatToHermes,
   type ChatMessage,
 } from '../services/webAssistant.service';
+import { logAssistantAudit, webSessionKey } from '../utils/assistantAudit.helper';
 
 export const webAssistantController = {
   async status(req: Request, res: Response) {
@@ -92,6 +93,21 @@ export const webAssistantController = {
     if (sanitized.length === 0) {
       return res.status(400).json({ success: false, error: 'Nenhuma mensagem válida' });
     }
+
+    const lastUserMsg = [...sanitized].reverse().find((m) => m.role === 'user')?.content ?? null;
+
+    res.on('finish', () => {
+      if (res.statusCode >= 500) return;
+      void logAssistantAudit({
+        sessionKey: webSessionKey(user.id),
+        userId: user.id,
+        userName: user.name,
+        endpoint: '/web-assistant/chat/stream',
+        method: 'POST',
+        question: lastUserMsg,
+        statusCode: res.statusCode,
+      });
+    });
 
     await streamChatToHermes(
       {
