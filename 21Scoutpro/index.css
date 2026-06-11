@@ -262,6 +262,7 @@ html {
 .assistant-shell {
   height: 100dvh;
   max-height: 100dvh;
+  min-height: 0;
 }
 
 .assistant-safe-top {

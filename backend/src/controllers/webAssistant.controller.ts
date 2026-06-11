@@ -50,6 +50,7 @@ export const webAssistantController = {
     return res.json({
       success: true,
       data: {
+        userId: user.id,
         enabled: isHermesWebConfigured(),
         userName: user.name,
         role: user.role_id,

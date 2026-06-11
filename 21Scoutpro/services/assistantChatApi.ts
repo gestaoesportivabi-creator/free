@@ -12,6 +12,7 @@ export type AssistantChatMessage = {
 };
 
 export type WebAssistantStatus = {
+  userId: string;
   enabled: boolean;
   userName: string;
   role: string;

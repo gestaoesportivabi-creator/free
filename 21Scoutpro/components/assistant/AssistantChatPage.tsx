@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, WifiOff } from 'lucide-react';
 import { AssistantWelcome } from './AssistantWelcome';
 import { AssistantMessageList } from './AssistantMessageList';
@@ -15,8 +15,15 @@ interface AssistantChatPageProps {
 }
 
 export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) => {
+  const [status, setStatus] = useState<WebAssistantStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [offline, setOffline] = useState(!navigator.onLine);
+
+  const isAdmin = status?.role === 'ADMINISTRADOR';
+
   const {
     messages,
+    historyLoaded,
     streaming,
     streamingPhase,
     streamingHint,
@@ -24,10 +31,10 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
     sendMessage,
     sendWelcome,
     setError,
-  } = useAssistantChat({ isAdmin: status?.role === 'ADMINISTRADOR' });
-  const [status, setStatus] = useState<WebAssistantStatus | null>(null);
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [offline, setOffline] = useState(!navigator.onLine);
+  } = useAssistantChat({ isAdmin, userId: status?.userId ?? null });
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,9 +50,9 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
   }, []);
 
   useEffect(() => {
-    if (statusLoading || !status?.enabled || offline) return;
+    if (statusLoading || !status?.enabled || offline || !historyLoaded) return;
     void sendWelcome();
-  }, [statusLoading, status?.enabled, offline, sendWelcome]);
+  }, [statusLoading, status?.enabled, offline, historyLoaded, sendWelcome]);
 
   useEffect(() => {
     const onOnline = () => setOffline(false);
@@ -58,13 +65,26 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
     };
   }, []);
 
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 120;
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, streaming, streamingPhase, streamingHint]);
+
   const isAthlete = status?.userType === 'athlete';
   const assistantEnabled = status?.enabled !== false;
   const hasUserMessages = messages.some((m) => m.role === 'user');
   const inputDisabled = streaming || offline || !assistantEnabled;
 
   return (
-    <div className="assistant-shell platform-font flex flex-col bg-black text-zinc-100">
+    <div className="assistant-shell platform-font flex flex-col bg-black text-zinc-100 overflow-hidden">
       <header className="assistant-safe-top sticky top-0 z-10 flex items-center gap-3 h-14 px-3 sm:px-4 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur shrink-0">
         <button
           type="button"
@@ -89,33 +109,39 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
       </header>
 
       {offline && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-amber-950/40 border-b border-amber-900/50 text-amber-200 text-sm">
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-950/40 border-b border-amber-900/50 text-amber-200 text-sm">
           <WifiOff size={16} className="shrink-0" />
           Sem conexão. Verifique a internet e tente novamente.
         </div>
       )}
 
       {!statusLoading && status && !assistantEnabled && (
-        <div className="px-4 py-3 bg-zinc-900/80 border-b border-zinc-800 text-sm text-zinc-400">
+        <div className="shrink-0 px-4 py-3 bg-zinc-900/80 border-b border-zinc-800 text-sm text-zinc-400">
           O assistente ainda não está configurado no servidor. Entre em contato com o suporte.
         </div>
       )}
 
-      <AssistantMessageList
-        messages={messages}
-        streaming={streaming}
-        streamingPhase={streamingPhase}
-        streamingHint={streamingHint}
-      />
-
-      {!hasUserMessages && !streaming && (
-        <div className="px-3 sm:px-4 pb-2 shrink-0">
-          <AssistantWelcome status={status} loading={statusLoading} onSuggest={sendMessage} />
-        </div>
-      )}
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain px-3 sm:px-4 py-4 custom-scrollbar"
+      >
+        {!hasUserMessages && !streaming && (
+          <div className="pb-4">
+            <AssistantWelcome status={status} loading={statusLoading} onSuggest={sendMessage} />
+          </div>
+        )}
+        <AssistantMessageList
+          messages={messages}
+          streaming={streaming}
+          streamingPhase={streamingPhase}
+          streamingHint={streamingHint}
+        />
+        <div className="h-2" aria-hidden="true" />
+      </div>
 
       {error && (
-        <div className="px-4 py-2 flex items-center justify-between gap-3 bg-red-950/40 border-t border-red-900/50 text-sm text-red-200">
+        <div className="shrink-0 px-4 py-2 flex items-center justify-between gap-3 bg-red-950/40 border-t border-red-900/50 text-sm text-red-200">
           <span className="min-w-0 truncate">{error}</span>
           <button
             type="button"
@@ -129,7 +155,7 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
 
       <AssistantQuickActions
         isAthlete={isAthlete}
-        isAdmin={status?.role === 'ADMINISTRADOR'}
+        isAdmin={isAdmin}
         disabled={inputDisabled}
         onSelect={sendMessage}
       />

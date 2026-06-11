@@ -1,6 +1,10 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AssistantChatMessage, StreamingPhase } from '../../services/assistantChatApi';
 import { streamWebAssistantChat } from '../../services/assistantChatApi';
+import {
+  loadAssistantChatHistory,
+  saveAssistantChatHistory,
+} from '../../utils/assistantChatStorage';
 import { containsYouTubeUrl, normalizeMessageYoutubeUrls } from '../../utils/youtubeDetect';
 
 function newId() {
@@ -12,14 +16,34 @@ const WELCOME_STAFF =
 const WELCOME_ADMIN =
   'Olá! Mostre o menu de boas-vindas ADMINISTRADOR (plataforma, usuarios, tenants, assistente, YouTube Scout). NAO use menu de tecnico.';
 
-export function useAssistantChat(options?: { isAdmin?: boolean }) {
+export function useAssistantChat(options?: { isAdmin?: boolean; userId?: string | null }) {
+  const userId = options?.userId ?? null;
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamingPhase, setStreamingPhase] = useState<StreamingPhase>('idle');
   const [streamingHint, setStreamingHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const welcomeSentRef = useRef(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  useEffect(() => {
+    if (!userId) {
+      setHistoryLoaded(false);
+      return;
+    }
+    const saved = loadAssistantChatHistory(userId);
+    setMessages(saved);
+    welcomeSentRef.current = saved.length > 0;
+    setHistoryLoaded(true);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !historyLoaded || streaming) return;
+    saveAssistantChatHistory(userId, messages);
+  }, [userId, messages, historyLoaded, streaming]);
 
   const runStream = useCallback(
     async (
@@ -81,6 +105,7 @@ export function useAssistantChat(options?: { isAdmin?: boolean }) {
 
       const assistantId = newId();
       const visibleUser = opts?.silent ? [] : [userMsg];
+      const base = messagesRef.current;
       setMessages((prev) => [
         ...prev,
         ...visibleUser,
@@ -88,7 +113,7 @@ export function useAssistantChat(options?: { isAdmin?: boolean }) {
       ]);
       setStreaming(true);
 
-      const history = [...messages, userMsg].map((m) => ({
+      const history = [...base, userMsg].map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -99,11 +124,11 @@ export function useAssistantChat(options?: { isAdmin?: boolean }) {
 
       await runStream(history, assistantId, hint);
     },
-    [messages, streaming, runStream]
+    [streaming, runStream]
   );
 
   const sendWelcome = useCallback(async () => {
-    if (welcomeSentRef.current || streaming) return;
+    if (welcomeSentRef.current || streaming || !historyLoaded) return;
     welcomeSentRef.current = true;
     const trigger = options?.isAdmin ? WELCOME_ADMIN : WELCOME_STAFF;
     try {
@@ -111,7 +136,13 @@ export function useAssistantChat(options?: { isAdmin?: boolean }) {
     } catch {
       welcomeSentRef.current = false;
     }
-  }, [sendMessage, streaming, options?.isAdmin]);
+  }, [sendMessage, streaming, options?.isAdmin, historyLoaded]);
+
+  const clearHistory = useCallback(() => {
+    setMessages([]);
+    welcomeSentRef.current = false;
+    if (userId) saveAssistantChatHistory(userId, []);
+  }, [userId]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -122,12 +153,14 @@ export function useAssistantChat(options?: { isAdmin?: boolean }) {
 
   return {
     messages,
+    historyLoaded,
     streaming,
     streamingPhase,
     streamingHint,
     error,
     sendMessage,
     sendWelcome,
+    clearHistory,
     stop,
     setError,
   };
