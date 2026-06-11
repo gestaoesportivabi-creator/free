@@ -1,15 +1,18 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AssistantChatMessage, StreamingPhase } from '../../services/assistantChatApi';
 import { streamWebAssistantChat } from '../../services/assistantChatApi';
-import { containsYouTubeUrl } from '../../utils/youtubeDetect';
+import { containsYouTubeUrl, normalizeMessageYoutubeUrls } from '../../utils/youtubeDetect';
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-const WELCOME_TRIGGER = 'Olá! Mostre o menu de boas-vindas com YouTube Scout PRO.';
+const WELCOME_STAFF =
+  'Olá! Mostre o menu de boas-vindas STAFF com YouTube Scout PRO (ultimo jogo, elenco, adversarios).';
+const WELCOME_ADMIN =
+  'Olá! Mostre o menu de boas-vindas ADMINISTRADOR (plataforma, usuarios, tenants, assistente, YouTube Scout). NAO use menu de tecnico.';
 
-export function useAssistantChat() {
+export function useAssistantChat(options?: { isAdmin?: boolean }) {
   const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingPhase, setStreamingPhase] = useState<StreamingPhase>('idle');
@@ -64,8 +67,8 @@ export function useAssistantChat() {
   );
 
   const sendMessage = useCallback(
-    async (text: string, options?: { silent?: boolean }) => {
-      const trimmed = text.trim();
+    async (text: string, opts?: { silent?: boolean }) => {
+      const trimmed = normalizeMessageYoutubeUrls(text.trim());
       if (!trimmed || streaming) return;
 
       setError(null);
@@ -77,7 +80,7 @@ export function useAssistantChat() {
       };
 
       const assistantId = newId();
-      const visibleUser = options?.silent ? [] : [userMsg];
+      const visibleUser = opts?.silent ? [] : [userMsg];
       setMessages((prev) => [
         ...prev,
         ...visibleUser,
@@ -102,12 +105,13 @@ export function useAssistantChat() {
   const sendWelcome = useCallback(async () => {
     if (welcomeSentRef.current || streaming) return;
     welcomeSentRef.current = true;
+    const trigger = options?.isAdmin ? WELCOME_ADMIN : WELCOME_STAFF;
     try {
-      await sendMessage(WELCOME_TRIGGER, { silent: true });
+      await sendMessage(trigger, { silent: true });
     } catch {
       welcomeSentRef.current = false;
     }
-  }, [sendMessage, streaming]);
+  }, [sendMessage, streaming, options?.isAdmin]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

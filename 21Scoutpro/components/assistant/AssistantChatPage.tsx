@@ -24,7 +24,7 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
     sendMessage,
     sendWelcome,
     setError,
-  } = useAssistantChat();
+  } = useAssistantChat({ isAdmin: status?.role === 'ADMINISTRADOR' });
   const [status, setStatus] = useState<WebAssistantStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -129,6 +129,7 @@ export const AssistantChatPage: React.FC<AssistantChatPageProps> = ({ onBack }) 
 
       <AssistantQuickActions
         isAthlete={isAthlete}
+        isAdmin={status?.role === 'ADMINISTRADOR'}
         disabled={inputDisabled}
         onSelect={sendMessage}
       />

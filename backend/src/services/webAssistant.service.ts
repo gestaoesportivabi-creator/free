@@ -8,9 +8,8 @@ import { TenantInfo } from '../utils/tenant.helper';
 import {
   containsYouTubeUrl,
   enrichUserMessageForYouTubeScout,
-  extractYouTubeUrls,
 } from '../utils/youtubeUrl.helper';
-import { addVideoFromPaste } from './insights/coachOpponents.service';
+import { buildYouTubeScoutContext } from './youtubeScout.context';
 
 export type ChatMessage = { role: 'user' | 'assistant' | 'system'; content: string };
 
@@ -64,12 +63,19 @@ Headers: X-Assistant-Token + X-Scout21-User-Id da sessao.`
 
 Voce e o Assistente Scout21 no dashboard web. Use skill scout21-api com header X-Scout21-User-Id: ${params.userId} em todas as consultas de dados. Nunca acesse dados de outro usuario. Responda em portugues BR, tom profissional e acolhedor, max ~280 palavras.
 ${adminBlock}
-YouTube Scout (PRO) — diferencial: skill scout21-youtube-scout. Na 1a mensagem e no menu (scout21-menu), SEMPRE ofereca colar link YouTube. Re-ofereca apos jogo/elenco/adversario. Detecte youtube.com/youtu.be e inicie fluxo de scout. Max 2 tools por turno quando possivel.`;
+
+REGRAS CRITICAS (anti-loop):
+- Skills ja estao carregadas — PROIBIDO dizer "vou carregar a skill", "carregando skill", "aguarde".
+- Se a mensagem do usuario contiver [SCOUT21_YOUTUBE_CONTEXT], os dados JA foram buscados — monte a resposta final IMEDIATAMENTE sem tools.
+- Ao colar link YouTube: primeira frase = status curto ("Salvando video...") e em seguida entregue o scout ou UMA pergunta objetiva.
+
+YouTube Scout (PRO): skill scout21-youtube-scout. Na 1a mensagem ofereca colar link YouTube. Max 2 tools por turno quando precisar buscar dados (exceto quando [SCOUT21_YOUTUBE_CONTEXT] presente).`;
 }
 
 export async function prepareMessagesForHermes(
   messages: ChatMessage[],
-  tenantInfo: TenantInfo
+  tenantInfo: TenantInfo,
+  role: string
 ): Promise<ChatMessage[]> {
   const trimmed = messages.slice(-MAX_HISTORY_MESSAGES);
   const out: ChatMessage[] = [];
@@ -82,14 +88,8 @@ export async function prepareMessagesForHermes(
     }
     let content = m.content;
     if (containsYouTubeUrl(content)) {
-      const urls = extractYouTubeUrls(content);
-      try {
-        const saved = await addVideoFromPaste(tenantInfo, { url: urls[0] });
-        content += `\n\n[SCOUT21_VIDEO_SAVED opponent="${saved.opponent?.name ?? ''}" key="${saved.opponent?.key ?? ''}"]`;
-      } catch {
-        /* Hermes pergunta adversário */
-      }
-      content = enrichUserMessageForYouTubeScout(content);
+      const contextBlock = await buildYouTubeScoutContext(tenantInfo, content, role);
+      content = enrichUserMessageForYouTubeScout(content, contextBlock);
     }
     out.push({ ...m, content });
   }
@@ -112,7 +112,7 @@ export async function streamChatToHermes(
   }
 
   const systemPrompt = buildSessionSystemPrompt(params);
-  const prepared = await prepareMessagesForHermes(params.messages, params.tenantInfo);
+  const prepared = await prepareMessagesForHermes(params.messages, params.tenantInfo, params.role);
   const apiMessages = [
     { role: 'system' as const, content: systemPrompt },
     ...prepared.filter((m) => m.role !== 'system'),

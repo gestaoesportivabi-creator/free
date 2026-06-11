@@ -2,9 +2,23 @@ import React from 'react';
 
 interface AssistantQuickActionsProps {
   isAthlete: boolean;
+  isAdmin?: boolean;
   disabled: boolean;
   onSelect: (message: string) => void;
 }
+
+const ADMIN_ACTIONS = [
+  { label: 'Visão geral', message: 'Puxe a visão geral da plataforma: usuarios, equipes e uso do assistente.' },
+  { label: 'Usuários', message: 'Liste os usuarios cadastrados na plataforma com plano e equipes.' },
+  { label: 'Tenants', message: 'Liste tecnicos e clubes com equipes vinculadas.' },
+  { label: 'Atividade', message: 'Mostre atividade recente do assistente web e Telegram.' },
+  {
+    label: 'YouTube Scout',
+    message:
+      'YouTube Scout PRO: para testar scout de video, preciso de conta de tecnico com equipe OU informar o adversario junto com o link.',
+  },
+  { label: 'Menu admin', message: 'Mostre o menu completo administrativo da plataforma.' },
+];
 
 const STAFF_ACTIONS = [
   { label: 'Último jogo', message: 'Qual foi o último jogo da minha equipe? Resuma placar, desempenho e destaques.' },
@@ -27,10 +41,11 @@ const ATHLETE_ACTIONS = [
 
 export const AssistantQuickActions: React.FC<AssistantQuickActionsProps> = ({
   isAthlete,
+  isAdmin = false,
   disabled,
   onSelect,
 }) => {
-  const actions = isAthlete ? ATHLETE_ACTIONS : STAFF_ACTIONS;
+  const actions = isAthlete ? ATHLETE_ACTIONS : isAdmin ? ADMIN_ACTIONS : STAFF_ACTIONS;
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-2 px-3 sm:px-4 scrollbar-none">
