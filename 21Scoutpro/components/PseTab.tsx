@@ -4,10 +4,8 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
-import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
-
-const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
-const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
+import { formatDateSafe } from '../utils/dateUtils';
+import { fetchPseJogosFromApi, fetchPseTreinosFromApi } from '../utils/wellnessStaffData';
 
 type Period = 'matutino' | 'vespertino' | 'noturno';
 
@@ -39,55 +37,6 @@ interface PseTabProps {
 type StoredPseJogos = Record<string, Record<string, number>>;
 type StoredPseTreinos = Record<string, Record<string, number>>;
 
-function mergeNestedRecord(
-  base: Record<string, Record<string, number>>,
-  incoming: Record<string, Record<string, number>>
-): Record<string, Record<string, number>> {
-  const out: Record<string, Record<string, number>> = { ...base };
-  Object.entries(incoming).forEach(([eventKey, playerMap]) => {
-    out[eventKey] = { ...(out[eventKey] || {}), ...playerMap };
-  });
-  return out;
-}
-
-function buildSessionKeysByDate(store: StoredPseTreinos): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  Object.keys(store).forEach(key => {
-    const datePart = key.split('_')[0];
-    if (!datePart) return;
-    if (!out[datePart]) out[datePart] = [];
-    out[datePart].push(key);
-  });
-  return out;
-}
-
-function buildScheduleSessionKeysByDate(schedules: WeeklySchedule[]): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  const active = (Array.isArray(schedules) ? schedules : []).filter(
-    s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true')
-  );
-  const seen = new Set<string>();
-  active.forEach(s => {
-    try {
-      const flat = normalizeScheduleDays(s);
-      if (!Array.isArray(flat)) return;
-      flat.forEach(day => {
-        const act = (day?.activity || '').trim();
-        if (act !== 'Treino' && act !== 'Musculação') return;
-        const date = day?.date || '';
-        const time = day?.time || '00:00';
-        if (!date) return;
-        const key = `${date}_${time}_${act}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        if (!out[date]) out[date] = [];
-        out[date].push(key);
-      });
-    } catch (_) {}
-  });
-  return out;
-}
-
 export const PseTab: React.FC<PseTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -106,80 +55,24 @@ export const PseTab: React.FC<PseTabProps> = ({
     let mounted = true;
     const load = async () => {
       try {
-        const rawJ = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-        const localJogos: StoredPseJogos = rawJ ? JSON.parse(rawJ) : {};
-        if (mounted && Object.keys(localJogos).length > 0) setPseJogos(localJogos);
-        const rawT = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-        const localTreinos: StoredPseTreinos = rawT ? JSON.parse(rawT) : {};
-        if (mounted && Object.keys(localTreinos).length > 0) setPseTreinos(localTreinos);
-
-        const [apiJogos, apiTreinos] = await Promise.all([
-          wellnessApi.getAll('pse-jogo'),
-          wellnessApi.getAll('pse-treino'),
+        const [jogos, treinos] = await Promise.all([
+          fetchPseJogosFromApi(),
+          fetchPseTreinosFromApi(schedules),
         ]);
         if (!mounted) return;
-
-        if (Array.isArray(apiJogos) && apiJogos.length > 0) {
-          const jogosData: StoredPseJogos = {};
-          apiJogos.forEach((item: any) => {
-            if (!jogosData[item.jogoId]) jogosData[item.jogoId] = {};
-            jogosData[item.jogoId][item.jogadorId] = item.valor;
-          });
-          const mergedJogos = mergeNestedRecord(jogosData, localJogos);
-          setPseJogos(mergedJogos);
-          try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(mergedJogos)); } catch (_) {}
-        }
-
-        if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
-          const treinosApi: StoredPseTreinos = {};
-          apiTreinos.forEach((item: any) => {
-            const yyyyMmDd = toLocalYmd(item.data);
-            if (!yyyyMmDd) return;
-            if (!treinosApi[yyyyMmDd]) treinosApi[yyyyMmDd] = {};
-            treinosApi[yyyyMmDd][item.jogadorId] = item.valor;
-          });
-          const scheduleSessionKeysByDate = buildScheduleSessionKeysByDate(schedules);
-          if (Object.keys(localTreinos).length > 0) {
-            const local = { ...localTreinos };
-            const sessionKeysByDate = buildSessionKeysByDate(local);
-            // Evita duplicação entre múltiplas sessões no mesmo dia:
-            // quando há mais de uma sessão para a data, não espalhamos payload diário da API para todas.
-            Object.entries(treinosApi).forEach(([date, byPlayer]) => {
-              const sessionKeys = sessionKeysByDate[date] || scheduleSessionKeysByDate[date] || [];
-              if (sessionKeys.length === 1) {
-                const onlyKey = sessionKeys[0];
-                local[onlyKey] = { ...(local[onlyKey] || {}), ...byPlayer };
-              } else if (sessionKeys.length > 1) {
-                // Sem sessão local prévia: ancora no primeiro treino do dia para exibição cross-device.
-                const firstKey = sessionKeys[0];
-                local[firstKey] = { ...(local[firstKey] || {}), ...byPlayer };
-              } else if (sessionKeys.length === 0) {
-                // Sem sessão local correspondente: mantém bucket diário isolado (não exibido como sessão).
-                local[date] = { ...(local[date] || {}), ...byPlayer };
-              }
-            });
-            setPseTreinos(local);
-            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(local)); } catch (_) {}
-          } else {
-            const mapped: StoredPseTreinos = {};
-            Object.entries(treinosApi).forEach(([date, byPlayer]) => {
-              const sessionKeys = scheduleSessionKeysByDate[date] || [];
-              if (sessionKeys.length > 0) {
-                mapped[sessionKeys[0]] = { ...(mapped[sessionKeys[0]] || {}), ...byPlayer };
-              } else {
-                mapped[date] = { ...(mapped[date] || {}), ...byPlayer };
-              }
-            });
-            setPseTreinos(mapped);
-            try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(mapped)); } catch (_) {}
-          }
-        }
+        setPseJogos(jogos);
+        setPseTreinos(treinos);
       } catch (err) {
         console.error('Erro ao carregar PSE:', err);
       }
     };
     load();
-    return () => { mounted = false; };
+    const onRefresh = () => { load(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('wellness-updated', onRefresh);
+    };
   }, [schedules]);
 
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
@@ -187,10 +80,8 @@ export const PseTab: React.FC<PseTabProps> = ({
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
       else next[matchId][playerId] = value;
-      try { localStorage.setItem(PSE_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
-    window.dispatchEvent(new Event('wellness-updated'));
   };
 
   const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
@@ -198,10 +89,8 @@ export const PseTab: React.FC<PseTabProps> = ({
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
       else next[sessionKey][playerId] = value;
-      try { localStorage.setItem(PSE_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
-    window.dispatchEvent(new Event('wellness-updated'));
   };
 
   const saveSessionToApi = async (ev: PseEvent) => {
@@ -232,7 +121,7 @@ export const PseTab: React.FC<PseTabProps> = ({
       window.dispatchEvent(new Event('wellness-updated'));
     } catch (err) {
       console.error('Erro ao salvar sessão PSE no servidor:', err);
-      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+      alert('Falha ao salvar no servidor. Verifique a conexão e tente novamente.');
     } finally {
       setSavingEventKey(null);
     }

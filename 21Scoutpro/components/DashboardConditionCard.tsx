@@ -1,13 +1,8 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Moon, Activity, Heart } from 'lucide-react';
 import { WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
-import { QUALIDADE_SONO_STORAGE_KEY } from './QualidadeSonoTab';
-
-const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
-const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
-const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
-const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
+import { fetchAllStaffWellnessFromApi } from '../utils/wellnessStaffData';
 
 type StoredSono = Record<string, Record<string, number>>;
 type StoredPse = Record<string, Record<string, number>>;
@@ -57,31 +52,25 @@ export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
   const [psrTreinos, setPsrTreinos] = useState<StoredPsr>({});
   const [psrJogos, setPsrJogos] = useState<StoredPsr>({});
 
-  const reloadFromStorage = () => {
+  const reloadFromApi = useCallback(async () => {
     try {
-      const s = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-      if (s) setSonoStored(JSON.parse(s));
-      const pt = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (pt) setPseTreinos(JSON.parse(pt));
-      const pj = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (pj) setPseJogos(JSON.parse(pj));
-      const pr = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-      if (pr) setPsrTreinos(JSON.parse(pr));
-      const prj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-      if (prj) setPsrJogos(JSON.parse(prj));
-    } catch (_) {}
-  };
+      const data = await fetchAllStaffWellnessFromApi(schedules);
+      setSonoStored(data.qualidadeSono);
+      setPseTreinos(data.pseTreinos);
+      setPseJogos(data.pseJogos);
+      setPsrTreinos(data.psrTreinos);
+      setPsrJogos(data.psrJogos);
+    } catch (err) {
+      console.error('Erro ao carregar condição física:', err);
+    }
+  }, [schedules]);
 
   useEffect(() => {
-    reloadFromStorage();
-    const handleRefresh = () => reloadFromStorage();
+    reloadFromApi();
+    const handleRefresh = () => { reloadFromApi(); };
     window.addEventListener('wellness-updated', handleRefresh);
-    window.addEventListener('storage', handleRefresh);
-    return () => {
-      window.removeEventListener('wellness-updated', handleRefresh);
-      window.removeEventListener('storage', handleRefresh);
-    };
-  }, []);
+    return () => window.removeEventListener('wellness-updated', handleRefresh);
+  }, [reloadFromApi]);
 
   const vigentSonoKeys = useMemo(() => {
     const keys = new Set<string>();

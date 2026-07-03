@@ -4,10 +4,8 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
-import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
-
-const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
-const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
+import { formatDateSafe } from '../utils/dateUtils';
+import { fetchPsrJogosFromApi, fetchPsrTreinosFromApi } from '../utils/wellnessStaffData';
 
 type Period = 'matutino' | 'vespertino' | 'noturno';
 
@@ -39,55 +37,6 @@ interface PsrTabProps {
 type StoredPsrJogos = Record<string, Record<string, number>>;
 type StoredPsrTreinos = Record<string, Record<string, number>>;
 
-function mergeNestedRecord(
-  base: Record<string, Record<string, number>>,
-  incoming: Record<string, Record<string, number>>
-): Record<string, Record<string, number>> {
-  const out: Record<string, Record<string, number>> = { ...base };
-  Object.entries(incoming).forEach(([eventKey, playerMap]) => {
-    out[eventKey] = { ...(out[eventKey] || {}), ...playerMap };
-  });
-  return out;
-}
-
-function buildSessionKeysByDate(store: StoredPsrTreinos): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  Object.keys(store).forEach(key => {
-    const datePart = key.split('_')[0];
-    if (!datePart) return;
-    if (!out[datePart]) out[datePart] = [];
-    out[datePart].push(key);
-  });
-  return out;
-}
-
-function buildScheduleSessionKeysByDate(schedules: WeeklySchedule[]): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  const active = (Array.isArray(schedules) ? schedules : []).filter(
-    s => s && (s.isActive === true || (s.isActive as unknown) === 'TRUE' || (s.isActive as unknown) === 'true')
-  );
-  const seen = new Set<string>();
-  active.forEach(s => {
-    try {
-      const flat = normalizeScheduleDays(s);
-      if (!Array.isArray(flat)) return;
-      flat.forEach(day => {
-        const act = (day?.activity || '').trim();
-        if (act !== 'Treino' && act !== 'Musculação') return;
-        const date = day?.date || '';
-        const time = day?.time || '00:00';
-        if (!date) return;
-        const key = `${date}_${time}_${act}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        if (!out[date]) out[date] = [];
-        out[date].push(key);
-      });
-    } catch (_) {}
-  });
-  return out;
-}
-
 export const PsrTab: React.FC<PsrTabProps> = ({
   schedules = [],
   championshipMatches = [],
@@ -106,83 +55,24 @@ export const PsrTab: React.FC<PsrTabProps> = ({
     let mounted = true;
     const loadFromApi = async () => {
       try {
-        const lpj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-        const localJogos: StoredPsrJogos = lpj ? JSON.parse(lpj) : {};
-        if (mounted && Object.keys(localJogos).length > 0) setPsrJogos(localJogos);
-        const lpt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-        const localTreinos: StoredPsrTreinos = lpt ? JSON.parse(lpt) : {};
-        if (mounted && Object.keys(localTreinos).length > 0) setPsrTreinos(localTreinos);
-
-        const [apiJogos, apiTreinos] = await Promise.all([
-          wellnessApi.getAll('psr-jogo'),
-          wellnessApi.getAll('psr-treino')
+        const [jogos, treinos] = await Promise.all([
+          fetchPsrJogosFromApi(),
+          fetchPsrTreinosFromApi(schedules),
         ]);
-
         if (!mounted) return;
-
-        // Jogos
-        if (Array.isArray(apiJogos) && apiJogos.length > 0) {
-          const newJogos: StoredPsrJogos = {};
-          apiJogos.forEach((item: any) => {
-            if (!newJogos[item.jogoId]) newJogos[item.jogoId] = {};
-            newJogos[item.jogoId][item.jogadorId] = item.valor;
-          });
-          const mergedJogos = mergeNestedRecord(newJogos, localJogos);
-          setPsrJogos(mergedJogos);
-          localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(mergedJogos));
-        }
-
-        // Treinos
-        if (Array.isArray(apiTreinos) && apiTreinos.length > 0) {
-          const newTreinos: StoredPsrTreinos = {};
-          apiTreinos.forEach((item: any) => {
-             const key = toLocalYmd(item.data);
-             if (!key) return;
-             if (!newTreinos[key]) newTreinos[key] = {};
-             newTreinos[key][item.jogadorId] = item.valor;
-          });
-          const scheduleSessionKeysByDate = buildScheduleSessionKeysByDate(schedules);
-          
-          if (Object.keys(localTreinos).length > 0) {
-            const merged = { ...localTreinos };
-            const sessionKeysByDate = buildSessionKeysByDate(merged);
-            // Evita replicar valor diário em múltiplas sessões no mesmo dia.
-            Object.entries(newTreinos).forEach(([date, byPlayer]) => {
-              const sessionKeys = sessionKeysByDate[date] || scheduleSessionKeysByDate[date] || [];
-              if (sessionKeys.length === 1) {
-                const onlyKey = sessionKeys[0];
-                merged[onlyKey] = { ...(merged[onlyKey] || {}), ...byPlayer };
-              } else if (sessionKeys.length > 1) {
-                // Sem sessão local prévia: ancora no primeiro treino do dia para exibição cross-device.
-                const firstKey = sessionKeys[0];
-                merged[firstKey] = { ...(merged[firstKey] || {}), ...byPlayer };
-              } else if (sessionKeys.length === 0) {
-                merged[date] = { ...(merged[date] || {}), ...byPlayer };
-              }
-            });
-            setPsrTreinos(merged);
-            localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(merged));
-          } else {
-             const mapped: StoredPsrTreinos = {};
-             Object.entries(newTreinos).forEach(([date, byPlayer]) => {
-               const sessionKeys = scheduleSessionKeysByDate[date] || [];
-               if (sessionKeys.length > 0) {
-                 mapped[sessionKeys[0]] = { ...(mapped[sessionKeys[0]] || {}), ...byPlayer };
-               } else {
-                 mapped[date] = { ...(mapped[date] || {}), ...byPlayer };
-               }
-             });
-             setPsrTreinos(mapped);
-             localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(mapped));
-          }
-        }
-
+        setPsrJogos(jogos);
+        setPsrTreinos(treinos);
       } catch (err) {
         console.error('Erro ao buscar dados de PSR:', err);
       }
     };
     loadFromApi();
-    return () => { mounted = false; };
+    const onRefresh = () => { loadFromApi(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('wellness-updated', onRefresh);
+    };
   }, [schedules]);
 
   const saveJogo = (matchId: string, playerId: string, value: number | '') => {
@@ -190,11 +80,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
       const next = { ...prev, [matchId]: { ...(prev[matchId] || {}) } };
       if (value === '') delete next[matchId][playerId];
       else next[matchId][playerId] = value as number;
-      try { localStorage.setItem(PSR_JOGOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
-    window.dispatchEvent(new Event('wellness-updated'));
-
   };
 
   const saveTreino = (sessionKey: string, playerId: string, value: number | '') => {
@@ -202,11 +89,8 @@ export const PsrTab: React.FC<PsrTabProps> = ({
       const next = { ...prev, [sessionKey]: { ...(prev[sessionKey] || {}) } };
       if (value === '') delete next[sessionKey][playerId];
       else next[sessionKey][playerId] = value as number;
-      try { localStorage.setItem(PSR_TREINOS_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
       return next;
     });
-    window.dispatchEvent(new Event('wellness-updated'));
-
   };
 
   const saveSessionToApi = async (ev: PsrEvent) => {
@@ -237,7 +121,7 @@ export const PsrTab: React.FC<PsrTabProps> = ({
       window.dispatchEvent(new Event('wellness-updated'));
     } catch (err) {
       console.error('Erro ao salvar sessão PSR no servidor:', err);
-      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+      alert('Falha ao salvar no servidor. Verifique a conexão e tente novamente.');
     } finally {
       setSavingEventKey(null);
     }

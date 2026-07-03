@@ -24,21 +24,20 @@ import { MatchRecord, Player, WeeklySchedule, InjuryRecord } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { exportPhysiologyPdf, PhysiologyPdfData } from '../utils/exportPhysiologyPdf';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
-import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
+import { WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
+import {
+  fetchAllStaffWellnessFromApi,
+  type NestedPlayerValues,
+  type StoredWellness,
+} from '../utils/wellnessStaffData';
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
 import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 
-const TRAINING_PSE_STORAGE_KEY = 'scout21_training_pse';
-const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
-const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
-const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
-const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
 type ChampionshipMatch = { id: string; date: string; time?: string; opponent: string; competition?: string };
-type StoredPseJogos = Record<string, Record<string, number>>;
-type StoredPseTreinos = Record<string, Record<string, number>>;
-type StoredPsrJogos = Record<string, Record<string, number>>;
-type StoredPsrTreinos = Record<string, Record<string, number>>;
-type StoredWellness = Record<string, Record<string, Record<string, number>>>;
+type StoredPseJogos = NestedPlayerValues;
+type StoredPseTreinos = NestedPlayerValues;
+type StoredPsrJogos = NestedPlayerValues;
+type StoredPsrTreinos = NestedPlayerValues;
 
 function enumerateDatesInclusive(from: string, to: string): string[] {
   const out: string[] = [];
@@ -216,82 +215,31 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
   const [dateTo, setDateTo] = useState(dr0.to);
   /** vazio = média da equipe; caso contrário dados só desse atleta (Elenco) */
   const [playerFilterId, setPlayerFilterId] = useState('');
-  const [trainingPse, setTrainingPse] = useState<Record<string, number>>({});
   const [pseJogosStored, setPseJogosStored] = useState<StoredPseJogos>({});
   const [pseTreinosStored, setPseTreinosStored] = useState<StoredPseTreinos>({});
   const [psrJogosStored, setPsrJogosStored] = useState<StoredPsrJogos>({});
   const [psrTreinosStored, setPsrTreinosStored] = useState<StoredPsrTreinos>({});
   const [wellnessStored, setWellnessStored] = useState<StoredWellness>({});
 
-  useEffect(() => {
+  const reloadStaffWellness = useCallback(async () => {
     try {
-      const raw = localStorage.getItem(TRAINING_PSE_STORAGE_KEY);
-      if (raw) setTrainingPse(JSON.parse(raw));
-    } catch (_) {}
-  }, []);
+      const data = await fetchAllStaffWellnessFromApi(schedules);
+      setPseJogosStored(data.pseJogos);
+      setPseTreinosStored(data.pseTreinos);
+      setPsrJogosStored(data.psrJogos);
+      setPsrTreinosStored(data.psrTreinos);
+      setWellnessStored(data.wellness);
+    } catch (err) {
+      console.error('Erro ao carregar dados fisiológicos:', err);
+    }
+  }, [schedules]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (raw) setPseJogosStored(JSON.parse(raw));
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (raw) setPseTreinosStored(JSON.parse(raw));
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      const j = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-      if (j) setPsrJogosStored(JSON.parse(j));
-      const t = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-      if (t) setPsrTreinosStored(JSON.parse(t));
-    } catch (_) {}
-  }, []);
-
-  useEffect(() => {
-    const loadWellness = () => {
-      try {
-        const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
-        if (w) setWellnessStored(JSON.parse(w));
-      } catch (_) {}
-    };
-    loadWellness();
-    window.addEventListener('wellness-updated', loadWellness);
-    return () => window.removeEventListener('wellness-updated', loadWellness);
-  }, []);
-
-  // Recarregar dados das abas PSE, PSR e Bem-estar quando a tab for exibida (para atualizar após preencher nas outras abas)
-  useEffect(() => {
-    const onStorage = () => {
-      try {
-        const j = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-        if (j) setPseJogosStored(JSON.parse(j));
-        const t = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-        if (t) setPseTreinosStored(JSON.parse(t));
-        const pj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-        if (pj) setPsrJogosStored(JSON.parse(pj));
-        const pt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-        if (pt) setPsrTreinosStored(JSON.parse(pt));
-        const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
-        if (w) setWellnessStored(JSON.parse(w));
-      } catch (_) {}
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  const saveTrainingPse = (updates: Record<string, number>) => {
-    setTrainingPse(prev => {
-      const next = { ...prev, ...updates };
-      try { localStorage.setItem(TRAINING_PSE_STORAGE_KEY, JSON.stringify(next)); } catch (_) {}
-      return next;
-    });
-  };
+    reloadStaffWellness();
+    const onRefresh = () => { reloadStaffWellness(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => window.removeEventListener('wellness-updated', onRefresh);
+  }, [reloadStaffWellness]);
 
   const dateInRange = useCallback((dateStr: string) => {
     const day = (dateStr || '').slice(0, 10);
@@ -307,19 +255,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     () => championshipMatches.filter(m => dateInRange(m.date)),
     [championshipMatches, dateInRange]
   );
-
-  // Datas de treinos a partir da Programação (aba Programação)
-  const trainingDatesFromSchedules = useMemo(() => {
-    const active = schedules.filter(s => s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true');
-    const datesSet = new Set<string>();
-    active.forEach(s => {
-      const flat = normalizeScheduleDays(s);
-      flat.forEach(day => {
-        if (day.activity === 'Treino' && day.date) datesSet.add(day.date);
-      });
-    });
-    return Array.from(datesSet).sort();
-  }, [schedules]);
 
   // Sessões de treino/musculação (igual à aba Média PSE Treinos): data + horário + período para média da equipe
   const trainingSessionsForChart = useMemo(() => {
@@ -391,13 +326,6 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
     return out;
   }, [players, dateInRange, playerFilterId]);
 
-  const filteredTraining = useMemo(() => {
-    return trainingDatesFromSchedules
-      .filter(date => dateInRange(date))
-      .map(date => ({ date, avgRpe: trainingPse[date] ?? undefined }));
-  }, [trainingDatesFromSchedules, trainingPse, dateInRange]);
-
-  // Dados do gráfico PSE (Treinos): média da equipe ou valor do atleta por sessão
   const rpeTrainingDataFromSessions = useMemo(() => {
     return trainingSessionsForChart
       .filter(s => dateInRange(s.date))
@@ -422,6 +350,8 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       })
       .filter(row => row.hasData);
   }, [trainingSessionsForChart, dateInRange, pseTreinosStored, playerFilterId]);
+
+  const rpeTrainingData = rpeTrainingDataFromSessions;
 
   const stats = useMemo(() => {
     let avgRpeMatch: string | number = 0;
@@ -552,16 +482,7 @@ export const PhysicalScout: React.FC<PhysicalScoutProps> = ({ matches, players, 
       .filter((row): row is NonNullable<typeof row> => row != null);
   }, [championshipMatches, matches, filteredMatches, filteredChampionshipMatches, pseJogosStored, playerFilterId]);
 
-  const rpeTrainingData = trainingSessionsForChart.length > 0
-    ? rpeTrainingDataFromSessions
-    : filteredTraining.map(t => ({
-        date: new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        dateKey: t.date,
-        rpe: t.avgRpe ?? 0,
-        type: 'Treino'
-      }));
-
-  // Evolução PSR (Jogos)
+  // Dados do gráfico PSE (Treinos): média da equipe ou valor do atleta por sessão
   const psrMatchData = useMemo(() => {
     if (championshipMatches.length === 0) return [];
     const sorted = [...filteredChampionshipMatches].sort((a, b) => a.date.localeCompare(b.date));

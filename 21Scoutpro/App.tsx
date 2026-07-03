@@ -45,6 +45,7 @@ import { BlogPage } from './components/BlogPage';
 import type { BlogLang } from './blog/types';
 import { applyRouteMeta } from './utils/seo';
 import { track, trackPageView } from './utils/analytics';
+import { clearLegacyWellnessLocalStorage } from './utils/wellnessStaffData';
 import { AssistantChatPage } from './components/assistant/AssistantChatPage';
 
 const SLIDES = [
@@ -845,10 +846,6 @@ export default function App() {
     'user',
     'scout21_schedules_local',
     'championships',
-    // Não limpar PSE/PSR no logout para manter os lançamentos locais entre sessões
-    // (sincronização com API pode ocorrer depois, sem perda imediata ao sair do sistema).
-    'scout21_qualidade_sono',
-    'scout21_training_pse',
     'scout21_settings_current_team',
     'substitutionFrequency',
     'realtimeScoutData',
@@ -856,6 +853,7 @@ export default function App() {
 
   const clearAllUserData = (includeToken = false) => {
     USER_DATA_LOCALSTORAGE_KEYS.forEach(key => localStorage.removeItem(key));
+    clearLegacyWellnessLocalStorage();
     if (includeToken) localStorage.removeItem('token');
     setMatches([]);
     setPlayers([]);

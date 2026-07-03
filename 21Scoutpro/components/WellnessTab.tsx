@@ -7,9 +7,9 @@ import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
 import { INJURY_LOCATIONS_BY_TYPE, WELLNESS_PAIN_SIDE_OPTIONS, WELLNESS_PAIN_TYPE_OPTIONS } from '../utils/injuryLocations';
 import { parseLocalDateOnly } from '../utils/dateUtils';
 
-export const WELLNESS_STORAGE_KEY = 'scout21_wellness';
+export const WELLNESS_STORAGE_KEY = 'scout21_wellness'; // legado — não usado para persistência
 
-/** Chaves persistidas no localStorage (bem-estar diário) */
+/** Chaves das dimensões de bem-estar diário */
 export const WELLNESS_DIMENSION_KEYS = ['stress', 'sono', 'humor', 'dor', 'satisfacao'] as const;
 
 export type WellnessDimensionKey = (typeof WELLNESS_DIMENSION_KEYS)[number];
@@ -177,21 +177,44 @@ function buildObservacoesPayload(entry: WellnessPlayerEntry): string | null {
   });
 }
 
+function mapWellnessRowsFromApi(apiRows: unknown): WellnessData {
+  const fromApi: WellnessData = {};
+  if (!Array.isArray(apiRows)) return fromApi;
+  apiRows.forEach((row: {
+    data?: string;
+    jogador_id?: string;
+    nivel_stress?: number;
+    qual_sono?: number;
+    humor_mot?: number;
+    dor_muscular?: number;
+    satisfacao?: number;
+    observacoes?: string;
+  }) => {
+    const date = toLocalYmd(row.data);
+    const playerId = String(row.jogador_id || '');
+    if (!date || !playerId) return;
+    if (!fromApi[date]) fromApi[date] = {};
+    const painMeta = parsePainMetaFromObservacoes(row.observacoes);
+    fromApi[date][playerId] = {
+      stress: row.nivel_stress ?? undefined,
+      sono: row.qual_sono ?? undefined,
+      humor: row.humor_mot ?? undefined,
+      dor: row.dor_muscular ?? undefined,
+      satisfacao: row.satisfacao ?? undefined,
+      painType: painMeta.type,
+      painLocation: painMeta.location,
+      painSide: painMeta.side,
+      painLocations: parsePainLocationsFromObservacoes(row.observacoes),
+      painDetails: parsePainDetailsFromObservacoes(row.observacoes),
+    };
+  });
+  return fromApi;
+}
+
 interface WellnessTabProps {
   players: Player[];
   schedules?: WeeklySchedule[];
   championshipMatches?: { id: string; date: string; time?: string; opponent?: string; competition?: string }[];
-}
-
-function mergeWellnessData(base: WellnessData, incoming: WellnessData): WellnessData {
-  const out: WellnessData = { ...base };
-  Object.entries(incoming).forEach(([date, byPlayer]) => {
-    out[date] = { ...(out[date] || {}), ...(byPlayer || {}) };
-    Object.entries(byPlayer || {}).forEach(([playerId, dimensions]) => {
-      out[date][playerId] = { ...(out[date][playerId] || {}), ...(dimensions || {}) };
-    });
-  });
-  return out;
 }
 
 function toLocalYmd(dateInput: string | undefined): string | null {
@@ -265,40 +288,22 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
 
   useEffect(() => {
     let mounted = true;
-    try {
-      const raw = localStorage.getItem(WELLNESS_STORAGE_KEY);
-      const localData: WellnessData = raw ? JSON.parse(raw) : {};
-      if (mounted) setData(localData);
-      wellnessApi.getAll('bem-estar-diario')
-        .then((apiRows: any[]) => {
-          if (!mounted || !Array.isArray(apiRows)) return;
-          const fromApi: WellnessData = {};
-          apiRows.forEach((row) => {
-            const date = toLocalYmd(row.data);
-            const playerId = String(row.jogador_id || '');
-            if (!date || !playerId) return;
-            if (!fromApi[date]) fromApi[date] = {};
-            const painMeta = parsePainMetaFromObservacoes(row.observacoes);
-            fromApi[date][playerId] = {
-              stress: row.nivel_stress ?? undefined,
-              sono: row.qual_sono ?? undefined,
-              humor: row.humor_mot ?? undefined,
-              dor: row.dor_muscular ?? undefined,
-              satisfacao: row.satisfacao ?? undefined,
-              painType: painMeta.type,
-              painLocation: painMeta.location,
-              painSide: painMeta.side,
-              painLocations: parsePainLocationsFromObservacoes(row.observacoes),
-              painDetails: parsePainDetailsFromObservacoes(row.observacoes),
-            };
-          });
-          const merged = mergeWellnessData(fromApi, localData);
-          setData(merged);
-          try { localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(merged)); } catch (_) {}
-        })
-        .catch((err) => console.error('Erro ao carregar bem-estar diário:', err));
-    } catch (_) {}
-    return () => { mounted = false; };
+    const load = async () => {
+      try {
+        const apiRows = await wellnessApi.getAll('bem-estar-diario');
+        if (!mounted) return;
+        setData(mapWellnessRowsFromApi(apiRows));
+      } catch (err) {
+        console.error('Erro ao carregar bem-estar diário:', err);
+      }
+    };
+    load();
+    const onRefresh = () => { load(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('wellness-updated', onRefresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -317,10 +322,6 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       if (!next[selectedDate]) next[selectedDate] = {};
       if (!next[selectedDate][playerId]) next[selectedDate][playerId] = {};
       next[selectedDate][playerId][dimension] = value;
-      try {
-        localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(next));
-      } catch (_) {}
-      window.dispatchEvent(new Event('wellness-updated'));
       return next;
     });
   };
@@ -338,10 +339,6 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
         ...next[selectedDate][playerId],
         ...patch,
       };
-      try {
-        localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(next));
-      } catch (_) {}
-      window.dispatchEvent(new Event('wellness-updated'));
       return next;
     });
   };
@@ -356,10 +353,6 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
         ...next[selectedDate][playerId],
         painDetails: nextDetails,
       };
-      try {
-        localStorage.setItem(WELLNESS_STORAGE_KEY, JSON.stringify(next));
-      } catch (_) {}
-      window.dispatchEvent(new Event('wellness-updated'));
       return next;
     });
   };
@@ -402,7 +395,7 @@ export const WellnessTab: React.FC<WellnessTabProps> = ({ players, schedules = [
       window.dispatchEvent(new Event('wellness-updated'));
     } catch (err) {
       console.error('Erro ao salvar bem-estar diário no servidor:', err);
-      alert('Falha ao salvar no servidor. Os dados continuam no navegador e podem ser salvos novamente.');
+      alert('Falha ao salvar no servidor. Verifique a conexão e tente novamente.');
     } finally {
       setSavingDate(null);
     }

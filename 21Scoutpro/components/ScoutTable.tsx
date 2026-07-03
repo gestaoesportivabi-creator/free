@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Table, Printer, Trash2, Save, ChevronDown, ChevronUp, X, Minus, Clock, Goal, Shield, Zap, AlertTriangle, ArrowRightLeft, Target, Users, Activity, Gauge, Square, ArrowUpDown, Calendar, ArrowLeft, Play, Pause, RotateCcw, Ambulance, Ban, Lock, Edit2, ArrowUp, ArrowDownRight, ArrowDown, BookOpen } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PlayerTimeControl, Team, Championship, PostMatchEvent, TechnicalAnalysis } from '../types';
-import { getPlayerPhysiologyForMatch } from '../utils/playerPhysiologyForMatch';
+import { computePlayerPhysiologyForMatch, loadPhysiologySources, type PhysiologySources } from '../utils/playerPhysiologyForMatch';
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe, getTodayLocalYmd, toLocalYmd } from '../utils/dateUtils';
@@ -197,6 +197,26 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     const [selectedScheduledMatch, setSelectedScheduledMatch] = useState<ChampionshipMatch | null>(null); // Partida programada selecionada
     const [selectedPlayersForMatch, setSelectedPlayersForMatch] = useState<Set<string>>(new Set()); // IDs dos jogadores selecionados
     const [preparationMatchType, setPreparationMatchType] = useState<MatchType>('normal'); // Tipo de partida para preparação
+    const [physiologySources, setPhysiologySources] = useState<PhysiologySources | null>(null);
+
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            try {
+                const sources = await loadPhysiologySources(schedules);
+                if (mounted) setPhysiologySources(sources);
+            } catch (err) {
+                console.error('Erro ao carregar fisiologia para preparação:', err);
+            }
+        };
+        load();
+        const onRefresh = () => { load(); };
+        window.addEventListener('wellness-updated', onRefresh);
+        return () => {
+            mounted = false;
+            window.removeEventListener('wellness-updated', onRefresh);
+        };
+    }, [schedules]);
     const [preparationExtraTimeMinutes, setPreparationExtraTimeMinutes] = useState<number>(5); // Minutos de acréscimo
     const [showStartScoutConfirmation, setShowStartScoutConfirmation] = useState<boolean>(false); // Modal de confirmação
     const [collectionType, setCollectionType] = useState<'realtime' | 'postmatch' | null>(null); // Tipo de coleta (null = seletor)
@@ -2077,7 +2097,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
-        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id);
+        const sources = physiologySources ?? { psrJogos: {}, pseTreinos: {}, wellness: {} };
+        const physiology = computePlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id, sources);
         const suspendedIds = new Set<string>();
         const penduradoIds = new Set<string>();
         if (match.competition && championships.length) {
@@ -2092,7 +2113,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             }
         }
         return { physiology, suspendedIds, penduradoIds };
-    }, [selectedScheduledMatch, players, schedules, championshipMatches, championships]);
+    }, [selectedScheduledMatch, players, schedules, championshipMatches, championships, physiologySources]);
 
     // Mesmo para preparação de partida salva (tempo real)
     const preparationDataSavedMatch = useMemo(() => {
@@ -2102,7 +2123,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             return { physiology: {} as Record<string, { psrMatchDay: number | null; pseAfterLastTraining: number | null; sleepMatchDay: number | null; dorMuscularMatchDay: number | null }>, suspendedIds: new Set<string>(), penduradoIds: new Set<string>() };
         }
         const playerIds = players.map(p => p.id);
-        const physiology = getPlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id);
+        const sources = physiologySources ?? { psrJogos: {}, pseTreinos: {}, wellness: {} };
+        const physiology = computePlayerPhysiologyForMatch(match.date, playerIds, schedules, championshipMatches, match.id, sources);
         const suspendedIds = new Set<string>();
         const penduradoIds = new Set<string>();
         if (match.competition && championships.length) {
@@ -2117,7 +2139,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             }
         }
         return { physiology, suspendedIds, penduradoIds };
-    }, [selectedMatch, players, schedules, championshipMatches, championships]);
+    }, [selectedMatch, players, schedules, championshipMatches, championships, physiologySources]);
     
     const isPlayerSuspended = (playerId: string): boolean => {
         const entry = entries.find(e => String(e.athleteId).trim() === String(playerId).trim());

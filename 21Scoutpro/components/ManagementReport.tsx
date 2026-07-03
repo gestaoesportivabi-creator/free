@@ -2,7 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Player, MatchRecord, PhysicalAssessment, PlayerTimeControl, MatchStats, InjuryRecord } from '../types';
 import { FileText, Calendar, User, Download, Activity, Trophy, AlertTriangle, BarChart3, Users, HeartPulse, Rotate3d, Brain, Lock } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import { WELLNESS_STORAGE_KEY, WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
+import { WELLNESS_DIMENSIONS, WELLNESS_IDEAL_VALUES } from './WellnessTab';
+import {
+  fetchPseJogosFromApi,
+  fetchPseTreinosFromApi,
+  fetchPsrJogosFromApi,
+  fetchPsrTreinosFromApi,
+  fetchWellnessFromApi,
+} from '../utils/wellnessStaffData';
 import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellnessRadarColors';
 import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
@@ -10,11 +17,6 @@ import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
 import { exportManagementReportPdf } from '../utils/exportManagementReportPdf';
 import { classifyBodyFatReference, type BodyFatReferenceBand } from './PhysicalAssessment';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-
-const PSE_JOGOS_STORAGE_KEY = 'scout21_pse_jogos';
-const PSE_TREINOS_STORAGE_KEY = 'scout21_pse_treinos';
-const PSR_JOGOS_STORAGE_KEY = 'scout21_psr_jogos';
-const PSR_TREINOS_STORAGE_KEY = 'scout21_psr_treinos';
 
 interface ManagementReportProps {
   players: Player[];
@@ -106,18 +108,33 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
 
   useEffect(() => {
-    try {
-      const pj = localStorage.getItem(PSE_JOGOS_STORAGE_KEY);
-      if (pj) setPseJogos(JSON.parse(pj));
-      const pt = localStorage.getItem(PSE_TREINOS_STORAGE_KEY);
-      if (pt) setPseTreinos(JSON.parse(pt));
-      const rj = localStorage.getItem(PSR_JOGOS_STORAGE_KEY);
-      if (rj) setPsrJogos(JSON.parse(rj));
-      const rt = localStorage.getItem(PSR_TREINOS_STORAGE_KEY);
-      if (rt) setPsrTreinos(JSON.parse(rt));
-      const w = localStorage.getItem(WELLNESS_STORAGE_KEY);
-      if (w) setWellnessStored(JSON.parse(w));
-    } catch (_) {}
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [pj, pt, rj, rt, wellness] = await Promise.all([
+          fetchPseJogosFromApi(),
+          fetchPseTreinosFromApi([]),
+          fetchPsrJogosFromApi(),
+          fetchPsrTreinosFromApi([]),
+          fetchWellnessFromApi(),
+        ]);
+        if (!mounted) return;
+        setPseJogos(pj);
+        setPseTreinos(pt);
+        setPsrJogos(rj);
+        setPsrTreinos(rt);
+        setWellnessStored(wellness);
+      } catch (err) {
+        console.error('Erro ao carregar dados fisiológicos:', err);
+      }
+    };
+    load();
+    const onRefresh = () => { load(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('wellness-updated', onRefresh);
+    };
   }, []);
 
   const selectedPlayer = useMemo(() => players.find(p => p.id === selectedPlayerId), [players, selectedPlayerId]);

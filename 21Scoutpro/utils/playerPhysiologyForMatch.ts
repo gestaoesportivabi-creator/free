@@ -1,16 +1,15 @@
 /**
- * Lê PSR, PSE e bem-estar diário do localStorage (fontes oficiais atuais)
- * e retorna, por atleta, os valores relevantes para o dia do jogo.
+ * PSR, PSE e bem-estar diário via API — valores relevantes para o dia do jogo.
  */
 
+import { WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from './scheduleUtils';
 import { parseLocalDateOnly } from './dateUtils';
-
-const PSR_JOGOS_KEY = 'scout21_psr_jogos';
-const PSR_TREINOS_KEY = 'scout21_psr_treinos';
-const PSE_JOGOS_KEY = 'scout21_pse_jogos';
-const PSE_TREINOS_KEY = 'scout21_pse_treinos';
-const WELLNESS_KEY = 'scout21_wellness';
+import {
+  fetchPseTreinosFromApi,
+  fetchPsrJogosFromApi,
+  fetchWellnessFromApi,
+} from './wellnessStaffData';
 
 type EventWithDate = { date: string; eventKey: string; type: 'treino' | 'jogo' };
 
@@ -28,40 +27,31 @@ function compareYmdAsc(a: string, b: string): number {
   return parseLocalDateOnly(a).getTime() - parseLocalDateOnly(b).getTime();
 }
 
-function getPsrJogos(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(PSR_JOGOS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+export interface PhysiologySources {
+  psrJogos: Record<string, Record<string, number>>;
+  pseTreinos: Record<string, Record<string, number>>;
+  wellness: Record<string, Record<string, { dor?: number; sono?: number }>>;
 }
 
-function getPsrTreinos(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(PSR_TREINOS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
+const EMPTY_SOURCES: PhysiologySources = { psrJogos: {}, pseTreinos: {}, wellness: {} };
 
-function getPseTreinos(): Record<string, Record<string, number>> {
-  try {
-    const raw = localStorage.getItem(PSE_TREINOS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function getWellness(): Record<string, Record<string, { dor?: number; sono?: number }>> {
-  try {
-    const raw = localStorage.getItem(WELLNESS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+export async function loadPhysiologySources(schedules: WeeklySchedule[]): Promise<PhysiologySources> {
+  const [psrJogos, pseTreinos, wellnessRaw] = await Promise.all([
+    fetchPsrJogosFromApi(),
+    fetchPseTreinosFromApi(schedules),
+    fetchWellnessFromApi(),
+  ]);
+  const wellness: PhysiologySources['wellness'] = {};
+  Object.entries(wellnessRaw).forEach(([date, byPlayer]) => {
+    wellness[date] = {};
+    Object.entries(byPlayer).forEach(([playerId, dims]) => {
+      wellness[date][playerId] = {
+        sono: dims.sono,
+        dor: dims.dor,
+      };
+    });
+  });
+  return { psrJogos, pseTreinos, wellness };
 }
 
 function buildEventsWithDates(
@@ -77,9 +67,9 @@ function buildEventsWithDates(
 
   active.forEach((s) => {
     try {
-      const flat = normalizeScheduleDays(s as any);
+      const flat = normalizeScheduleDays(s as WeeklySchedule);
       if (!Array.isArray(flat)) return;
-      flat.forEach((day: any) => {
+      flat.forEach((day) => {
         const act = (day?.activity || '').trim();
         if (act !== 'Treino' && act !== 'Musculação') return;
         const date = toLocalYmd(day?.date || '') || '';
@@ -90,7 +80,7 @@ function buildEventsWithDates(
         list.push({ date, eventKey: sessionKey, type: 'treino' });
       });
     } catch {
-      // ignore
+      /* ignore */
     }
   });
 
@@ -105,28 +95,19 @@ function buildEventsWithDates(
 }
 
 export interface PlayerPhysiology {
-  /** PSR armazenada no dia do jogo (evento do jogo) */
   psrMatchDay: number | null;
-  /** PSE da última sessão de treino (inclui treino no dia do jogo) */
   pseAfterLastTraining: number | null;
-  /** Qualidade do sono no dia do jogo (evento jogo_${matchDate}) */
   sleepMatchDay: number | null;
-  /** Dor muscular no dia do jogo (escala 1 a 5) */
   dorMuscularMatchDay: number | null;
 }
 
-/**
- * Para cada playerId, retorna:
- * - psrMatchDay: PSR armazenada no dia do jogo (jogo da data da partida)
- * - pseAfterLastTraining: PSE da última sessão de treino (inclui treino no dia do jogo se for antes do jogo)
- * - sleepMatchDay: qualidade do sono no dia do jogo (sempre via Bem-Estar Diário)
- */
-export function getPlayerPhysiologyForMatch(
+export function computePlayerPhysiologyForMatch(
   matchDate: string,
   playerIds: string[],
   schedules: { days?: unknown[]; isActive?: unknown }[],
   championshipMatches: { id: string; date: string; time?: string; opponent?: string }[],
-  matchId?: string
+  matchId: string | undefined,
+  sources: PhysiologySources
 ): Record<string, PlayerPhysiology> {
   const normalizedMatchDate = toLocalYmd(matchDate);
   const result: Record<string, PlayerPhysiology> = {};
@@ -135,9 +116,7 @@ export function getPlayerPhysiologyForMatch(
   });
   if (!normalizedMatchDate) return result;
 
-  const psrJogos = getPsrJogos();
-  const pseTreinos = getPseTreinos();
-  const wellness = getWellness();
+  const { psrJogos, pseTreinos, wellness } = sources;
 
   const events = buildEventsWithDates(schedules, championshipMatches);
   const matchDayEvent = events.find((e) => e.date === normalizedMatchDate && e.type === 'jogo');
@@ -146,7 +125,6 @@ export function getPlayerPhysiologyForMatch(
     .filter((e) => e.type === 'jogo' && compareYmdAsc(e.date, normalizedMatchDate) <= 0)
     .sort((a, b) => compareYmdAsc(b.date, a.date));
 
-  // Última sessão de treino: inclui treinos no dia do jogo (ex.: treino de manhã, jogo à noite)
   const treinoEventsOnOrBeforeMatch = events
     .filter((e) => e.type === 'treino' && compareYmdAsc(e.date, normalizedMatchDate) <= 0)
     .sort((a, b) => {
@@ -175,8 +153,6 @@ export function getPlayerPhysiologyForMatch(
     }
 
     for (const ev of treinoEventsOnOrBeforeMatch) {
-      // Compatibilidade: alguns ambientes armazenam PSE treino por sessão
-      // (YYYY-MM-DD_HH:mm_Atividade) e outros por bucket diário (YYYY-MM-DD).
       const data = pseTreinos[ev.eventKey] || pseTreinos[ev.date];
       const val = data?.[pid];
       if (typeof val === 'number' && val >= 0 && val <= 10) {
@@ -225,4 +201,23 @@ export function getPlayerPhysiologyForMatch(
   });
 
   return result;
+}
+
+/** @deprecated use computePlayerPhysiologyForMatch com sources da API */
+export function getPlayerPhysiologyForMatch(
+  matchDate: string,
+  playerIds: string[],
+  schedules: { days?: unknown[]; isActive?: unknown }[],
+  championshipMatches: { id: string; date: string; time?: string; opponent?: string }[],
+  matchId?: string,
+  sources: PhysiologySources = EMPTY_SOURCES
+): Record<string, PlayerPhysiology> {
+  return computePlayerPhysiologyForMatch(
+    matchDate,
+    playerIds,
+    schedules,
+    championshipMatches,
+    matchId,
+    sources
+  );
 }

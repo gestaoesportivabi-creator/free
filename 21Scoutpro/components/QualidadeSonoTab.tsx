@@ -4,8 +4,10 @@ import { Player, WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { wellnessApi } from '../services/api';
 import { resolveEquipeIdFromSchedules } from '../utils/resolveEquipeId';
-import { formatDateSafe, toLocalYmd } from '../utils/dateUtils';
+import { formatDateSafe } from '../utils/dateUtils';
+import { fetchQualidadeSonoFromApi } from '../utils/wellnessStaffData';
 
+/** @deprecated chave legada — não usada para persistência */
 export const QUALIDADE_SONO_STORAGE_KEY = 'scout21_qualidade_sono';
 
 type StoredQualidadeSono = Record<string, Record<string, number>>; // eventKey -> playerId -> 1-5
@@ -54,40 +56,19 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
     let mounted = true;
     const loadFromApi = async () => {
       try {
-        const raw = localStorage.getItem(QUALIDADE_SONO_STORAGE_KEY);
-        if (raw && mounted) setStored(JSON.parse(raw));
-
-        const apiData = await wellnessApi.getAll('qualidade-sono');
-        if (!mounted || !Array.isArray(apiData)) return;
-
-        const newData: StoredQualidadeSono = {};
-        apiData.forEach((item: any) => {
-          // A data no backend é salva como timestamp; normalizar para o calendário local.
-          const date = toLocalYmd(item.data);
-          if (!date) return;
-          // O frontend junta a string treino_YYYY-MM-DD
-          const eventKey = `treino_${date}`; 
-          
-          if (!newData[eventKey]) newData[eventKey] = {};
-          newData[eventKey][item.jogadorId] = item.valor;
-        });
-
-        if (raw) {
-          const lData = JSON.parse(raw);
-          for (const key of Object.keys(lData)) {
-            if (newData[key]) lData[key] = { ...lData[key], ...newData[key] };
-          }
-          setStored(lData);
-          localStorage.setItem(QUALIDADE_SONO_STORAGE_KEY, JSON.stringify(lData));
-        } else {
-          setStored(newData);
-        }
+        const data = await fetchQualidadeSonoFromApi();
+        if (mounted) setStored(data);
       } catch (err) {
         console.error('Erro ao buscar dados de Qualidade Sono:', err);
       }
     };
     loadFromApi();
-    return () => { mounted = false; };
+    const onRefresh = () => { loadFromApi(); };
+    window.addEventListener('wellness-updated', onRefresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener('wellness-updated', onRefresh);
+    };
   }, []);
 
   const save = async (eventKey: string, playerId: string, value: number | '') => {
@@ -95,30 +76,27 @@ export const QualidadeSonoTab: React.FC<QualidadeSonoTabProps> = ({
       const eventData = { ...(prev[eventKey] || {}) };
       if (value === '') delete eventData[playerId];
       else eventData[playerId] = value as number;
-      const next = { ...prev, [eventKey]: eventData };
-      try {
-        localStorage.setItem(QUALIDADE_SONO_STORAGE_KEY, JSON.stringify(next));
-      } catch (_) {}
-      return next;
+      return { ...prev, [eventKey]: eventData };
     });
-    window.dispatchEvent(new Event('wellness-updated'));
 
     if (value !== '') {
       const equipeId = resolveEquipeIdFromSchedules(safeSchedules);
       if (!equipeId) {
-        console.warn('[Qualidade do sono] Sem equipeId nas programações; dados ficam só no navegador.');
-      } else {
-        try {
-          const datePart = eventKey.split('_')[1];
-          await wellnessApi.saveBulk('qualidade-sono', [{
-            equipeId,
-            data: datePart,
-            jogadorId: playerId,
-            value,
-          }]);
-        } catch (err) {
-          console.error('Falha ao salvar a qualidade do sono', err);
-        }
+        alert('Não foi possível salvar: equipe não identificada na programação.');
+        return;
+      }
+      try {
+        const datePart = eventKey.split('_')[1];
+        await wellnessApi.saveBulk('qualidade-sono', [{
+          equipeId,
+          data: datePart,
+          jogadorId: playerId,
+          value,
+        }]);
+        window.dispatchEvent(new Event('wellness-updated'));
+      } catch (err) {
+        console.error('Falha ao salvar a qualidade do sono', err);
+        alert('Falha ao salvar no servidor. Verifique a conexão e tente novamente.');
       }
     }
   };
