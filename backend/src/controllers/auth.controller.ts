@@ -11,6 +11,7 @@ import prisma from '../config/database';
 import { env } from '../config/env';
 import { UnauthorizedError } from '../utils/errors';
 import { getAthleteEquipeId, normalizeAccessEmail } from '../utils/athleteAccount.helper';
+import { sendAccountCreatedEmails } from '../services/email/email.service';
 
 const ALLOWED_REGISTER_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
 /** Planos que podem ser atribuídos pelo admin (não inclui ADMINISTRADOR) */
@@ -274,6 +275,12 @@ export const authController = {
         });
       }
 
+      void sendAccountCreatedEmails({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      });
+
       // Gerar token
       const token = jwt.sign(
         { userId: user.id, email: user.email },
@@ -417,6 +424,12 @@ export const authController = {
           },
         });
       }
+
+      void sendAccountCreatedEmails({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      });
 
       return res.status(201).json({
         success: true,

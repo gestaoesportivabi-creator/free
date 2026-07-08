@@ -16,27 +16,59 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  type AuthMode = 'login' | 'forgot' | 'magic';
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [resetEmail, setResetEmail] = useState('');
+  const [magicEmail, setMagicEmail] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleResetPassword = (e: React.FormEvent) => {
-    e.preventDefault();
+  const requestAuthEmail = async (
+    endpoint: '/auth/forgot-password' | '/auth/magic-link',
+    address: string,
+    onSuccess: () => void
+  ) => {
     setError('');
-    setResetSuccessMsg('');
-    
-    // Simulação de envio de e-mail
-    setResetSuccessMsg('Instruções para redefinição de senha foram enviadas.');
-    setTimeout(() => {
-      setIsResettingPassword(false);
+    setSuccessMsg('');
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${getApiUrl()}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: address.trim() }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSuccessMsg(
+          result.message ||
+            'Se existir uma conta com este e-mail, você receberá as instruções em instantes.'
+        );
+        onSuccess();
+      } else {
+        setError(result.error || 'Não foi possível enviar o e-mail.');
+      }
+    } catch {
+      setError('Erro de conexão. Verifique se o backend está rodando.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await requestAuthEmail('/auth/forgot-password', resetEmail, () => {
       setResetEmail('');
-      setResetSuccessMsg('');
-    }, 3000);
+    });
+  };
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await requestAuthEmail('/auth/magic-link', magicEmail, () => {
+      setMagicEmail('');
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -166,85 +198,68 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
             </p>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail ou Nome</label>
-            <input
-              type="text"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder="seu@email.com ou seu nome"
-            />
-          </div>
+        {authMode === 'login' ? (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail ou Nome</label>
+              <input
+                type="text"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
+                placeholder="seu@email.com ou seu nome"
+              />
+            </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Senha</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-              placeholder="••••••"
-            />
-          </div>
-          
-          <button
-            type="button"
-            onClick={() => setIsResettingPassword(true)}
-            className="w-full text-[10px] text-zinc-400 hover:text-[#00f0ff] font-light underline transition-colors text-center"
-          >
-            Esqueci minha senha
-          </button>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">Senha</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
+                placeholder="••••••"
+              />
+            </div>
 
-          {error && <div className="text-red-400 text-xs bg-red-950/60 p-3 rounded-xl border border-red-900/50 flex items-center gap-2 justify-center font-light backdrop-blur-sm"><ShieldCheck size={14}/> {error}</div>}
-          {successMsg && <div className="text-[#00f0ff] text-xs bg-cyan-950/60 p-3 rounded-xl border border-cyan-900/50 text-center font-light backdrop-blur-sm">{successMsg}</div>}
+            <div className="flex flex-col gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('forgot');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                className="w-full text-[10px] text-zinc-400 hover:text-[#00f0ff] font-light underline transition-colors text-center"
+              >
+                Esqueci minha senha
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('magic');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                className="w-full text-[10px] text-zinc-400 hover:text-[#00f0ff] font-light underline transition-colors text-center"
+              >
+                Entrar com link mágico
+              </button>
+            </div>
 
-          {isResettingPassword ? (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail</label>
-                <input
-                  type="email"
-                  required
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
-                  placeholder="Digite seu e-mail"
-                />
+            {error && (
+              <div className="text-red-400 text-xs bg-red-950/60 p-3 rounded-xl border border-red-900/50 flex items-center gap-2 justify-center font-light backdrop-blur-sm">
+                <ShieldCheck size={14} /> {error}
               </div>
-              
-              {resetSuccessMsg && (
-                <div className="bg-green-500/20 border border-green-500/50 text-green-400 text-xs py-2 px-4 rounded-lg text-center">
-                  {resetSuccessMsg}
-                </div>
-              )}
-              
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsResettingPassword(false);
-                    setResetEmail('');
-                    setError('');
-                    setResetSuccessMsg('');
-                  }}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-4 font-bold uppercase text-xs rounded-xl transition-all border border-white/10"
-                >
-                  Voltar
-                </button>
-                <button
-                  type="submit"
-                  onClick={handleResetPassword}
-                  className="flex-1 bg-[#00f0ff] hover:bg-[#33f5ff] text-black py-4 font-bold uppercase text-xs rounded-xl transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.6)]"
-                >
-                  Enviar
-                </button>
+            )}
+            {successMsg && (
+              <div className="text-[#00f0ff] text-xs bg-cyan-950/60 p-3 rounded-xl border border-cyan-900/50 text-center font-light backdrop-blur-sm">
+                {successMsg}
               </div>
-            </>
-          ) : (
+            )}
+
             <button
               type="submit"
               disabled={isLoading}
@@ -259,8 +274,108 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
                 <>Entrar em Quadra</>
               )}
             </button>
-          )}
-        </form>
+          </form>
+        ) : authMode === 'forgot' ? (
+          <form onSubmit={handleForgotPassword} className="space-y-3">
+            <p className="text-xs text-zinc-400 text-center leading-relaxed">
+              Informe o e-mail da sua conta. Enviaremos um link para redefinir a senha.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail</label>
+              <input
+                type="email"
+                required
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
+                placeholder="seu@email.com"
+              />
+            </div>
+
+            {error && (
+              <div className="text-red-400 text-xs bg-red-950/60 p-3 rounded-xl border border-red-900/50 flex items-center gap-2 justify-center font-light backdrop-blur-sm">
+                <ShieldCheck size={14} /> {error}
+              </div>
+            )}
+            {successMsg && (
+              <div className="text-green-400 text-xs bg-green-950/40 border border-green-900/50 py-2 px-4 rounded-lg text-center">
+                {successMsg}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setResetEmail('');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-4 font-bold uppercase text-xs rounded-xl transition-all border border-white/10"
+              >
+                Voltar
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex-1 bg-[#00f0ff] hover:bg-[#33f5ff] text-black py-4 font-bold uppercase text-xs rounded-xl transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)] disabled:opacity-50"
+              >
+                {isLoading ? 'Enviando…' : 'Enviar'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleMagicLink} className="space-y-3">
+            <p className="text-xs text-zinc-400 text-center leading-relaxed">
+              Enviaremos um link seguro para entrar sem digitar senha.
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-light text-zinc-300 uppercase tracking-wider pl-1">E-mail</label>
+              <input
+                type="email"
+                required
+                value={magicEmail}
+                onChange={(e) => setMagicEmail(e.target.value)}
+                className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
+                placeholder="seu@email.com"
+              />
+            </div>
+
+            {error && (
+              <div className="text-red-400 text-xs bg-red-950/60 p-3 rounded-xl border border-red-900/50 flex items-center gap-2 justify-center font-light backdrop-blur-sm">
+                <ShieldCheck size={14} /> {error}
+              </div>
+            )}
+            {successMsg && (
+              <div className="text-green-400 text-xs bg-green-950/40 border border-green-900/50 py-2 px-4 rounded-lg text-center">
+                {successMsg}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setMagicEmail('');
+                  setError('');
+                  setSuccessMsg('');
+                }}
+                className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white py-4 font-bold uppercase text-xs rounded-xl transition-all border border-white/10"
+              >
+                Voltar
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex-1 bg-[#00f0ff] hover:bg-[#33f5ff] text-black py-4 font-bold uppercase text-xs rounded-xl transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)] disabled:opacity-50"
+              >
+                {isLoading ? 'Enviando…' : 'Enviar link'}
+              </button>
+            </div>
+          </form>
+        )}
         
         <div className="mt-4 text-center pt-4 border-t border-white/10">
              <a 

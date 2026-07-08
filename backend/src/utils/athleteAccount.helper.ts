@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import prisma from '../config/database';
 import type { TransactionClient } from './transactionWithTenant';
 import { AppError, ValidationError } from './errors';
+import { sendAccountCreatedEmails } from '../services/email/email.service';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -57,7 +58,7 @@ export async function createAthleteUserAccount(
   const passwordHash = await bcrypt.hash(params.accessPassword, 10);
   const roleId = await getAtletaRoleId(tx);
 
-  await client.user.create({
+  const created = await client.user.create({
     data: {
       email,
       passwordHash,
@@ -66,6 +67,13 @@ export async function createAthleteUserAccount(
       jogadorId: params.jogadorId,
       isActive: true,
     },
+    select: { id: true, email: true, name: true },
+  });
+
+  void sendAccountCreatedEmails({
+    userId: created.id,
+    email: created.email,
+    name: created.name,
   });
 }
 

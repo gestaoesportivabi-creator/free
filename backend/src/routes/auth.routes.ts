@@ -4,6 +4,7 @@
 
 import { Router } from 'express';
 import { authController } from '../controllers/auth.controller';
+import { authEmailController } from '../controllers/authEmail.controller';
 import { platformAdminController } from '../controllers/platformAdmin.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { requirePlatformAdmin } from '../middleware/admin.middleware';
@@ -13,6 +14,11 @@ const admin = [authMiddleware, requirePlatformAdmin] as const;
 
 router.post('/login', authController.login);
 router.post('/register', authController.register);
+router.post('/forgot-password', authEmailController.forgotPassword);
+router.post('/reset-password', authEmailController.resetPassword);
+router.post('/magic-link', authEmailController.requestMagicLink);
+router.post('/magic-link/verify', authEmailController.verifyMagicLink);
+router.post('/verify-email', authEmailController.verifyEmail);
 router.get('/profile', authMiddleware, authController.profile);
 router.put('/profile', authMiddleware, authController.updateProfile);
 

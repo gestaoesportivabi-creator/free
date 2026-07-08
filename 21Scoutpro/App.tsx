@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Login } from './components/Login';
+import { AuthEmailAction, AuthEmailActionKind } from './components/AuthEmailAction';
 import { LandingPage } from './components/LandingPage';
 import { GeneralScout } from './components/GeneralScout';
 import { PhysicalScout } from './components/PhysicalScout';
@@ -181,17 +182,30 @@ function isAssistantPath(path?: string): boolean {
   return p === '/dashboard/assistente';
 }
 
-/** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
-function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
-  const p = normalizePathname();
-  if (matchBlogPath(p)) return 'blog';
-  if (
+function matchAuthEmailPath(p: string): { kind: AuthEmailActionKind; token: string } | null {
+  const m = p.match(/^\/login\/(reset-password|magic-link|verify-email)$/);
+  if (!m || typeof window === 'undefined') return null;
+  const token = new URLSearchParams(window.location.search).get('token');
+  if (!token) return null;
+  return { kind: m[1] as AuthEmailActionKind, token };
+}
+
+function isLoginRelatedPath(p: string): boolean {
+  return (
     p === '/login' ||
     p === '/registro' ||
     p === '/register' ||
     p === '/dashboard' ||
-    p === '/dashboard/assistente'
-  ) {
+    p === '/dashboard/assistente' ||
+    matchAuthEmailPath(p) != null
+  );
+}
+
+/** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
+function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
+  const p = normalizePathname();
+  if (matchBlogPath(p)) return 'blog';
+  if (isLoginRelatedPath(p)) {
     return 'login';
   }
   return 'landing';
@@ -1509,7 +1523,7 @@ export default function App() {
         setBlogSlug(null);
         return;
       }
-      if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard') {
+      if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard' || matchAuthEmailPath(path)) {
         setAssistantOpen(false);
         setCurrentRoute('login');
         setBlogSlug(null);
@@ -1609,10 +1623,27 @@ export default function App() {
   }
 
   if (currentRoute === 'login') {
-    return <Login 
-      onLogin={handleLoginWithRoute}
-      onBackToHome={() => setCurrentRoute('landing')}
-    />;
+    const authEmail = matchAuthEmailPath(normalizePathname());
+    if (authEmail) {
+      return (
+        <AuthEmailAction
+          kind={authEmail.kind}
+          token={authEmail.token}
+          onLogin={handleLoginWithRoute}
+          onBackToLogin={() => {
+            setCurrentRoute('login');
+            window.history.pushState({}, '', '/login');
+          }}
+        />
+      );
+    }
+
+    return (
+      <Login
+        onLogin={handleLoginWithRoute}
+        onBackToHome={() => setCurrentRoute('landing')}
+      />
+    );
   }
 
   // Se estiver na rota 'app' mas não tiver usuário, mostrar loading

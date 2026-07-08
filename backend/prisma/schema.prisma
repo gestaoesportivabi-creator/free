@@ -40,6 +40,7 @@ model User {
   teamDisplayName String?   @map("team_display_name") @db.VarChar(255)
   teamShieldUrl   String?   @map("team_shield_url")
   lastLoginAt     DateTime? @map("last_login_at")
+  emailVerifiedAt DateTime? @map("email_verified_at")
   jogadorId       String?   @unique @map("jogador_id") @db.Text
   telegramChatId       String?   @unique @map("telegram_chat_id") @db.Text
   telegramCoachChatId  String?   @unique @map("telegram_coach_chat_id") @db.Text
@@ -52,7 +53,31 @@ model User {
   @@index([telegramChatId])
   @@index([telegramCoachChatId])
   coachAssistantAudits CoachAssistantAudit[]
+  emailAuthTokens      EmailAuthToken[]
   @@map("users")
+}
+
+enum EmailAuthPurpose {
+  password_reset
+  magic_link
+  email_verify
+
+  @@map("email_auth_purpose")
+}
+
+model EmailAuthToken {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  tokenHash String           @map("token_hash") @db.Text
+  purpose   EmailAuthPurpose
+  expiresAt DateTime         @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?        @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([tokenHash])
+  @@map("email_auth_tokens")
 }
 
 model CoachAssistantAudit {
