@@ -9,6 +9,11 @@ import {
 
 export type ClockMode = 'realtime' | 'postmatch';
 
+export const REGULATION_HALF_MINUTES = 20;
+export const REGULATION_HALF_SECONDS = REGULATION_HALF_MINUTES * 60;
+export const REGULATION_TOTAL_MINUTES = REGULATION_HALF_MINUTES * 2;
+export const REGULATION_TOTAL_SECONDS = REGULATION_HALF_SECONDS * 2;
+
 export type ClockState =
   | 'PRE_JOGO'
   | 'PRIMEIRO_TEMPO'
@@ -61,7 +66,7 @@ const clampRealtimeSeconds = (seconds: number, period: MatchHalf): number =>
 
 const clampPostmatchSeconds = (seconds: number, firstHalfLocked: boolean): number => {
   const clamped = clamp(Math.floor(seconds), 0, MATCH_ABSOLUTE_MAX_SECONDS);
-  return firstHalfLocked ? Math.max(20 * 60, clamped) : clamped;
+  return firstHalfLocked ? Math.max(REGULATION_HALF_SECONDS, clamped) : clamped;
 };
 
 const formatClockTime = (seconds: number): string => {
@@ -199,7 +204,7 @@ export class ClockService {
     return this.commit({
       state: 'SEGUNDO_TEMPO',
       period: '2T',
-      currentTimeSeconds: this.snapshot.mode === 'postmatch' ? 20 * 60 : 0,
+      currentTimeSeconds: this.snapshot.mode === 'postmatch' ? REGULATION_HALF_SECONDS : 0,
       isRunning: false,
       firstHalfLocked: true,
     });

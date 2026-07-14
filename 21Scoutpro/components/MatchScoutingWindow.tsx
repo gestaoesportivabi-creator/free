@@ -19,7 +19,9 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
-import { ClockService, getEventStamp, type ClockSnapshot, type ClockState } from '../services/clockService';
+import { REGULATION_HALF_SECONDS, getEventStamp } from '../services/clockService';
+import { useMatchClock } from '../hooks/useMatchClock';
+import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -377,8 +379,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   });
   
   // Estados para período e posse
-  const clockServiceRef = useRef<ClockService>(new ClockService(isPostmatch ? 'postmatch' : 'realtime'));
-  const [clockSnapshot, setClockSnapshot] = useState<ClockSnapshot>(() => clockServiceRef.current.getSnapshot());
   const [ballPossessionNow, setBallPossessionNow] = useState<'com' | 'sem'>('com');
   const ballPossessionNowRef = useRef<'com' | 'sem'>(ballPossessionNow);
   useEffect(() => { ballPossessionNowRef.current = ballPossessionNow; }, [ballPossessionNow]);
@@ -472,58 +472,177 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const id = window.setTimeout(() => setTopRightNotice(null), 4500);
     return () => window.clearTimeout(id);
   }, [topRightNotice]);
-
+  const {
+    snapshot: clockSnapshot,
+    formatTime,
+    hydrateClock,
+    iniciarPrimeiroTempo,
+    pausar,
+    pausarPorEvento,
+    continuarPartida,
+    encerrarPrimeiroTempo,
+    iniciarSegundoTempo,
+    encerrarPartida,
+    retornarAoPrimeiroTempo,
+    iniciarSincronizacao,
+    confirmarSincronizacao,
+    cancelarSincronizacao,
+    getEventStamp: getOfficialEventStamp,
+    isPausedByEvent,
+    isSyncing,
+    canRegisterRealtimeEvent,
+  } = useMatchClock({ mode: isPostmatch ? 'postmatch' : 'realtime' });
   const matchTime = clockSnapshot.currentTimeSeconds;
   const currentPeriod = clockSnapshot.period;
   const isRunning = clockSnapshot.isRunning;
   const firstHalfLocked = clockSnapshot.firstHalfLocked;
   const isMatchEnded = clockSnapshot.state === 'ENCERRADO';
+  const [showClockSyncModal, setShowClockSyncModal] = useState(false);
+  const [syncMinuteInput, setSyncMinuteInput] = useState<string>('0');
+  const [syncSecondInput, setSyncSecondInput] = useState<string>('00');
+  const [syncValidationError, setSyncValidationError] = useState<string | null>(null);
 
-  const applyClockSnapshot = useCallback((snapshot: ClockSnapshot) => {
-    setClockSnapshot(snapshot);
-    return snapshot;
-  }, []);
-
-  const withClock = useCallback((mutate: (clock: ClockService) => ClockSnapshot) => {
-    return applyClockSnapshot(mutate(clockServiceRef.current));
-  }, [applyClockSnapshot]);
-
-  const syncClock = useCallback((
-    seconds: number,
-    options: {
-      period?: MatchHalf;
-      firstHalfLocked?: boolean;
-      state?: ClockState;
-      isRunning?: boolean;
-    } = {}
-  ) => {
-    return withClock((clock) => clock.syncTime(seconds, options));
-  }, [withClock]);
-
-  const startClock = useCallback(() => withClock((clock) => clock.start()), [withClock]);
-  const pauseClock = useCallback(() => withClock((clock) => clock.pause()), [withClock]);
-  const resumeClock = useCallback(() => withClock((clock) => clock.resume()), [withClock]);
-  const enterIntervalClock = useCallback(() => withClock((clock) => clock.enterInterval()), [withClock]);
-  const startSecondHalfClock = useCallback(() => withClock((clock) => clock.startSecondHalf()), [withClock]);
-  const returnToFirstHalfClock = useCallback(() => withClock((clock) => clock.returnToFirstHalf()), [withClock]);
-  const endClock = useCallback(() => withClock((clock) => clock.end()), [withClock]);
-  const tickClock = useCallback(() => withClock((clock) => clock.tick()), [withClock]);
-
-  const toggleClock = useCallback(() => {
-    const snapshot = clockServiceRef.current.getSnapshot();
-    if (snapshot.isRunning) {
-      return pauseClock();
+  const pauseClock = useCallback((options?: { silent?: boolean }) => {
+    if (isPostmatch) return { ok: true };
+    if (clockSnapshot.state === 'PAUSADO' && !clockSnapshot.isRunning) {
+      return { ok: true };
     }
-    if (snapshot.state === 'PRE_JOGO') {
-      return startClock();
+    const result = pausar();
+    if (!options?.silent && !result.ok && result.error) setTopRightNotice(result.error);
+    return result;
+  }, [clockSnapshot.isRunning, clockSnapshot.state, isPostmatch, pausar]);
+
+  const pauseClockForEvent = useCallback((options?: { silent?: boolean }) => {
+    if (isPostmatch) return { ok: true };
+    if (clockSnapshot.state === 'PAUSADO' && !clockSnapshot.isRunning && isPausedByEvent) {
+      return { ok: true };
     }
-    return resumeClock();
-  }, [pauseClock, resumeClock, startClock]);
+    const result = pausarPorEvento();
+    if (!options?.silent && !result.ok && result.error) setTopRightNotice(result.error);
+    return result;
+  }, [clockSnapshot.isRunning, clockSnapshot.state, isPausedByEvent, isPostmatch, pausarPorEvento]);
+
+  const resumeClock = useCallback((options?: { silent?: boolean }) => {
+    if (isPostmatch) return { ok: true };
+    if (clockSnapshot.isRunning) {
+      return { ok: true };
+    }
+    const result = continuarPartida();
+    if (!options?.silent && !result.ok && result.error) setTopRightNotice(result.error);
+    return result;
+  }, [clockSnapshot.isRunning, continuarPartida, isPostmatch]);
+
+  const applyClockDirective = useCallback((directive: ClockPauseDirective) => {
+    if (directive === 'manual') pauseClock();
+    if (directive === 'event') pauseClockForEvent();
+  }, [pauseClock, pauseClockForEvent]);
+
+  const applyEventClockBehavior = useCallback((type: MatchEvent['type'], result?: MatchEvent['result']) => {
+    const rule = getMatchClockEventRule(type, typeof result === 'string' ? result : undefined);
+    applyClockDirective(rule.pauseAfterRegister);
+  }, [applyClockDirective]);
+
+  const applyPreActionClockBehavior = useCallback((type: MatchEvent['type'], result?: MatchEvent['result']) => {
+    const rule = getMatchClockEventRule(type, typeof result === 'string' ? result : undefined);
+    applyClockDirective(rule.pauseBeforeFlow);
+  }, [applyClockDirective]);
+
+  const getClockStateLabel = useCallback((state: typeof clockSnapshot.state): string => {
+    switch (state) {
+      case 'PRE_JOGO':
+        return 'PRE-JOGO';
+      case 'PRIMEIRO_TEMPO':
+        return 'PRIMEIRO TEMPO';
+      case 'PAUSADO':
+        return 'PAUSADO';
+      case 'SINCRONIZANDO':
+        return 'SINCRONIZANDO';
+      case 'INTERVALO':
+        return 'INTERVALO';
+      case 'SEGUNDO_TEMPO':
+        return 'SEGUNDO TEMPO';
+      case 'ENCERRADO':
+        return 'ENCERRADO';
+      default:
+        return state;
+    }
+  }, [clockSnapshot.state]);
+
+  const getRealtimeBlockMessage = useCallback((): string => {
+    switch (clockSnapshot.state) {
+      case 'PRE_JOGO':
+        return 'Inicie a partida para liberar o registro de eventos.';
+      case 'INTERVALO':
+        return 'Inicie o segundo tempo para registrar eventos.';
+      case 'SINCRONIZANDO':
+        return 'Conclua ou cancele a sincronizacao antes de registrar novos eventos.';
+      case 'ENCERRADO':
+        return 'A partida foi encerrada. Use o fluxo de retorno ja existente para editar.';
+      case 'PAUSADO':
+        return 'Retome a partida para continuar registrando eventos.';
+      default:
+        return 'O cronometro precisa estar em andamento para registrar eventos.';
+    }
+  }, [clockSnapshot.state]);
+
+  const blockRealtimeEventWhenNeeded = useCallback(() => {
+    if (isPostmatch || canRegisterRealtimeEvent) return false;
+    setTopRightNotice(getRealtimeBlockMessage());
+    return true;
+  }, [canRegisterRealtimeEvent, getRealtimeBlockMessage, isPostmatch]);
+
+  const openClockSyncModal = useCallback(() => {
+    if (isPostmatch) return;
+    const result = iniciarSincronizacao();
+    if (!result.ok) {
+      setTopRightNotice(result.error ?? 'Nao foi possivel abrir a sincronizacao do cronometro.');
+    }
+    setSyncMinuteInput(String(Math.floor(matchTime / 60)));
+    setSyncSecondInput(String(matchTime % 60).padStart(2, '0'));
+    setSyncValidationError(null);
+    setShowClockSyncModal(true);
+  }, [iniciarSincronizacao, isPostmatch, matchTime]);
+
+  const closeClockSyncModal = useCallback(() => {
+    if (!isSyncing) {
+      setShowClockSyncModal(false);
+      setSyncValidationError(null);
+      return;
+    }
+    const result = cancelarSincronizacao();
+    if (!result.ok) {
+      setTopRightNotice(result.error ?? 'Nao foi possivel cancelar a sincronizacao.');
+      return;
+    }
+    setShowClockSyncModal(false);
+    setSyncValidationError(null);
+  }, [cancelarSincronizacao, isSyncing]);
+
+  const handleConfirmClockSync = useCallback(() => {
+    const minuteIsValid = /^\d+$/.test(syncMinuteInput.trim());
+    const secondIsValid = /^\d+$/.test(syncSecondInput.trim());
+    if (!minuteIsValid || !secondIsValid) {
+      setSyncValidationError('Informe minuto e segundo usando apenas numeros inteiros.');
+      return;
+    }
+    const minute = Number.parseInt(syncMinuteInput.trim(), 10);
+    const second = Number.parseInt(syncSecondInput.trim(), 10);
+    const result = confirmarSincronizacao(minute, second);
+    if (!result.ok) {
+      setSyncValidationError(result.error ?? 'Nao foi possivel sincronizar o cronometro.');
+      return;
+    }
+    setShowClockSyncModal(false);
+    setSyncValidationError(null);
+  }, [confirmarSincronizacao, syncMinuteInput, syncSecondInput]);
 
   useEffect(() => {
-    clockServiceRef.current = new ClockService(isPostmatch ? 'postmatch' : 'realtime');
-    applyClockSnapshot(clockServiceRef.current.getSnapshot());
-  }, [applyClockSnapshot, isPostmatch]);
+    if (!showClockSyncModal && !isSyncing) return;
+    if (showClockSyncModal && !isSyncing) {
+      setShowClockSyncModal(false);
+      setSyncValidationError(null);
+    }
+  }, [isSyncing, showClockSyncModal]);
   
   // Funções para gerenciar frequência de substituições em localStorage
   const loadSubstitutionFrequency = (): Record<string, number> => {
@@ -724,7 +843,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   /** Tempo relativo à metade + period técnico; pós-jogo: `rawSeconds` é minuto absoluto 0–40. */
   const eventTimeAndPeriod = (rawSeconds: number, periodOverride?: MatchHalf): { time: number; period: MatchHalf } => {
-    return getEventStamp(clockServiceRef.current, rawSeconds, periodOverride);
+    return getOfficialEventStamp(rawSeconds, periodOverride);
   };
 
   const executeActionFlow = (
@@ -876,7 +995,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Pós-jogo: os campos manuais continuam no UI, mas o estado oficial do relógio passa pelo ClockService.
   useEffect(() => {
     if (!isPostmatch) return;
-    const snapshot = syncClock(manualMinute * 60 + manualSecond, {
+    const snapshot = hydrateClock({
+      seconds: manualMinute * 60 + manualSecond,
       firstHalfLocked,
       isRunning: false,
     });
@@ -884,7 +1004,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const nextSecond = snapshot.currentTimeSeconds % 60;
     if (nextMinute !== manualMinute) setManualMinute(nextMinute);
     if (nextSecond !== manualSecond) setManualSecond(nextSecond);
-  }, [isPostmatch, manualMinute, manualSecond, firstHalfLocked, syncClock]);
+  }, [firstHalfLocked, hydrateClock, isPostmatch, manualMinute, manualSecond]);
 
   // Inicializar modal de escalação quando janela abrir (apenas realtime)
   useEffect(() => {
@@ -895,17 +1015,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
-        syncClock(20 * 60, { firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       } else if (userEndedFirstHalfCollectionRef.current) {
         setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
-        syncClock(20 * 60, { firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       } else {
         setManualMinute(0);
         setManualSecond(0);
         setManualHalfPinned(true);
-        syncClock(0, { firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: 0, firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       }
       // Postmatch: pular lineup, usar selectedPlayerIds como jogadores ativos
       const ids = selectedPlayerIds && selectedPlayerIds.length > 0
@@ -944,7 +1064,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setShowLineupModal(true);
       }
     }
-  }, [isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players, match?.collectionPhase, match?.id, match?.lineup, syncClock]);
+  }, [hydrateClock, isOpen, isMatchStarted, isPostmatch, selectedPlayerIds, players, match?.collectionPhase, match?.id, match?.lineup]);
 
   // Jogadores ativos na coleta = só após trancar o locker com 5 IDs; sem ativos = ninguém selecionável na coleta
   useEffect(() => {
@@ -1019,7 +1139,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     let interval: NodeJS.Timeout | null = null;
     if (isRunning && !isMatchEnded) {
       interval = setInterval(() => {
-        tickClock();
         if (ballPossessionNowRef.current === 'com') {
           setPossessionSecondsWith(prev => prev + 1);
         } else {
@@ -1030,12 +1149,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isRunning, isMatchEnded, tickClock]);
-
-  // Formatar tempo (MM:SS)
-  const formatTime = (seconds: number): string => {
-    return clockServiceRef.current.formatTime(seconds);
-  };
+  }, [isRunning, isMatchEnded]);
 
   // Recalcular placar e faltas a partir de matchEvents (usado após edição na tela de logs)
   const recalcGoalsAndFoulsFromEvents = (events: MatchEvent[]) => {
@@ -1182,19 +1296,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
       if (hasLog && inSecondHalf) {
-        syncClock(0, { period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       } else if (hasLog && !inSecondHalf) {
-        syncClock(0, { period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       } else if (!hasLog && inSecondHalf) {
-        syncClock(0, { period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       } else if (!hasLog && !inSecondHalf) {
-        syncClock(0, { period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       }
     } else if (inSecondHalf) {
       setManualMinute(20);
       setManualSecond(0);
       setManualHalfPinned(true);
-      syncClock(20 * 60, { firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+      hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
     }
     autosaveSkipRef.current = true;
     setTimeout(() => {
@@ -1204,29 +1318,35 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         lastAutosaveSignatureRef.current = initialSnapshot;
       } catch (_) {}
     }, 0);
-  }, [isOpen, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players, syncClock]);
+  }, [hydrateClock, isOpen, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
 
   // Toggle cronômetro
-  const handleToggleTimer = () => {
-    toggleClock();
-  };
-
   // Encerrar tempo (primeira metade → modal de intervalo; segunda metade → fim de jogo)
   const handleEndTime = () => {
-    if (matchTime >= 20 * 60) {
+    if (matchTime >= REGULATION_HALF_SECONDS) {
       if (currentPeriod === '1T') {
-        enterIntervalClock();
+        const result = encerrarPrimeiroTempo();
+        if (!result.ok) {
+          setTopRightNotice(result.error ?? 'Nao foi possivel encerrar o primeiro tempo.');
+          return;
+        }
         setShowIntervalAnalysis(true);
       } else {
-        // Segunda metade: encerrar partida
-        endClock();
+        const result = encerrarPartida();
+        if (!result.ok && result.error) {
+          setTopRightNotice(result.error);
+        }
       }
     }
   };
   
   /** Segundo tempo no ao vivo: cronômetro zera, posse inverte (mesmo após intervalo ou após “encerrar coleta 1º tempo”). */
   const applySecondHalfRealtime = () => {
-    startSecondHalfClock();
+    const result = iniciarSegundoTempo();
+    if (!result.ok) {
+      setTopRightNotice(result.error ?? 'Nao foi possivel iniciar o segundo tempo.');
+      return;
+    }
     setShowIntervalAnalysis(false);
     setBallPossessionNow(ballPossessionStart === 'us' ? 'sem' : 'com');
   };
@@ -1244,12 +1364,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setManualMinute(20);
         setManualSecond(0);
         setManualHalfPinned(true);
-        startSecondHalfClock();
+        hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       });
     } else {
       flushSync(() => {
-        pauseClock();
-        applySecondHalfRealtime();
+        const result = encerrarPrimeiroTempo();
+        if (!result.ok && result.error) {
+          setTopRightNotice(result.error);
+          return;
+        }
+        setShowIntervalAnalysis(true);
       });
     }
     if (onSave && isOpen) {
@@ -1284,12 +1408,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setManualMinute(0);
         setManualSecond(0);
         setManualHalfPinned(true);
-        returnToFirstHalfClock();
+        const result = retornarAoPrimeiroTempo();
+        if (!result.ok && result.error) {
+          setTopRightNotice(result.error);
+        }
       });
-    } else {
       flushSync(() => {
-        pauseClock();
-        returnToFirstHalfClock();
+        const result = retornarAoPrimeiroTempo();
+        if (!result.ok && result.error) {
+          setTopRightNotice(result.error);
+        }
       });
     }
     if (onSave && isOpen) {
@@ -1915,11 +2043,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     
     // Bloquear comandos quando tempo está parado (exceto GOL e substituições) - apenas em realtime
-    if (!isPostmatch && !isRunning && action !== 'goal') {
-      alert('O cronômetro está parado. Inicie o cronômetro para registrar ações.');
+    if (blockRealtimeEventWhenNeeded()) {
+      return;
+    }
+    /*
+
       return;
     }
     
+    */
     // Se já há passe pendente e clicou em Passe novamente, cancelar
     if (action === 'pass' && pendingPassEventId) {
       setMatchEvents(prev => prev.filter(e => e.id !== pendingPassEventId));
@@ -1936,11 +2068,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         alert('Selecione um jogador primeiro.');
         return;
       }
+      if (action === 'goal') applyPreActionClockBehavior('goal');
+      if (action === 'penalty') applyPreActionClockBehavior('penalty');
+      if (action === 'freeKick') applyPreActionClockBehavior('freeKick');
       setSelectedAction(action);
       return;
     }
 
     if (action === 'foul') {
+      applyPreActionClockBehavior('foul');
       startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
       setSelectedAction(action);
       return;
@@ -1952,16 +2088,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         details: null,
         cardTeam: 'against',
       });
+      applyPreActionClockBehavior('card');
       setSelectedAction(action);
       return;
     }
     if (ballPossessionNow === 'sem' && (action === 'tackle' || action === 'save')) {
+      applyPreActionClockBehavior(action);
       startActionFlow(action, hasSelectedPlayer ? selectedPlayerId : null);
       setSelectedAction(action);
       return;
     }
     if (ballPossessionNow === 'sem' && action === 'block') {
-      if (!isPostmatch) pauseClock();
+      applyPreActionClockBehavior('block');
       handleRegisterBlock(hasSelectedPlayer ? selectedPlayerId : TEAM_EVENT_FAKE_PLAYER_ID);
       setSelectedAction(action);
       return;
@@ -1970,6 +2108,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       alert('Selecione um jogador primeiro.');
       return;
     }
+    applyPreActionClockBehavior(action as MatchEvent['type']);
     startActionFlow(action, selectedPlayerId);
     setSelectedAction(action);
   };
@@ -2005,9 +2144,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setMatchEvents(prev => [...prev, newEvent]);
 
     // Retomar cronômetro (desarme = bola em jogo)
-    if (!isRunning) {
-      resumeClock();
-    }
+    applyEventClockBehavior('tackle', result);
 
     // Desarme sem posse: posse vai para o adversário
     if (result === 'withoutBall') {
@@ -2065,7 +2202,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     setMatchEvents(prev => [...prev, newEvent]);
 
-    if (!isRunning) resumeClock();
+    applyEventClockBehavior('save', difficulty);
     setSelectedAction(null);
   };
   
@@ -2099,9 +2236,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setMatchEvents(prev => [...prev, newEvent]);
     
     // Retomar cronômetro (bloqueio = bola em jogo)
-    if (!isRunning) {
-      resumeClock();
-    }
+    applyEventClockBehavior('block');
     
     setSelectedAction(null);
   };
@@ -2137,10 +2272,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (team === 'for') {
       setFoulsForCount(prev => prev + 1);
-    } else {
       setFoulsAgainstCount(prev => prev + 1);
     }
 
+    applyEventClockBehavior('foul');
     setSelectedAction(null);
   };
 
@@ -2172,24 +2307,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setMatchEvents(prev => [...prev, newEvent]);
     
     // Se passe foi correto, aguardar próximo jogador selecionado como receptor
+    applyEventClockBehavior('pass', result);
     if (result === 'correct') {
       if (!requirePassReceiver) {
         setPendingPassSenderId(null);
         setPendingPassEventId(null);
         setPendingPassResult(null);
         setSelectedAction(null);
-        if (!isRunning) {
-          resumeClock();
-        }
         return;
       }
       setPendingPassSenderId(pid);
       setPendingPassEventId(eventId);
       setPendingPassResult('correct');
       // Retomar cronômetro (passe certo = bola em jogo)
-      if (!isRunning) {
-        resumeClock();
-      }
     } else {
       // Passe errado: posse de bola passa para o adversário (sem posse)
       setBallPossessionNow('sem');
@@ -2253,15 +2383,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setMatchEvents(prev => [...prev, newEvent]);
     
     // Parar cronômetro se chute pra fora
-    if (result === 'outside') {
-      pauseClock();
-    } else {
-      // Retomar cronômetro se não for pra fora (bola em jogo)
-      if (!isRunning) {
-        resumeClock();
-      }
-    }
-    
+    applyEventClockBehavior('shot', result);
+
     setSelectedAction(null);
   };
   
@@ -2269,7 +2392,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleRegisterCorner = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
-    pauseClock();
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
@@ -2289,6 +2411,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
+    applyEventClockBehavior('corner', zone);
     setSelectedAction(null);
   };
 
@@ -2315,6 +2438,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
 
     setMatchEvents(prev => [...prev, newEvent]);
+    applyEventClockBehavior('lateral', zone);
     setSelectedAction(null);
   };
 
@@ -2340,11 +2464,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const assistPlayer = assistPlayerId ? activePlayers.find(p => String(p.id).trim() === assistPlayerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('goal', goalType);
     const rawGoalT = goalTimeOverride ?? pendingGoalTime ?? matchTime;
-    const { time: goalTime, period: goalPeriod } = getEventStamp(
-      clockServiceRef.current,
-      rawGoalT,
-      goalPeriodOverride ?? undefined
-    );
+    const { time: goalTime, period: goalPeriod } = getOfficialEventStamp(rawGoalT, goalPeriodOverride ?? undefined);
     const method = goalMethod ?? pendingGoalMethod;
 
     const effectivePlayerId = isOpponent
@@ -2394,7 +2514,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     
     // Cronômetro já foi parado quando GOL foi clicado, mas garantir que está parado
-    pauseClock();
+    applyEventClockBehavior('goal', goalType);
     
     setShowGoalConfirmation(false);
     setPendingGoalType(null);
@@ -2649,6 +2769,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
+    applyEventClockBehavior('card');
     if (cardTeam === 'against') {
       setSelectedAction(null);
       setSelectedPlayerId(null);
@@ -2881,7 +3002,60 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   if (!isOpen) return null;
 
-  const canEndTime = matchTime >= 20 * 60;
+  const canEndTime = matchTime >= REGULATION_HALF_SECONDS;
+  const isRealtimeActionLocked = !isPostmatch && !canRegisterRealtimeEvent;
+  const shouldDisableRealtimeEventButtons = isBlockedByPenalty || isRealtimeActionLocked;
+  const syncMinuteIsNumeric = /^\d+$/.test(syncMinuteInput.trim());
+  const syncSecondIsNumeric = /^\d+$/.test(syncSecondInput.trim());
+  const syncMinuteValue = syncMinuteIsNumeric ? Number.parseInt(syncMinuteInput.trim(), 10) : null;
+  const syncSecondValue = syncSecondIsNumeric ? Number.parseInt(syncSecondInput.trim(), 10) : null;
+  const syncPreviewSeconds =
+    syncMinuteValue != null && syncSecondValue != null
+      ? Math.max(0, syncMinuteValue * 60 + syncSecondValue)
+      : null;
+  const syncPreviewLabel = syncPreviewSeconds != null && syncSecondValue != null && syncSecondValue <= 59
+    ? formatTime(syncPreviewSeconds)
+    : '--:--';
+  const clockPrimaryAction = (() => {
+    switch (clockSnapshot.state) {
+      case 'PRE_JOGO':
+        return {
+          label: 'INICIAR PARTIDA',
+          onClick: () => {
+            const result = iniciarPrimeiroTempo();
+            if (!result.ok && result.error) setTopRightNotice(result.error);
+          },
+          disabled: false,
+          className: 'border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff] hover:bg-[#00f0ff]/25',
+        };
+      case 'PRIMEIRO_TEMPO':
+      case 'SEGUNDO_TEMPO':
+        return {
+          label: 'PAUSAR',
+          onClick: () => pauseClock(),
+          disabled: false,
+          className: 'border-amber-500 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25',
+        };
+      case 'PAUSADO':
+        return {
+          label: 'CONTINUAR PARTIDA',
+          onClick: () => resumeClock(),
+          disabled: false,
+          className: isPausedByEvent
+            ? 'border-emerald-400 bg-emerald-400/20 text-emerald-100 hover:bg-emerald-400/30 shadow-lg shadow-emerald-500/20'
+            : 'border-emerald-500 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25',
+        };
+      case 'INTERVALO':
+        return {
+          label: 'INICIAR SEGUNDO TEMPO',
+          onClick: handleStartSecondHalf,
+          disabled: false,
+          className: 'border-violet-400 bg-violet-400/15 text-violet-200 hover:bg-violet-400/25',
+        };
+      default:
+        return null;
+    }
+  })();
 
   const isRealtimePage = window.location.pathname === '/scout-realtime';
   const useFullViewport = isRealtimePage || takeFullWidth;
@@ -4301,9 +4475,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <div className="flex gap-1 flex-1 min-h-0">
                     <button
                       onClick={() => setBallPossessionNow('sem')}
-                      disabled={isBlockedByPenalty}
+                      disabled={isBlockedByPenalty || isRealtimeActionLocked}
                       className={`flex-1 min-h-[48px] px-4 py-4 rounded-lg border-2 font-black uppercase text-base transition-all ${
-                        isBlockedByPenalty
+                        isBlockedByPenalty || isRealtimeActionLocked
                           ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                           : ballPossessionNow === 'sem'
                           ? 'bg-red-500/40 border-red-500 text-white'
@@ -4315,21 +4489,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (!isMatchStarted || isBlockedByPenalty) return;
+                        if (!isMatchStarted || shouldDisableRealtimeEventButtons) return;
+                        if (blockRealtimeEventWhenNeeded()) return;
                         if (!hasSelectedPlayer) {
                           setTopRightNotice('Selecione um jogador em quadra na lista à esquerda antes de marcar o gol.');
                           return;
                         }
-                        if (!isPostmatch) pauseClock();
+                        applyPreActionClockBehavior('goal');
                         setPendingGoalTime(null);
                         setGoalStep('team');
                         setPendingGoalIsOpponent(false);
                         setPendingGoalType(null);
                         setPendingGoalPlayerId(null);
                       }}
-                      disabled={!isMatchStarted || isBlockedByPenalty}
+                      disabled={!isMatchStarted || shouldDisableRealtimeEventButtons}
                       className={`flex-1 min-h-[48px] px-4 py-4 rounded-lg border-2 font-black uppercase text-base transition-all flex items-center justify-center gap-1 active:scale-95 ${
-                        isMatchStarted && !isBlockedByPenalty
+                        isMatchStarted && !shouldDisableRealtimeEventButtons
                           ? hasSelectedPlayer
                             ? 'bg-green-500/20 text-green-400 border-green-500 hover:bg-green-500/30'
                             : 'bg-zinc-900/80 text-zinc-500 border-zinc-600 opacity-80'
@@ -4341,9 +4516,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </button>
                     <button
                       onClick={() => setBallPossessionNow('com')}
-                      disabled={isBlockedByPenalty}
+                      disabled={isBlockedByPenalty || isRealtimeActionLocked}
                       className={`flex-1 min-h-[48px] px-4 py-4 rounded-lg border-2 font-black uppercase text-base transition-all ${
-                        isBlockedByPenalty
+                        isBlockedByPenalty || isRealtimeActionLocked
                           ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                           : ballPossessionNow === 'com'
                           ? 'bg-[#00f0ff]/40 border-[#00f0ff] text-white'
@@ -4362,13 +4537,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
                         <button
                           onClick={() => {
-                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
-                            if (!isPostmatch && selectedAction !== 'foul') pauseClock();
+                            if (shouldDisableRealtimeEventButtons) return;
                             handleSelectAction('foul');
                           }}
-                          disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                          disabled={shouldDisableRealtimeEventButtons}
                           className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            (!isPostmatch && !isRunning) || isBlockedByPenalty
+                            shouldDisableRealtimeEventButtons
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : selectedAction === 'foul'
                               ? 'bg-orange-500/30 border-orange-500 text-orange-400'
@@ -4380,13 +4554,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <button
                           onClick={() => {
                             if (!isMatchStarted) return;
-                            if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
-                            if (!isPostmatch) pauseClock();
+                            if (shouldDisableRealtimeEventButtons) return;
                             handleSelectAction('corner');
                           }}
-                          disabled={!isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                          disabled={!isMatchStarted || shouldDisableRealtimeEventButtons}
                           className={`flex-1 min-h-[44px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                            (!isPostmatch && !isRunning) || isBlockedByPenalty
+                            shouldDisableRealtimeEventButtons
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                               : 'bg-cyan-500/10 border-cyan-500/40 text-cyan-500/70 hover:bg-cyan-500/20 hover:border-cyan-500 hover:text-cyan-400 shadow-sm'
                           }`}
@@ -4429,7 +4602,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         ) : (
                           <>
                             <div className="w-full flex flex-col items-center gap-0.5 shrink-0">
-                              <span className="text-zinc-500 text-[10px] font-bold uppercase">Tempo</span>
+                              <span className="text-zinc-500 text-[10px] font-bold uppercase">Tempo oficial</span>
                               <span
                                 className={`text-xs font-black uppercase tracking-wide ${
                                   currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
@@ -4437,18 +4610,51 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               >
                                 {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
                               </span>
+                              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">
+                                {getClockStateLabel(clockSnapshot.state)}
+                              </span>
                             </div>
-                            <button
-                              onClick={handleToggleTimer}
-                              className={`w-full h-full min-h-[80px] py-4 px-4 rounded-lg border-2 font-black font-mono text-3xl transition-all flex flex-col items-center justify-center gap-1 active:scale-95 ${
-                                isRunning
-                                  ? 'border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                                  : 'border-red-500 bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                              }`}
-                            >
-                              {isRunning ? <Pause size={28} /> : <Play size={28} />}
-                              {formatTime(matchTime)}
-                            </button>
+                            <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-4 flex flex-col items-center justify-center gap-2">
+                              <div className="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight tabular-nums">
+                                {formatTime(matchTime)}
+                              </div>
+                              {clockPrimaryAction ? (
+                                <button
+                                  type="button"
+                                  onClick={clockPrimaryAction.onClick}
+                                  disabled={clockPrimaryAction.disabled}
+                                  className={`w-full min-h-[56px] px-3 py-3 rounded-lg border-2 font-black uppercase text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                                >
+                                  {clockPrimaryAction.label}
+                                </button>
+                              ) : (
+                                <div className="w-full min-h-[56px] px-3 py-3 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-500 text-xs font-bold uppercase flex items-center justify-center">
+                                  Partida encerrada
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={openClockSyncModal}
+                                disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
+                                className={`w-full px-3 py-2 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
+                                  clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
+                                    ? 'border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed'
+                                    : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
+                                }`}
+                              >
+                                Sincronizar cronÃ´metro
+                              </button>
+                              {isPausedByEvent && (
+                                <p className="text-center text-[10px] font-bold uppercase text-emerald-200">
+                                  Evento pausou o relÃ³gio. Use continuar partida para retomar.
+                                </p>
+                              )}
+                              {isRealtimeActionLocked && (
+                                <p className="text-center text-[10px] font-bold uppercase text-amber-200">
+                                  {getRealtimeBlockMessage()}
+                                </p>
+                              )}
+                            </div>
                             {canEndTime && !isMatchEnded && (
                               <button
                                 onClick={handleEndTime}
@@ -4485,9 +4691,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <>
                             <button
                               onClick={() => handleSelectAction('pass')}
-                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                shouldDisableRealtimeEventButtons
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : !hasSelectedPlayer
                                   ? 'bg-zinc-900/70 border-zinc-700 text-zinc-500 opacity-70'
@@ -4500,9 +4706,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('shot')}
-                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                shouldDisableRealtimeEventButtons
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : !hasSelectedPlayer
                                   ? 'bg-zinc-900/70 border-red-500/20 text-red-500/50 opacity-70'
@@ -4518,9 +4724,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <>
                             <button
                               onClick={() => handleSelectAction('tackle')}
-                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                shouldDisableRealtimeEventButtons
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'tackle'
                                   ? 'bg-blue-500/30 border-blue-500 text-blue-400'
@@ -4531,9 +4737,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('save')}
-                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                shouldDisableRealtimeEventButtons
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'save'
                                   ? 'bg-purple-500/30 border-purple-500 text-purple-400'
@@ -4544,9 +4750,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('block')}
-                              disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                              disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                                (!isPostmatch && !isRunning) || isBlockedByPenalty
+                                shouldDisableRealtimeEventButtons
                                   ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                                   : selectedAction === 'block'
                                   ? 'bg-yellow-500/30 border-yellow-500 text-yellow-400'
@@ -4564,20 +4770,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     <div className="grid grid-cols-5 gap-1 shrink-0 min-h-[56px]">
                       <button
                         onClick={() => {
-                          if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
+                          if (shouldDisableRealtimeEventButtons) return;
                           if (isPostmatch && getTimeForEvent() === null) {
                             alert('Informe o tempo (ex.: 0100 para 01:00).');
                             return;
                           }
-                          if (!isPostmatch) pauseClock();
+                          applyPreActionClockBehavior('penalty');
                           setPenaltyStep('team');
                           setPendingPenaltyTeam(null);
                           setPendingPenaltyKickerId(null);
                           setSelectedAction(null);
                         }}
-                        disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty}
+                        disabled={shouldDisableRealtimeEventButtons}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                          (!isPostmatch && !isRunning) || isBlockedByPenalty
+                          shouldDisableRealtimeEventButtons
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : penaltyStep ? 'bg-purple-500/40 border-purple-500 text-white'
                             : 'bg-zinc-900 border-purple-500/30 text-purple-500/70 hover:bg-purple-500/20 hover:border-purple-500 hover:text-purple-400'
@@ -4587,7 +4793,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
+                          if (shouldDisableRealtimeEventButtons) return;
                           if (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5) {
                             return; // Habilitado quando pelo menos um lado tem 5 faltas no período atual
                           }
@@ -4595,15 +4801,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             alert('Informe o tempo (ex.: 0100 para 01:00).');
                             return;
                           }
-                          if (!isPostmatch) pauseClock();
+                          applyPreActionClockBehavior('freeKick');
                           setFreeKickStep('team');
                           setPendingFreeKickTeam(null);
                           setPendingFreeKickKickerId(null);
                           setSelectedAction(null);
                         }}
-                        disabled={(!isPostmatch && !isRunning) || isBlockedByPenalty || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)}
+                        disabled={shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
-                          (!isPostmatch && !isRunning) || isBlockedByPenalty || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                          shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : freeKickStep ? 'bg-red-500/40 border-red-500 text-white'
                             : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
@@ -4614,17 +4820,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <button
                         onClick={() => {
                           if (!isMatchStarted) return;
-                          if ((!isPostmatch && !isRunning) || isBlockedByPenalty) return;
+                          if (shouldDisableRealtimeEventButtons) return;
                           if (!hasSelectedPlayer) {
                             alert('Selecione um jogador primeiro.');
                             return;
                           }
-                          if (!isPostmatch) pauseClock();
                           handleSelectAction('lateral');
                         }}
-                        disabled={!isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty}
+                        disabled={!isMatchStarted || shouldDisableRealtimeEventButtons}
                         className={`min-h-[48px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
-                          !isMatchStarted || (!isPostmatch && !isRunning) || isBlockedByPenalty
+                          !isMatchStarted || shouldDisableRealtimeEventButtons
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
                             : !hasSelectedPlayer
                             ? 'bg-cyan-500/5 border-cyan-500/20 text-cyan-500/40 opacity-70'
@@ -5107,6 +5312,84 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   className="px-6 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-sm rounded-xl transition-colors"
                 >
                   Retomar após o intervalo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showClockSyncModal && !isPostmatch && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
+            <div className="w-full max-w-md rounded-2xl border-2 border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
+              <div className="border-b border-zinc-800 px-5 py-4">
+                <p className="text-white text-sm font-black uppercase">Sincronizar cronÃ´metro</p>
+                <p className="text-zinc-400 text-xs mt-1">
+                  Ajuste manualmente o relÃ³gio do {currentPeriod === '1T' ? '1Âº tempo' : '2Âº tempo'}.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">PerÃ­odo</p>
+                    <p className="text-sm font-black uppercase text-zinc-100">{currentPeriod}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">Atual</p>
+                    <p className="text-sm font-black font-mono text-zinc-100">{formatTime(matchTime)}</p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">Proposto</p>
+                    <p className="text-sm font-black font-mono text-[#00f0ff]">{syncPreviewLabel}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1 text-xs font-bold uppercase text-zinc-300">
+                    Minuto
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={syncMinuteInput}
+                      onChange={(e) => {
+                        setSyncMinuteInput(e.target.value.replace(/\D/g, ''));
+                        setSyncValidationError(null);
+                      }}
+                      className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-base font-mono text-white focus:border-[#00f0ff] focus:outline-none"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-bold uppercase text-zinc-300">
+                    Segundo
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={syncSecondInput}
+                      onChange={(e) => {
+                        setSyncSecondInput(e.target.value.replace(/\D/g, ''));
+                        setSyncValidationError(null);
+                      }}
+                      className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-base font-mono text-white focus:border-[#00f0ff] focus:outline-none"
+                    />
+                  </label>
+                </div>
+                {syncValidationError && (
+                  <div className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
+                    {syncValidationError}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={closeClockSyncModal}
+                  className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-xs font-bold uppercase hover:bg-zinc-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmClockSync}
+                  className="px-4 py-2 rounded-lg border border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff] text-xs font-black uppercase hover:bg-[#00f0ff]/25 transition-colors"
+                >
+                  Confirmar sincronizaÃ§Ã£o
                 </button>
               </div>
             </div>
