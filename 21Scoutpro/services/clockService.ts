@@ -77,6 +77,24 @@ const resolvePostmatchPeriod = (seconds: number, firstHalfLocked: boolean): Matc
 const resolvePhaseState = (period: MatchHalf): ClockState =>
   period === '2T' ? 'SEGUNDO_TEMPO' : 'PRIMEIRO_TEMPO';
 
+const resolveEventStampFromSnapshot = (
+  snapshot: ClockSnapshot,
+  rawSeconds?: number,
+  periodOverride?: MatchHalf
+): EventStamp => {
+  const effectiveSeconds = rawSeconds ?? snapshot.currentTimeSeconds;
+
+  if (snapshot.mode === 'postmatch') {
+    return absoluteSecondsToStored(effectiveSeconds);
+  }
+
+  const period = periodOverride ?? snapshot.period;
+  return {
+    period,
+    time: clampRealtimeSeconds(effectiveSeconds, period),
+  };
+};
+
 export class ClockService {
   private snapshot: ClockSnapshot;
 
@@ -208,20 +226,6 @@ export class ClockService {
     return formatClockTime(seconds);
   }
 
-  buildEventStamp(rawSeconds?: number, periodOverride?: MatchHalf): EventStamp {
-    const effectiveSeconds = rawSeconds ?? this.snapshot.currentTimeSeconds;
-
-    if (this.snapshot.mode === 'postmatch') {
-      return absoluteSecondsToStored(effectiveSeconds);
-    }
-
-    const period = periodOverride ?? this.snapshot.period;
-    return {
-      period,
-      time: clampRealtimeSeconds(effectiveSeconds, period),
-    };
-  }
-
   private resolveStateAfterSync(
     period: MatchHalf,
     firstHalfLocked: boolean,
@@ -273,5 +277,5 @@ export function getEventStamp(
   rawSeconds?: number,
   periodOverride?: MatchHalf
 ): EventStamp {
-  return clockService.buildEventStamp(rawSeconds, periodOverride);
+  return resolveEventStampFromSnapshot(clockService.getSnapshot(), rawSeconds, periodOverride);
 }

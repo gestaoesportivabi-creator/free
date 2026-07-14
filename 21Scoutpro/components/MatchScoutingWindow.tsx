@@ -323,13 +323,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     }
   }, []);
-  const [matchTime, setMatchTime] = useState<number>(0); // tempo em segundos
   const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (20+ = 2º tempo)
   const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
   /** Pós-jogo: 0:00 só abre popup «Informar tempo» se o usuário não escolheu 1º/2º no centro (ex.: após gol). */
   const [manualHalfPinned, setManualHalfPinned] = useState<boolean>(true);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
@@ -380,10 +377,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   });
   
   // Estados para período e posse
-  const [currentPeriod, setCurrentPeriod] = useState<'1T' | '2T'>('1T');
-  /** Após encerrar coleta do 1º tempo (ou intervalo → 2º), não volta mais ao 1T. */
-  const [firstHalfLocked, setFirstHalfLocked] = useState(false);
   const clockServiceRef = useRef<ClockService>(new ClockService(isPostmatch ? 'postmatch' : 'realtime'));
+  const [clockSnapshot, setClockSnapshot] = useState<ClockSnapshot>(() => clockServiceRef.current.getSnapshot());
   const [ballPossessionNow, setBallPossessionNow] = useState<'com' | 'sem'>('com');
   const ballPossessionNowRef = useRef<'com' | 'sem'>(ballPossessionNow);
   useEffect(() => { ballPossessionNowRef.current = ballPossessionNow; }, [ballPossessionNow]);
@@ -478,12 +473,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return () => window.clearTimeout(id);
   }, [topRightNotice]);
 
+  const matchTime = clockSnapshot.currentTimeSeconds;
+  const currentPeriod = clockSnapshot.period;
+  const isRunning = clockSnapshot.isRunning;
+  const firstHalfLocked = clockSnapshot.firstHalfLocked;
+  const isMatchEnded = clockSnapshot.state === 'ENCERRADO';
+
   const applyClockSnapshot = useCallback((snapshot: ClockSnapshot) => {
-    setMatchTime(snapshot.currentTimeSeconds);
-    setCurrentPeriod(snapshot.period);
-    setIsRunning(snapshot.isRunning);
-    setFirstHalfLocked(snapshot.firstHalfLocked);
-    setIsMatchEnded(snapshot.state === 'ENCERRADO');
+    setClockSnapshot(snapshot);
     return snapshot;
   }, []);
 
@@ -2111,12 +2108,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Registrar falta: Nosso ou Adversário. Contagem continua após 5; a partir da 6ª o botão Tiro Livre fica disponível.
   const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
-    const pid =
+    const rawPlayerId =
       team === 'against'
         ? (playerIdOverride ?? OPPONENT_FAKE_PLAYER_ID)
         : (playerIdOverride ?? selectedPlayerId);
-    if (team === 'for' && !pid) return;
-    if (team === 'for' && pid === OPPONENT_FAKE_PLAYER_ID) return;
+    if (team === 'for' && !rawPlayerId) return;
+    if (team === 'for' && rawPlayerId === OPPONENT_FAKE_PLAYER_ID) return;
+    const pid = rawPlayerId ?? OPPONENT_FAKE_PLAYER_ID;
 
     const rawT = timeOverride ?? (getTimeForEvent() ?? matchTime);
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT, periodOverride);
