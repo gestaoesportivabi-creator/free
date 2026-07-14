@@ -596,6 +596,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const result = iniciarSincronizacao();
     if (!result.ok) {
       setTopRightNotice(result.error ?? 'Nao foi possivel abrir a sincronizacao do cronometro.');
+      return;
     }
     setSyncMinuteInput(String(Math.floor(matchTime / 60)));
     setSyncSecondInput(String(matchTime % 60).padStart(2, '0'));
@@ -1250,6 +1251,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
 
     const has2TEvent = converted.some((e) => e.period === '2T');
+    const hasPossessionProgress =
+      ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
     const phase = match.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
@@ -1301,8 +1304,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       } else if (!hasLog && inSecondHalf) {
         hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
-      } else if (!hasLog && !inSecondHalf) {
+      } else if (!hasLog && hasPossessionProgress) {
         hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+      } else if (!hasLog && !inSecondHalf) {
+        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRE_JOGO', isRunning: false });
       }
     } else if (inSecondHalf) {
       setManualMinute(20);
@@ -1358,8 +1363,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   /** Encerra a coleta do 1º tempo: ativa 2º tempo; faltas exibidas passam a ser as do 2T (novos lances entram como 2T). */
   const handleEndFirstHalfCollection = () => {
     if (currentPeriod !== '1T') return;
-    userEndedFirstHalfCollectionRef.current = true;
     if (isPostmatch) {
+      userEndedFirstHalfCollectionRef.current = true;
       flushSync(() => {
         setManualMinute(20);
         setManualSecond(0);
@@ -1367,12 +1372,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
       });
     } else {
+      const result = encerrarPrimeiroTempo();
+      if (!result.ok) {
+        if (result.error) setTopRightNotice(result.error);
+        return;
+      }
+      userEndedFirstHalfCollectionRef.current = true;
       flushSync(() => {
-        const result = encerrarPrimeiroTempo();
-        if (!result.ok && result.error) {
-          setTopRightNotice(result.error);
-          return;
-        }
         setShowIntervalAnalysis(true);
       });
     }
@@ -1402,23 +1408,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     ) {
       return;
     }
-    userEndedFirstHalfCollectionRef.current = false;
     if (isPostmatch) {
       flushSync(() => {
         setManualMinute(0);
         setManualSecond(0);
         setManualHalfPinned(true);
-        const result = retornarAoPrimeiroTempo();
-        if (!result.ok && result.error) {
-          setTopRightNotice(result.error);
-        }
       });
-      flushSync(() => {
-        const result = retornarAoPrimeiroTempo();
-        if (!result.ok && result.error) {
-          setTopRightNotice(result.error);
-        }
-      });
+    }
+    const result = retornarAoPrimeiroTempo();
+    if (!result.ok) {
+      if (result.error) setTopRightNotice(result.error);
+      return;
+    }
+    userEndedFirstHalfCollectionRef.current = false;
+    if (!isPostmatch) {
+      setShowIntervalAnalysis(false);
     }
     if (onSave && isOpen) {
       setTimeout(() => {
@@ -1732,7 +1736,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const buildMatchSnapshot = (status: 'em_andamento' | 'encerrado'): MatchRecord => {
     const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
     savedMatch.status = status;
-    savedMatch.collectionPhase = !isMatchStarted ? 0 : currentPeriod === '1T' ? 1 : 2;
+    savedMatch.collectionPhase = clockSnapshot.state === 'PRE_JOGO' ? 0 : currentPeriod === '1T' ? 1 : 2;
 
     const squadIds = [
       ...new Set(
