@@ -11,7 +11,7 @@ A Sprint 003B conectou a experiencia operacional do cronometro ao fluxo ativo de
 
 Status de QA complementar:
 - ver `docs/SPRINT_003B_1_QA_REPORT.md`;
-- resultado atual: `BLOQUEADA PARA VALIDACAO OPERACIONAL`.
+- resultado atual: `AMBIENTE QA OFICIAL CRIADO E VALIDADO COM RESSALVAS`.
 
 O resultado pratico desta Sprint:
 - o fluxo realtime agora consome `useMatchClock` como adaptador de interface;
@@ -21,19 +21,15 @@ O resultado pratico desta Sprint:
 - pausas por evento ganham retomada destacada via `CONTINUAR PARTIDA`;
 - transicoes invalidas de periodo e bloqueios de registro em estados proibidos ficam centralizados no fluxo da tela.
 
-## Arquivos criados
+## Arquivos criados na Sprint 003B
 
 - `21Scoutpro/hooks/useMatchClock.ts`
 - `21Scoutpro/utils/matchClockEventRules.ts`
-- `docs/SPRINT_003B_REPORT.md`
 
-## Arquivos modificados
+## Arquivos modificados na Sprint 003B
 
 - `21Scoutpro/components/MatchScoutingWindow.tsx`
 - `21Scoutpro/services/clockService.ts`
-
-Observacao:
-- `21Scoutpro/public/sitemap.xml` e `21Scoutpro/dist/index.html` ficaram alterados por comandos de build locais.
 
 ## Arquitetura do adaptador
 
@@ -183,116 +179,68 @@ Validado no ambiente local:
 - frontend local `http://localhost:5173`: respondendo
 - `backend type-check`: aprovado
 - `frontend build` (`21Scoutpro`): aprovado
-- `frontend type-check` filtrado para `MatchScoutingWindow.tsx`: sem erros novos
 
-Validado por implementacao e inspeção controlada do fluxo:
-- estados principais do painel foram mapeados a partir de `clockSnapshot`;
-- sincronizacao restaura snapshot anterior e mantem estado rodando/pausado;
-- `getEventStamp()` segue como origem oficial dos timestamps do fluxo ativo;
-- regra tipada de pausa foi extraida para modulo proprio;
-- bloqueios de evento por estado foram centralizados.
+Validado por rodada autenticada QA:
+- login com usuario QA criado por seed oficial;
+- visualizacao do tenant `QA SCOUT 21`;
+- abertura da partida `QA CRONOMETRO 003B`;
+- abertura do fluxo `Adicionar dados da Partida`;
+- registro de um gol QA;
+- salvamento como incompleto;
+- reabertura pela tela de analise e por `Editar Dados`.
 
-Nao validado ponta a ponta nesta execucao:
-- rodada autenticada completa em partida QA no browser;
-- persistencia final reabrindo uma partida apos salvar via UI;
-- evidencias visuais dos cenarios operacionais completos da especificacao.
+Principal ressalva:
+- o cronometro fica visivel na coleta, mas o fluxo de gol ainda abriu a etapa manual `Tempo do gol`, exigindo digitacao de `00:15`.
 
-Motivo atualizado:
-- a Sprint 003B.1 confirmou o bloqueio operacional por ausencia de credencial/partida de QA autorizadas;
-- o detalhe do bloqueio e das correcoes posteriores esta em `docs/SPRINT_003B_1_QA_REPORT.md`.
+## Atualizacao da infraestrutura QA
 
-## Evidencias dos cenarios
+Arquivos adicionados nesta rodada:
+- `backend/scripts/helpers/qa-environment.ts`
+- `backend/scripts/seed-qa-environment.ts`
+- `backend/scripts/cleanup-qa-environment.ts`
+- `docs/QA_GUIDE.md`
 
-Cobertos tecnicamente:
-- Cenario 1: estados `PRE_JOGO` e `PRIMEIRO_TEMPO` conectados ao painel e ao comando principal
-- Cenario 2: pausa manual e retomada via `PAUSADO -> CONTINUAR PARTIDA`
-- Cenario 4: pausa por evento com CTA central `CONTINUAR PARTIDA`
-- Cenarios 5, 6 e 7: sincronizacao com confirmacao, cancelamento e restauracao do estado anterior
-- Cenarios 9, 10 e 11: protecoes de `INTERVALO`, `SEGUNDO_TEMPO` e `ENCERRADO`
+Arquivos atualizados nesta rodada:
+- `backend/package.json`
+- `docs/SPRINT_003B_1_QA_REPORT.md`
+- `docs/SPRINT_003B_REPORT.md`
 
-Cobertos por build/type-check:
-- compatibilidade de compilacao do frontend alterado
-- compatibilidade do backend sem alteracoes
-
-Pendentes de rodada QA assistida:
-- evidencias navegaveis dos cenarios com clique real na coleta
-- confirmacao visual de autosave durante partida autenticada
-- confirmacao visual de recarga de partida salva
+Objetivo atendido:
+- a Sprint 003B agora possui uma massa oficial e reversivel para a validacao do cronometro.
 
 ## Resultado do build
 
 - `backend type-check`: aprovado
-- `frontend build` (`21Scoutpro`): aprovado com warnings de env/chunks
-- `build` monorepo completo: bloqueado quando executado com backend dev ativo, por lock do Prisma em `query_engine-windows.dll.node`
-
-## Resultado do frontend type-check
-
-- o type-check completo do frontend continua reprovado por erros preexistentes em varios arquivos fora do escopo;
-- o filtro para `components/MatchScoutingWindow.tsx` nao retornou erros novos apos a Sprint.
-
-## Resultado do lint
-
-- nao foi executado lint frontend dedicado nesta Sprint;
-- o escopo permaneceu em build e type-check.
-
-## Erros preexistentes separados dos erros da Sprint
-
-Preexistentes fora do escopo:
-- erros em `App.tsx`
-- erros em componentes administrativos e dashboards
-- erros em `Schedule`, `ScoutTable`, `TimeControl`, `services/api.ts`, `config.ts` e modulos de blog
-
-Erros novos da Sprint:
-- nenhum erro residual encontrado em `21Scoutpro/components/MatchScoutingWindow.tsx`
-- nenhum erro residual encontrado em `21Scoutpro/hooks/useMatchClock.ts`
-- nenhum erro residual encontrado em `21Scoutpro/utils/matchClockEventRules.ts`
-- nenhum erro residual encontrado em `21Scoutpro/services/clockService.ts`
+- `frontend build` (`21Scoutpro`): aprovado com warnings antigos de env/chunks
 
 ## Riscos remanescentes
 
 - `MatchScoutingWindow` continua grande e concentrando muita orquestracao de UI;
 - eventos pendentes (`block`, `corner`, `freeKick`, `penalty`, `lateral`) ainda precisam validacao da comissao;
-- o build do monorepo completo pode falhar localmente se o backend estiver segurando o binario do Prisma;
-- os warnings antigos de chunk grande continuam no frontend.
-- validacao autenticada continua pendente ate existir massa de QA autorizada.
+- o frontend ainda emite warnings antigos de chunk grande;
+- o fluxo `Ativos` ainda depende de descoberta manual do operador;
+- a semantica final do timestamp do evento precisa confirmacao funcional.
 
 ## Limitacoes
 
-- nenhuma alteracao de backend, banco, schema, migration ou seed;
+- sem migrations ou alteracao de schema;
 - nenhuma persistencia nova do estado detalhado do cronometro;
 - nenhuma sincronizacao com servidor ou entre dispositivos;
 - nenhuma extensao para prorrogacao, disputa por penaltis ou cronometro regressivo;
 - nenhuma ativacao de `RealtimeScoutPage`;
 - nenhuma refatoracao ampla de `MatchScoutingWindow`.
 
-## Backlog recomendado para a Sprint 003C de QA automatizado
+## Backlog recomendado para a Sprint 003C
 
-- criar testes unitarios para `useMatchClock`
-- criar testes unitarios para `matchClockEventRules`
-- criar testes de transicao do painel por estado do `clockSnapshot`
-- automatizar cenarios de pausa por evento e sincronizacao
-- cobrir persistencia e reabertura da coleta
-- automatizar smoke test autenticado do fluxo realtime
-- decidir regra definitiva dos eventos ainda pendentes
-
-## Escopo preservado
-
-- backend inalterado
-- banco inalterado
-- payload atual preservado
-- autosave mantido
-- `ClockService` continua independente de regras esportivas
-- nenhuma funcionalidade fora do escopo da Sprint foi adicionada
-
-## Correcoes posteriores registradas na Sprint 003B.1
-
-- correcao do retorno ao primeiro tempo no fluxo realtime;
-- remocao de chamada duplicada ao retornar ao primeiro tempo no postmatch;
-- preservacao do estado `PRE_JOGO` na persistencia sem kickoff;
-- bloqueio da abertura do modal de sincronizacao quando o servico rejeita a transicao.
+- automatizar login QA e abertura da partida oficial;
+- automatizar o fluxo `Ativos -> jogador -> evento -> salvar`;
+- validar se o timestamp do evento deve ser automatico ou manual por regra de produto;
+- cobrir reabertura da coleta com ultimo comando reidratado;
+- adicionar smoke test para cleanup em `dry-run`;
+- testar navegacao de saida da coleta com alteracoes em andamento.
 
 ## Conclusao real da Sprint
 
-- implementacao tecnica: pronta para revisao humana;
-- validacao operacional autenticada: bloqueada ate definicao de conta, tenant e partida de QA;
-- proxima acao segura: executar a rodada 003B.1 com massa autorizada e entao liberar a Sprint 003C.
+- implementacao tecnica do cronometro: pronta para validacao automatizada;
+- validacao operacional autenticada: executada com sucesso na massa QA oficial;
+- proxima acao segura: seguir para a Sprint 003C automatizando os cenarios validados e cobrindo as ressalvas operacionais mapeadas.
