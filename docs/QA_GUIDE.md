@@ -183,3 +183,81 @@ Validacao desta sprint:
 - o cleanup nao foi executado nesta sprint, apenas validado em `dry-run`;
 - a massa criada contem um gol QA salvo em `00:15` para validar persistencia e reabertura;
 - o ambiente valida a infraestrutura de QA, nao conclui sozinho a auditoria funcional completa do cronometro.
+
+## Automacao E2E
+
+Estrutura criada na Sprint 003C:
+
+- `21Scoutpro/playwright.config.ts`
+- `21Scoutpro/.env.e2e.example`
+- `21Scoutpro/e2e/helpers/`
+- `21Scoutpro/e2e/specs/`
+- `21Scoutpro/e2e/README.md`
+
+Scripts do frontend:
+
+```powershell
+cmd /c npm run test:e2e
+cmd /c npm run test:e2e:headed
+cmd /c npm run test:e2e:ui
+cmd /c npm run test:e2e:report
+```
+
+Variaveis locais obrigatorias:
+
+- `E2E_BASE_URL`
+- `E2E_API_URL`
+- `E2E_QA_EMAIL`
+- `E2E_QA_PASSWORD`
+
+Variaveis opcionais:
+
+- `E2E_QA_MATCH_OPPONENT`
+- `E2E_QA_MATCH_COMPETITION`
+- `E2E_QA_PLAYER_NAME`
+
+Convencoes da suite:
+
+- execucao serial (`workers: 1`) para evitar concorrencia sobre a massa QA oficial;
+- `trace` em primeira repeticao;
+- screenshot em falha;
+- video retido em falha;
+- relatorio HTML em `21Scoutpro/playwright-report/`.
+
+Instalacao local:
+
+```powershell
+cd 21Scoutpro
+cmd /c npm install
+cmd /c npx playwright install chromium
+```
+
+Modo de execucao segura:
+
+1. subir backend local com acesso ao banco online;
+2. subir frontend local;
+3. criar `21Scoutpro/.env.e2e` a partir de `.env.e2e.example`;
+4. preencher a senha QA fora do Git;
+5. rodar a suite desejada.
+
+Regras de seguranca da automacao:
+
+- nao versionar `21Scoutpro/.env.e2e`;
+- nao imprimir senha em log;
+- nao trocar autenticacao por workaround local;
+- nao executar cleanup real na Sprint 003C;
+- usar somente a massa QA oficial.
+
+Cobertura prevista:
+
+- smoke autenticado de login e abertura da coleta;
+- controles do cronometro;
+- persistencia e reabertura;
+- cleanup QA em `--dry-run`.
+
+Limitacoes atuais da automacao:
+
+- a execucao autenticada depende da senha QA oficial disponivel localmente;
+- o frontend possui erros historicos de `type-check` fora do escopo desta sprint;
+- a suite foi compilada e listada com sucesso, mas a rodada autenticada completa nao pode ser concluida sem a credencial QA real;
+- o cleanup `--dry-run` precisa de acesso de rede ao banco online.
