@@ -261,3 +261,10 @@ Limitacoes atuais da automacao:
 - o frontend possui erros historicos de `type-check` fora do escopo desta sprint;
 - a suite foi compilada e listada com sucesso, mas a rodada autenticada completa nao pode ser concluida sem a credencial QA real;
 - o cleanup `--dry-run` precisa de acesso de rede ao banco online.
+
+Resultado da atualizacao 003C.1:
+
+- o arquivo `21Scoutpro/.env.e2e` permaneceu fora do Git e ignorado;
+- as quatro variaveis obrigatorias foram encontradas localmente;
+- o smoke autenticado falhou na etapa de login com mensagem `Credenciais invalidas`;
+- por isso o fechamento da Sprint 003C ficou `BLOQUEADO POR CREDENCIAL OU AMBIENTE` ate a senha QA valida ser provisionada fora do Git.

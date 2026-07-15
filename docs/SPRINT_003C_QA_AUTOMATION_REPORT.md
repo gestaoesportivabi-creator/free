@@ -4,6 +4,7 @@ Projeto: SCOUT 21 PRO
 Repositorio: `free`  
 Branch: `feature/cronometro-partida`  
 Data: `2026-07-15`
+Atualizacao 003C.1: `2026-07-15`
 
 ## Resumo executivo
 
@@ -133,11 +134,36 @@ Executado com sucesso:
 - `playwright test --list`
 - `cleanup:qa-environment -- --dry-run` com acesso ao banco online
 - `backend /health`
+- `cleanup-dry-run.spec.ts`
 
 Resultado do cleanup `--dry-run`:
 
 - registros QA localizados: `22`
 - nenhuma alteracao realizada
+
+## Execucao autenticada da Sprint 003C.1
+
+Resultado da rodada autenticada:
+
+- `qa-smoke.spec.ts --headed`: `BLOQUEADO POR CREDENCIAL OU AMBIENTE`
+- causa identificada: `credencial invalida`
+- evidencias:
+  - screenshot: `21Scoutpro/test-results/qa-smoke-QA-smoke-do-crono-8a3cc-o-simples-save-e-reabertura-chromium/test-failed-1.png`
+  - video: `21Scoutpro/test-results/qa-smoke-QA-smoke-do-crono-8a3cc-o-simples-save-e-reabertura-chromium/video.webm`
+  - contexto Playwright: `21Scoutpro/test-results/qa-smoke-QA-smoke-do-crono-8a3cc-o-simples-save-e-reabertura-chromium/error-context.md`
+
+Diagnostico objetivo:
+
+- o navegador permaneceu na tela de login;
+- a UI exibiu `Credenciais invalidas`;
+- o seletor `nav-dados-jogo` nao apareceu porque a autenticacao nao foi concluida;
+- nao houve evidencia de falha do cronometro, da coleta, da massa QA ou do helper de navegacao nesta rodada.
+
+Classificacao:
+
+- categoria: `ambiente / credencial`
+- severidade: `bloqueador operacional`
+- impacto na sprint: impede executar smoke, cronometro, persistencia e suite completa autenticada.
 
 ## Bugs e inconsistencias encontrados
 
@@ -174,25 +200,70 @@ Resultado do cleanup `--dry-run`:
   - infraestrutura concluida;
   - execucao autenticada real permanece pendente da credencial QA local.
 
+### QA-AUTO-004
+
+- Severidade: `BLOQUEADA POR CREDENCIAL OU AMBIENTE`
+- Titulo: `.env.e2e` local possui senha presente, mas nao valida para a conta QA
+- Evidencia:
+  - auditoria confirmou `E2E_QA_PASSWORD=set` sem expor o valor;
+  - o smoke autenticado retornou `Credenciais invalidas`;
+  - a navegacao nao saiu da tela de login.
+- Tratamento:
+  - nenhuma correcao de produto aplicada;
+  - necessario provisionar a senha QA oficial valida fora do Git antes de retomar a sprint.
+
 ## Resultado operacional desta rodada
 
-- login QA real: nao executado nesta maquina por ausencia da senha QA oficial local
-- abertura autenticada da coleta: nao executada nesta maquina pela mesma dependencia de credencial
-- cronometro autenticado ponta a ponta: infraestrutura pronta, execucao pendente
-- persistencia ponta a ponta: cenarios implementados, execucao pendente
+- login QA real: `REPROVADO POR CREDENCIAL INVALIDA`
+- abertura autenticada da coleta: `BLOQUEADA`
+- cronometro autenticado ponta a ponta: `BLOQUEADO`
+- persistencia ponta a ponta: `BLOQUEADA`
+- suite completa `npm run test:e2e`: `NAO EXECUTADA`
+- segunda rodada consecutiva: `NAO EXECUTADA`
+
+Classificacao dos testes nesta atualizacao:
+
+- aprovados:
+  - `cleanup-dry-run.spec.ts`
+- reprovados:
+  - nenhum teste de produto reprovado
+- instaveis:
+  - nenhum identificado, pois a rodada autenticada nao avancou
+- bloqueados:
+  - `qa-smoke.spec.ts`
+  - `clock-controls.spec.ts`
+  - `persistence.spec.ts`
+  - `npm run test:e2e`
 
 ## Credenciais
 
 - confirmadas como nao versionadas: `SIM`
 - `.env.e2e` real deve permanecer local e ignorado
 - nenhuma senha real foi gravada no repositorio
+- `git ls-files 21Scoutpro/.env.e2e`: vazio
+- `git check-ignore -v 21Scoutpro/.env.e2e`: confirmado
+- `git log --all -- 21Scoutpro/.env.e2e`: sem historico versionado
 
 ## Limites e riscos remanescentes
 
 - a massa QA oficial ainda e compartilhada, entao a suite permanece serial;
-- a senha QA precisa ser provisionada localmente antes da rodada autenticada;
+- a senha QA precisa ser provisionada localmente e validada antes da rodada autenticada;
 - o frontend acumula erros antigos de tipagem fora da Sprint 003C;
 - warnings antigos de build (env/chunk) continuam existindo.
+
+## Decisao final da Sprint 003C
+
+- status final: `BLOQUEADA POR CREDENCIAL OU AMBIENTE`
+- motivo:
+  - a infraestrutura E2E esta pronta;
+  - o cleanup em `--dry-run` esta aprovado;
+  - a execucao autenticada obrigatoria nao pode ser concluida porque a credencial local atual da conta QA foi rejeitada no login.
+
+Pendencia objetiva para retomada:
+
+1. provisionar uma senha QA valida em `21Scoutpro/.env.e2e`;
+2. rerodar `qa-smoke.spec.ts --headed`;
+3. se o smoke passar, executar `clock-controls.spec.ts`, `persistence.spec.ts` e duas rodadas consecutivas de `npm run test:e2e`.
 
 ## Backlog recomendado para a proxima sprint
 

@@ -26,3 +26,4 @@
 - a suite roda em modo serial para evitar concorrencia sobre a massa QA oficial
 - os testes assumem exclusivamente o ambiente QA autorizado
 - nao execute cleanup real durante a Sprint 003C
+- se o smoke parar na tela de login com `Credenciais invalidas`, trate como bloqueio de credencial local e nao como bug do cronometro
