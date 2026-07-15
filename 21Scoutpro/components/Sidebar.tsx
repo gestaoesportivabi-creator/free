@@ -268,13 +268,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                   LOCKED_MENU_TAB_IDS.has(item.id) ||
                   (category.id === 'fisiologia' && !fisiologiaUnlocked);
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
-                    title={item.label}
-                    className={`w-full flex justify-center p-2.5 rounded-xl transition-all duration-200 group ${
-                      isActive
-                        ? 'bg-[#00f0ff] text-black shadow-[0_0_10px_rgba(0,240,255,0.3)]'
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
+                  title={item.label}
+                  data-testid={item.id === 'table' ? 'nav-dados-jogo' : undefined}
+                  className={`w-full flex justify-center p-2.5 rounded-xl transition-all duration-200 group ${
+                    isActive
+                      ? 'bg-[#00f0ff] text-black shadow-[0_0_10px_rgba(0,240,255,0.3)]'
                         : 'text-zinc-500 hover:bg-zinc-900 hover:text-white'
                     }`}
                   >
@@ -327,6 +328,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                           <button
                             key={item.id}
                             onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
+                            data-testid={item.id === 'table' ? 'nav-dados-jogo' : undefined}
                             className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
                               isActive
                                 ? 'bg-[#00f0ff] text-black shadow-[0_0_10px_rgba(0,240,255,0.3)]'

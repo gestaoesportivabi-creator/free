@@ -207,6 +207,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                data-testid="login-email"
                 className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
                 placeholder="seu@email.com ou seu nome"
               />
@@ -219,6 +220,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                data-testid="login-password"
                 className="w-full px-4 py-3.5 bg-black/40 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#00f0ff] focus:bg-black/60 transition-all placeholder-zinc-400 font-light text-sm backdrop-blur-sm"
                 placeholder="••••••"
               />
@@ -263,6 +265,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome }) => {
             <button
               type="submit"
               disabled={isLoading}
+              data-testid="login-submit"
               className="w-full py-4 px-4 bg-white/90 hover:bg-[#00f0ff] text-black font-semibold text-sm rounded-xl transition-all hover:scale-[1.02] shadow-[0_0_30px_rgba(255,255,255,0.1)] mt-4 uppercase tracking-wider backdrop-blur-sm flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (

@@ -3124,6 +3124,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <button
                 type="button"
                 onClick={() => setShowLogsView(true)}
+                data-testid="logs-open"
                 className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] uppercase font-normal transition-colors"
               >
                 <List size={14} /> Logs
@@ -3132,6 +3133,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleEndCollection}
+                    data-testid="end-collection"
                     disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
                     className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
                       (isPostmatch && matchEvents.length >= 1) || isMatchEnded
@@ -3145,6 +3147,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveLater}
+                  data-testid="save-match"
                   className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
                 >
                   Guardar como incompleto
@@ -3185,12 +3188,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <button
                 type="button"
                 onClick={() => { setShowLogsView(false); setEditingEventId(null); setEditDraft(null); }}
+                data-testid="logs-close"
                 className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-zinc-600 bg-zinc-800 text-white hover:bg-zinc-700 text-sm font-bold uppercase transition-colors"
               >
                 <ArrowLeft size={18} /> Voltar
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-auto rounded-xl border-2 border-zinc-800 bg-zinc-950">
+            <div data-testid="event-logs-table" className="flex-1 min-h-0 overflow-auto rounded-xl border-2 border-zinc-800 bg-zinc-950">
               <table className="w-full text-left border-collapse">
                 <thead className="sticky top-0 bg-zinc-900 border-b-2 border-zinc-700 z-10">
                   <tr>
@@ -3210,13 +3214,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       const draft = isEditing ? editDraft : null;
                       const subtypeOpts = draft ? getSubtypeOptions(draft.type) : [];
                       return (
-                        <tr key={event.id} className="border-b border-zinc-800 hover:bg-zinc-900/50">
+                        <tr
+                          key={event.id}
+                          data-testid="event-log-row"
+                          data-event-id={event.id}
+                          data-event-period={event.period}
+                          data-event-type={event.type}
+                          data-event-time={formatTime(storedToAbsoluteSeconds(event.period, event.time))}
+                          className="border-b border-zinc-800 hover:bg-zinc-900/50"
+                        >
                           <td className="p-2">
                             {isEditing && draft ? (
                               <input
                                 type="text"
                                 value={editTimeInput}
                                 onChange={(e) => setEditTimeInput(e.target.value)}
+                                data-testid="edit-event-time"
                                 placeholder="MM:SS"
                                 className="w-16 px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm font-mono"
                               />
@@ -3386,6 +3399,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     setEditingEventId(null);
                                     setEditDraft(null);
                                   }}
+                                  data-testid="edit-event-confirm"
                                   className="px-2 py-1 rounded bg-green-600 hover:bg-green-500 text-white text-xs font-bold"
                                 >
                                   Confirmar
@@ -3393,6 +3407,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => { setEditingEventId(null); setEditDraft(null); }}
+                                  data-testid="edit-event-cancel"
                                   className="px-2 py-1 rounded bg-zinc-600 hover:bg-zinc-500 text-white text-xs font-bold"
                                 >
                                   Cancelar
@@ -3418,6 +3433,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     });
                                     setEditTimeInput(formatTime(storedToAbsoluteSeconds(event.period, event.time)));
                                   }}
+                                  data-testid="event-edit"
                                   className="px-2 py-1 rounded bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] hover:bg-[#00f0ff]/30 text-xs font-bold"
                                 >
                                   Editar
@@ -3430,6 +3446,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     recalcGoalsAndFoulsFromEvents(updated);
                                     if (editingEventId === event.id) { setEditingEventId(null); setEditDraft(null); }
                                   }}
+                                  data-testid="event-delete"
                                   className="px-2 py-1 rounded bg-red-600/80 hover:bg-red-500 border border-red-500/50 text-white text-xs font-bold"
                                   title="Excluir evento"
                                 >
@@ -3531,7 +3548,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <p className="text-yellow-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no recebedor do passe</p>
             )}
 
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
+            <div data-testid="player-selector" className="flex-1 min-h-0 overflow-y-auto space-y-1">
               {!isMatchStarted ? (
                 <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-lg p-2 text-center">
                   <p className="text-yellow-400 text-xs font-bold">Complete a escalação para iniciar</p>
@@ -3582,6 +3599,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       key={player.id}
                       type="button"
                       title={isGk ? `${labelName} — Goleiro` : labelName}
+                      data-testid={`player-button-${pid}`}
+                      data-player-name={labelName}
+                      data-player-jersey={String(displayNum)}
                       onClick={() => {
                         if (lockerOpen) {
                           if (isExpelled) return;
@@ -3651,6 +3671,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   ? 'bg-yellow-500/25 border-yellow-500 text-yellow-200'
                   : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
               }`}
+              data-testid="pass-receiver-toggle"
             >
               Exigir recebedor: {requirePassReceiver ? 'ON' : 'OFF'}
             </button>
@@ -3683,6 +3704,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   ? 'bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30'
                   : 'bg-yellow-500/20 border-yellow-500 text-yellow-400 hover:bg-yellow-500/30'
               }`}
+              data-testid="lineup-actives"
             >
               {lockerOpen ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
               Ativos
@@ -4082,23 +4104,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     <div className="p-4">
                       {actionFlow.action === 'pass' && actionFlow.step === 'details' && (
                         <div className="grid grid-cols-3 gap-3">
-                          <button onClick={() => { advanceActionFlowToPlayer('correct'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">Certo</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('wrong', { wrongPassTransition: false }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Errado</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('wrong', { wrongPassTransition: true }); }} className="px-4 py-3 bg-amber-500/20 border-2 border-amber-500 text-amber-400 font-bold uppercase text-xs rounded-lg hover:bg-amber-500/30 transition-colors">Transição</button>
+                          <button data-testid="event-result-pass-correct" onClick={() => { advanceActionFlowToPlayer('correct'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">Certo</button>
+                          <button data-testid="event-result-pass-wrong" onClick={() => { advanceActionFlowToPlayer('wrong', { wrongPassTransition: false }); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Errado</button>
+                          <button data-testid="event-result-pass-transition" onClick={() => { advanceActionFlowToPlayer('wrong', { wrongPassTransition: true }); }} className="px-4 py-3 bg-amber-500/20 border-2 border-amber-500 text-amber-400 font-bold uppercase text-xs rounded-lg hover:bg-amber-500/30 transition-colors">Transição</button>
                         </div>
                       )}
                       {actionFlow.action === 'shot' && (
                         <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => { advanceActionFlowToPlayer('inside'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">No gol</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('outside'); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Fora</button>
+                          <button data-testid="event-result-shot-inside" onClick={() => { advanceActionFlowToPlayer('inside'); }} className="px-4 py-3 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-xs rounded-lg hover:bg-green-500/30 transition-colors">No gol</button>
+                          <button data-testid="event-result-shot-outside" onClick={() => { advanceActionFlowToPlayer('outside'); }} className="px-4 py-3 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-xs rounded-lg hover:bg-red-500/30 transition-colors">Fora</button>
                           <button onClick={() => { advanceActionFlowToPlayer('post'); }} className="px-4 py-3 bg-yellow-500/20 border-2 border-yellow-500 text-yellow-400 font-bold uppercase text-xs rounded-lg hover:bg-yellow-500/30 transition-colors">Trave</button>
                           <button onClick={() => { advanceActionFlowToPlayer('blocked'); }} className="px-4 py-3 bg-orange-500/20 border-2 border-orange-500 text-orange-400 font-bold uppercase text-xs rounded-lg hover:bg-orange-500/30 transition-colors">Bloqueado</button>
                         </div>
                       )}
                       {actionFlow.action === 'foul' && (
                         <div className="grid grid-cols-2 gap-3">
-                          <button onClick={() => { advanceActionFlowToPlayer('for', { foulTeam: 'for' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-[#00f0ff]/20 border-[#00f0ff] text-[#00f0ff] hover:bg-[#00f0ff]/30">Nosso {foulsForCurrentPeriod > 0 && <span className="text-zinc-400">({foulsForCurrentPeriod})</span>}</button>
-                          <button onClick={() => { advanceActionFlowToPlayer('against', { foulTeam: 'against' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30">Adversário {foulsAgainstCurrentPeriod > 0 && <span className="text-zinc-400">({foulsAgainstCurrentPeriod})</span>}</button>
+                          <button data-testid="event-result-foul-for" onClick={() => { advanceActionFlowToPlayer('for', { foulTeam: 'for' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-[#00f0ff]/20 border-[#00f0ff] text-[#00f0ff] hover:bg-[#00f0ff]/30">Nosso {foulsForCurrentPeriod > 0 && <span className="text-zinc-400">({foulsForCurrentPeriod})</span>}</button>
+                          <button data-testid="event-result-foul-against" onClick={() => { advanceActionFlowToPlayer('against', { foulTeam: 'against' }); }} className="px-4 py-3 rounded-lg border-2 font-bold uppercase text-xs transition-colors bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30">Adversário {foulsAgainstCurrentPeriod > 0 && <span className="text-zinc-400">({foulsAgainstCurrentPeriod})</span>}</button>
                         </div>
                       )}
                       {actionFlow.action === 'tackle' && (
@@ -4544,6 +4566,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             if (shouldDisableRealtimeEventButtons) return;
                             handleSelectAction('foul');
                           }}
+                          data-testid="event-selector-foul"
                           disabled={shouldDisableRealtimeEventButtons}
                           className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                             shouldDisableRealtimeEventButtons
@@ -4573,7 +4596,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
 
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
-                      <div className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
+                      <div data-testid="match-clock-panel" className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
                         {isPostmatch ? (
                           <div className="w-full h-full min-h-[80px] py-3 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
                             <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo de coleta</label>
@@ -4614,12 +4637,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               >
                                 {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
                               </span>
-                              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">
+                              <span data-testid="clock-state" className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">
                                 {getClockStateLabel(clockSnapshot.state)}
                               </span>
                             </div>
                             <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-4 flex flex-col items-center justify-center gap-2">
-                              <div className="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight tabular-nums">
+                              <div data-testid="clock-time" className="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight tabular-nums">
                                 {formatTime(matchTime)}
                               </div>
                               {clockPrimaryAction ? (
@@ -4627,6 +4650,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   type="button"
                                   onClick={clockPrimaryAction.onClick}
                                   disabled={clockPrimaryAction.disabled}
+                                  data-testid={
+                                    clockSnapshot.state === 'PRE_JOGO'
+                                      ? 'clock-start'
+                                      : clockSnapshot.state === 'PAUSADO'
+                                        ? 'clock-continue'
+                                        : clockSnapshot.state === 'INTERVALO'
+                                          ? 'clock-start-second-half'
+                                          : 'clock-pause'
+                                  }
                                   className={`w-full min-h-[56px] px-3 py-3 rounded-lg border-2 font-black uppercase text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
                                 >
                                   {clockPrimaryAction.label}
@@ -4640,6 +4672,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 type="button"
                                 onClick={openClockSyncModal}
                                 disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
+                                data-testid="clock-sync"
                                 className={`w-full px-3 py-2 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
                                   clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
                                     ? 'border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed'
@@ -4662,6 +4695,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             {canEndTime && !isMatchEnded && (
                               <button
                                 onClick={handleEndTime}
+                                data-testid="clock-end-period"
                                 className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
                               >
                                 Encerrar Tempo
@@ -4671,6 +4705,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={handleEndFirstHalfCollection}
+                                data-testid="clock-end-first-half"
                                 className="w-full px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/70 text-amber-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
                               >
                                 Encerrar coleta do 1º tempo
@@ -4680,6 +4715,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={handleReturnToFirstHalfCollection}
+                                data-testid="clock-return-first-half"
                                 className="w-full px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/70 text-sky-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
                               >
                                 Voltar ao 1º tempo
@@ -4695,6 +4731,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <>
                             <button
                               onClick={() => handleSelectAction('pass')}
+                              data-testid="event-selector-pass"
                               disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 shouldDisableRealtimeEventButtons
@@ -4710,6 +4747,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('shot')}
+                              data-testid="event-selector-shot"
                               disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 shouldDisableRealtimeEventButtons
@@ -5323,7 +5361,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         )}
 
         {showClockSyncModal && !isPostmatch && (
-          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
+          <div data-testid="clock-sync-dialog" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
             <div className="w-full max-w-md rounded-2xl border-2 border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
               <div className="border-b border-zinc-800 px-5 py-4">
                 <p className="text-white text-sm font-black uppercase">Sincronizar cronÃ´metro</p>
@@ -5357,6 +5395,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         setSyncMinuteInput(e.target.value.replace(/\D/g, ''));
                         setSyncValidationError(null);
                       }}
+                      data-testid="clock-sync-minute"
                       className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-base font-mono text-white focus:border-[#00f0ff] focus:outline-none"
                     />
                   </label>
@@ -5370,12 +5409,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         setSyncSecondInput(e.target.value.replace(/\D/g, ''));
                         setSyncValidationError(null);
                       }}
+                      data-testid="clock-sync-second"
                       className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-base font-mono text-white focus:border-[#00f0ff] focus:outline-none"
                     />
                   </label>
                 </div>
                 {syncValidationError && (
-                  <div className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
+                  <div data-testid="clock-sync-error" className="rounded-lg border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
                     {syncValidationError}
                   </div>
                 )}
@@ -5384,6 +5424,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <button
                   type="button"
                   onClick={closeClockSyncModal}
+                  data-testid="clock-sync-cancel"
                   className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-xs font-bold uppercase hover:bg-zinc-700 transition-colors"
                 >
                   Cancelar
@@ -5391,6 +5432,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <button
                   type="button"
                   onClick={handleConfirmClockSync}
+                  data-testid="clock-sync-confirm"
                   className="px-4 py-2 rounded-lg border border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff] text-xs font-black uppercase hover:bg-[#00f0ff]/25 transition-colors"
                 >
                   Confirmar sincronizaÃ§Ã£o
