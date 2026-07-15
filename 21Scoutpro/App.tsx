@@ -37,6 +37,7 @@ import { AthletePseForm } from './components/athlete/AthletePseForm';
 import { AthletePsrForm } from './components/athlete/AthletePsrForm';
 import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
+import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -1562,14 +1563,9 @@ export default function App() {
     );
   }
 
-  // Tempo real isolado/desativado na UI principal.
+  // Tempo real dedicado para a coleta autenticada.
   if (window.location.pathname === '/scout-realtime') {
-    window.history.replaceState({}, '', '/dashboard');
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-zinc-400">Redirecionando...</p>
-      </div>
-    );
+    return <RealtimeScoutPage />;
   }
 
   // Blog público (sem exigir login)

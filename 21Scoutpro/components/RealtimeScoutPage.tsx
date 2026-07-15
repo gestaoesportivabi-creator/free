@@ -107,6 +107,15 @@ export const RealtimeScoutPage: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  const exitRealtimeScout = () => {
+    localStorage.removeItem('realtimeScoutData');
+    if (window.opener && !window.opener.closed) {
+      window.close();
+      return;
+    }
+    window.location.assign('/dashboard');
+  };
+
   const handleSave = async (
     savedMatch: MatchRecord,
     options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
@@ -123,13 +132,12 @@ export const RealtimeScoutPage: React.FC = () => {
         setMatch((prev) => (prev ? { ...prev, ...saved, id: saved.id } : saved));
       }
       if (saved && !isAutosave) {
-        localStorage.removeItem('realtimeScoutData');
         alert(
           saveAsIncomplete
             ? 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.'
             : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
         );
-        window.close();
+        exitRealtimeScout();
       } else if (!saved && !isAutosave) {
         alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
       }
@@ -144,9 +152,7 @@ export const RealtimeScoutPage: React.FC = () => {
   };
 
   const handleClose = () => {
-    // Limpar dados e fechar aba
-    localStorage.removeItem('realtimeScoutData');
-    window.close();
+    exitRealtimeScout();
   };
 
   if (isLoading) {
@@ -167,7 +173,7 @@ export const RealtimeScoutPage: React.FC = () => {
           <div className="text-red-400 text-xl font-black uppercase mb-4">Erro</div>
           <div className="text-zinc-400 text-sm mb-6">{error || 'Dados da partida não encontrados'}</div>
           <button
-            onClick={() => window.close()}
+            onClick={exitRealtimeScout}
             className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-sm rounded-xl transition-colors"
           >
             Fechar

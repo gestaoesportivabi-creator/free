@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sheet, Calendar, ArrowLeft } from 'lucide-react';
-export type CollectionType = 'postmatch';
+export type CollectionType = 'realtime' | 'postmatch';
 
 interface MatchContext {
   date: string;
@@ -73,7 +73,24 @@ export const CollectionTypeSelector: React.FC<CollectionTypeSelectorProps> = ({
         <div className="grid grid-cols-1 gap-4">
           <button
             type="button"
+            onClick={() => onSelect('realtime')}
+            data-testid="scouting-open-realtime"
+            className="flex items-center gap-4 p-6 bg-zinc-950 border-2 border-zinc-800 rounded-xl hover:border-[#00f0ff]/50 transition-colors text-left group"
+          >
+            <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-[#00f0ff]/20 border-2 border-[#00f0ff]/50 flex items-center justify-center group-hover:bg-[#00f0ff]/30">
+              <Calendar className="text-[#00f0ff]" size={28} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-white font-black text-lg uppercase tracking-tight">Abrir Scout em Tempo Real</div>
+              <div className="text-zinc-500 text-sm mt-1">
+                Iniciar ou retomar a coleta com cronometro operacional, pausa, retomada e sincronizacao.
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
             onClick={() => onSelect('postmatch')}
+            data-testid="scouting-open"
             className="flex items-center gap-4 p-6 bg-zinc-950 border-2 border-zinc-800 rounded-xl hover:border-[#00f0ff]/50 transition-colors text-left group"
           >
             <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-[#00f0ff]/20 border-2 border-[#00f0ff]/50 flex items-center justify-center group-hover:bg-[#00f0ff]/30">

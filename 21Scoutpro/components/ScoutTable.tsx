@@ -1966,6 +1966,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         setEndDate(toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     };
 
+    const openRealtimeScout = (realtimeScoutData: {
+        matchId?: string;
+        date: string;
+        opponent: string;
+        competition?: string;
+        players: Player[];
+        teams: Team[];
+        matchType: MatchType;
+        extraTimeMinutes: number;
+        selectedPlayerIds?: string[];
+    }) => {
+        localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
+        window.location.assign('/scout-realtime');
+    };
+
     const handleMatchClick = (item: CalendarMatchItem) => {
         setCollectionType(null);
         setShowPostMatchSheet(false);
@@ -2226,7 +2241,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 className="bg-black rounded-2xl border-2 border-zinc-900 p-4 text-left hover:border-[#00f0ff]/50 hover:bg-zinc-950 transition-all shadow-lg relative"
                             >
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
+                                    <span
+                                        data-testid="collection-status"
+                                        data-match-status={getMatchStatus(item, scheduledBaseCounts)}
+                                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
                                         (() => {
                                             const status = getMatchStatus(item, scheduledBaseCounts);
                                             if (status === 'disponivel') return 'bg-green-500/20 text-green-400 border border-green-500/50';
@@ -2234,7 +2252,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             if (status === 'finalizado') return 'bg-red-500/20 text-red-400 border border-red-500/50';
                                             return 'bg-zinc-500/20 text-zinc-400 border border-zinc-500/50';
                                         })()
-                                    }`}>
+                                    }`}
+                                    >
                                         {(() => {
                                             const status = getMatchStatus(item, scheduledBaseCounts);
                                             if (status === 'disponivel') return 'Disponível';
@@ -2284,6 +2303,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 <button
                                     type="button"
                                     onClick={() => handleMatchClick(item)}
+                                    data-testid="match-card"
+                                    data-match-id={String(item.id)}
+                                    data-match-opponent={item.opponent || ''}
+                                    data-match-type={item.type}
                                     className="w-full text-left cursor-pointer"
                                 >
                                     <p className="text-white font-bold text-sm truncate">{item.opponent || '-'}</p>
@@ -2338,13 +2361,19 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 opponent: selectedMatch.opponent || '',
                                 competition: selectedMatch.competition,
                             }}
-                            onSelect={() => setShowPostMatchSheet(true)}
+                            onSelect={(type: CollectionType) => {
+                                if (type === 'realtime') {
+                                    setShowRealtimePrepForSavedMatch(true);
+                                    return;
+                                }
+                                setShowPostMatchSheet(true);
+                            }}
                             onBack={handleBackToCalendar}
                         />
                     )}
 
                     {/* Preparação tempo real — partida salva (não executada): seleção de atletas antes de abrir a nova aba */}
-                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && false && (
+                    {!isScheduledMatch() && selectedMatch && isMatchNotExecuted(selectedMatch) && showRealtimePrepForSavedMatch && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2405,6 +2434,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             });
                                             setSelectedPlayersForMatch(newSet);
                                         }}
+                                        data-testid="prep-select-all"
                                         className="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-zinc-700 text-[#00f0ff] hover:bg-zinc-600 transition-colors"
                                     >
                                         Selecionar todos
@@ -2427,7 +2457,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} data-testid={`prep-athlete-${id}`} data-player-name={nickname || player.name} data-player-jersey={String(player.jerseyNumber ?? '')} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
                                                     {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
@@ -2478,11 +2508,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             extraTimeMinutes: selectedExtraTimeMinutes ?? 5,
                                             selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                         };
-                                        localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                        // Tempo real isolado no painel: segue para pós-jogo.
-                                        setShowPostMatchSheet(true);
+                                        openRealtimeScout(realtimeScoutData);
                                         setShowRealtimePrepForSavedMatch(false);
                                     }}
+                                    data-testid="prep-start-scout"
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className="flex-1 px-6 py-4 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-sm rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
                                 >
@@ -2501,7 +2530,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                     )}
 
                     {/* Interface de Preparação para Partida Programada — tempo real */}
-                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && false && (
+                    {isScheduledMatch() && selectedScheduledMatch && collectionType === 'realtime' && !showPostMatchSheet && (
                         <div className="space-y-6 animate-fade-in pb-12">
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
@@ -2581,7 +2610,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} data-testid={`prep-athlete-${id}`} data-player-name={nickname || player.name} data-player-jersey={String(player.jerseyNumber ?? '')} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
                                                     {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
@@ -2665,6 +2694,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         if (!validateFutsalLineupSelection()) return;
                                         setShowStartScoutConfirmation(true);
                                     }}
+                                    data-testid="prep-open-confirm"
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] ${
                                         selectedPlayersForMatch.size === 0
@@ -2758,7 +2788,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         const borderClass = isSelected ? 'border border-emerald-400' : `border ${baseBorderClass}`;
                                         const nickname = (player.nickname && player.nickname.trim()) ? player.nickname.trim() : '';
                                         return (
-                                            <label key={player.id} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
+                                            <label key={player.id} data-testid={`prep-athlete-${id}`} data-player-name={nickname || player.name} data-player-jersey={String(player.jerseyNumber ?? '')} className={`flex flex-row items-stretch gap-1.5 p-1.5 rounded-lg border transition-colors bg-zinc-900/90 min-w-[200px] ${unavailable ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${borderClass}`}>
                                                 <input type="checkbox" checked={isSelected} disabled={unavailable} onChange={(e) => { if (unavailable) return; const newSet = new Set(selectedPlayersForMatch); if (e.target.checked) newSet.add(id); else newSet.delete(id); setSelectedPlayersForMatch(newSet); }} className="sr-only" />
                                                 <div className="flex-shrink-0 flex items-center">
                                                     {player.photoUrl ? <img src={player.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-700" aria-hidden /> : <div className="w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[#00f0ff] font-bold text-[10px]">{player.jerseyNumber}</div>}
@@ -2914,11 +2944,26 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     ? fromLineup
                                                     : [...new Set([...fromStats, ...fromLog])];
                                             setSelectedPlayersForMatch(new Set(ids));
+                                            if (m.status === 'em_andamento' && ids.length > 0) {
+                                                openRealtimeScout({
+                                                    matchId: m.id,
+                                                    date: m.date,
+                                                    opponent: m.opponent || '',
+                                                    competition: m.competition,
+                                                    players: players || [],
+                                                    teams: teams || [],
+                                                    matchType: selectedMatchType,
+                                                    extraTimeMinutes: selectedExtraTimeMinutes ?? 5,
+                                                    selectedPlayerIds: ids,
+                                                });
+                                                return;
+                                            }
                                             setShowPostMatchSheet(true);
                                         }}
+                                        data-testid="reopen-match"
                                         className="flex items-center gap-2 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
                                     >
-                                        <Edit2 size={16} /> Editar Dados
+                                        <Edit2 size={16} /> {selectedMatch.status === 'em_andamento' ? 'Retomar Coleta' : 'Editar Dados'}
                                     </button>
                                     <button
                                         type="button"
@@ -3180,11 +3225,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     extraTimeMinutes: preparationExtraTimeMinutes,
                                                     selectedPlayerIds: Array.from(selectedPlayersForMatch),
                                                 };
-                                                localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-                                                // Tempo real isolado no painel: segue para pós-jogo.
-                                                setShowPostMatchSheet(true);
+                                                openRealtimeScout(realtimeScoutData);
                                                 setShowStartScoutConfirmation(false);
                                             }}
+                                            data-testid="prep-confirm-start-scout"
                                             disabled={selectedPlayersForMatch.size === 0}
                                             className="flex-1 px-4 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(0,240,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                                         >
