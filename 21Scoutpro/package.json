@@ -8,7 +8,12 @@
     "prebuild": "node scripts/build-sitemap.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "push:blog-only": "node scripts/push-blog-only.mjs"
+    "push:blog-only": "node scripts/push-blog-only.mjs",
+    "type-check": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "googleapis": "^131.0.0",
@@ -19,9 +24,11 @@
     "recharts": "^2.12.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
+    "dotenv": "^17.4.2",
     "typescript": "^5.4.2",
     "vite": "^5.1.5"
   }

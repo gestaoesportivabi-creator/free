@@ -42,4 +42,7 @@ logs
 # Environment
 .env
 .env.local
+.env.e2e
 .env.*.local
+playwright-report
+test-results
