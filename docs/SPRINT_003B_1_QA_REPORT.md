@@ -34,6 +34,28 @@ Observacao:
 - sem credencial de QA validada e sem partida autorizada, a Sprint nao pode ser marcada como concluida;
 - nao houve tentativa de criar usuario, seed, migration, bypass de autenticacao ou uso de partida real.
 
+## Atualizacao da Sprint 003B.2
+
+- Data da revisao complementar: `2026-07-15`
+- Objetivo: destravar a massa de QA da validacao operacional
+- Resultado: `BLOQUEADA AGUARDANDO AUTORIZACAO PARA MASSA DE QA`
+
+Autorizacao recebida:
+- nenhuma autorizacao explicita registrada para alterar o banco conectado ao backend local;
+- portanto, nenhum seed, migration, criacao de usuario ou limpeza foi executado.
+
+Massa criada:
+- nenhuma
+
+Validacao de login nesta Sprint:
+- nenhuma nova tentativa autenticada foi executada;
+- o bloqueio anterior de `Credenciais invalidas` permanece valido ate existir usuario de QA oficialmente provisionado.
+
+Proxima acao:
+- obter autorizacao explicita e nomeada;
+- criar ou aprovar o pacote `QA SCOUT 21`;
+- repetir a validacao operacional da Sprint 003B.1.
+
 ## Pre-requisitos faltantes
 
 1. Usuario de QA autorizado, com credencial valida no ambiente conectado ao banco online.
@@ -41,6 +63,139 @@ Observacao:
 3. Partida ficticia ou autorizada para teste da coleta.
 4. Confirmacao de quais atletas podem aparecer nos registros.
 5. Procedimento de remocao ou descarte dos dados gerados.
+
+## Missao 01 — mapeamento tecnico
+
+### Mecanismo atual de autenticacao
+
+- endpoint principal de login staff: `POST /api/auth/login`
+- endpoints auxiliares:
+  - `POST /api/auth/register`
+  - `POST /api/auth/forgot-password`
+  - `POST /api/auth/reset-password`
+  - `POST /api/auth/magic-link`
+  - `POST /api/auth/magic-link/verify`
+  - `POST /api/auth/verify-email`
+- middleware de sessao: `backend/src/middleware/auth.middleware.ts`
+- middleware de tenant: `backend/src/middleware/tenant.middleware.ts`
+
+### Modelo de usuario e roles
+
+Models principais:
+- `Role`
+- `User`
+- `Tecnico`
+- `Clube`
+- `Equipe`
+- `Jogador`
+- `EquipesJogadores`
+- `Jogo`
+- `EmailAuthToken`
+
+Roles encontradas no codigo:
+- `ADMINISTRADOR`
+- `ESSENCIAL`
+- `COMPETICAO`
+- `PERFORMANCE`
+- `ATLETA`
+
+Comportamento relevante:
+- no frontend, roles staff sao mapeadas para `TECNICO`, mas o backend preserva o `planName`;
+- `ESSENCIAL` cria e exige vinculo com `Tecnico`;
+- `COMPETICAO` cria e exige vinculo com `Clube`;
+- `ADMINISTRADOR` pode existir sem tenant;
+- `ATLETA` usa `jogadorId` e resolve tenant pelas equipes ativas do atleta.
+
+### Algoritmo de senha e sessao
+
+- hash de senha: `bcrypt.hash(..., 10)`
+- validacao: `bcrypt.compare(...)`
+- sessao: JWT assinado com `JWT_SECRET`
+- expiracao: `JWT_EXPIRES_IN`
+- `login` aceita email normalizado ou nome;
+- existe atalho `admin` -> `admin@admin.com` apenas no identificador de login.
+
+### Variaveis de ambiente relevantes
+
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `CORS_ORIGIN`
+- `FRONTEND_URL`
+- `MAX_REGISTERED_USERS`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `EMAIL_REPLY_TO`
+- `EMAIL_DISABLED`
+
+### Riscos dos scripts existentes
+
+| Script | Dados criados | Dados alterados | E idempotente? | Risco | Permitido? |
+| --- | --- | --- | --- | --- | --- |
+| `backend/scripts/seed-roles.ts` | `roles` base (`ADMINISTRADOR`, `ESSENCIAL`, `COMPETICAO`, `PERFORMANCE`) | atualiza roles existentes via `upsert` | sim | altera camada global de acesso; nao cria tenant QA | nao no banco online atual sem autorizacao |
+| `backend/scripts/seed-admin.ts` | `roles`, `users`, `tecnicos` | reativa/atualiza `admin@admin.com` e garante tecnico vinculado | parcial | credencial fixa, usuario global, impacto direto em autenticacao | nao no banco online atual sem autorizacao |
+| `backend/scripts/seed-demo-data.ts` | `equipes`, `jogadores`, `equipes_jogadores`, `competicoes`, `jogos`, `jogos_estatisticas_equipe`, `jogos_estatisticas_jogador`, `jogos_eventos`, `avaliacoes_fisicas`, `programacoes`, `programacoes_dias`, `campeonatos`, `campeonatos_jogos`, `metas_estatisticas`, `lesoes` | com `--clean` remove em lote praticamente todos os dados do tenant tecnico do admin | nao | alto volume, limpeza destrutiva por tenant, duplica dados em reruns | nao |
+| `backend/scripts/seed-chopinzinho-lnf.ts` | `equipes`, `jogadores`, `equipes_jogadores`, `competicoes`, `campeonatos`, `youtube_canais`, `jogos`, `jogos_estatisticas_equipe`, `jogos_estatisticas_jogador`, `campeonatos_jogos`, `adversarios`, `adversario_videos` | atualiza registros existentes de um tenant real/especifico por IDs fixos | parcial | usa `DANIEL_USER_ID` e `DANIEL_TECNICO_ID`; mistura dados reais/operacionais | nao |
+
+Observacoes:
+- `seed-roles.ts` e `seed-chopinzinho-lnf.ts` existem no repositorio, mas nao possuem alias no `backend/package.json`;
+- `seed-demo-data.ts` depende de existir `admin@admin.com` com tecnico associado;
+- `seed-admin.ts` imprime credenciais no console, o que por si so ja o torna inadequado para uma rodada de QA online sem controle.
+
+## Missao 02 — pacote minimo recomendado de QA
+
+Tenant recomendado:
+- `QA SCOUT 21`
+
+Clube recomendado:
+- `QA Futsal Clube`
+
+Equipe recomendada:
+- `QA Principal`
+
+Usuario recomendado:
+- `qa.scout21@dominio-autorizado`
+- role recomendada: `ESSENCIAL`
+
+Atletas recomendados:
+- `QA Atleta 01`
+- `QA Atleta 02`
+- `QA Atleta 03`
+- `QA Atleta 04`
+- `QA Atleta 05`
+- `QA Atleta 06`
+
+Partida recomendada:
+- `QA Cronometro 003B`
+- adversario: `QA Adversario`
+
+## Missao 03 e 04 — solucao recomendada apos autorizacao
+
+Solucao tecnica recomendada:
+- criar `backend/scripts/seed-qa-clock.ts`
+- adicionar comando `npm run seed:qa-clock`
+- exigir `ALLOW_QA_SEED=true`
+- implementar busca por registros existentes antes de criar novos
+- prefixar todos os registros com `QA`
+
+Limpeza recomendada:
+- criar `backend/scripts/cleanup-qa-clock.ts`
+- adicionar comando `npm run cleanup:qa-clock`
+- exigir `ALLOW_QA_CLEANUP=true`
+- remover somente registros do pacote QA
+
+Dry-run recomendado:
+- `npm run seed:qa-clock -- --dry-run`
+
+## Missao 05 — validacao de acesso
+
+Status:
+- nao executada
+
+Motivo:
+- nao existe usuario funcional de QA provisionado com autorizacao explicita;
+- sem isso, a autenticacao e a abertura da coleta continuam bloqueadas por regra da Sprint 003B.2.
 
 ## Revisao do diff da Sprint 003B
 
@@ -165,3 +320,6 @@ Conclusoes da revisao:
 Condicao para liberar:
 - repetir a rodada autenticada completa com conta, tenant e partida de QA explicitamente autorizados;
 - reexecutar os 18 cenarios com evidencia de UI, console e Network.
+
+Decisao atualizada da Sprint 003B.2:
+- `BLOQUEADA AGUARDANDO AUTORIZACAO PARA MASSA DE QA`
