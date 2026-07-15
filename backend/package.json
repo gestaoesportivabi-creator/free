@@ -12,6 +12,8 @@
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
     "seed:chopinzinho": "tsx scripts/seed-chopinzinho-lnf.ts",
+    "seed:qa-environment": "tsx scripts/seed-qa-environment.ts",
+    "cleanup:qa-environment": "tsx scripts/cleanup-qa-environment.ts",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
     "postinstall": "prisma generate"
