@@ -2306,6 +2306,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     data-testid="match-card"
                                     data-match-id={String(item.id)}
                                     data-match-opponent={item.opponent || ''}
+                                    data-match-competition={item.competition || ''}
                                     data-match-type={item.type}
                                     className="w-full text-left cursor-pointer"
                                 >

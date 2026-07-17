@@ -324,7 +324,7 @@ export const playersApi = {
  */
 export const matchesApi = {
   getAll: () => get<MatchRecord>(API_RESOURCES.matches),
-  getById: (id: string) => get<MatchRecord>(API_RESOURCES.matches, id).then(arr => arr[0] || null),
+  getById: (id: string) => getOne<MatchRecord>(API_RESOURCES.matches, id),
   create: (match: MatchRecord) => post<MatchRecord>(API_RESOURCES.matches, match),
   update: (id: string, match: Partial<MatchRecord>) => put<MatchRecord>(API_RESOURCES.matches, id, match),
   delete: (id: string) => del(API_RESOURCES.matches, id),
