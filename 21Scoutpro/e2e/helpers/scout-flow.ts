@@ -24,6 +24,88 @@ async function waitForRealtimeScout(page: Page): Promise<void> {
   await expect(page.getByTestId('match-clock-panel')).toBeVisible();
 }
 
+async function dismissNewsletterModal(page: Page): Promise<void> {
+  const newsletterDialog = page.getByRole('dialog', { name: /Receba insights de futsal que viram resultado/i });
+  if (!(await newsletterDialog.isVisible().catch(() => false))) {
+    return;
+  }
+
+  const closeButton = newsletterDialog.getByRole('button', { name: /^Fechar$/i }).first();
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click({ force: true });
+    await newsletterDialog.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+  }
+}
+
+async function resolveLineupConfirmButton(page: Page) {
+  const byTestId = page.getByTestId('lineup-confirm-start');
+  if (await byTestId.isVisible().catch(() => false)) {
+    return byTestId;
+  }
+  return page.getByRole('button', { name: /Confirmar Escalação e Iniciar Partida/i });
+}
+
+async function resolveLineupPlayerOptions(page: Page) {
+  const byTestId = page.locator('[data-testid^="lineup-player-option-"]');
+  if ((await byTestId.count()) > 0) {
+    return byTestId;
+  }
+  return page.locator('button').filter({ hasText: /QA ATLETA/i });
+}
+
+async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
+  const confirm = await resolveLineupConfirmButton(page);
+  if (!(await confirm.waitFor({ state: 'visible', timeout: 250 }).then(() => true).catch(() => false))) {
+    return false;
+  }
+
+  const options = await resolveLineupPlayerOptions(page);
+  let selected = await page.locator('text=Jogadores em Quadra (').textContent().catch(() => null);
+
+  if (!selected?.includes('(5/5)')) {
+    for (let index = 0; index < 5; index += 1) {
+      const nextOption = options.first();
+      await expect(nextOption).toBeVisible();
+      await nextOption.click();
+      selected = await page.locator('text=Jogadores em Quadra (').textContent().catch(() => null);
+      if (selected?.includes('(5/5)')) {
+        break;
+      }
+    }
+  }
+
+  const ballUs = page.getByTestId('lineup-ball-us');
+  if (await ballUs.isVisible().catch(() => false)) {
+    await ballUs.click();
+  } else {
+    await page.getByRole('button', { name: /Nossa Equipe/i }).click();
+  }
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await waitForRealtimeScout(page);
+  return true;
+}
+
+async function settleRealtimeEntry(page: Page): Promise<void> {
+  await page.waitForURL(/\/scout-realtime$/, { timeout: 20_000 });
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 12_000) {
+    if (await handleRealtimeLineupModal(page)) {
+      return;
+    }
+
+    const clockPanel = page.getByTestId('match-clock-panel');
+    if (await clockPanel.isVisible().catch(() => false)) {
+      return;
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  await expect(page.getByTestId('match-clock-panel')).toBeVisible();
+}
+
 async function ensureAtLeastFivePreparedPlayers(page: Page): Promise<void> {
   const cards = page.locator('[data-testid^="prep-athlete-"]');
   const total = await cards.count();
@@ -63,12 +145,14 @@ export async function abrirDadosDoJogo(page: Page): Promise<void> {
 }
 
 export async function abrirPartidaQa(page: Page, preferredKind: QaMatchKind = 'any'): Promise<void> {
-  const base = page.locator(`[data-testid="match-card"][data-match-opponent="${qaEnv.matchOpponent}"]`);
+  const base = page.locator(
+    `[data-testid="match-card"][data-match-opponent="${qaEnv.matchOpponent}"][data-match-competition="${qaEnv.matchCompetition}"]`
+  );
   const locator =
     preferredKind === 'any'
       ? base.first()
       : page.locator(
-          `[data-testid="match-card"][data-match-opponent="${qaEnv.matchOpponent}"][data-match-type="${preferredKind}"]`
+          `[data-testid="match-card"][data-match-opponent="${qaEnv.matchOpponent}"][data-match-competition="${qaEnv.matchCompetition}"][data-match-type="${preferredKind}"]`
         ).first();
 
   if (preferredKind !== 'any' && (await locator.count()) === 0) {
@@ -84,12 +168,36 @@ export async function abrirPartidaQa(page: Page, preferredKind: QaMatchKind = 'a
 export async function iniciarColeta(page: Page): Promise<void> {
   if (await isVisible(page, 'reopen-match')) {
     await page.getByTestId('reopen-match').click();
-    await waitForRealtimeScout(page);
+    const openedRealtime = await page
+      .waitForURL(/\/scout-realtime$/, { timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (openedRealtime) {
+      await settleRealtimeEntry(page);
+      return;
+    }
+
+    const openedPostmatchSheet = await page
+      .getByTestId('collection-status')
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (openedPostmatchSheet) {
+      return;
+    }
+
     return;
   }
 
   if (await isVisible(page, 'scouting-open-realtime')) {
     await page.getByTestId('scouting-open-realtime').click();
+  }
+
+  await settleRealtimeEntry(page);
+  if (await page.getByTestId('match-clock-panel').isVisible().catch(() => false)) {
+    return;
   }
 
   await ensureAtLeastFivePreparedPlayers(page);
@@ -112,13 +220,46 @@ export async function iniciarColeta(page: Page): Promise<void> {
 }
 
 export async function selecionarAtletaQa(page: Page, playerName = qaEnv.playerName): Promise<void> {
+  const ensureEnabledPlayers = async () => {
+    const enabledPlayers = page.locator('[data-testid^="player-button-"]:not([disabled])');
+    if ((await enabledPlayers.count()) > 0) {
+      return enabledPlayers;
+    }
+
+    const activesToggle = page.getByTestId('lineup-actives');
+    if (!(await activesToggle.isVisible().catch(() => false))) {
+      return enabledPlayers;
+    }
+
+    await activesToggle.click();
+    await page.waitForTimeout(150);
+    await activesToggle.click();
+    await page.waitForTimeout(150);
+
+    if ((await enabledPlayers.count()) > 0) {
+      return enabledPlayers;
+    }
+
+    await activesToggle.click();
+    const allPlayers = page.locator('[data-testid^="player-button-"]');
+    const selectableCount = await allPlayers.count();
+    for (let index = 0; index < Math.min(5, selectableCount); index += 1) {
+      await allPlayers.nth(index).click();
+    }
+    await activesToggle.click();
+    await page.waitForTimeout(150);
+
+    return enabledPlayers;
+  };
+
+  await ensureEnabledPlayers();
   const preferred = page.locator(`[data-testid^="player-button-"][data-player-name="${playerName}"]`).first();
-  if ((await preferred.count()) > 0) {
+  if ((await preferred.count()) > 0 && !(await preferred.isDisabled().catch(() => true))) {
     await preferred.click();
     return;
   }
 
-  const firstPlayer = page.locator('[data-testid^="player-button-"]').first();
+  const firstPlayer = page.locator('[data-testid^="player-button-"]:not([disabled])').first();
   await expect(firstPlayer).toBeVisible();
   await firstPlayer.click();
 }
@@ -177,11 +318,18 @@ export async function reabrirPartida(page: Page): Promise<void> {
 }
 
 export async function abrirLogs(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  if (await page.getByTestId('event-logs-table').isVisible().catch(() => false)) {
+    return;
+  }
   await page.getByTestId('logs-open').click();
   await expect(page.getByTestId('event-logs-table')).toBeVisible();
 }
 
 export async function fecharLogs(page: Page): Promise<void> {
+  if (!(await page.getByTestId('event-logs-table').isVisible().catch(() => false))) {
+    return;
+  }
   await page.getByTestId('logs-close').click();
 }
 
@@ -197,12 +345,17 @@ export async function obterUltimoEvento(page: Page): Promise<LoggedEventSnapshot
   };
 }
 
+export async function contarEventosLog(page: Page): Promise<number> {
+  return page.getByTestId('event-log-row').count();
+}
+
 export async function sincronizarClock(page: Page, minute: number, second: number): Promise<void> {
+  await dismissNewsletterModal(page);
   await page.getByTestId('clock-sync').click();
   await expect(page.getByTestId('clock-sync-dialog')).toBeVisible();
   await page.getByTestId('clock-sync-minute').fill(String(minute));
   await page.getByTestId('clock-sync-second').fill(String(second).padStart(2, '0'));
-  await page.getByTestId('clock-sync-confirm').click();
+  await page.getByTestId('clock-sync-confirm').click({ force: true });
   await expect(page.getByTestId('clock-sync-dialog')).not.toBeVisible();
 }
 
@@ -211,19 +364,95 @@ export async function abrirColetaQaEmTempoReal(page: Page, preferredKind: QaMatc
   await abrirDadosDoJogo(page);
   await abrirPartidaQa(page, preferredKind);
   await iniciarColeta(page);
+
+  const clockStateVisible = await page
+    .getByTestId('clock-state')
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (clockStateVisible) {
+    return;
+  }
+
+  const collectionStatus = page.getByTestId('collection-status');
+  if (!(await collectionStatus.isVisible().catch(() => false))) {
+    return;
+  }
+
+  const statusText = (await collectionStatus.textContent()) || '';
+  if (!statusText.includes('POS-JOGO')) {
+    return;
+  }
+
+  await page.getByTestId('save-match').click();
+  await abrirDadosDoJogo(page);
+  await abrirPartidaQa(page, 'saved');
+  await iniciarColeta(page);
 }
 
 export async function ensureClockStarted(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
   const state = await page.getByTestId('clock-state').textContent();
   if (state?.includes('PRE-JOGO')) {
     await page.getByTestId('clock-start').click();
   } else if (state?.includes('PAUSADO')) {
     await page.getByTestId('clock-continue').click();
   } else if (state?.includes('INTERVALO')) {
-    await page.getByTestId('clock-start-second-half').click();
+    await iniciarSegundoTempo(page);
   }
 }
 
 export async function readClock(page: Page): Promise<string> {
   return (await page.getByTestId('clock-time').textContent())?.trim() || '00:00';
+}
+
+export async function garantirPosseCom(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  const button = page.getByRole('button', { name: /^Com posse$/i });
+  await expect(button).toBeVisible();
+  if (!(await button.isDisabled().catch(() => true))) {
+    await button.click();
+  }
+}
+
+export async function encerrarPrimeiroTempo(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  const endFirstHalfButton = page.getByTestId('clock-end-first-half');
+  await expect(endFirstHalfButton).toBeVisible();
+  await endFirstHalfButton.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('clock-state')).toHaveText('INTERVALO');
+}
+
+export async function iniciarSegundoTempo(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  const modalResume = page.getByRole('button', { name: /Retomar ap[oó]s o intervalo/i });
+  if (await modalResume.isVisible().catch(() => false)) {
+    await modalResume.click();
+  } else {
+    await page.getByTestId('clock-start-second-half').click();
+  }
+  await expect(page.getByTestId('clock-state')).toHaveText('SEGUNDO TEMPO');
+}
+
+export async function encerrarPartida(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  const endMatchButton = page.getByTestId('clock-end-match');
+  await expect(endMatchButton).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await endMatchButton.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('clock-state')).toHaveText('ENCERRADO');
+}
+
+export async function registrarGolQa(page: Page): Promise<void> {
+  await dismissNewsletterModal(page);
+  const goalButton = page.getByTestId('event-selector-goal');
+  await expect(goalButton).toBeVisible();
+  await goalButton.evaluate((button: HTMLButtonElement) => button.click());
+  await dismissNewsletterModal(page);
+  await page.getByTestId('goal-team-us').evaluate((button: HTMLButtonElement) => button.click());
+  await dismissNewsletterModal(page);
+  await page.getByRole('button', { name: /^Ataque$/ }).evaluate((button: HTMLButtonElement) => button.click());
+  await dismissNewsletterModal(page);
+  await page.getByTestId('goal-assist-none').evaluate((button: HTMLButtonElement) => button.click());
 }

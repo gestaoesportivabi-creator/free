@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
 import {
   abrirColetaQaEmTempoReal,
+  encerrarPartida,
+  encerrarPrimeiroTempo,
   ensureClockStarted,
+  iniciarSegundoTempo,
   readClock,
   registrarEvento,
   selecionarAtletaQa,
@@ -72,9 +75,26 @@ test.describe.serial('QA controles do cronometro', () => {
     await abrirColetaQaEmTempoReal(page, 'saved');
     await ensureClockStarted(page);
 
-    await page.getByTestId('clock-end-period').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('INTERVALO');
-    await page.getByTestId('clock-start-second-half').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('SEGUNDO TEMPO');
+    await encerrarPrimeiroTempo(page);
+    await expect(page.getByTestId('collection-status')).toContainText('Inicie o segundo tempo');
+    await iniciarSegundoTempo(page);
+    await expect(page.getByTestId('collection-status')).toContainText('Encerre a partida');
+  });
+
+  test('encerra a partida e libera a finalizacao', async ({ page }) => {
+    await abrirColetaQaEmTempoReal(page, 'saved');
+    await ensureClockStarted(page);
+
+    const state = (await page.getByTestId('clock-state').textContent()) || '';
+    if (state.includes('PRIMEIRO TEMPO')) {
+      await encerrarPrimeiroTempo(page);
+      await iniciarSegundoTempo(page);
+    } else if (state.includes('INTERVALO')) {
+      await iniciarSegundoTempo(page);
+    }
+
+    await encerrarPartida(page);
+    await expect(page.getByTestId('collection-status')).toContainText('Partida encerrada');
+    await expect(page.getByTestId('end-collection')).toBeEnabled();
   });
 });

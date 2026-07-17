@@ -20,6 +20,7 @@
 - controles principais do cronometro
 - persistencia e reabertura
 - cleanup QA em `--dry-run`
+- ciclo completo da partida com dez eventos, gol, encerramento e reabertura
 
 ## Observacoes
 
@@ -27,3 +28,6 @@
 - os testes assumem exclusivamente o ambiente QA autorizado
 - nao execute cleanup real durante a Sprint 003C
 - se o smoke parar na tela de login com `Credenciais invalidas`, trate como bloqueio de credencial local e nao como bug do cronometro
+- se a partida QA abrir diretamente em `POS-JOGO`, os helpers oficiais rebaixam a coleta para `em_andamento` via `Guardar como incompleto` antes de reabrir o realtime
+- os helpers tambem fecham o modal de newsletter quando ele tenta interceptar cliques da coleta
+- `cleanup-dry-run.spec.ts` exige conectividade autorizada com o banco QA online
