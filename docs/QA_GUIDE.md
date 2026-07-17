@@ -58,6 +58,12 @@ Senha:
 - sempre injetar por `QA_ENVIRONMENT_PASSWORD` no momento do seed;
 - a credencial usada na execucao desta sprint foi provisionada fora do repositorio.
 
+Padronizacao da credencial QA:
+- a partir da Sprint 003C.2, a redefinicao segura da senha QA pode ser feita por `QA_USER_EMAIL` e `QA_USER_PASSWORD`;
+- o comando oficial e `npm run qa:reset-password`;
+- a senha continua local, nao versionada e nunca deve ir para log.
+- a senha oficial da conta QA deve ser compartilhada exclusivamente por canal privado ou gerenciador de senhas.
+
 ## Convencoes
 
 - nenhum dado real pode ser reutilizado;
@@ -83,6 +89,7 @@ Nao foram encontrados arquivos dedicados de `builders`, `factories` ou `fixtures
 | `backend/scripts/helpers/qa-environment.ts` | Centraliza nomes, guards e data oficial do ambiente QA | Sim | Sim | Sim |
 | `backend/scripts/seed-qa-environment.ts` | Cria o ambiente oficial QA de forma idempotente | Sim | Sim | Sim |
 | `backend/scripts/cleanup-qa-environment.ts` | Remove somente o pacote QA oficial com dupla confirmacao | Sim | Sim | Sim |
+| `backend/scripts/reset-qa-password.ts` | Redefine somente `password_hash` do usuario QA oficial | Sim | Sim | Sim |
 
 ## Criacao
 
@@ -128,6 +135,34 @@ Resultado desta execucao:
 
 Idempotencia validada:
 - o `dry-run` apos a execucao retornou `total: 0`.
+
+## Recuperacao da credencial QA
+
+Quando o usuario QA ja existe, o seed QA nao atualiza `password_hash`; ele apenas cria o usuario quando necessario. Por isso, divergencias de senha devem ser tratadas pelo reset oficial, nao por rerun do seed.
+
+Comandos:
+
+```powershell
+$env:QA_USER_EMAIL='qa.scout21@qa.scout21.local'
+$env:QA_USER_PASSWORD='<senha-nao-versionada>'
+cmd /c npm run qa:reset-password
+```
+
+Dry-run opcional:
+
+```powershell
+$env:QA_USER_EMAIL='qa.scout21@qa.scout21.local'
+$env:QA_USER_PASSWORD='<senha-nao-versionada>'
+cmd /c npx tsx scripts/reset-qa-password.ts --dry-run
+```
+
+Garantias do reset:
+- valida o email QA oficial;
+- valida role, tecnico, clube e equipe QA antes de escrever;
+- usa `bcrypt`;
+- nao cria usuario novo;
+- nao altera outros registros;
+- e idempotente quando a senha ja estiver sincronizada.
 
 ## Limpeza
 
@@ -210,6 +245,11 @@ Variaveis locais obrigatorias:
 - `E2E_QA_EMAIL`
 - `E2E_QA_PASSWORD`
 
+Variaveis locais auxiliares para manutencao da conta QA:
+
+- `QA_USER_EMAIL`
+- `QA_USER_PASSWORD`
+
 Variaveis opcionais:
 
 - `E2E_QA_MATCH_OPPONENT`
@@ -240,6 +280,11 @@ Modo de execucao segura:
 4. preencher a senha QA fora do Git;
 5. rodar a suite desejada.
 
+Observacao operacional da Sprint 003C.2:
+
+- se a instancia local em `5173` estiver servindo bundle antigo sem os `data-testid` mais recentes, subir uma instancia nova do frontend em porta dedicada e apontar `E2E_BASE_URL` localmente para essa porta;
+- na execucao desta sprint foi usada uma instancia fresca em `http://127.0.0.1:4173`.
+
 Regras de seguranca da automacao:
 
 - nao versionar `21Scoutpro/.env.e2e`;
@@ -259,7 +304,7 @@ Limitacoes atuais da automacao:
 
 - a execucao autenticada depende da senha QA oficial disponivel localmente;
 - o frontend possui erros historicos de `type-check` fora do escopo desta sprint;
-- a suite foi compilada e listada com sucesso, mas a rodada autenticada completa nao pode ser concluida sem a credencial QA real;
+- a credencial QA foi recuperada e o login voltou a funcionar, mas a automacao ainda encontra falhas reais de persistencia/reabertura e encerramento de periodo;
 - o cleanup `--dry-run` precisa de acesso de rede ao banco online.
 
 Resultado da atualizacao 003C.1:
@@ -268,3 +313,35 @@ Resultado da atualizacao 003C.1:
 - as quatro variaveis obrigatorias foram encontradas localmente;
 - o smoke autenticado falhou na etapa de login com mensagem `Credenciais invalidas`;
 - por isso o fechamento da Sprint 003C ficou `BLOQUEADO POR CREDENCIAL OU AMBIENTE` ate a senha QA valida ser provisionada fora do Git.
+
+Resultado da atualizacao 003C.2:
+
+- a senha QA foi padronizada com reset seguro;
+- o login QA em contexto limpo foi aprovado;
+- `cleanup-dry-run.spec.ts` permaneceu aprovado;
+- quatro cenarios principais de `clock-controls.spec.ts` passaram;
+- permaneceram bugs reais em persistencia/reabertura e encerramento de periodo;
+- a segunda rodada completa mostrou flakiness adicional no modal de sincronizacao.
+
+Resultado da validacao complementar em `2026-07-16`:
+
+- a conta `qa.scout21@qa.scout21.local` foi redefinida novamente por `QA_USER_EMAIL` + `QA_USER_PASSWORD`, sem alterar tenant, role, clube, equipe, atletas ou partida;
+- o login em sessao limpa foi aprovado em `http://127.0.0.1:5173/login`;
+- o tenant `QA SCOUT 21` ficou visivel na UI;
+- a partida `QA CRONOMETRO 003B` permaneceu acessivel em `Dados do Jogo`;
+- o `qa-smoke.spec.ts --headed` autenticou com sucesso, mas continuou reprovado porque `event-log-row` nao apareceu apos o registro do evento;
+- `clock-controls.spec.ts` manteve aprovados os cenarios principais do cronometro, com falha remanescente em fluxo funcional;
+- `cleanup-dry-run.spec.ts` permaneceu seguro;
+- o `backend type-check` passou;
+- o `frontend build` passou quando executado fora das restricoes do sandbox.
+
+Resultado da Sprint 003D em `2026-07-16`:
+
+- o fluxo realtime passou a explicar explicitamente quando `Finalizar Coleta` depende de `ENCERRADO`;
+- o gol realtime passou a usar apenas o timestamp oficial do cronometro;
+- a reabertura voltou a carregar o snapshot salvo corretamente com `matchesApi.getById()` ajustado;
+- o helper E2E passou a recuperar a partida QA quando ela abrir em `POS-JOGO`, usando `Guardar como incompleto` antes de reabrir o realtime;
+- o helper E2E tambem fecha o modal de newsletter quando ele intercepta a coleta;
+- a rodada consolidada `qa-smoke + clock-controls + persistence + cleanup-dry-run + full-match-cycle` terminou com `10/10` aprovados em execucao serial;
+- o `cleanup-dry-run` continua exigindo acesso autorizado ao banco QA online;
+- `dist/index.html` e `public/sitemap.xml` seguem como artefatos gerados e nao devem entrar em commit sem justificativa formal.
