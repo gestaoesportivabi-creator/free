@@ -582,41 +582,41 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       case 'INTERVALO':
         return 'Inicie o segundo tempo para registrar eventos.';
       case 'SINCRONIZANDO':
-        return 'Conclua ou cancele a sincronizacao antes de registrar novos eventos.';
+        return 'Conclua ou cancele a sincronização antes de registrar novos eventos.';
       case 'ENCERRADO':
-        return 'A partida foi encerrada. Use o fluxo de retorno ja existente para editar.';
+        return 'A partida foi encerrada. Use o fluxo de retorno já existente para editar.';
       case 'PAUSADO':
         return 'Retome a partida para continuar registrando eventos.';
       default:
-        return 'O cronometro precisa estar em andamento para registrar eventos.';
+        return 'O cronômetro precisa estar em andamento para registrar eventos.';
     }
   }, [clockSnapshot.state]);
 
   const getCollectionStatusMessage = useCallback((): string => {
     if (isPostmatch) {
       return matchEvents.length >= 1
-        ? 'Coleta pronta para finalizacao.'
+        ? 'Coleta pronta para finalização.'
         : 'Registre pelo menos um evento para finalizar a coleta.';
     }
     switch (clockSnapshot.state) {
       case 'PRE_JOGO':
-        return 'Inicie a partida para liberar o registro e a finalizacao da coleta.';
+        return 'Inicie a partida para liberar o registro e o salvamento da coleta.';
       case 'PRIMEIRO_TEMPO':
         return 'Conclua o primeiro tempo antes de finalizar a coleta.';
       case 'INTERVALO':
         return 'Inicie o segundo tempo para continuar a coleta.';
       case 'SEGUNDO_TEMPO':
-        return 'Encerre a partida no cronometro para liberar a finalizacao.';
+        return 'Encerre a partida no cronômetro para liberar a finalização da coleta.';
       case 'PAUSADO':
         return currentPeriod === '2T'
           ? 'Retome ou encerre a partida para continuar.'
           : 'Retome a partida para continuar a coleta.';
       case 'SINCRONIZANDO':
-        return 'Conclua ou cancele a sincronizacao antes de finalizar.';
+        return 'Conclua ou cancele a sincronização antes de finalizar.';
       case 'ENCERRADO':
-        return 'Partida encerrada. A coleta ja pode ser finalizada.';
+        return 'Partida encerrada. A coleta está pronta para finalização.';
       default:
-        return 'Finalize a partida no cronometro para concluir a coleta.';
+        return 'Finalize a partida no cronômetro para concluir a coleta.';
     }
   }, [clockSnapshot.state, currentPeriod, isPostmatch, matchEvents.length]);
 
@@ -630,7 +630,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (isPostmatch) return;
     const result = iniciarSincronizacao();
     if (!result.ok) {
-      setTopRightNotice(result.error ?? 'Nao foi possivel abrir a sincronizacao do cronometro.');
+      setTopRightNotice(result.error ?? 'Não foi possível abrir a sincronização do cronômetro.');
       return;
     }
     setSyncMinuteInput(String(Math.floor(matchTime / 60)));
@@ -647,7 +647,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     const result = cancelarSincronizacao();
     if (!result.ok) {
-      setTopRightNotice(result.error ?? 'Nao foi possivel cancelar a sincronizacao.');
+      setTopRightNotice(result.error ?? 'Não foi possível cancelar a sincronização.');
       return;
     }
     setShowClockSyncModal(false);
@@ -658,14 +658,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const minuteIsValid = /^\d+$/.test(syncMinuteInput.trim());
     const secondIsValid = /^\d+$/.test(syncSecondInput.trim());
     if (!minuteIsValid || !secondIsValid) {
-      setSyncValidationError('Informe minuto e segundo usando apenas numeros inteiros.');
+      setSyncValidationError('Informe minuto e segundo usando apenas números inteiros.');
       return;
     }
     const minute = Number.parseInt(syncMinuteInput.trim(), 10);
     const second = Number.parseInt(syncSecondInput.trim(), 10);
     const result = confirmarSincronizacao(minute, second);
     if (!result.ok) {
-      setSyncValidationError(result.error ?? 'Nao foi possivel sincronizar o cronometro.');
+      setSyncValidationError(result.error ?? 'Não foi possível sincronizar o cronômetro.');
       return;
     }
     setShowClockSyncModal(false);
@@ -1410,12 +1410,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const handleEndMatchRealtime = () => {
     if (isPostmatch || currentPeriod !== '2T' || isMatchEnded) return;
-    if (!window.confirm('Encerrar a partida agora? O cronometro passara para ENCERRADO e a coleta podera ser finalizada.')) {
+    if (!window.confirm('Encerrar a partida agora? O cronômetro passará para ENCERRADO e a coleta poderá ser finalizada.')) {
       return;
     }
     const result = encerrarPartida();
     if (!result.ok) {
-      setTopRightNotice(result.error ?? 'Nao foi possivel encerrar a partida.');
+      setTopRightNotice(result.error ?? 'Não foi possível encerrar a partida.');
     }
   };
 
@@ -2069,7 +2069,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Confirmar escalação e iniciar partida
   const handleConfirmLineup = () => {
     if (lineupPlayers.length !== 5) {
-      alert('Por favor, selecione exatamente 5 jogadores para a escalação.');
+      alert('Por favor, selecione exatamente 5 atletas para a escalação.');
       return;
     }
 
@@ -2115,7 +2115,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Adicionar jogador à escalação
   const handleAddToLineup = (playerId: string) => {
     if (lineupPlayers.length >= 5) {
-      alert('Máximo de 5 jogadores em quadra. Remova um jogador primeiro.');
+      alert('Máximo de 5 atletas em quadra. Remova um atleta primeiro.');
       return;
     }
 
@@ -2127,7 +2127,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       });
       if (hasGoalkeeper) {
         alert(
-          'Já há um goleiro em quadra. No futsal, apenas um goleiro pode estar em campo por vez. Durante o jogo, um jogador de linha pode assumir a função (goleiro linha).'
+          'Já há um goleiro em quadra. No futsal, apenas um goleiro pode estar em campo por vez. Durante o jogo, um atleta de linha pode assumir a função (goleiro linha).'
         );
         return;
       }
@@ -2173,7 +2173,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     // Ações com fluxo próprio (GOL, PÊNALTI, TIRO LIVRE) — agora também no padrão jogador-primeiro
     if (action === 'goal' || action === 'penalty' || action === 'freeKick') {
       if (!hasSelectedPlayer && action !== 'goal') {
-        alert('Selecione um jogador primeiro.');
+        alert('Selecione um atleta primeiro.');
         return;
       }
       if (action === 'goal') applyPreActionClockBehavior('goal');
@@ -2213,7 +2213,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     if (!hasSelectedPlayer) {
-      alert('Selecione um jogador primeiro.');
+      alert('Selecione um atleta primeiro.');
       return;
     }
     applyPreActionClockBehavior(action as MatchEvent['type']);
@@ -2956,7 +2956,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       
       // activePlayers é derivado de lineupPlayers no useEffect, então já reflete 4 em quadra
       
-      alert(`⚠️ ${player?.name || 'Jogador'} foi expulso. Ajuste os Ativos quando quiser (máx. 5 em quadra).`);
+      alert(`⚠️ ${player?.name || 'Atleta'} foi expulso. Ajuste os atletas em quadra quando quiser (máx. 5 em quadra).`);
     }
     
     setSelectedAction(null);
@@ -3264,7 +3264,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 data-testid="logs-open"
                 className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] uppercase font-normal transition-colors"
               >
-                <List size={14} /> Logs
+                <List size={14} /> Eventos da partida
               </button>
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2">
@@ -3278,7 +3278,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
                     }`}
                   >
-                    Finalizar Coleta
+                    Finalizar coleta
                   </button>
                 </div>
                 <p
@@ -3289,7 +3289,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       : 'text-amber-200'
                   }`}
                 >
-                  Estado atual: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {getCollectionStatusMessage()}
+                  Estado: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {getCollectionStatusMessage()}
                 </p>
                 <button
                   type="button"
@@ -3297,7 +3297,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   data-testid="save-match"
                   className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
                 >
-                  Guardar como incompleto
+                  Salvar como incompleta
                 </button>
               </div>
             </div>
@@ -3331,7 +3331,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           /* Tela de Logs do jogo */
           <div className="flex-1 flex flex-col p-4 overflow-hidden min-h-0">
             <div className="flex items-center justify-between mb-4 shrink-0">
-              <h2 className="text-white font-bold uppercase text-lg">Logs do jogo</h2>
+              <h2 className="text-white font-bold uppercase text-lg">Eventos da partida</h2>
               <button
                 type="button"
                 onClick={() => { setShowLogsView(false); setEditingEventId(null); setEditDraft(null); }}
@@ -3346,7 +3346,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <thead className="sticky top-0 bg-zinc-900 border-b-2 border-zinc-700 z-10">
                   <tr>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Tempo</th>
-                    <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Jogador</th>
+                    <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Atleta</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Ação</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Subtipo / Resultado</th>
                     <th className="p-2 text-zinc-400 text-xs font-bold uppercase">Extra</th>
@@ -3650,12 +3650,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     : actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save'
                       ? 'Defesa — goleiro'
                       : actionFlow?.step === 'player' && !goalStep
-                        ? 'Ação — jogador'
+                        ? 'Ação — atleta'
                         : pendingPassEventId && requirePassReceiver
                           ? 'PASSE — recebedor'
                           : selectedPlayer
-                            ? `JOGADOR ${selectedPlayer.jerseyNumber ?? '?'}`
-                        : 'SELECIONAR JOGADOR'}
+                            ? `ATLETA ${selectedPlayer.jerseyNumber ?? '?'}`
+                        : 'SELECIONAR ATLETA'}
             </h3>
             {selectedPlayer && !goalStep && !actionFlow && !pendingPassEventId && (
               <p className="text-emerald-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
@@ -3664,7 +3664,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             )}
             {shouldHighlightPlayerPanel && (
               <p className="text-[#00f0ff] text-xs font-black uppercase text-center mb-2 shrink-0">
-                Selecione um jogador
+                Selecione um atleta
               </p>
             )}
             {goalStep === 'author' && !pendingGoalIsOpponent && (
@@ -3680,7 +3680,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               </>
             )}
             {actionFlow?.step === 'player' && !goalStep && (
-              <p className="text-[#00f0ff]/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no número do jogador</p>
+              <p className="text-[#00f0ff]/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no número do atleta</p>
             )}
             {actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save' && !goalStep && (
               <p className="text-purple-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no goleiro</p>
@@ -3712,7 +3712,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             return p ? (p.nickname?.trim() || p.name) : eid;
                           })
                           .join(', ')}
-                        . Use Ativos para marcar quem está em quadra (máx. 5).
+                        . Ajuste os atletas em quadra quando quiser (máx. 5).
                       </p>
                     </div>
                   )}
@@ -3797,7 +3797,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </>
               ) : (
                 <div className="bg-green-500/10 border border-green-500/80 rounded-lg p-2 text-center">
-                  <p className="text-zinc-500 text-xs">Nenhum jogador ativo</p>
+                  <p className="text-zinc-500 text-xs">Nenhum atleta ativo</p>
                 </div>
               )}
             </div>
@@ -3880,7 +3880,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             )}
             {goalStep === 'assist' && !pendingGoalIsOpponent && (
               <div className="mb-2 p-2 bg-amber-500/10 border border-amber-500/50 rounded-lg">
-                <p className="text-amber-300 text-xs font-bold text-center">Assistência: toque num jogador à esquerda ou sem assistência</p>
+                <p className="text-amber-300 text-xs font-bold text-center">Assistência: toque num atleta à esquerda ou selecione sem assistência</p>
                 <button
                   type="button"
                     onClick={() => {
@@ -3911,7 +3911,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             {/* Indicação quando a ação aguarda seleção na lista à esquerda */}
             {actionFlow?.step === 'player' && !goalStep && (
               <div className="mb-2 p-2 bg-[#00f0ff]/10 border border-[#00f0ff]/50 rounded-lg">
-                <p className="text-[#00f0ff] text-xs font-bold text-center">Escolha o jogador na lista à esquerda</p>
+                <p className="text-[#00f0ff] text-xs font-bold text-center">Escolha o atleta na lista à esquerda</p>
                 <button
                   type="button"
                   onClick={handleActionFlowPlayerModalBack}
@@ -4686,7 +4686,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         if (!isMatchStarted || shouldDisableRealtimeEventButtons) return;
                         if (blockRealtimeEventWhenNeeded()) return;
                         if (!hasSelectedPlayer) {
-                          setTopRightNotice('Selecione um jogador em quadra na lista à esquerda antes de marcar o gol.');
+                          setTopRightNotice('Selecione um atleta em quadra na lista à esquerda antes de marcar o gol.');
                           return;
                         }
                         applyPreActionClockBehavior('goal');
@@ -4848,11 +4848,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
                                 }`}
                               >
-                                Sincronizar cronÃ´metro
+                                Sincronizar cronômetro
                               </button>
                               {isPausedByEvent && (
                                 <p className="text-center text-[10px] font-bold uppercase text-emerald-200">
-                                  Evento pausou o relÃ³gio. Use continuar partida para retomar.
+                                  O evento pausou o relógio. Use Continuar partida para retomar.
                                 </p>
                               )}
                               {isRealtimeActionLocked && (
@@ -5043,7 +5043,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           if (!isMatchStarted) return;
                           if (shouldDisableRealtimeEventButtons) return;
                           if (!hasSelectedPlayer) {
-                            alert('Selecione um jogador primeiro.');
+                            alert('Selecione um atleta primeiro.');
                             return;
                           }
                           handleSelectAction('lateral');
@@ -5064,7 +5064,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           if (!isMatchStarted) return;
                           if (isBlockedByPenalty) return;
                           if (!hasSelectedPlayer) {
-                            alert('Selecione um jogador primeiro.');
+                            alert('Selecione um atleta primeiro.');
                             return;
                           }
                           handleSelectAction('card');
@@ -5157,14 +5157,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <div className="p-6 overflow-y-auto flex-1">
                 <div className="mb-6">
                   <p className="text-zinc-400 text-sm mb-4">
-                    Selecione 5 jogadores: 1 goleiro (slot abaixo) e 4 jogadores de linha. Durante o jogo, um jogador de
+                    Selecione 5 atletas: 1 goleiro (slot abaixo) e 4 atletas de linha. Durante o jogo, um atleta de
                     linha pode assumir a função de goleiro (goleiro linha).
                   </p>
                   
                   {/* Escalação (5 jogadores) */}
                   <div className="mb-6">
                     <h4 className="text-white font-bold uppercase text-sm mb-3">
-                      Jogadores em Quadra ({lineupPlayers.length}/5)
+                      Atletas em quadra ({lineupPlayers.length}/5)
                     </h4>
                     <div className="grid grid-cols-5 gap-3 mb-3">
                       {Array.from({ length: 5 }).map((_, index) => {
@@ -5182,7 +5182,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             {player ? (
                               <>
                                 <p className="text-[#00f0ff] text-xs font-bold mb-1">
-                                  {player.position === 'Goleiro' || index === 0 ? '🥅 GOLEIRO' : `Jogador ${index + 1}`}
+                                  {player.position === 'Goleiro' || index === 0 ? '🥅 GOLEIRO' : `Atleta ${index + 1}`}
                                 </p>
                                 <p className="text-white font-bold text-sm text-center">
                                   #{player.jerseyNumber}
@@ -5547,15 +5547,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           <div data-testid="clock-sync-dialog" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
             <div className="w-full max-w-md rounded-2xl border-2 border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
               <div className="border-b border-zinc-800 px-5 py-4">
-                <p className="text-white text-sm font-black uppercase">Sincronizar cronÃ´metro</p>
+                <p className="text-white text-sm font-black uppercase">Sincronizar cronômetro</p>
                 <p className="text-zinc-400 text-xs mt-1">
-                  Ajuste manualmente o relÃ³gio do {currentPeriod === '1T' ? '1Âº tempo' : '2Âº tempo'}.
+                  Ajuste manualmente o relógio do {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}.
                 </p>
               </div>
               <div className="px-5 py-4 space-y-4">
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase text-zinc-500">PerÃ­odo</p>
+                    <p className="text-[10px] font-bold uppercase text-zinc-500">Período</p>
                     <p className="text-sm font-black uppercase text-zinc-100">{currentPeriod}</p>
                   </div>
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
@@ -5618,7 +5618,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   data-testid="clock-sync-confirm"
                   className="px-4 py-2 rounded-lg border border-[#00f0ff] bg-[#00f0ff]/15 text-[#00f0ff] text-xs font-black uppercase hover:bg-[#00f0ff]/25 transition-colors"
                 >
-                  Confirmar sincronizaÃ§Ã£o
+                  Confirmar sincronização
                 </button>
               </div>
             </div>
