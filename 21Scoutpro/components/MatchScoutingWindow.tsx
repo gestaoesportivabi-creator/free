@@ -505,9 +505,48 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const firstHalfLocked = clockSnapshot.firstHalfLocked;
   const isMatchEnded = clockSnapshot.state === 'ENCERRADO';
   const [showClockSyncModal, setShowClockSyncModal] = useState(false);
+  const [showEndMatchModal, setShowEndMatchModal] = useState(false);
+  const [isEndingMatch, setIsEndingMatch] = useState(false);
   const [syncMinuteInput, setSyncMinuteInput] = useState<string>('0');
   const [syncSecondInput, setSyncSecondInput] = useState<string>('00');
   const [syncValidationError, setSyncValidationError] = useState<string | null>(null);
+
+  const normalizeUiLabel = useCallback((value: string): string => {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  const formatRecentEventAction = useCallback((event: MatchEvent): string => {
+    if (event.type === 'goal') {
+      return 'Gol';
+    }
+
+    const tipo = (event.tipo || 'Evento').trim();
+    const subtipo = (event.subtipo || '').trim();
+
+    if (!subtipo) return tipo;
+
+    const tipoNorm = normalizeUiLabel(tipo);
+    const subtipoNorm = normalizeUiLabel(subtipo);
+
+    if (tipoNorm === subtipoNorm || subtipoNorm.startsWith(`${tipoNorm} `)) {
+      return subtipo;
+    }
+
+    if (subtipoNorm === 'no gol') {
+      return `${tipo} no gol`;
+    }
+
+    if (tipoNorm === 'finalizacao' && subtipoNorm === 'bloqueado') {
+      return 'Finalização bloqueada';
+    }
+
+    return `${tipo} ${subtipo.charAt(0).toLowerCase()}${subtipo.slice(1)}`;
+  }, [normalizeUiLabel]);
 
   const pauseClock = useCallback((options?: { silent?: boolean }) => {
     if (isPostmatch) return { ok: true };
@@ -1410,13 +1449,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const handleEndMatchRealtime = () => {
     if (isPostmatch || currentPeriod !== '2T' || isMatchEnded) return;
-    if (!window.confirm('Encerrar a partida agora? O cronômetro passará para ENCERRADO e a coleta poderá ser finalizada.')) {
-      return;
-    }
+    setShowEndMatchModal(true);
+  };
+
+  const handleCancelEndMatchModal = () => {
+    if (isEndingMatch) return;
+    setShowEndMatchModal(false);
+  };
+
+  const handleConfirmEndMatchRealtime = () => {
+    if (isEndingMatch) return;
+    setIsEndingMatch(true);
     const result = encerrarPartida();
     if (!result.ok) {
       setTopRightNotice(result.error ?? 'Não foi possível encerrar a partida.');
+      setIsEndingMatch(false);
+      return;
     }
+    setShowEndMatchModal(false);
+    setIsEndingMatch(false);
   };
 
   /** Encerra a coleta do 1º tempo: ativa 2º tempo; faltas exibidas passam a ser as do 2T (novos lances entram como 2T). */
@@ -2978,21 +3029,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Linhas de exibição para "Últimos comandos": passes viram duas linhas (quem deu / quem recebeu)
   const lastCommandDisplayLines = useMemo(() => {
-    const lines: Array<{ key: string; time: number; playerName: string; actionText: string; zone?: string }> = [];
+    const lines: Array<{ key: string; absoluteTime: number; playerName: string; actionText: string; zone?: string }> = [];
     for (const event of lastThreeEvents) {
       const zone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
       const isPassWithReceiver = event.type === 'pass' && event.passToPlayerId && event.passToPlayerName;
+      const absoluteTime = storedToAbsoluteSeconds(event.period, event.time);
       if (isPassWithReceiver) {
         lines.push({
           key: `${event.id}-passer`,
-          time: event.time,
+          absoluteTime,
           playerName: event.playerName || 'N/A',
-          actionText: event.tipo + (event.subtipo ? ` ${event.subtipo}` : ''),
+          actionText: formatRecentEventAction(event),
           zone,
         });
         lines.push({
           key: `${event.id}-receiver`,
-          time: event.time,
+          absoluteTime,
           playerName: event.passToPlayerName || 'N/A',
           actionText: 'Recebeu passe',
           zone,
@@ -3000,15 +3052,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else {
         lines.push({
           key: event.id,
-          time: event.time,
+          absoluteTime,
           playerName: event.playerName || 'N/A',
-          actionText: event.tipo + (event.subtipo ? ` ${event.subtipo}` : ''),
+          actionText: formatRecentEventAction(event),
           zone,
         });
       }
     }
     return lines;
-  }, [lastThreeEvents]);
+  }, [formatRecentEventAction, lastThreeEvents]);
 
   const isBlockedByPenalty = !!penaltyStep;
 
@@ -3262,7 +3314,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 type="button"
                 onClick={() => setShowLogsView(true)}
                 data-testid="logs-open"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] uppercase font-normal transition-colors"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] font-semibold transition-colors"
               >
                 <List size={14} /> Eventos da partida
               </button>
@@ -3272,9 +3324,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     onClick={handleEndCollection}
                     data-testid="end-collection"
                     disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
-                    className={`px-4 py-2.5 rounded-xl border-2 text-xs uppercase font-bold tracking-wide transition-all ${
+                    className={`px-4 py-2.5 rounded-xl border-2 text-xs font-bold tracking-wide transition-all ${
                       (isPostmatch && matchEvents.length >= 1) || isMatchEnded
-                        ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500 text-red-400 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-red-500/10'
+                        ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400 text-emerald-100 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-500/10'
                         : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
                     }`}
                   >
@@ -3658,12 +3710,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         : 'SELECIONAR ATLETA'}
             </h3>
             {selectedPlayer && !goalStep && !actionFlow && !pendingPassEventId && (
-              <p className="text-emerald-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
+              <p data-testid="selected-athlete-summary" className="text-emerald-300 text-[11px] font-semibold text-center mb-2 shrink-0">
                 {(selectedPlayer.nickname?.trim() || selectedPlayer.name || '').trim()} selecionado
               </p>
             )}
             {shouldHighlightPlayerPanel && (
-              <p className="text-[#00f0ff] text-xs font-black uppercase text-center mb-2 shrink-0">
+              <p className="text-[#00f0ff] text-xs font-black text-center mb-2 shrink-0">
                 Selecione um atleta
               </p>
             )}
@@ -3680,7 +3732,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               </>
             )}
             {actionFlow?.step === 'player' && !goalStep && (
-              <p className="text-[#00f0ff]/90 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no número do atleta</p>
+              <p className="text-[#00f0ff]/90 text-[10px] font-semibold text-center mb-2 shrink-0">Toque no número do atleta</p>
             )}
             {actionFlow?.step === 'goalkeeper' && actionFlow.action === 'save' && !goalStep && (
               <p className="text-purple-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no goleiro</p>
@@ -3717,15 +3769,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
                   )}
                   {lockerOpen && (
-                    <p className="text-amber-400 text-[10px] font-bold uppercase text-center mb-2 shrink-0">
-                      {lineupPlayers.length < 5 ? (
-                        <>
-                          Em quadra ({lineupPlayers.length}) · Rascunho: {lockerDraftIds.length}/5 — máx. 1 goleiro; toque nos números; Ativos para trancar
-                        </>
-                      ) : (
-                        <>Ativos: {lockerDraftIds.length}/5 — máx. 1 goleiro; toque nos números; Ativos para trancar</>
-                      )}
-                    </p>
+                    <div className="rounded-lg border border-amber-500/60 bg-amber-500/10 px-2 py-2 text-center mb-2 shrink-0">
+                      <p className="text-amber-200 text-[11px] font-bold">{lockerDraftIds.length} de 5 atletas em quadra</p>
+                      <p className="text-amber-100/90 text-[10px]">Máximo de 1 goleiro</p>
+                      <p className="text-amber-100/80 text-[10px]">Toque nos números e confirme abaixo</p>
+                    </div>
                   )}
                 <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
                   {allSquadPlayers.map((player) => {
@@ -3854,7 +3902,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               data-testid="lineup-actives"
             >
               {lockerOpen ? <Unlock size={16} aria-hidden /> : <Lock size={16} aria-hidden />}
-              Ativos
+              {lockerOpen ? 'Confirmar atletas em quadra' : 'Editar atletas em quadra'}
             </button>
           </div>
 
@@ -5109,25 +5157,33 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         </>
         )}
 
-        {/* Log dos últimos comandos - Parte inferior da tela - tamanho fixo */}
-        <div className="h-[48px] min-h-[48px] max-h-[48px] bg-zinc-950 border-t border-zinc-800 px-3 py-2 flex-shrink-0 overflow-hidden">
-          <div className="flex items-center gap-3 text-xs w-full h-full">
-            <p className="text-zinc-500 font-bold uppercase shrink-0">Últimos comandos:</p>
-            <div className="flex-1 flex gap-2 overflow-hidden min-w-0">
+        {/* Eventos recentes - Parte inferior da tela */}
+        <div className="h-[64px] min-h-[64px] max-h-[64px] bg-zinc-950 border-t border-zinc-800 px-3 py-2 flex-shrink-0 overflow-hidden">
+          <div className="flex items-start sm:items-center gap-3 text-xs w-full h-full">
+            <p className="text-zinc-500 font-bold uppercase shrink-0">Eventos recentes:</p>
+            <div data-testid="recent-events" className="flex-1 flex gap-2 overflow-x-auto overflow-y-hidden min-w-0 pb-1">
               {lastCommandDisplayLines.length > 0 ? (
                 lastCommandDisplayLines.slice(-5).map((line) => (
                   <div
                     key={line.key}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-zinc-900 border border-zinc-800 rounded shrink-0 min-w-0 overflow-hidden"
+                    data-testid="recent-event-item"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded shrink-0 min-w-0 max-w-full"
                   >
-                    <span className="text-zinc-400 font-mono shrink-0">{formatTime(line.time)}</span>
-                    <span className="text-white font-bold truncate">{line.playerName}</span>
-                    <span className="text-[#00f0ff] truncate">{line.actionText}</span>
-                    {line.zone && <span className="text-zinc-500 shrink-0">{line.zone}</span>}
+                    <span data-testid="recent-event-time" className="text-zinc-400 font-mono shrink-0">{formatTime(line.absoluteTime)}</span>
+                    <span className="text-zinc-600 shrink-0">·</span>
+                    <span data-testid="recent-event-player" className="text-white font-semibold truncate">{line.playerName}</span>
+                    <span className="text-zinc-600 shrink-0">·</span>
+                    <span data-testid="recent-event-action" className="text-[#00f0ff] truncate">{line.actionText}</span>
+                    {line.zone && (
+                      <>
+                        <span className="text-zinc-600 shrink-0">·</span>
+                        <span className="text-zinc-500 shrink-0">{line.zone}</span>
+                      </>
+                    )}
                   </div>
                 ))
               ) : (
-                <p className="text-zinc-600 text-xs truncate">Nenhum comando registrado ainda</p>
+                <p className="text-zinc-600 text-xs truncate">Nenhum evento registrado ainda.</p>
               )}
             </div>
           </div>
@@ -5537,6 +5593,51 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   className="px-6 py-3 bg-[#00f0ff] hover:bg-[#00d9e6] text-black font-black uppercase text-sm rounded-xl transition-colors"
                 >
                   Retomar após o intervalo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showEndMatchModal && !isPostmatch && (
+          <div
+            data-testid="end-match-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="end-match-dialog-title"
+            className="fixed inset-0 z-[119] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4"
+          >
+            <div className="w-full max-w-md rounded-2xl border-2 border-red-500/60 bg-zinc-950 shadow-2xl shadow-black/40 overflow-hidden">
+              <div className="border-b border-zinc-800 px-5 py-4">
+                <p id="end-match-dialog-title" className="text-white text-sm font-black uppercase">Encerrar partida</p>
+                <p className="text-zinc-300 text-xs mt-1 leading-relaxed">
+                  O cronômetro passará para encerrado e a coleta ficará pronta para finalização.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Próxima ação</p>
+                  <p className="text-sm font-semibold text-zinc-100">Finalize a coleta assim que a partida for encerrada.</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={handleCancelEndMatchModal}
+                  disabled={isEndingMatch}
+                  data-testid="end-match-cancel"
+                  className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-xs font-bold uppercase hover:bg-zinc-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmEndMatchRealtime}
+                  disabled={isEndingMatch}
+                  data-testid="end-match-confirm"
+                  className="px-4 py-2 rounded-lg border border-red-400 bg-red-500/15 text-red-100 text-xs font-black uppercase hover:bg-red-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isEndingMatch ? 'Encerrando...' : 'Encerrar partida'}
                 </button>
               </div>
             </div>
