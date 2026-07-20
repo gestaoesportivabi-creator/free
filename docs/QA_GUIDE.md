@@ -219,6 +219,24 @@ Validacao desta sprint:
 - a massa criada contem um gol QA salvo em `00:15` para validar persistencia e reabertura;
 - o ambiente valida a infraestrutura de QA, nao conclui sozinho a auditoria funcional completa do cronometro.
 
+## Polish visual da coleta
+
+Na revisao de 2026-07-17, a coleta realtime recebeu um polish visual controlado sem mudanca de regra funcional.
+
+Ajustes principais:
+- `Jogador` foi reduzido na interface realtime em favor de `Atleta`;
+- `Logs` passou a aparecer como `Eventos da partida`;
+- `Guardar como incompleto` passou a `Salvar como incompleta`;
+- `Encerrar partida` ganhou modal interno para substituir a confirmacao nativa;
+- o rodape `Eventos recentes` passou a exibir horario absoluto e resumo sem duplicacao.
+
+Escopo preservado:
+- sem alteracao de backend;
+- sem alteracao de payload;
+- sem alteracao do `ClockService`;
+- sem alteracao da regra de save;
+- sem alteracao da reabertura.
+
 ## Automacao E2E
 
 Estrutura criada na Sprint 003C:
