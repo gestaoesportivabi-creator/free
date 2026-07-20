@@ -12,6 +12,7 @@ import {
   garantirPosseCom,
   iniciarColeta,
   iniciarSegundoTempo,
+  obterEventoRecente,
   obterUltimoEvento,
   reabrirPartida,
   registrarEvento,
@@ -131,6 +132,11 @@ test.describe.serial('QA ciclo completo da partida', () => {
     expect(latestGoal.time).toBe('22:40');
     await fecharLogs(page);
 
+    const recentGoal = await obterEventoRecente(page);
+    expect(recentGoal.time).toBe('22:40');
+    expect(recentGoal.action).toBe('Gol');
+    expect(recentGoal.text).not.toContain('Gol Gol');
+
     await encerrarPartida(page);
     await expect(page.getByTestId('collection-status')).toContainText('Partida encerrada');
     await expect(page.getByTestId('end-collection')).toBeEnabled();
@@ -148,5 +154,9 @@ test.describe.serial('QA ciclo completo da partida', () => {
     expect(reopenedLatest.type).toBe('goal');
     expect(reopenedLatest.period).toBe('2T');
     expect(reopenedLatest.time).toBe('22:40');
+
+    const reopenedRecentGoal = await obterEventoRecente(page);
+    expect(reopenedRecentGoal.time).toBe('22:40');
+    expect(reopenedRecentGoal.action).toBe('Gol');
   });
 });

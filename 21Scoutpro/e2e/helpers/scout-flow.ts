@@ -25,7 +25,7 @@ async function waitForRealtimeScout(page: Page): Promise<void> {
 }
 
 async function dismissNewsletterModal(page: Page): Promise<void> {
-  const newsletterDialog = page.getByRole('dialog', { name: /Receba insights de futsal que viram resultado/i });
+  const newsletterDialog = page.getByRole('dialog').filter({ hasText: /Receba insights de futsal que viram resultado/i });
   if (!(await newsletterDialog.isVisible().catch(() => false))) {
     return;
   }
@@ -33,6 +33,14 @@ async function dismissNewsletterModal(page: Page): Promise<void> {
   const closeButton = newsletterDialog.getByRole('button', { name: /^Fechar$/i }).first();
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click({ force: true });
+    await newsletterDialog.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+    return;
+  }
+
+  const buttons = newsletterDialog.locator('button');
+  const buttonCount = await buttons.count();
+  if (buttonCount > 0) {
+    await buttons.nth(0).click({ force: true });
     await newsletterDialog.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
   }
 }
@@ -60,14 +68,14 @@ async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
   }
 
   const options = await resolveLineupPlayerOptions(page);
-  let selected = await page.locator('text=Jogadores em Quadra (').textContent().catch(() => null);
+  let selected = await page.locator('text=Atletas em quadra (').textContent().catch(() => null);
 
   if (!selected?.includes('(5/5)')) {
     for (let index = 0; index < 5; index += 1) {
       const nextOption = options.first();
       await expect(nextOption).toBeVisible();
       await nextOption.click();
-      selected = await page.locator('text=Jogadores em Quadra (').textContent().catch(() => null);
+      selected = await page.locator('text=Atletas em quadra (').textContent().catch(() => null);
       if (selected?.includes('(5/5)')) {
         break;
       }
@@ -439,9 +447,24 @@ export async function encerrarPartida(page: Page): Promise<void> {
   await dismissNewsletterModal(page);
   const endMatchButton = page.getByTestId('clock-end-match');
   await expect(endMatchButton).toBeVisible();
-  page.once('dialog', (dialog) => dialog.accept());
   await endMatchButton.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('end-match-dialog')).toBeVisible();
+  await dismissNewsletterModal(page);
+  await page.getByTestId('end-match-confirm').evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByTestId('end-match-dialog')).not.toBeVisible();
   await expect(page.getByTestId('clock-state')).toHaveText('ENCERRADO');
+}
+
+export async function obterEventoRecente(page: Page) {
+  const item = page.getByTestId('recent-event-item').last();
+  await expect(item).toBeVisible();
+
+  return {
+    time: ((await item.getByTestId('recent-event-time').textContent()) || '').trim(),
+    player: ((await item.getByTestId('recent-event-player').textContent()) || '').trim(),
+    action: ((await item.getByTestId('recent-event-action').textContent()) || '').trim(),
+    text: ((await item.textContent()) || '').replace(/\s+/g, ' ').trim(),
+  };
 }
 
 export async function registrarGolQa(page: Page): Promise<void> {

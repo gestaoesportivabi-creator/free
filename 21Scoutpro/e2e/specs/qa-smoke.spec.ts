@@ -15,6 +15,7 @@ import {
 test.describe.serial('QA smoke do cronometro e da coleta', () => {
   test('login, abertura da partida, evento simples, save e reabertura', async ({ page }) => {
     await abrirColetaQaEmTempoReal(page, 'scheduled');
+    await expect(page.getByTestId('save-match')).toHaveText('Salvar como incompleta');
 
     await expect(page.getByTestId('clock-state')).toHaveText(/PRE-JOGO|PRIMEIRO TEMPO|PAUSADO/);
     const beforeStart = await readClock(page);

@@ -93,6 +93,13 @@ test.describe.serial('QA controles do cronometro', () => {
       await iniciarSegundoTempo(page);
     }
 
+    await page.getByTestId('clock-end-match').evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.getByTestId('end-match-dialog')).toBeVisible();
+    await expect(page.getByTestId('end-match-dialog')).toContainText('Encerrar partida');
+    await expect(page.getByTestId('end-match-dialog')).toContainText('coleta ficará pronta para finalização');
+    await page.getByTestId('end-match-cancel').click();
+    await expect(page.getByTestId('end-match-dialog')).not.toBeVisible();
+
     await encerrarPartida(page);
     await expect(page.getByTestId('collection-status')).toContainText('Partida encerrada');
     await expect(page.getByTestId('end-collection')).toBeEnabled();
