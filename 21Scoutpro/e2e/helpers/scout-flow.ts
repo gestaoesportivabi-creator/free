@@ -139,6 +139,41 @@ async function ensureAtLeastFivePreparedPlayers(page: Page): Promise<void> {
   expect(selected).toBeGreaterThanOrEqual(5);
 }
 
+async function prepararElencoPosJogo(page: Page): Promise<void> {
+  const continueButton = page.getByTestId('postmatch-continue');
+  if (!(await continueButton.isVisible().catch(() => false))) {
+    return;
+  }
+
+  const selectAllVisibleGroup = async () => {
+    const selectAll = page.getByRole('button', { name: /^Selecionar todos$/i }).first();
+    if (await selectAll.isVisible().catch(() => false)) {
+      await selectAll.click();
+    }
+  };
+
+  await selectAllVisibleGroup();
+
+  const linePlayersFilter = page.getByRole('button', { name: /Atletas de linha/i });
+  if (await linePlayersFilter.isVisible().catch(() => false)) {
+    await linePlayersFilter.click();
+    await selectAllVisibleGroup();
+  }
+
+  const goalkeepersFilter = page.getByRole('button', { name: /^Goleiros$/i });
+  if (await goalkeepersFilter.isVisible().catch(() => false)) {
+    await goalkeepersFilter.click();
+    await selectAllVisibleGroup();
+  }
+
+  if (await continueButton.isDisabled().catch(() => true)) {
+    await ensureAtLeastFivePreparedPlayers(page);
+  }
+
+  await expect(continueButton).toBeEnabled();
+  await continueButton.click();
+}
+
 export async function loginComoQa(page: Page): Promise<void> {
   await page.goto('/login');
   await page.getByTestId('login-email').fill(qaEnv.email);
@@ -150,6 +185,34 @@ export async function loginComoQa(page: Page): Promise<void> {
 export async function abrirDadosDoJogo(page: Page): Promise<void> {
   await page.getByTestId('nav-dados-jogo').click();
   await expect(page.getByTestId('match-card').first()).toBeVisible();
+}
+
+export async function abrirColetaQaPosJogo(page: Page, preferredKind: QaMatchKind = 'saved'): Promise<void> {
+  await loginComoQa(page);
+  await abrirDadosDoJogo(page);
+  await abrirPartidaQa(page, preferredKind);
+
+  if (await isVisible(page, 'reopen-match')) {
+    await page.getByTestId('reopen-match').click();
+    const openedPostmatch = await page
+      .getByTestId('collection-status')
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (openedPostmatch) {
+      return;
+    }
+  }
+
+  if (await isVisible(page, 'scouting-open')) {
+    await page.getByTestId('scouting-open').click();
+  }
+
+  await prepararElencoPosJogo(page);
+  await expect(page.getByTestId('save-match')).toBeVisible();
+  await expect(page.getByTestId('match-clock-panel')).toContainText(/Tempo de coleta/i);
+  await expect(page.getByTestId('clock-state')).toHaveCount(0);
 }
 
 export async function abrirPartidaQa(page: Page, preferredKind: QaMatchKind = 'any'): Promise<void> {

@@ -2836,6 +2836,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         if (!validateFutsalLineupSelection()) return;
                                         setShowPostMatchSheet(true);
                                     }}
+                                    data-testid="postmatch-continue"
                                     disabled={selectedPlayersForMatch.size === 0}
                                     className={`flex items-center gap-2 font-black uppercase text-sm px-6 py-3 rounded-xl transition-colors ${
                                         selectedPlayersForMatch.size === 0
