@@ -178,7 +178,13 @@ export type PostMatchAction =
   | 'tackleWithBall'
   | 'tackleWithoutBall'
   | 'tackleCounter'
-  | 'save';
+  | 'save'
+  | 'card'
+  | 'block'
+  | 'corner'
+  | 'freeKick'
+  | 'penalty'
+  | 'lateral';
 
 export interface PostMatchEvent {
   id: string;
@@ -214,6 +220,18 @@ export interface PostMatchEvent {
   foulTeam?: 'for' | 'against';
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */
   wrongPassGeneratedTransition?: boolean;
+  /** Resultado bruto do evento para reidratação fiel do MatchScoutingWindow */
+  result?: string;
+  /** Tipo do cartão quando action = 'card' */
+  cardType?: 'yellow' | 'secondYellow' | 'red';
+  /** Time do cartão quando action = 'card' */
+  cardTeam?: 'for' | 'against';
+  /** Identifica se a bola parada foi a favor da nossa equipe */
+  isForUs?: boolean;
+  /** ID do cobrador para tiro livre/pênalti */
+  kickerId?: string;
+  /** Nome do cobrador para tiro livre/pênalti */
+  kickerName?: string;
 }
 
 export interface TechnicalAnalysis {

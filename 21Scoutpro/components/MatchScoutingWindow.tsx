@@ -174,6 +174,37 @@ interface MatchEvent {
 }
 
 /** Converte PostMatchEvent[] (do banco/API) para MatchEvent[] (estado da janela de coleta). */
+function inferCardTypeFromSubtype(subtipo?: string): MatchEvent['cardType'] | undefined {
+  switch ((subtipo ?? '').trim()) {
+    case 'Amarelo':
+      return 'yellow';
+    case 'Segundo Amarelo':
+      return 'secondYellow';
+    case 'Vermelho':
+      return 'red';
+    default:
+      return undefined;
+  }
+}
+
+function inferSetPieceResultFromSubtype(subtipo?: string): MatchEvent['result'] | undefined {
+  switch ((subtipo ?? '').trim()) {
+    case 'Gol':
+      return 'goal';
+    case 'Defendido':
+      return 'saved';
+    case 'Pra fora':
+      return 'outside';
+    case 'Trave':
+      return 'post';
+    case 'Não gol':
+    case 'Nao gol':
+      return 'noGoal';
+    default:
+      return undefined;
+  }
+}
+
 function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]): MatchEvent[] {
   const playerById = new Map(players.map(p => [String(p.id).trim(), p]));
   const zoneToResult: Record<string, LateralResult> = {
@@ -238,6 +269,26 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         else if (pe.subtipo === 'Simples' || pe.subtipo === 'DEFESA SIMPLES') result = 'simple';
         else if (pe.subtipo === 'Difícil') result = 'hard';
         break;
+      case 'card':
+        type = 'card';
+        break;
+      case 'block':
+        type = 'block';
+        break;
+      case 'corner':
+        type = 'corner';
+        break;
+      case 'freeKick':
+        type = 'freeKick';
+        result = inferSetPieceResultFromSubtype(pe.subtipo);
+        break;
+      case 'penalty':
+        type = 'penalty';
+        result = inferSetPieceResultFromSubtype(pe.subtipo);
+        break;
+      case 'lateral':
+        type = 'lateral';
+        break;
       case 'assist':
         type = 'goal';
         break;
@@ -246,29 +297,44 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         result = 'correct';
     }
 
-    const playerId = pe.playerId === OPPONENT_FAKE_PLAYER_ID ? OPPONENT_FAKE_PLAYER_ID : String(pe.playerId).trim();
-    const playerName = pe.playerName ?? (playerId === OPPONENT_FAKE_PLAYER_ID ? OPPONENT_FAKE_PLAYER_NAME : playerById.get(playerId)?.name);
+    const rawPlayerId = pe.playerId != null ? String(pe.playerId).trim() : '';
+    const inferredOpponentEvent =
+      (pe.action === 'goal' && (pe.isOpponentGoal === true || pe.subtipo === 'Contra')) ||
+      (pe.action === 'card' && pe.cardTeam === 'against') ||
+      ((pe.action === 'freeKick' || pe.action === 'penalty') && pe.isForUs === false);
+    const playerId =
+      rawPlayerId === OPPONENT_FAKE_PLAYER_ID
+        ? OPPONENT_FAKE_PLAYER_ID
+        : rawPlayerId || (inferredOpponentEvent ? OPPONENT_FAKE_PLAYER_ID : undefined);
+    const playerName =
+      pe.playerName ??
+      (playerId === OPPONENT_FAKE_PLAYER_ID ? OPPONENT_FAKE_PLAYER_NAME : playerId ? playerById.get(playerId)?.name : undefined);
 
     const event: MatchEvent = {
       id: pe.id,
       type,
-      playerId,
-      playerName,
       time: timeSeconds,
       period: normalizedPeriod,
       tipo: pe.tipo,
       subtipo: pe.subtipo,
     };
+    if (playerId) event.playerId = playerId;
+    if (playerName) event.playerName = playerName;
     if (result !== undefined) event.result = result;
     if (type === 'save' && result) {
       event.details =
         result === 'outside' ? { saveOutcome: 'outside' } : { saveDifficulty: result as 'simple' | 'hard' };
+    }
+    if (type === 'card') {
+      event.cardType = pe.cardType ?? inferCardTypeFromSubtype(pe.subtipo);
+      event.cardTeam = pe.cardTeam ?? (playerId === OPPONENT_FAKE_PLAYER_ID ? 'against' : 'for');
     }
     if (pe.passToPlayerId) {
       event.passToPlayerId = String(pe.passToPlayerId).trim();
       event.passToPlayerName = pe.passToPlayerName ?? playerById.get(event.passToPlayerId)?.name;
     }
     if (pe.zone && zoneToResult[pe.zone]) event.result = zoneToResult[pe.zone];
+    else if (pe.result) event.result = pe.result as MatchEvent['result'];
     if (pe.goalMethod) event.goalMethod = pe.goalMethod;
     if (pe.isOpponentGoal === true || (pe.action === 'goal' && pe.subtipo === 'Contra')) {
       event.isOpponentGoal = true;
@@ -279,6 +345,11 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       event.assistPlayerName = pe.assistPlayerName ?? playerById.get(event.assistPlayerId)?.name;
     }
     if (pe.foulTeam) event.foulTeam = pe.foulTeam;
+    if (type === 'freeKick' || type === 'penalty') {
+      event.isForUs = pe.isForUs ?? playerId !== OPPONENT_FAKE_PLAYER_ID;
+      if (pe.kickerId) event.kickerId = String(pe.kickerId).trim();
+      if (pe.kickerName) event.kickerName = pe.kickerName;
+    }
     if (pe.wrongPassGeneratedTransition !== undefined) event.wrongPassGeneratedTransition = pe.wrongPassGeneratedTransition;
 
     return event;
@@ -1235,8 +1306,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     let foulsForCalc = 0;
     let foulsAgainstCalc = 0;
     for (const e of events) {
-      if (e.type === 'goal') {
-        if (e.isOpponentGoal || e.result === 'contra') goalsAgainstCalc += 1;
+      const isSetPieceGoal = (e.type === 'freeKick' || e.type === 'penalty') && e.result === 'goal';
+      if (e.type === 'goal' || isSetPieceGoal) {
+        const isOpponentScore =
+          e.type === 'goal'
+            ? (e.isOpponentGoal || e.result === 'contra')
+            : (e.isForUs === false || e.playerId === OPPONENT_FAKE_PLAYER_ID);
+        if (isOpponentScore) goalsAgainstCalc += 1;
         else goalsForCalc += 1;
       } else if (e.type === 'foul') {
         if (e.foulTeam === 'against') foulsAgainstCalc += 1;
@@ -1621,6 +1697,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (e.result === 'withoutBall') return 'tackleWithoutBall';
         if (e.result === 'counter') return 'tackleCounter';
         return 'tackleWithBall';
+      case 'card': return 'card';
+      case 'block': return 'block';
+      case 'corner': return 'corner';
+      case 'freeKick': return 'freeKick';
+      case 'penalty': return 'penalty';
+      case 'lateral': return 'lateral';
       case 'save': return 'save';
       default: return null;
     }
@@ -1638,25 +1720,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const goalsConcededTimes: Array<{ time: string; method?: string }> = [];
 
     for (const e of events) {
-      // Cartões: atualizar yellowCards/redCards em playerStats (não têm PostMatchAction)
-      if (e.type === 'card' && e.playerId) {
-        if (e.cardTeam === 'against' || String(e.playerId).trim() === OPPONENT_FAKE_PLAYER_ID) {
-          continue;
-        }
-        const playerId = String(e.playerId).trim();
-        if (!playerStats[playerId]) playerStats[playerId] = emptyStats();
-        const ps = playerStats[playerId];
-        if (e.cardType === 'yellow') {
-          ps.yellowCards = (ps.yellowCards ?? 0) + 1;
-        } else if (e.cardType === 'secondYellow') {
-          ps.yellowCards = (ps.yellowCards ?? 0) + 1;
-          ps.redCards = (ps.redCards ?? 0) + 1;
-        } else if (e.cardType === 'red') {
-          ps.redCards = (ps.redCards ?? 0) + 1;
-        }
-        continue;
-      }
-
       const action = matchEventToPostMatchAction(e);
       if (!action) continue;
 
@@ -1698,6 +1761,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       const ps = playerStats[playerId];
 
       const timeStr = formatTimeToMMSS(e.time);
+
+      if (action === 'card') {
+        if (e.cardTeam !== 'against' && playerId !== OPPONENT_FAKE_PLAYER_ID) {
+          if (e.cardType === 'yellow') {
+            ps.yellowCards = (ps.yellowCards ?? 0) + 1;
+          } else if (e.cardType === 'secondYellow') {
+            ps.yellowCards = (ps.yellowCards ?? 0) + 1;
+            ps.redCards = (ps.redCards ?? 0) + 1;
+          } else if (e.cardType === 'red') {
+            ps.redCards = (ps.redCards ?? 0) + 1;
+          }
+        }
+      }
 
       if (action === 'goal') {
         if (e.isOpponentGoal || e.result === 'contra') {
@@ -1773,6 +1849,27 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else if (action === 'save') {
         ps.saves = (ps.saves ?? 0) + 1;
         teamStats.saves = (teamStats.saves ?? 0) + 1;
+      } else if (action === 'freeKick' || action === 'penalty') {
+        const isForUs = e.isForUs !== false && playerId !== OPPONENT_FAKE_PLAYER_ID;
+        if (e.result === 'goal') {
+          const setPieceMethod = action === 'freeKick' ? 'Tiro Livre' : 'Pênalti';
+          if (isForUs) {
+            ps.goals += 1;
+            teamStats.goals += 1;
+            goalsFor += 1;
+            goalTimes.push({
+              time: `${timeStr} (${e.period})`,
+              method: setPieceMethod,
+            });
+          } else {
+            goalsAgainst += 1;
+            teamStats.goalsConceded = (teamStats.goalsConceded ?? 0) + 1;
+            goalsConcededTimes.push({
+              time: `${timeStr} (${e.period})`,
+              method: setPieceMethod,
+            });
+          }
+        }
       }
 
       const postEvent: PostMatchEvent = {
@@ -1785,6 +1882,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         subtipo: e.subtipo,
       };
       if (e.playerName) postEvent.playerName = e.playerName;
+      if (e.result) postEvent.result = e.result;
       if ((action === 'passCorrect' || action === 'passWrong') && e.passToPlayerId) {
         postEvent.passToPlayerId = String(e.passToPlayerId).trim();
         if (e.passToPlayerName) postEvent.passToPlayerName = e.passToPlayerName;
@@ -1811,7 +1909,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           if (e.assistPlayerName) postEvent.assistPlayerName = e.assistPlayerName;
         }
       }
+      if (action === 'card') {
+        postEvent.cardType = e.cardType;
+        postEvent.cardTeam = e.cardTeam;
+      }
       if (action === 'falta') postEvent.foulTeam = e.foulTeam;
+      if (action === 'freeKick' || action === 'penalty') {
+        postEvent.isForUs = e.isForUs;
+        if (e.kickerId) postEvent.kickerId = String(e.kickerId).trim();
+        if (e.kickerName) postEvent.kickerName = e.kickerName;
+      }
       postMatchEventLog.push(postEvent);
     }
 
@@ -2761,11 +2868,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const { tipo, subtipo } = getTipoSubtipo('freeKick', result);
     const rawT = getTimeForEvent() ?? matchTime;
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT);
+    const effectivePlayerId = team === 'against' ? OPPONENT_FAKE_PLAYER_ID : (kickerId || undefined);
+    const effectivePlayerName = kicker?.name || (team === 'against' ? OPPONENT_FAKE_PLAYER_NAME : 'Nossa Equipe');
     const newEvent: MatchEvent = {
       id: `freekick-${Date.now()}`,
       type: 'freeKick',
-      playerId: kickerId || undefined,
-      playerName: kicker?.name || (team === 'against' ? 'Adversário' : 'Nossa Equipe'),
+      playerId: effectivePlayerId,
+      playerName: effectivePlayerName,
       time: evtTime,
       period: evtPeriod,
       result,
@@ -2816,11 +2925,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const { tipo, subtipo } = getTipoSubtipo('penalty', result);
     const rawT = getTimeForEvent() ?? matchTime;
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT);
+    const effectivePlayerId = team === 'against' ? OPPONENT_FAKE_PLAYER_ID : (kickerId || undefined);
+    const effectivePlayerName = kicker?.name || (team === 'against' ? OPPONENT_FAKE_PLAYER_NAME : 'Nossa Equipe');
     const newEvent: MatchEvent = {
       id: `penalty-${Date.now()}`,
       type: 'penalty',
-      playerId: kickerId || undefined,
-      playerName: kicker?.name || (team === 'against' ? 'Adversário' : 'Nossa Equipe'),
+      playerId: effectivePlayerId,
+      playerName: effectivePlayerName,
       time: evtTime,
       period: evtPeriod,
       result,
@@ -4801,6 +4912,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             if (shouldDisableRealtimeEventButtons) return;
                             handleSelectAction('corner');
                           }}
+                          data-testid="event-selector-corner"
                           disabled={!isMatchStarted || shouldDisableRealtimeEventButtons}
                           className={`flex-1 min-h-[44px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                             shouldDisableRealtimeEventButtons
@@ -5019,6 +5131,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             </button>
                             <button
                               onClick={() => handleSelectAction('block')}
+                              data-testid="event-selector-block"
                               disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 shouldDisableRealtimeEventButtons
@@ -5050,6 +5163,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setPendingPenaltyKickerId(null);
                           setSelectedAction(null);
                         }}
+                        data-testid="event-selector-penalty"
                         disabled={shouldDisableRealtimeEventButtons}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           shouldDisableRealtimeEventButtons
@@ -5076,6 +5190,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           setPendingFreeKickKickerId(null);
                           setSelectedAction(null);
                         }}
+                        data-testid="event-selector-freekick"
                         disabled={shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
                           shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
@@ -5096,6 +5211,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           }
                           handleSelectAction('lateral');
                         }}
+                        data-testid="event-selector-lateral"
                         disabled={!isMatchStarted || shouldDisableRealtimeEventButtons}
                         className={`min-h-[48px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || shouldDisableRealtimeEventButtons
@@ -5117,6 +5233,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           }
                           handleSelectAction('card');
                         }}
+                        data-testid="event-selector-card"
                         disabled={!isMatchStarted || isBlockedByPenalty}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || isBlockedByPenalty
@@ -5136,6 +5253,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           if (isBlockedByPenalty) return;
                           handleSelectAction('cardAgainst');
                         }}
+                        data-testid="event-selector-card-against"
                         disabled={!isMatchStarted || isBlockedByPenalty}
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                           !isMatchStarted || isBlockedByPenalty
