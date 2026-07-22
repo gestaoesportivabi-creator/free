@@ -363,3 +363,12 @@ Resultado da Sprint 003D em `2026-07-16`:
 - a rodada consolidada `qa-smoke + clock-controls + persistence + cleanup-dry-run + full-match-cycle` terminou com `10/10` aprovados em execucao serial;
 - o `cleanup-dry-run` continua exigindo acesso autorizado ao banco QA online;
 - `dist/index.html` e `public/sitemap.xml` seguem como artefatos gerados e nao devem entrar em commit sem justificativa formal.
+
+Resultado da Sprint 003G em `2026-07-22`:
+
+- o payload compartilhado `postMatchEventLog` passou a persistir tambem `card`, `block`, `corner`, `freeKick`, `penalty` e `lateral`;
+- a reabertura voltou a reconstruir esses eventos no `MatchScoutingWindow`, com `result`, `cardType`, `cardTeam`, `isForUs` e cobrador quando aplicavel;
+- `freeKick` e `penalty` com `result = goal` passaram a recompor o placar corretamente apos save e reopen;
+- a automacao ganhou `21Scoutpro/e2e/specs/postmatch-data-entry.spec.ts` para validar `corner + card + goal` no mesmo pipeline compartilhado;
+- na massa QA disponivel em `2026-07-22`, o card oficial reutilizavel abre primeiro a janela compartilhada de coleta, entao a validacao automatizada ficou focada no gargalo arquitetural comum entre Realtime e Pos-Jogo;
+- a selecao explicita de assistente continuou limitada no replay salvo atual e foi registrada como risco operacional remanescente.
