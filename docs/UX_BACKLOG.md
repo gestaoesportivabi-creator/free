@@ -1,167 +1,123 @@
 # UX_BACKLOG
 
 Projeto: `SCOUT 21 PRO`
-Sprint: `004A`
+Sprint: `004B`
 Data: `2026-07-23`
-Escopo: catalogo de atritos, prioridades e plano recomendado para 004B.
+Escopo: backlog operacional priorizado para a coleta hibrida.
 
 ## Resumo executivo
 
-O problema atual nao e mais estabilidade tecnica.
+O backlog agora sai da camada generica de UX e entra em produto operacional.
 
-O problema agora e friccao operacional.
+Prioridade:
 
-O backlog abaixo prioriza o que mais atrasa um scout durante a coleta.
+- remover perguntas desnecessarias ao vivo;
+- separar claramente realtime de pos-jogo por proposito;
+- preparar o Shell experimental sem tocar no dominio.
 
-## Catalogo de atritos por gravidade
+## P0 - risco de perda de dado ou fluxo impossivel
 
-### P0 - trava velocidade ou gera erro operacional direto
+| Item | Problema | Efeito |
+| --- | --- | --- |
+| Ambiguidade de fluxo do card | o operador pode cair num caminho diferente sem querer | baixa previsibilidade de entrada |
+| Falta de clareza do proximo passo em eventos compostos | usuario pode abandonar ou registrar errado | erro de registro |
+| Dependencia visual de estados internos do clock | operador precisa interpretar o motor | fluxo trava ou desacelera |
 
-| Atrito | Impacto |
-| --- | --- |
-| fluxo atual comeca em `atleta primeiro`, nao em `evento primeiro` | conflita com a ordem mental do scout |
-| primeiro evento do realtime exige muitos cliques antes da partida realmente comecar | custo alto antes de gerar valor |
-| tempo manual do pos-jogo aparece tarde | aumenta erro de memoria |
-| o mesmo card pode abrir por caminhos visuais diferentes | baixa previsibilidade operacional |
-| relogio pausado por evento nem sempre e obvio o bastante | risco de perder tempo real |
+## P1 - alto impacto operacional / erro de registro / clique duplicado
 
-### P1 - desacelera e confunde
+| Item | Problema | Efeito |
+| --- | --- | --- |
+| `Atleta -> Evento` | ordem mental invertida | custo cognitivo alto |
+| Preparacao longa antes do primeiro evento | valor demora a aparecer | atraso operacional |
+| Passe generico no realtime | alto volume, baixo valor imediato | distracao do jogo |
+| Tempo manual tardio no pos-jogo | lembranca se degrada | erro de tempo |
+| Logs como tela principal de revisao | rouba area operacional | queda de ritmo |
 
-| Atrito | Impacto |
-| --- | --- |
-| preparacao de atletas existe em mais de uma tela | repeticao cognitiva |
-| linha de botes mistura eventos simples e complexos | procura visual lenta |
-| log em tabela ocupa a tela toda quando aberto | interrompe o ritmo |
-| gols, faltas e bolas paradas usam fluxos diferentes demais | o usuario precisa reaprender cada lance |
-| muito texto explicativo dentro do fluxo | reduz foco no clique seguinte |
+## P2 - excesso de etapas / baixa previsibilidade / popup longo
 
-### P2 - incomoda, mas e contornavel
+| Item | Problema | Efeito |
+| --- | --- | --- |
+| Gols, faltas e bolas paradas usam escadas diferentes | reaprendizado constante | lentidao |
+| Participante secundario aparece tarde | o evento se expande no meio do fluxo | surpresa ruim |
+| Falta de painel contextual fixo | estado disperso | mais olhares e retorno visual fraco |
+| Muitos botoes com o mesmo peso | pouca hierarquia | procura visual lenta |
 
-| Atrito | Impacto |
-| --- | --- |
-| area livre pouco aproveitada | desperdicio de contexto tatico |
-| informacoes de placar, estado e ultimos eventos disputam atencao | hierarquia visual fraca |
-| `Salvar como incompleta` e `Finalizar coleta` dependem de regras internas pouco visiveis | descoberta tardia |
-| modal de newsletter ainda pode interferir na navegacao | ruido externo |
+## P3 - texto / hierarquia / detalhe visual
 
-### P3 - polish
+| Item | Problema | Efeito |
+| --- | --- | --- |
+| Rotulos longos em alguns botoes | peso visual | leitura mais lenta |
+| Alertas difusos | prioridade pouco clara | operador ignora |
+| Area livre subutilizada | tela parece vazia e pouco profissional | baixa percepcao de produto |
 
-| Atrito | Impacto |
-| --- | --- |
-| textos de botoes ainda longos em alguns pontos | peso visual |
-| filtros e seletores poderiam ser mais compactos | densidade de tela |
-| ausencia de atalho visual para eventos mais usados | microatrasos repetidos |
+## Decisoes de backlog desta Sprint
 
-## Problemas encontrados no desenho atual
+### Confirmado
 
-1. O sistema pede mais memoria operacional do que deveria.
-2. O usuario so descobre parte das informacoes exigidas no meio do fluxo.
-3. Realtime e pos-jogo compartilham motor demais na experiencia visual.
-4. A area mais nobre da tela ainda nao esta dedicada ao lance atual.
-5. A revisao de log compete com o registro, em vez de complementar.
+- Passe generico nao entra no realtime principal
+- Shell precisa nascer por flag
+- Gol nao entra no piloto inicial do Shell
+- painel contextual deve ser pequeno e permanente
 
-## Melhorias priorizadas
+### Adiado para experimento
 
-### Prioridade 1
+- mini-quadra
+- inferencia de sequencias
+- pressao recente
+- enriquecimento tatico detalhado
 
-- adotar `Evento -> Atleta -> Detalhes -> Confirmar`
-- explicitar tempo e periodo mais cedo
-- reduzir preparacao duplicada
-- criar area contextual fixa com ultimos eventos e status do relogio
+## Roadmap sugerido
 
-### Prioridade 2
+### 004C - Infraestrutura do Shell experimental
 
-- transformar logs em painel lateral/drawer
-- padronizar fluxos de gol, falta e bola parada
-- unificar mensagem de estado e bloqueio do relogio
+- isolar shell visual
+- criar flag
+- manter fluxo atual como default
+- preservar Playwright e QA
 
-### Prioridade 3
+### 004D - Eventos simples
 
-- mini-quadra ou mapa simplificado
-- atalhos operacionais de tempo no pos-jogo
-- presets de eventos mais usados
-
-## Catalogo de componentes: manter, mudar, remover
-
-### Manter
-
-- `useMatchClock`
-- `ClockService`
-- `matchUpsert`
-- `matchesApi`
-- contratos de `MatchEvent` e `postMatchEventLog`
-
-### Mudar
-
-- `ScoutTable`
-- `CollectionTypeSelector`
-- `MatchScoutingWindow`
-- logs e edicao
-- preparacao de lineup/elenco
-
-### Reduzir ou aposentar
-
-- `PostMatchCollectionSheet` legado
-- bifurcacoes visuais repetidas
-- modais grandes para eventos simples
-
-## Riscos de migracao
-
-| Risco | Mitigacao |
-| --- | --- |
-| quebrar Playwright atual | manter test ids estaveis e introduzir camada V2 com cobertura paralela |
-| quebrar pos-jogo ao mexer no shell visual | preservar handlers e payload; trocar primeiro a ordem visual |
-| regressao no clock | nao tocar em `ClockService` na 004B inicial |
-| duplicar experiencia durante a migracao | usar feature flag e remover o velho logo apos cobertura verde |
-
-## Plano recomendado para Sprint 004B
-
-### Missao 1
-
-Criar novo shell visual de coleta dentro de `MatchScoutingWindow`, sem trocar persistencia nem clock.
-
-### Missao 2
-
-Implementar o fluxo `Evento -> Atleta` para:
-
-- passe
-- chute
+- finalizacao
+- defesa
 - falta
+- perda de posse
+- recuperacao de posse
 
-### Missao 3
+### 004E - Eventos compostos
 
-Criar painel contextual fixo com:
+- gol
+- penalti
+- tiro livre
+- cartao
+- substituicao
 
-- placar
-- periodo
-- clock
-- ultimos eventos
-- alerta de pausa
+### 004F - Painel contextual
 
-### Missao 4
+- 4 informacoes permanentes
+- 3 informacoes contextuais
+- 1 alerta prioritario
 
-Mover logs completos para modo secundario:
+### 004G - Teste A/B e decisao
 
-- drawer lateral
-- tabela completa so para auditoria/edicao
+- rodada QA comparativa
+- metricas vs baseline
+- manter, ajustar ou matar o Shell
 
-### Missao 5
+## Itens que devem morrer se nao provarem valor
 
-Atualizar Playwright para cobrir:
+- captura de passe generico ao vivo
+- fluxo que exige popup longo para evento simples
+- logs full-screen como centro da operacao
+- duplicidade de preparacao entre modos
 
-- abertura do novo shell
-- eventos simples
-- relogio
-- save/reopen
+## Recomendacao para 004C
 
-### Missao 6
+Comecar pelo menor recorte que prove a tese:
 
-Trazer o fluxo do gol para o shell novo sem alterar payload.
+1. shell novo isolado
+2. eventos simples
+3. painel contextual basico
+4. flag explicita
+5. rollback trivial
 
-## Definicao de pronto para 004B
-
-1. shell novo ativo por flag ou rota controlada
-2. realtime funcionando no novo fluxo para eventos simples
-3. sem regressao em QA, Playwright, save/reopen ou clock
-4. log antigo ainda acessivel como fallback
-5. branch pronta para validacao operacional da comissao
+Se isso nao mostrar ganho operacional, o Shell nao deve escalar.

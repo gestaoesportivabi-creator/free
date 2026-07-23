@@ -1,129 +1,217 @@
 # EVENT_MATRIX_V2
 
 Projeto: `SCOUT 21 PRO`
-Sprint: `004A`
+Sprint: `004B`
 Data: `2026-07-23`
-Escopo: matriz de informacoes realmente necessarias por evento.
+Escopo: taxonomia operacional final dos eventos da coleta hibrida.
 
-## Leitura rapida
+## Pergunta central
 
-Legenda:
+Qual e a menor quantidade de informacao que o scout precisa fornecer ao vivo para que o sistema consiga reconstruir corretamente o jogo e produzir analises uteis?
 
-- `Obrigatorio`: sem isso o evento nao existe
-- `Opcional`: melhora analise, mas nao bloqueia o registro
-- `Inferido`: pode ser derivado do contexto
+## Taxonomia operacional
 
-## Matriz
+### Classe A
 
-| Evento | Informacoes obrigatorias | Informacoes opcionais | Pode ser inferido | Ordem recomendada no fluxo V2 |
-| --- | --- | --- | --- | --- |
-| Gol a favor | autor, equipe, tempo, periodo | assistencia, metodo | placar atual | evento -> equipe -> autor -> assistencia/metodo -> tempo -> confirmar |
-| Gol contra/adversario | equipe, tempo, periodo | metodo | placar atual | evento -> equipe -> tempo -> confirmar |
-| Passe certo | executor | recebedor | tempo realtime, periodo realtime | evento -> atleta -> resultado -> recebedor opcional |
-| Passe errado | executor | flag de transicao | tempo realtime, periodo realtime | evento -> atleta -> resultado |
-| Chute no gol | executor | zona, contexto tatico | tempo realtime, periodo realtime | evento -> atleta -> resultado |
-| Chute fora | executor | zona, contexto tatico | tempo realtime, periodo realtime | evento -> atleta -> resultado |
-| Chute na trave | executor | zona, contexto tatico | tempo realtime, periodo realtime | evento -> atleta -> resultado |
-| Chute bloqueado | executor | zona, contexto tatico | tempo realtime, periodo realtime | evento -> atleta -> resultado |
-| Falta nossa | executor, time faltoso | zona | tempo realtime, periodo realtime | evento -> lado -> atleta -> tempo se pos-jogo |
-| Falta do adversario | time faltoso | zona | periodo e tempo | evento -> lado -> tempo se pos-jogo |
-| Cartao nosso | atleta, tipo do cartao | nenhuma | tempo realtime, periodo realtime | evento -> lado -> atleta -> tipo |
-| Cartao adversario | tipo do cartao | nenhuma | tempo realtime, periodo realtime | evento -> lado -> tipo |
-| Desarme com posse | executor | nenhuma | tempo realtime, periodo realtime | evento -> atleta -> subtipo |
-| Desarme sem posse | executor | nenhuma | tempo realtime, periodo realtime | evento -> atleta -> subtipo |
-| Desarme contra-ataque | executor | nenhuma | tempo realtime, periodo realtime | evento -> atleta -> subtipo |
-| Defesa do goleiro | goleiro, subtipo | nenhuma | tempo realtime, periodo realtime | evento -> goleiro -> subtipo |
-| Bloqueio | executor | nenhuma | tempo realtime, periodo realtime | evento -> atleta |
-| Escanteio nosso | executor | zona | tempo realtime, periodo realtime | evento -> lado -> atleta |
-| Escanteio adversario | nenhuma | zona | periodo, tempo | evento -> lado |
-| Lateral nosso | executor | zona | tempo realtime, periodo realtime | evento -> lado -> atleta |
-| Lateral adversario | nenhuma | zona | periodo, tempo | evento -> lado |
-| Tiro livre nosso | cobrador, resultado | zona | tempo realtime, periodo realtime | evento -> lado -> resultado -> cobrador se necessario |
-| Tiro livre adversario | resultado | zona | periodo, tempo | evento -> lado -> resultado |
-| Penalti nosso | cobrador, resultado | nenhuma | tempo realtime, periodo realtime | evento -> lado -> resultado -> cobrador |
-| Penalti adversario | resultado | nenhuma | periodo, tempo | evento -> lado -> resultado |
+Eventos que alteram o estado do jogo e devem ser registrados imediatamente.
 
-## Regras de simplificacao recomendadas
+Criterios:
 
-### 1. Atleta so quando houver autor real
+- mexem em placar, faltas, disponibilidade de jogador ou reinicio relevante;
+- precisam de feedback instantaneo;
+- geram contexto para o resto da partida.
 
-Nao pedir atleta primeiro para:
+### Classe B
 
-- falta do adversario
-- cartao adversario
-- escanteio adversario
-- lateral adversario
-- gol adversario sem autor identificado
+Eventos relevantes para leitura ao vivo, com registro rapido.
 
-### 2. Tempo deve entrar cedo no pos-jogo
+Criterios:
 
-Para pos-jogo, o tempo precisa ficar visivel logo que o evento e escolhido.
+- ajudam a interpretar pressao, volume, dominancia ou risco;
+- nao precisam de profundidade total;
+- devem caber em uma interacao curta.
 
-Motivo:
+### Classe C
 
-- o operador costuma lembrar primeiro "foi aos 12:40";
-- hoje o sistema pede o tempo tarde demais.
+Eventos ou detalhes de enriquecimento.
 
-### 3. Periodo quase sempre pode ser herdado
+Criterios:
 
-Periodo nao precisa ser perguntado a cada evento se:
+- melhoram a analise;
+- nao precisam interromper a atencao do operador ao vivo;
+- podem ser completados no pos-jogo.
 
-- existe periodo ativo visivel;
-- o usuario esta trabalhando dentro de um bloco claro `1T` ou `2T`.
+### Classe D
 
-### 4. Recebedor de passe nao deve bloquear o registro padrao
+Eventos que nao devem ser coletados manualmente ao vivo sem justificativa forte.
 
-Recebedor e dado de profundidade.
+Criterios:
 
-Recomendacao:
+- alta frequencia;
+- baixo valor imediato;
+- alto custo operacional;
+- maior chance de desviar o scout do jogo.
 
-- `OFF` por padrao operacional;
-- `ON` apenas em cenarios analiticos especificos.
+## Decisao sobre Passe
 
-### 5. Metodo do gol deve ser curto
+Decisao final:
 
-Metodo do gol e importante, mas nao pode virar um labirinto.
+- `Passe` generico sai do realtime principal.
+- `Passe` permanece no pos-jogo como enriquecimento opcional, se a equipe realmente precisar desse nivel de detalhe.
+- Ao vivo, o sistema deve preferir eventos derivados de maior valor:
+  - assistencia;
+  - passe-chave;
+  - perda de posse;
+  - sequencia que gera finalizacao.
 
-Recomendacao:
+Justificativa:
 
-- expor 4 a 6 opcoes no maximo;
-- evitar submenu profundo;
-- permitir `sem classificar agora` se a operacao exigir velocidade.
+- frequencia muito alta;
+- custo operacional excessivo;
+- baixo valor imediato para um unico scout;
+- compete com lances mais importantes;
+- varios efeitos analiticos do passe podem ser recuperados por outros eventos ou inferencia futura.
 
-## Eventos por complexidade operacional
+## Matriz principal
 
-### Baixa complexidade
+| Evento | Classe | Realtime | Pos-jogo | Futuro automatico | Prioridade | Exige atleta | Exige participante secundario | Exige detalhe | Altera placar | Altera faltas | Altera posse | Pausa clock | Gera alerta | Confirmacao em um toque | Pode enriquecer depois |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Gol nosso | A | Sim | Sim | Parcial | Muito alta | Sim | Assistente opcional | Origem/metodo | Sim | Nao | Nao | Sim | Sim | Nao | Sim |
+| Gol adversario | A | Sim | Sim | Parcial | Muito alta | Nao obrigatorio | Nao | Origem opcional | Sim | Nao | Nao | Sim | Sim | Quase | Sim |
+| Cartao nosso | A | Sim | Sim | Nao | Alta | Sim | Nao | Tipo do cartao | Nao | Nao | Nao | Nao | Sim | Nao | Pouco |
+| Cartao adversario | A | Sim | Sim | Nao | Alta | Nao obrigatorio | Nao | Tipo do cartao | Nao | Nao | Nao | Nao | Sim | Quase | Pouco |
+| Expulsao | A | Sim | Sim | Nao | Alta | Sim ou adversario | Nao | Origem do cartao/causa | Nao | Nao | Nao | Nao | Sim | Nao | Pouco |
+| Penalti | A | Sim | Sim | Nao | Alta | So se a favor | Nao | Resultado | Pode | Nao | Nao | Sim | Sim | Nao | Sim |
+| Tiro livre | A | Sim | Sim | Nao | Alta | So se a favor | Nao | Resultado | Pode | Nao | Nao | Sim | Sim | Nao | Sim |
+| Falta acumulada nossa | A | Sim | Sim | Sim | Alta | Sim | Nao | Lado opcional | Nao | Sim | Nao | Sim | Sim | Quase | Sim |
+| Falta acumulada adversaria | A | Sim | Sim | Sim | Alta | Nao obrigatorio | Nao | Lado opcional | Nao | Sim | Nao | Sim | Sim | Quase | Sim |
+| Substituicao | A | Sim | Opcional | Sim no futuro | Alta | Sim | Sim | entrada/saida | Nao | Nao | Nao | Nao | Baixo | Nao | Pouco |
+| Tempo tecnico | A | Sim | Opcional | Nao | Media | Nao | Nao | equipe | Nao | Nao | Nao | Sim | Media | Sim | Nao |
+| Finalizacao no gol | B | Sim | Sim | Sim | Alta | Sim | Nao | resultado | Nao | Nao | Nao | Nao | Media | Sim | Sim |
+| Finalizacao fora | B | Sim | Sim | Sim | Alta | Sim | Nao | resultado | Nao | Nao | Nao | Nao | Baixo | Sim | Sim |
+| Finalizacao na trave | B | Sim | Sim | Sim | Alta | Sim | Nao | resultado | Nao | Nao | Nao | Nao | Media | Sim | Sim |
+| Defesa | B | Sim | Sim | Sim | Alta | Sim | Nao | tipo de defesa | Nao | Nao | Nao | Nao | Media | Quase | Sim |
+| Perda de posse | B | Sim | Sim | Sim | Alta | Sim | Nao | causa opcional | Nao | Nao | Sim | Nao | Media | Sim | Sim |
+| Recuperacao de posse | B | Sim | Sim | Sim | Alta | Sim | Nao | origem opcional | Nao | Nao | Sim | Nao | Media | Sim | Sim |
+| Desarme | B | Sim | Sim | Sim | Media | Sim | Nao | subtipo | Nao | Nao | Pode | Nao | Baixo | Sim | Sim |
+| Bloqueio | B | Sim | Sim | Sim | Media | Sim | Nao | nenhuma | Nao | Nao | Nao | Nao | Baixo | Sim | Sim |
+| Escanteio | B | Sim | Sim | Sim | Media | So se nosso | Nao | lado opcional | Nao | Nao | Nao | Sim | Baixo | Quase | Sim |
+| Lateral | C | Nao como botao principal | Sim | Sim | Baixa | So se nosso | Nao | lado opcional | Nao | Nao | Nao | Sim | Baixo | Sim | Sim |
+| Assistencia | C | Nao como evento isolado | Sim como enriquecimento do gol | Sim | Alta no pos-jogo | Sim | Sim | vinculacao ao gol | Nao | Nao | Nao | Nao | Nao | Nao | Sim |
+| Passe-chave | C | Nao | Sim | Sim | Media | Sim | Sim | ligacao com finalizacao | Nao | Nao | Nao | Nao | Nao | Nao | Sim |
+| Passe generico | D | Nao | Opcional | Sim | Baixa | Sim | Recebedor opcional | tipo do passe | Nao | Nao | Nao | Nao | Nao | Nao | Sim |
+| Conducao / microacao | D | Nao | Nao | Sim | Muito baixa | Sim | Nao | varia | Nao | Nao | Nao | Nao | Nao | Nao | Sim |
 
-- passe
-- chute
-- bloqueio
-- desarme
+## Regras finais de produto por grupo
 
-### Media complexidade
+### O que precisa existir no realtime
 
-- falta
-- cartao
-- escanteio
-- lateral
-- defesa
+- Classe A inteira
+- Classe B prioritaria
+- nenhum item da Classe D como botao principal
 
-### Alta complexidade
+### O que pode existir so no pos-jogo
 
-- gol
-- tiro livre
-- penalti
+- assistencia como enriquecimento
+- passe-chave
+- lateral detalhado
+- zonas e origem taticas
+- observacao textual
 
-## Ordem recomendada de redesign em 004B
+### O que deve migrar para inferencia futura
 
-1. passe
-2. chute
-3. falta
-4. gol
-5. cartao
-6. bola parada restante
+- passes genericos em volume
+- padroes de sequencia ofensiva
+- algumas relacoes de posse e transicao
+- sugestao de pressao recente
+- agrupamento de origem de jogada
 
-Motivo:
+## Microfluxos prioritarios
 
-- cobre maior volume de uso primeiro;
-- reduz risco de quebrar o pipeline inteiro;
-- entrega ganho operacional visivel cedo.
+### 1. Gol
+
+`Gol -> equipe -> autor -> origem curta -> assistencia se aplicavel -> confirmar`
+
+Origem curta visivel ao vivo:
+
+- jogada individual
+- erro do adversario
+- rebote
+- bola parada
+- sem assistencia
+- desconhecida
+
+Origem que pode ficar para pos-jogo:
+
+- recuperacao alta
+- tipo detalhado de ataque
+- classificacao tatico-contextual mais fina
+
+### 2. Finalizacao
+
+`Finalizacao -> atleta -> resultado -> confirmar`
+
+Detalhes opcionais depois:
+
+- zona
+- origem da jogada
+- pressao sofrida
+
+### 3. Defesa
+
+`Defesa -> goleiro -> tipo -> confirmar`
+
+Detalhes opcionais depois:
+
+- zona do chute
+- origem do ataque
+
+### 4. Falta
+
+`Falta -> nosso ou adversario -> atleta se nosso -> confirmar`
+
+Detalhes opcionais depois:
+
+- lado
+- zona
+- contexto tatico
+
+### 5. Cartao
+
+`Cartao -> nosso ou adversario -> atleta se nosso -> tipo -> confirmar`
+
+### 6. Escanteio
+
+`Escanteio -> nosso ou adversario -> atleta se nosso -> confirmar`
+
+### 7. Perda de posse
+
+`Perda de posse -> atleta -> causa curta opcional -> confirmar`
+
+### 8. Recuperacao de posse
+
+`Recuperacao de posse -> atleta -> origem curta opcional -> confirmar`
+
+### 9. Substituicao
+
+`Substituicao -> sai -> entra -> confirmar`
+
+### 10. Penalti
+
+`Penalti -> nosso ou adversario -> resultado -> cobrador se nosso -> confirmar`
+
+### 11. Tiro livre
+
+`Tiro livre -> nosso ou adversario -> resultado -> cobrador se nosso -> confirmar`
+
+## Conclusao
+
+A coleta hibrida recomendada para o SCOUT 21 PRO fica assim:
+
+- realtime: Classe A + Classe B essencial
+- pos-jogo: enriquecimento da Classe C
+- futuro: inferencia da Classe D e parte da Classe C
+
+Decisao mais importante desta Sprint:
+
+- `Passe` nao deve permanecer como evento principal no realtime.

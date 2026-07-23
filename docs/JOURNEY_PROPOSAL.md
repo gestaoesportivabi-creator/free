@@ -1,218 +1,304 @@
 # JOURNEY_PROPOSAL
 
 Projeto: `SCOUT 21 PRO`
-Sprint: `004A`
+Sprint: `004B`
 Data: `2026-07-23`
-Escopo: proposta de redesenho, sem implementacao.
+Escopo: modelagem do fluxo hibrido e planejamento do experimento do Shell.
 
 ## Resumo executivo
 
-A proposta central desta Sprint e simples:
+A proposta deixa de tratar realtime e pos-jogo como duas variacoes do mesmo formulario.
 
-`Evento -> Atleta -> Detalhes -> Confirmar`
+Eles passam a ter propositos diferentes:
 
-Em vez do fluxo atual:
+- realtime registra o minimo necessario para controlar a partida e gerar contexto imediato;
+- pos-jogo revisa, corrige, enriquece e relaciona;
+- futuro automatico infere padroes, sugere contexto e reduz captura manual.
 
-`Atleta -> Evento -> Detalhes -> Tempo`
+## Modelo hibrido proposto
+
+### Realtime
 
 Objetivo:
 
-- reduzir cliques;
-- reduzir troca de contexto;
-- reduzir erro de selecao;
-- aumentar velocidade em lances repetitivos;
-- deixar a tela principal mais profissional e orientada a operacao.
+- velocidade
+- baixo numero de cliques
+- foco no estado do jogo
+- feedback imediato
 
-## Principios de redesenho
+Regra:
 
-1. A UI deve seguir a ordem mental do scout, nao a ordem tecnica do estado interno.
-2. O proximo passo precisa ser sempre previsivel.
-3. O tempo do evento deve aparecer cedo, nao tarde.
-4. O atleta so deve ser pedido quando realmente for necessario.
-5. O log deve ajudar sem roubar a tela.
-6. O modo realtime e o pos-jogo podem compartilhar motor, mas nao precisam compartilhar a mesma jornada visual.
+- perguntar apenas o necessario para gravar um evento confiavel.
 
-## Proposta de fluxo: Evento -> Atleta
+### Pos-jogo
+
+Objetivo:
+
+- profundidade
+- correcao
+- enriquecimento
+- auditoria
+
+Regra:
+
+- abrir o evento salvo e permitir completar os campos que nao valia a pena pedir ao vivo.
+
+### Futuro automatico
+
+Objetivo:
+
+- reduzir trabalho manual
+- sugerir ligacoes
+- detectar padroes
+- aumentar confiabilidade do contexto
+
+Regra:
+
+- o sistema deve inferir o que for repetitivo, caro ou pouco valioso de capturar manualmente ao vivo.
+
+## Fluxo hibrido
+
+### Coleta ao vivo
+
+`Evento essencial -> minimo de perguntas -> confirmacao -> atualizacao do estado -> memoria da partida`
+
+### Pos-jogo
+
+`Revisar evento -> enriquecer -> corrigir -> relacionar -> validar`
+
+### Futuro
+
+`Inferir -> detectar padroes -> gerar insights -> recomendar atencao`
+
+## Proposta operacional do Shell
+
+### Ordem base
+
+`Evento -> Participantes -> Detalhe curto -> Confirmar`
+
+### Diferencas por modo
+
+#### Realtime
+
+- tempo e periodo automaticos
+- menos passos
+- menos texto
+- menos campos
+
+#### Pos-jogo
+
+- tempo e periodo editaveis
+- mais detalhes
+- mais relacao entre eventos
+- revisao e correcao fortes
+
+## Microfluxo do Gol
+
+Gol e o unico evento explicitamente composto e prioritario no Shell.
 
 ### Fluxo base
 
-1. scout escolhe o tipo de lance
-2. sistema destaca apenas os atletas elegiveis
-3. scout toca no atleta
-4. sistema abre detalhes minimos do evento
-5. sistema confirma automaticamente quando o evento for simples
-6. sistema pede tempo cedo no pos-jogo e usa timestamp oficial no realtime
+`Gol -> equipe -> autor -> origem -> assistencia quando aplicavel -> confirmacao`
 
-### Exemplos
+### O que deve aparecer ao vivo
 
-#### Passe certo
+- equipe: nossa, adversario, contra
+- autor: obrigatorio para gol nosso
+- origem curta:
+  - jogada individual
+  - erro do adversario
+  - rebote
+  - bola parada
+  - sem assistencia
+  - desconhecida
+- assistencia:
+  - so quando fizer sentido
+  - nunca como obrigatoria em todo gol
 
-1. clicar `Passe`
-2. clicar `Atleta`
-3. confirmar `Certo`
-4. opcional: recebedor so se a equipe realmente usar essa coleta
+### O que pode ser enriquecido depois
 
-#### Falta
+- classificacao tatico-detalhada da origem
+- contexto da jogada
+- zona inicial
+- relacao com sequencia ofensiva
 
-1. clicar `Falta`
-2. escolher `Nosso` ou `Adversario`
-3. clicar atleta apenas se a falta for nossa
-4. informar tempo cedo no pos-jogo
-5. confirmar
+### Gol adversario
 
-#### Gol
+Ao vivo:
 
-1. clicar `Gol`
-2. escolher equipe
-3. clicar autor
-4. escolher assistencia opcional
-5. escolher metodo
-6. confirmar tempo
-7. ver placar atualizado no mesmo lugar
+- nao exigir autor quando isso atrasar a operacao
+- registrar imediatamente placar, tempo e periodo
+- permitir origem curta opcional
 
-## Comparacao: fluxo atual vs fluxo proposto
+Pos-jogo:
 
-| Criterio | Atual | Proposto |
+- se houver video ou memoria confiavel, completar autor ou origem
+
+### Wireframe conceitual do Gol
+
+```text
+[GOL]
+  -> [NOSSO] [ADVERSARIO] [CONTRA]
+  -> se NOSSO:
+       [ATLETA]
+       [JOGADA INDIVIDUAL] [ERRO ADV] [REBOTE] [BOLA PARADA] [SEM ASSIST] [DESCONHECIDA]
+       se origem comportar assistencia:
+         [ASSISTENCIA OPCIONAL]
+  -> [CONFIRMAR]
+```
+
+Meta operacional:
+
+- realtime: registrar gol em `<= 5 s`
+- pos-jogo: registrar gol completo em `<= 8 s`
+
+## Painel contextual recomendado
+
+### Informacoes permanentes - maximo 4
+
+1. tempo
+2. periodo
+3. placar
+4. faltas acumuladas
+
+### Informacoes contextuais - maximo 3
+
+1. posse atual
+2. ultimos eventos
+3. proximo passo esperado
+
+### Alerta prioritario - maximo 1 por vez
+
+Exemplos:
+
+- relogio pausado por evento
+- proxima falta acumulada critica
+- evento incompleto aguardando confirmacao
+
+## Metricas de sucesso
+
+### Baseline observado
+
+- cliques ate primeiro evento realtime: `14 a 18`
+- tempo ate primeiro evento realtime: `18 a 45 s`
+- cliques ate primeiro evento pos-jogo: `9 a 14`
+- tempo ate primeiro evento pos-jogo: `12 a 30 s`
+- gol realtime: `3 a 7 s`
+- gol pos-jogo: `4 a 9 s`
+
+### Metas propostas para o Shell
+
+| Metrica | Baseline atual | Meta inicial |
 | --- | --- | --- |
-| Primeira decisao do usuario | atleta | evento |
-| Visibilidade do proximo passo | variavel | previsivel |
-| Tempo aparece | tarde | cedo |
-| Simples vs complexo | mistura na mesma grade | escada progressiva |
-| Repeticao de lances | lenta | mais rapida |
-| Reentrada cognitiva apos cada evento | alta | media/baixa |
-| Escalabilidade para atalhos | baixa | alta |
+| Cliques ate primeiro evento realtime | 14 a 18 | reduzir em 30% |
+| Tempo ate primeiro evento realtime | 18 a 45 s | ficar abaixo de 15 s |
+| Registro de evento simples ao vivo | 2 a 5 s | `<= 2 s` |
+| Registro de gol ao vivo | 3 a 7 s | `<= 5 s` |
+| Cancelamentos por fluxo confuso | sem baseline firme | reduzir visivelmente em QA |
+| Eventos duplicados | risco atual baixo, mas existente | zero em fluxo piloto |
+| Popup sem saida clara | existe em alguns eventos | zero no Shell |
 
-## Vantagens do fluxo Evento -> Atleta
+## Experimento do Shell
 
-### Operacionais
+### Regra obrigatoria
 
-- diminui erro de clicar atleta certo e evento errado;
-- melhora a memoria muscular do scout;
-- acelera lances repetitivos como passe, falta, chute e lateral;
-- reduz a sensacao de popup arbitrario.
+O Shell e um experimento de jornada, nao um fork do dominio.
 
-### Arquiteturais
+Permanece igual:
 
-- mantem `MatchScoutingWindow` como engine de estado;
-- permite adaptar a camada visual sem reescrever `ClockService`;
-- conserva `matchEvents`, `postMatchEventLog` e `upsertMatchRecord`;
-- facilita manter Playwright por meio de novos `data-testid` estaveis.
-
-## Uso da area livre
-
-Hoje a tela gasta area com:
-
-- espacos vazios laterais;
-- logs muito largos quando abertos;
-- botoes em grade sem hierarquia de prioridade;
-- pouco contexto tatico.
-
-A proposta para a area livre:
-
-### Coluna contextual fixa
-
-- ultimos 5 eventos
-- placar
-- estado do clock
-- faltas por periodo
-- posse atual
-
-### Painel tatico opcional
-
-- mini-quadra
-- lado da acao
-- pressao/posse
-- mapa de calor simplificado por evento, se existir dado suficiente
-
-### Faixa de produtividade
-
-- evento em andamento
-- atleta selecionado
-- detalhe pendente
-- alerta de relogio pausado
-
-## Catalogo de componentes
-
-### Pode permanecer quase intacto
-
-- `useMatchClock`
 - `ClockService`
-- `matchUpsert`
-- estrutura de `MatchEvent`
-- persistencia `matchesApi`
+- save
+- reopen
+- API
+- payload
+- pos-jogo
+- tipos de evento persistidos
 
-### Deve permanecer, mas com nova casca visual
+### Flag recomendada
 
-- `MatchScoutingWindow`
-- `ScoutTable`
-- `CollectionTypeSelector`
-- tabela de logs
+`SCOUT_SHELL_V2_ENABLED`
 
-### Deve virar subcomponente explicito
+Uso:
 
-- painel de selecao de evento
-- painel de atleta
-- painel de contexto do jogo
-- painel de revisao rapida
-- fluxo de gol
-- fluxo de tempo manual
+- `false` por padrao
+- `true` apenas para QA e pessoas autorizadas
 
-### Deve perder protagonismo
+### Publico inicial
 
-- `PostMatchCollectionSheet` legado
-- logs full-screen como modo principal de revisao
-- lineup modal com logica operacional espalhada
+- ambiente QA oficial
+- operador interno
+- validacao da comissao tecnica
 
-### Deve desaparecer no futuro
+### Eventos piloto
 
-- bifurcacoes visuais que repetem a mesma preparacao em duas telas diferentes;
-- logica de entrada que depende de o usuario descobrir sozinho se o card e `saved`, `scheduled` ou `incomplete`.
+1. finalizacao
+2. falta
+3. defesa
 
-## Migracao sem quebrar o que ja estabilizou
+Gol nao entra no piloto inicial.
 
-### Fase 1 - shell visual
+### Periodo do experimento
 
-- manter `MatchScoutingWindow` e reorganizar so a ordem de apresentacao;
-- preservar payload, hooks e handlers;
-- adicionar uma camada `journeyMode = current | v2`.
+- janela inicial sugerida: `2 semanas`
+- rodada 1: QA interno
+- rodada 2: validacao assistida com operacao real simulada
 
-### Fase 2 - evento primeiro
+### Criterios para virar default
 
-- introduzir um novo painel de eventos;
-- ao selecionar evento, destacar atletas elegiveis;
-- manter handlers atuais como adaptadores.
+- eventos simples mais rapidos que o fluxo atual
+- sem regressao em save/reopen
+- sem regressao em realtime
+- feedback operacional positivo
+- nenhuma ambiguidade grave de proximo passo
 
-### Fase 3 - unificacao de detalhes
+### Criterios para morrer
 
-- concentrar detalhes em um painel lateral unico;
-- reduzir modais isolados;
-- manter o gol como fluxo especial, mas com layout consistente.
+- nao reduzir cliques ou tempo de forma relevante
+- introduzir erros novos de registro
+- criar divergencia de payload ou dominio
+- exigir suporte operacional constante
 
-### Fase 4 - revisao e area livre
+### Plano de rollback
 
-- trocar a tabela de logs por resumo lateral e drawer de auditoria;
-- manter a tabela completa para edicao pesada, nao para uso continuo.
+- flag volta para `false`
+- fluxo antigo continua default durante todo o experimento
+- nenhum dado precisa de migracao
 
-### Fase 5 - retirada de legado
+### Data de morte
 
-- apos validacao QA e Playwright, desativar caminhos duplicados;
-- congelar `PostMatchCollectionSheet` apenas como fallback historico.
+Data de morte operacional proposta: `2026-09-01`.
 
-## Impacto esperado
+Assuncao usada nesta documentacao:
 
-| Objetivo | Ganho esperado |
-| --- | --- |
-| Velocidade do primeiro evento | queda de 20% a 40% nos cliques |
-| Velocidade de eventos repetitivos | ganho alto |
-| Clareza de proximo passo | ganho alto |
-| Erros de periodo/tempo | ganho medio |
-| Treinamento de novos operadores | ganho alto |
+- o experimento nasce na esteira da Sprint `004C`;
+- a decisao final precisa acontecer, no maximo, ate o encerramento planejado da Sprint `004G`.
 
-## Plano recomendado para Sprint 004B
+Se o Shell nao cumprir os criterios de aprovacao ate `2026-09-01`, ele deve ser descontinuado ou replanejado explicitamente.
 
-1. implementar o shell `Evento -> Atleta` apenas no realtime, mantendo feature flag;
-2. preservar payload e handlers atuais;
-3. cobrir com Playwright o novo caminho principal;
-4. migrar gol e falta primeiro;
-5. depois trazer pos-jogo para o mesmo shell visual;
-6. so no fim remover as telas duplicadas de preparacao e revisao.
+## Recomendacao para a Sprint 004C
+
+Objetivo de 004C:
+
+- preparar infraestrutura do Shell experimental sem alterar o motor.
+
+Escopo recomendado:
+
+1. criar flag `SCOUT_SHELL_V2_ENABLED`
+2. isolar shell visual da coleta
+3. introduzir painel contextual
+4. garantir compatibilidade com Playwright e QA
+5. nao tocar ainda em gol composto
+
+## Conclusao
+
+A coleta hibrida proposta resolve o conflito central da plataforma:
+
+- o sistema atual sabe persistir bem;
+- agora ele precisa perguntar menos ao vivo.
+
+Decisao estrutural da Sprint:
+
+- realtime serve ao controle da partida;
+- pos-jogo serve ao enriquecimento;
+- futuro serve a inferencia;
+- o Shell so muda jornada, nunca o motor.

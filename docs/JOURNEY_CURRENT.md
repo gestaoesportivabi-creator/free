@@ -1,242 +1,233 @@
 # JOURNEY_CURRENT
 
 Projeto: `SCOUT 21 PRO`
-Sprint: `004A`
+Sprint: `004B`
 Data: `2026-07-23`
-Escopo: descoberta da jornada atual, sem alteracao funcional.
+Escopo: auditoria operacional da jornada atual como sistema.
+
+## Pergunta central
+
+Qual e a menor quantidade de informacao que o scout precisa fornecer ao vivo para que o sistema consiga reconstruir corretamente o jogo e produzir analises uteis?
+
+Toda a leitura abaixo usa essa pergunta como filtro.
 
 ## Resumo executivo
 
-Hoje a coleta ja funciona, mas a jornada foi crescendo em camadas:
+O sistema atual ja cobre:
 
-- `ScoutTable` decide o tipo de partida e o modo de coleta.
-- `CollectionTypeSelector` abre uma bifurcacao entre realtime e pos-jogo.
-- `ScoutTable` ainda tem uma tela de preparacao diferente para cada modo.
-- `MatchScoutingWindow` concentra quase toda a operacao real.
-- `RealtimeScoutPage` abre o realtime em nova aba.
+- entrada na partida;
+- preparacao;
+- coleta realtime;
+- coleta pos-jogo;
+- save;
+- reopen;
+- reconciliacao de estado com `ClockService`.
 
-O resultado operacional e:
+Mas a jornada ainda foi modelada como:
 
-- muitas telas antes da primeira acao de scout;
-- muitos estados intermediarios invisiveis;
-- dependencia forte de memoria operacional do usuario;
-- fluxo de registro centrado em `Atleta -> Evento`, mesmo quando a intencao mental do scout costuma ser `Evento -> Atleta`.
+`Partida -> Modo -> Preparacao -> Atleta -> Evento -> Detalhe -> Tempo -> Confirmacao -> Save`
 
-## Telas atuais da jornada
+O scout, porem, tende a pensar assim:
 
-| Ordem | Tela | Componente principal | Objetivo atual |
+`Lance observado -> Relevancia -> Evento -> Participantes -> Confirmacao`
+
+Essa diferenca explica a maior parte da friccao atual.
+
+## Mapa macro do sistema atual
+
+| Etapa | Componente principal | Decisao exigida | Mudanca de contexto |
 | --- | --- | --- | --- |
-| 1 | Login | `Login` | Autenticar e gravar token |
-| 2 | Dashboard | `App` + navegacao lateral | Entrar no modulo `Dados do Jogo` |
-| 3 | Lista de partidas | `ScoutTable` | Escolher card de partida |
-| 4 | Seletor de tipo de coleta | `CollectionTypeSelector` | Decidir `realtime` ou `postmatch` |
-| 5 | Preparacao realtime | `ScoutTable` | Selecionar atletas e abrir nova aba |
-| 6 | Preparacao pos-jogo | `ScoutTable` | Selecionar atletas e abrir coleta em modal |
-| 7 | Coleta realtime | `RealtimeScoutPage` + `MatchScoutingWindow` | Rodar partida ao vivo |
-| 8 | Coleta pos-jogo | `MatchScoutingWindow` | Lancar eventos manualmente |
-| 9 | Logs e edicao | tabela interna de `MatchScoutingWindow` | Revisar, editar, excluir |
-| 10 | Modais auxiliares | sync, tempo manual, gol, encerramento | Resolver passos complementares |
+| Entrada na partida | `ScoutTable` | qual card abrir | alta |
+| Tipo de coleta | `CollectionTypeSelector` | realtime vs pos-jogo | media |
+| Preparacao | `ScoutTable` | atletas elegiveis | alta |
+| Inicio | `RealtimeScoutPage` ou `MatchScoutingWindow` | lineup / posse / start | alta |
+| Evento | `MatchScoutingWindow` | atleta primeiro, evento depois | alta |
+| Confirmacao | fluxos internos | detalhe, tempo, assistencia, resultado | alta |
+| Atualizacao do estado | `MatchScoutingWindow` + `useMatchClock` | quase invisivel ao usuario | baixa |
+| Feedback | placar, logs, ultimos eventos, alertas | entender se o sistema aceitou o evento | media |
+| Save / Reopen | `onSave`, `matchUpsert`, `matchesApi` | concluir ou continuar depois | media |
+| Pos-jogo | `MatchScoutingWindow` | revisar, editar, enriquecer | media |
 
-## Modelo mental atual do fluxo
+## Jornada detalhada: realtime
 
-Fluxo predominante atual:
+### Sequencia operacional atual
 
-`Partida -> Modo -> Preparacao -> Atleta -> Evento -> Resultado/Detalhe -> Tempo -> Save`
+| Etapa | Acao | Cliques | Tempo estimado | Informacao solicitada | Necessidade real ao vivo | Possibilidade de inferencia | Possibilidade de enriquecimento posterior | Risco de erro |
+| --- | --- | ---: | --- | --- | --- | --- | --- | --- |
+| 1 | abrir `Dados do Jogo` | 1 | 1 a 2 s | nenhuma | obrigatoria | nao | nao | baixa |
+| 2 | localizar a partida | 1 | 2 a 8 s | data, adversario, competicao | obrigatoria | nao | nao | media |
+| 3 | escolher `Abrir Scout em Tempo Real` | 1 | 1 a 2 s | modo | obrigatoria | nao | nao | media |
+| 4 | selecionar elenco | 1 a 8 | 4 a 20 s | atletas disponiveis | parcial | parcialmente por lineup padrao, no futuro | sim | alta |
+| 5 | abrir nova aba | 1 | 1 s | nenhuma | tecnica, nao operacional | sim | nao | media |
+| 6 | definir 5 em quadra | 5 | 4 a 8 s | quinteto inicial | obrigatoria | parcialmente, no futuro | sim | alta |
+| 7 | definir posse inicial | 1 | 1 s | bola inicial | util, mas nao sempre critica | talvez, com origem de kick-off | nao | media |
+| 8 | iniciar partida | 1 | 1 s | nenhuma | obrigatoria | nao | nao | baixa |
+| 9 | selecionar atleta | 1 | 0.5 a 2 s | participante principal | depende do evento | as vezes | nao | alta |
+| 10 | selecionar evento | 1 | 0.5 a 1.5 s | tipo do lance | obrigatoria | nao | nao | media |
+| 11 | resolver detalhe | 0 a 4 | 0 a 5 s | resultado, metodo, assistencia, etc. | varia por evento | sim em parte | sim | alta |
+| 12 | retomar relogio se pausou | 0 a 1 | 0 a 2 s | estado do clock | obrigatoria so em alguns eventos | nao | nao | alta |
+| 13 | revisar log | 1 | 1 s | nenhuma | raramente obrigatoria | nao | sim | media |
+| 14 | salvar como incompleta / finalizar | 1 a 2 | 1 a 3 s | estado de periodo | obrigatoria | nao | nao | media |
 
-Para o scout, isso gera um desvio:
+### Baseline operacional realtime
 
-- o scout pensa primeiro no lance;
-- a UI pede primeiro o atleta;
-- os detalhes do evento aparecem depois;
-- o tempo as vezes aparece tarde;
-- em lances complexos, o fluxo muda de forma no meio da acao.
+- Cliques minimos realistas ate o primeiro evento simples: `14 a 18`
+- Tempo provavel ate o primeiro evento simples: `18 a 45 s`
+- Cliques para um gol realtime completo: `4 a 8` apos a partida ja estar em curso
+- Tempo provavel para um gol realtime completo: `3 a 7 s`
 
-## Jornada atual: realtime
+## Jornada detalhada: pos-jogo
 
-### Caminho base
+### Sequencia operacional atual
 
-| Passo | Tela | Acao | Cliques | Tempo estimado | Informacoes exigidas | Possiveis erros |
-| --- | --- | --- | ---: | --- | --- | --- |
-| 1 | Login | Preencher email e senha | 3 | 5 a 12 s | Credenciais | erro de login, sessao antiga, token expirado |
-| 2 | Dashboard | Clicar em `Dados do Jogo` | 1 | 1 a 2 s | nenhuma | clique bloqueado por modal de newsletter |
-| 3 | Lista de partidas | Localizar card correto | 1 | 2 a 8 s | data, adversario, competicao | card salvo vs programado confunde entrada |
-| 4 | Tipo de coleta | Escolher `Abrir Scout em Tempo Real` | 1 | 1 a 2 s | decisao de modo | escolha errada abre pos-jogo |
-| 5 | Preparacao | Filtrar/selecionar atletas | 1 a 8 | 4 a 20 s | disponibilidade, suspensao, lesao | selecionar elenco incompleto, errar goleiro, ignorar pendurados |
-| 6 | Preparacao | Clicar em `Iniciar Scout da Partida` | 1 | 1 s | min. de atletas | abre nova aba, troca de contexto |
-| 7 | Lineup modal | Escolher 5 atletas em quadra | 5 | 4 a 8 s | quinteto inicial | ordem errada, numero errado, atleta indisponivel |
-| 8 | Lineup modal | Informar posse inicial | 1 | 1 s | bola inicial | usuario esquece posse |
-| 9 | Lineup modal | Confirmar inicio | 1 | 1 s | lineup completo | falha se 5 atletas nao estiverem validos |
-| 10 | Coleta | Iniciar partida | 1 | 1 s | nenhuma | usuario tenta registrar evento antes de iniciar |
-| 11 | Coleta | Selecionar atleta | 1 | 0.5 a 2 s | atleta correto | atleta nao esta ativo, grid apertado |
-| 12 | Coleta | Selecionar evento | 1 | 0.5 a 1.5 s | tipo do lance | clique em evento errado, evento bloqueado por estado |
-| 13 | Coleta | Resolver detalhe | 0 a 4 | 0 a 5 s | resultado, metodo, assistencia, recebedor, etc. | fluxo muda conforme evento; popup pode confundir |
-| 14 | Coleta | Retomar/pause clock quando preciso | 0 a 1 | 0 a 2 s | entender estado do relogio | esquecer relogio pausado por evento |
-| 15 | Coleta | Abrir logs para revisar | 1 | 1 s | nenhuma | tabela rouba espaco operacional |
-| 16 | Coleta | Salvar como incompleta ou finalizar | 1 a 2 | 1 a 3 s | estado do periodo | usuario nao entende por que nao pode finalizar |
+| Etapa | Acao | Cliques | Tempo estimado | Informacao solicitada | Necessidade real ao vivo | Possibilidade de inferencia | Possibilidade de enriquecimento posterior | Risco de erro |
+| --- | --- | ---: | --- | --- | --- | --- | --- | --- |
+| 1 | abrir `Dados do Jogo` | 1 | 1 a 2 s | nenhuma | obrigatoria | nao | nao | baixa |
+| 2 | localizar a partida | 1 | 2 a 8 s | data, adversario, competicao | obrigatoria | nao | nao | media |
+| 3 | escolher `Adicionar dados da Partida` | 1 | 1 a 2 s | modo | obrigatoria | nao | nao | media |
+| 4 | selecionar atletas | 1 a 8 | 4 a 20 s | elenco a considerar | parcial | talvez por lineup salvo | sim | media |
+| 5 | continuar para coleta | 1 | 1 s | nenhuma | obrigatoria | nao | nao | baixa |
+| 6 | selecionar atleta | 1 | 0.5 a 2 s | participante principal | depende do evento | as vezes | nao | alta |
+| 7 | selecionar evento | 1 | 0.5 a 1.5 s | tipo do lance | obrigatoria | nao | nao | media |
+| 8 | resolver detalhe | 0 a 4 | 0 a 6 s | resultado, autor, assistencia, metodo | varia | sim em parte | sim | alta |
+| 9 | informar tempo manual | 1 a 3 | 1 a 5 s | minuto e segundo | obrigatoria no modelo atual | nao | nao | alta |
+| 10 | trocar periodo | 1 | 1 s | 1T vs 2T | obrigatoria por bloco | parcialmente | nao | media |
+| 11 | revisar e editar logs | 1 a 5 | 2 a 10 s | tempo, tipo, assistencia | alta relevancia pos-jogo | nao | sim | media |
+| 12 | salvar | 1 | 1 a 3 s | consistencia do log | obrigatoria | nao | nao | media |
 
-### Cliques minimos para o primeiro evento realtime
+### Baseline operacional pos-jogo
 
-Sem contar login e busca visual:
+- Cliques minimos realistas ate o primeiro evento simples: `9 a 14`
+- Tempo provavel ate o primeiro evento simples: `12 a 30 s`
+- Cliques para um gol pos-jogo completo: `5 a 9`
+- Tempo provavel para um gol pos-jogo completo: `4 a 9 s`
 
-- 1 clique no card
-- 1 clique no tipo de coleta
-- 1 clique em `Selecionar todos` ou varios cliques nos atletas
-- 1 clique para iniciar
-- 5 cliques para o quinteto
-- 1 clique para posse
-- 1 clique para confirmar lineup
-- 1 clique para iniciar partida
-- 1 clique no atleta
-- 1 clique no evento
+## Auditoria por fase do sistema
 
-Total minimo realista: `14 a 18 cliques` antes do primeiro evento simples.
+### 1. Entrada na partida
 
-## Jornada atual: pos-jogo
+Decisao exigida:
 
-### Caminho base
+- identificar card correto;
+- entender se o card esta programado, salvo ou incompleto.
 
-| Passo | Tela | Acao | Cliques | Tempo estimado | Informacoes exigidas | Possiveis erros |
-| --- | --- | --- | ---: | --- | --- | --- |
-| 1 | Login | Preencher email e senha | 3 | 5 a 12 s | credenciais | mesmo risco do realtime |
-| 2 | Dashboard | Clicar em `Dados do Jogo` | 1 | 1 a 2 s | nenhuma | modal de newsletter |
-| 3 | Lista de partidas | Localizar card | 1 | 2 a 8 s | data, adversario, competicao | card salvo/incompleto muda o caminho |
-| 4 | Tipo de coleta | Escolher `Adicionar dados da Partida` | 1 | 1 a 2 s | decisao de modo | escolha errada manda ao realtime |
-| 5 | Preparacao pos-jogo | Selecionar atletas | 1 a 8 | 4 a 20 s | elenco base da analise | usuario pode incluir atletas desnecessarios |
-| 6 | Preparacao pos-jogo | `Continuar para coleta de dados` | 1 | 1 s | min. de atletas | sem clareza do que muda a seguir |
-| 7 | Coleta pos-jogo | Selecionar atleta | 1 | 0.5 a 2 s | atleta correto | pensamento natural costuma ser evento primeiro |
-| 8 | Coleta pos-jogo | Selecionar evento | 1 | 0.5 a 1.5 s | tipo do lance | usuario perde tempo procurando botao |
-| 9 | Coleta pos-jogo | Resolver detalhe | 0 a 4 | 0 a 6 s | resultado, autor, assistencia, metodo | variacao por evento, falta previsibilidade |
-| 10 | Coleta pos-jogo | Informar tempo manual | 1 a 3 | 1 a 5 s | minuto e segundo | tempo aparece tarde no fluxo |
-| 11 | Coleta pos-jogo | Trocar periodo quando necessario | 1 | 1 s | 1T vs 2T | usuario pode esquecer de encerrar o 1T |
-| 12 | Coleta pos-jogo | Abrir logs | 1 | 1 s | nenhuma | perde area principal da tela |
-| 13 | Coleta pos-jogo | Editar/excluir eventos | 1 a 5 | 2 a 10 s | tempo, tipo, assistencia | edicao e poderosa, mas lenta |
-| 14 | Coleta pos-jogo | Salvar | 1 | 1 a 3 s | consistencia do log | usuario so descobre conflitos no fim |
+Problema:
 
-### Cliques minimos para o primeiro evento pos-jogo
+- o tipo do card muda o caminho visual;
+- isso e uma decisao de sistema, nao do scout.
 
-Sem contar login e busca visual:
+### 2. Preparacao
 
-- 1 clique no card
-- 1 clique no tipo de coleta
-- 1 clique em `Selecionar todos` ou varios cliques nos atletas
-- 1 clique em `Continuar`
-- 1 clique no atleta
-- 1 clique no evento
-- 1 clique no detalhe
-- 2 cliques no tempo manual
-- 1 clique para confirmar
+Decisao exigida:
 
-Total minimo realista: `9 a 14 cliques` antes do primeiro evento simples.
+- quem participa do scout;
+- quem esta em quadra;
+- qual lado inicia com a bola.
 
-## Fluxos atuais por tipo de evento
+Problema:
 
-### Evento simples
+- alto numero de cliques antes de qualquer dado novo;
+- mesma intencao aparece em mais de uma tela;
+- o operador ainda nao entrou no ritmo do jogo.
 
-Exemplo: passe certo no realtime
+### 3. Inicio
 
-1. selecionar atleta
-2. clicar em `PASSE`
-3. clicar em `Certo`
-4. opcionalmente resolver recebedor
+Decisao exigida:
 
-### Evento medio
+- iniciar o clock;
+- reconhecer se a partida esta em `PRE_JOGO`, `PAUSADO`, `INTERVALO` ou `ENCERRADO`.
 
-Exemplo: falta no pos-jogo
+Problema:
 
-1. selecionar atleta
-2. clicar em `FALTA`
-3. escolher `Nosso` ou `Adversario`
-4. abrir popup de tempo manual
-5. escolher minuto
-6. escolher segundo
-7. confirmar
+- o estado do relogio influencia o que pode ser feito;
+- mas o sistema mistura operacao do scout com semantica interna do motor.
 
-### Evento complexo
+### 4. Registro do evento
 
-Exemplo: gol no pos-jogo
+Decisao exigida:
 
-1. selecionar atleta ou autor
-2. clicar em `GOL`
-3. escolher equipe
-4. escolher metodo
-5. escolher assistencia opcional
-6. preencher tempo manual
-7. confirmar
+- escolher atleta antes do evento na maioria dos casos;
+- entender o detalhe exigido so depois do clique.
 
-Observacao: o fluxo do gol mistura logica de placar, autoria, assistencia e tempo dentro do mesmo ciclo, mas o operador so ve a maior parte dessas exigencias depois de ja ter clicado no evento.
+Problema:
 
-## Informacoes exigidas hoje por camada
+- alto custo de contexto;
+- excesso de tela olhando para a interface.
 
-| Camada | Informacoes exigidas |
-| --- | --- |
-| Escolha da partida | data, adversario, competicao, tipo do card |
-| Escolha do modo | realtime vs postmatch |
-| Preparacao | elenco, disponibilidade, goleiros, posse inicial |
-| Registro do evento | atleta, tipo do evento, detalhe, time do lance |
-| Confirmacao | tempo, periodo, metodo, assistencia, receptor |
-| Persistencia | integridade do `matchEvents`, `postMatchEventLog`, placar, `collectionPhase` |
+### 5. Confirmacao
 
-## Componentes atuais envolvidos
+Decisao exigida:
 
-### UI principal
+- confirmar tempo, detalhe, participantes secundarios e metodo.
 
-- `ScoutTable`
-- `CollectionTypeSelector`
-- `RealtimeScoutPage`
-- `MatchScoutingWindow`
-- `NewsletterPopup` (interferencia externa real)
+Problema:
 
-### Subfluxos internos de `MatchScoutingWindow`
+- os requisitos aparecem em cascata;
+- eventos parecidos nao seguem a mesma escada visual.
 
-- painel de atleta
-- painel central de eventos
-- painel de relogio
-- tabela de logs e edicao
-- modal de lineup
-- modal de sync do relogio
-- modal de encerramento
-- dialogos de gol
-- dialogo de tempo manual no pos-jogo
+### 6. Atualizacao do estado
 
-### Hooks, services e utilitarios
+Estado alterado hoje por evento:
 
-- `useMatchClock`
-- `ClockService`
-- `matchUpsert`
-- `matchesApi`
+- cronometro
+- periodo
+- placar
+- faltas
+- posse
+- historico de eventos
 
-## Endpoints e persistencia usados no fluxo
+Problema:
 
-| Momento | Endpoint/artefato |
-| --- | --- |
-| Login | autenticacao com token gravado em `localStorage` |
-| Carregar lista | `matchesApi` / recursos de partidas |
-| Reabrir partida | `matchesApi.getById()` |
-| Salvar partida | `matchesApi.create()` ou `matchesApi.update()` via `upsertMatchRecord()` |
-| Realtime em nova aba | `localStorage.realtimeScoutData` |
-| Estado do clock | `ClockService` + `useMatchClock` |
+- o sistema atual cuida bem do motor;
+- mas nao traduz esse motor em fluxo operacional simples.
 
-## Onde o operador perde mais tempo hoje
+### 7. Save, reopen e pos-jogo
 
-1. antes do primeiro evento, por excesso de preparacao e contexto espalhado;
-2. no switch mental entre `atleta primeiro` e `evento primeiro`;
-3. nos eventos com mais de uma etapa, porque o sistema revela as exigencias em parcelas;
-4. na revisao por logs, porque a grade toma a tela inteira e interrompe o ritmo do scout;
-5. no pos-jogo, ao precisar voltar o olhar para o controle de periodo e depois para o popup de tempo manual.
+Ponto forte:
 
-## Conclusao da jornada atual
+- o dominio atual ja suporta save, reopen e reconciliacao consistente.
 
-O sistema atual esta funcional, mas foi modelado para ser preciso antes de ser rapido.
+Problema:
 
-Ele privilegia:
+- essa forca arquitetural ainda nao virou uma jornada mais leve.
 
-- consistencia interna;
-- reutilizacao do mesmo componente para modos diferentes;
-- protecoes de clock e persistencia;
+## O que realmente precisa ser coletado ao vivo
 
-Mas paga um custo alto em operacao:
+Leitura preliminar da jornada atual:
 
-- entrada longa;
-- excesso de cliques antes do primeiro registro;
-- baixa previsibilidade do proximo passo;
-- pouco aproveitamento da area livre para contexto tatico.
+- nem todo clique atual justifica sua existencia;
+- muitos dados hoje pedidos ao vivo poderiam ser:
+  - enriquecidos depois;
+  - inferidos no futuro;
+  - removidos do realtime sem perda critica.
+
+Hipotese forte para a Sprint 004B:
+
+- realtime deve registrar apenas o que altera estado e contexto tatico imediato;
+- pos-jogo deve absorver profundidade;
+- futuro automatico deve absorver inferencia e sugestao.
+
+## Principais pontos de friccao observados
+
+1. `Atleta -> Evento` contraria a ordem mental do operador.
+2. O primeiro evento exige preparacao longa.
+3. O sistema pede profundidade ao vivo demais para alguns lances.
+4. Tempo manual aparece tarde no pos-jogo.
+5. O log ocupa espaco demais para a funcao que cumpre durante a partida.
+6. O caminho do card ainda vaza regras internas do sistema para o operador.
+
+## Conclusao
+
+Hoje a plataforma esta pronta para uma coleta hibrida, mas a jornada ainda nao esta.
+
+O motor esta mais maduro do que a experiencia.
+
+Isso abre uma oportunidade clara:
+
+- manter o mesmo dominio;
+- manter o mesmo `ClockService`;
+- manter o mesmo save;
+- mas separar com clareza:
+  - o que e essencial ao vivo;
+  - o que e enriquecimento pos-jogo;
+  - o que deve virar inferencia futura.

@@ -1,55 +1,69 @@
 # WIREFRAMES
 
 Projeto: `SCOUT 21 PRO`
-Sprint: `004A`
+Sprint: `004B`
 Data: `2026-07-23`
-Escopo: wireframes conceituais, sem implementacao.
+Escopo: wireframes conceituais do modelo hibrido, sem implementacao.
 
-## Premissas
+## Guardrails
 
-- modo escuro continua como base visual;
-- prioridade para velocidade operacional;
-- painel central deve respirar mais;
-- logs nao devem cobrir a tela inteira no uso normal.
+- no maximo 4 informacoes permanentes;
+- no maximo 3 informacoes contextuais;
+- no maximo 1 alerta prioritario por vez;
+- o proximo clique precisa ser obvio;
+- o painel principal deve servir ao evento atual, nao ao historico completo.
 
-## Desktop
+## Informacoes permanentes
 
-### Realtime - shell proposto
+1. tempo
+2. periodo
+3. placar
+4. faltas acumuladas
+
+## Informacoes contextuais
+
+1. posse atual
+2. ultimos eventos
+3. proximo passo
+
+## Alerta prioritario
+
+Apenas um por vez:
+
+- relogio pausado por evento
+- ultima falta antes do limite
+- evento aguardando confirmacao
+
+## Desktop - realtime
 
 ```text
 +--------------------------------------------------------------------------------------------------+
-| HEADER: Partida | Placar | Periodo | Clock | Estado | Save | Finalizar | Ultimos alertas        |
+| [Tempo] [Periodo] [Placar] [Faltas]                          [Salvar] [Finalizar] [Alerta unico] |
 +---------------------------+--------------------------------------+-----------------------------+
-| EVENTOS                    | AREA OPERACIONAL                    | CONTEXTO RAPIDO            |
-|                            |                                      |                           |
-| [Gol] [Passe] [Chute]      | Atleta selecionavel por contexto     | Ultimos eventos           |
-| [Falta] [Cartao] [Esc]     |                                      | 22:05 Gol QA 02          |
-| [TL] [Penalti] [Lateral]   |  [1] [2] [3] [4] [5] [6]            | 21:10 Gol QA 04          |
-| [Defesa] [Desarme] [Blk]   |                                      | Falta 22:10 Adv          |
-|                            |  Painel inferior de detalhes         |                           |
-| Filtro: simples / avancado |  evento: Gol                         | Posse / faltas / resumo   |
-|                            |  autor: QA 02                        |                           |
-|                            |  assist: QA 03                       |                           |
-|                            |  tempo: 20:45                        |                           |
-|                            |  [Confirmar] [Cancelar]              |                           |
+| EVENTOS ESSENCIAIS        | EVENTO EM ANDAMENTO                 | CONTEXTO RAPIDO            |
+|                           |                                      |                           |
+| [Gol] [Finalizacao]       | passo 1: evento                      | Posse atual               |
+| [Falta] [Cartao]          | passo 2: atleta ou lado              | Ultimos eventos           |
+| [Defesa] [Rec Posse]      | passo 3: detalhe curto               | Proximo passo             |
+| [Perda Posse] [Esc]       | passo 4: confirmar                   |                           |
+| [Penalti] [TL] [Subs]     |                                      |                           |
+|                           | [Confirmar] [Cancelar]               |                           |
 +---------------------------+--------------------------------------+-----------------------------+
 ```
 
-### Pos-jogo - shell proposto
+## Desktop - pos-jogo
 
 ```text
 +--------------------------------------------------------------------------------------------------+
-| HEADER: Partida | Placar | Bloco ativo 1T/2T | Save | Reabrir | Atalhos de tempo            |
+| [Tempo manual] [Periodo] [Placar] [Faltas]                    [Salvar] [Reabrir] [Alerta unico]  |
 +---------------------------+--------------------------------------+-----------------------------+
-| EVENTOS                    | ELENCO / QUADRA / DETALHES          | REVISAO                    |
-|                            |                                      |                           |
-| [Gol] [Passe] [Chute]      | Grade de atletas contextual         | Ultimos 10 eventos        |
-| [Falta] [Cartao] [Esc]     |                                      | Editar rapido             |
-| [TL] [Penalti] [Lateral]   | Tempo fica visivel antes da         | Validacao de placar       |
-| [Defesa] [Desarme] [Blk]   | confirmacao final                   | Alertas de consistencia   |
-|                            |                                      |                           |
-| Atalhos 00:00 / 05:00      | [evento] [atleta] [detalhes]        |                           |
-| 10:00 / 15:00 / 20:00      | [tempo] [confirmar]                 |                           |
+| EVENTOS / FILTROS         | ENRIQUECIMENTO DO EVENTO             | REVISAO RAPIDA            |
+|                           |                                      |                           |
+| [Gol] [Finalizacao]       | autor                                 | ultimos 8 eventos        |
+| [Falta] [Cartao]          | participante secundario               | inconsistencias          |
+| [Defesa] [Esc]            | origem / metodo / observacao          | editar rapido            |
+| [Penalti] [TL]            | tempo / periodo                       |                           |
+|                           | [Confirmar]                           |                           |
 +---------------------------+--------------------------------------+-----------------------------+
 ```
 
@@ -57,38 +71,31 @@ Escopo: wireframes conceituais, sem implementacao.
 
 ```text
 +--------------------------------------------------------------------------------------+
-| Partida | Placar | Clock/Periodo | Save | Finalizar                                 |
+| [Tempo] [Periodo] [Placar] [Faltas]                           [Salvar] [Alerta]      |
 +----------------------+-------------------------------------------+-------------------+
-| EVENTOS              | ZONA PRINCIPAL                            | LOG LATERAL       |
+| EVENTOS              | OPERACAO                                 | CONTEXTO          |
 |                      |                                           |                   |
-| Gol                  | Atletas contextuais                       | 3 ultimos         |
-| Passe                |                                           |                   |
-| Chute                | Detalhes compactos                        |                   |
-| Falta                |                                           |                   |
-| Cartao               | Confirmacao                              |                   |
-| ...                  |                                           |                   |
+| [Gol]                | atleta / lado / detalhe                  | ultimos 3         |
+| [Finalizacao]        |                                           | posse             |
+| [Falta]              | confirmar                                 | proximo passo     |
+| [Defesa]             |                                           |                   |
+| [Cartao]             |                                           |                   |
 +----------------------+-------------------------------------------+-------------------+
 ```
-
-Observacao:
-
-- em notebook, o log lateral precisa ser colapsavel;
-- sem isso, os botoes principais ficam espremidos.
 
 ## Tablet horizontal
 
 ```text
 +----------------------------------------------------------------------------+
-| Partida | Placar | Periodo | Save                                          |
+| [Tempo] [Periodo] [Placar] [Faltas]                    [Salvar] [Alerta]   |
 +----------------------+------------------------------+----------------------+
-| EVENTOS              | ATLETAS                      | DETALHES             |
-| Gol                  | [1] [2] [3]                 | evento               |
-| Passe                | [4] [5] [6]                 | tempo                |
-| Chute                |                              | subtipo              |
-| Falta                |                              | confirmar            |
-| ...                  |                              |                      |
+| EVENTOS              | PARTICIPANTES               | DETALHES             |
+| [Gol]                | [1] [2] [3]                | detalhe curto        |
+| [Finalizacao]        | [4] [5] [6]                | confirmacao          |
+| [Falta]              | lado do evento             |                      |
+| [Defesa]             |                            |                      |
 +----------------------+------------------------------+----------------------+
-| Clock / ultimos eventos / alertas compactos                                 |
+| Posse | Ultimos eventos | Proximo passo                                     |
 +----------------------------------------------------------------------------+
 ```
 
@@ -96,52 +103,78 @@ Observacao:
 
 ```text
 +--------------------------------------------------------------+
-| Partida | Placar | Periodo | Save                            |
+| [Tempo] [Periodo] [Placar] [Faltas]                          |
 +--------------------------------------------------------------+
-| EVENTOS em carrossel                                          |
-| [Gol] [Passe] [Chute] [Falta] [Cartao] ...                    |
+| EVENTOS EM CARROSSEL                                         |
+| [Gol] [Finalizacao] [Falta] [Defesa] [Cartao] ...            |
 +--------------------------------------------------------------+
-| ATLETAS                                                       |
-| [1] [2] [3] [4] [5] [6]                                       |
+| PARTICIPANTES / LADO                                          |
 +--------------------------------------------------------------+
-| DETALHES / TEMPO / CONFIRMACAO                                |
+| DETALHE CURTO / CONFIRMACAO                                   |
 +--------------------------------------------------------------+
-| ULTIMOS EVENTOS                                                |
+| CONTEXTO                                                      |
+| posse | ultimos eventos | proximo passo                       |
 +--------------------------------------------------------------+
 ```
 
-## Modo escuro
+## Goal micro-wireframe
 
-Direcao visual recomendada:
+### Realtime
 
-- fundo principal quase preto, mas nao chapado;
-- destaque ciano apenas para a acao primaria;
-- verde para sucesso/confirmado;
-- amber para alerta operacional;
-- vermelho para risco, cartao, time adversario e bloqueio;
-- log secundario em cinza quente, nao branco puro.
+```text
+[GOL]
+  [NOSSO] [ADVERSARIO] [CONTRA]
+  -> se NOSSO:
+       [ATLETA]
+       [JOGADA INDIVIDUAL] [ERRO ADV] [REBOTE] [BOLA PARADA] [SEM ASSIST] [DESCONHECIDA]
+       [ASSISTENCIA OPCIONAL]
+  [CONFIRMAR]
+```
+
+### Pos-jogo
+
+```text
+[GOL]
+  [NOSSO] [ADVERSARIO] [CONTRA]
+  [AUTOR]
+  [ORIGEM]
+  [ASSISTENCIA OPCIONAL]
+  [TEMPO]
+  [PERIODO]
+  [CONFIRMAR]
+```
 
 ## Uso da area livre
 
-### O que pode entrar sem poluir
+### Deve entrar
 
-- mini-quadra simplificada
-- ultimos 5 eventos
-- placar por periodo
-- contagem de faltas
 - posse atual
-- indicador de relogio pausado
+- ultimos eventos
+- proximo passo
+- alerta unico
 
-### O que nao deve ocupar a area livre
+### Pode entrar depois
 
-- textos longos
-- tabela completa o tempo inteiro
-- modais grandes para eventos simples
-- redundancia de status que ja aparece no header
+- mini-quadra
+- pressao recente
+- sequencia ofensiva
 
-## Regras de ouro para 004B
+### Nao deve entrar
 
-1. Cada tela deve responder "qual e o proximo clique?".
-2. O detalhe do evento deve aparecer sem cobrir a tela toda.
-3. O log completo deve virar ferramenta de auditoria, nao o centro do fluxo.
-4. O atleta deve ficar mais perto do evento, nao como etapa anterior fixa.
+- tabela completa permanente
+- texto longo de instrucao
+- popup gigante para eventos simples
+- mais de um alerta ao mesmo tempo
+
+## Conclusao visual
+
+O painel contextual do Shell precisa ser pequeno, confiavel e sempre visivel.
+
+Ele nao pode competir com o evento atual.
+
+Seu papel e:
+
+- orientar;
+- reduzir duvida;
+- lembrar estado;
+- nunca sequestrar a atencao do scout.
