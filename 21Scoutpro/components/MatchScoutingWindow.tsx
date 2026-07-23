@@ -913,16 +913,31 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
     if (!actionFlow) return;
+    const openTimeOrExecuteAgainstEvent = (
+      nextFlow: NonNullable<typeof actionFlow>,
+      playerId: string
+    ) => {
+      if (needsTimePopup()) {
+        setActionFlow({
+          ...nextFlow,
+          step: 'time' as const,
+          selectedPlayerId: playerId,
+          pendingTime: getTimeForEvent() ?? matchTime ?? 0,
+        });
+        return;
+      }
+      executeActionFlow(nextFlow, playerId);
+    };
     // Falta do adversário: só contabiliza; não abre popup com lista dos nossos jogadores
     if (actionFlow.action === 'foul' && extra?.foulTeam === 'against') {
-      executeActionFlow(
+      openTimeOrExecuteAgainstEvent(
         { ...actionFlow, step: 'details', details, foulTeam: 'against', ...extra },
         OPPONENT_FAKE_PLAYER_ID
       );
       return;
     }
     if (actionFlow.action === 'card' && extra?.cardTeam === 'against') {
-      executeActionFlow(
+      openTimeOrExecuteAgainstEvent(
         { ...actionFlow, step: 'details', details, cardTeam: 'against', ...extra },
         OPPONENT_FAKE_PLAYER_ID
       );
@@ -984,8 +999,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  const needsTimePopup = (): boolean =>
-    isPostmatch && manualMinute === 0 && manualSecond === 0 && !manualHalfPinned;
+  const needsTimePopup = (): boolean => isPostmatch;
 
   /** Tempo relativo à metade + period técnico; pós-jogo: `rawSeconds` é minuto absoluto 0–40. */
   const eventTimeAndPeriod = (rawSeconds: number, periodOverride?: MatchHalf): { time: number; period: MatchHalf } => {
@@ -1171,7 +1185,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else {
         setManualMinute(0);
         setManualSecond(0);
-        setManualHalfPinned(true);
+        setManualHalfPinned(false);
         hydrateClock({ seconds: 0, firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       }
       // Postmatch: pular lineup, usar selectedPlayerIds como jogadores ativos
@@ -1181,6 +1195,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setActivePlayers(players.filter(p => ids.includes(String(p.id).trim())));
       setLineupPlayers(ids);
       setBenchPlayers([]);
+      setSquadActiveIds(ids);
       setIsMatchStarted(true);
       setShowLineupModal(false);
       // Definir goleiro atual: primeiro goleiro na lista de ativos, ou primeiro da lista
@@ -1394,6 +1409,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         (Array.isArray(L.bench) && L.bench.length > 0));
 
     if (!hasLog && !hasLineupData) {
+      // The first postmatch opening can start from a fully empty QA fixture.
+      // Mark hydration as consumed for this match so later autosave prop updates
+      // do not wipe the in-flight local event list back to an empty snapshot.
+      hydrationAppliedForMatchIdRef.current = mid;
       if (!isPostmatch) setRealtimeHydrationReady(true);
       return;
     }
@@ -1598,7 +1617,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       flushSync(() => {
         setManualMinute(0);
         setManualSecond(0);
-        setManualHalfPinned(true);
+        setManualHalfPinned(false);
       });
     }
     const result = retornarAoPrimeiroTempo();
@@ -3658,6 +3677,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                     setEditDraft(prev => prev ? { ...prev, assistPlayerId: val, assistPlayerName: p?.name ?? null } : null);
                                   }
                                 }}
+                                data-testid="edit-event-assist"
                                 className="px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm min-w-[140px]"
                               >
                                 <option value="">Sem assistência</option>
@@ -3895,6 +3915,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   const displayNum = player.jerseyNumber ?? '?';
                   const labelName = player.nickname?.trim() || player.name || '';
                   const isInactiveLocked =
+                    !isPostmatch &&
                     !lockerOpen &&
                     isMatchStarted &&
                     (squadActiveIds.length === 0 || !squadActiveIds.includes(pid));
@@ -4391,6 +4412,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               }
                             }
                           }}
+                          data-testid="goal-time-input"
                           className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-3 text-white text-lg font-mono font-bold outline-none focus:border-cyan-500 placeholder:text-zinc-600"
                         />
                       </div>
@@ -4399,6 +4421,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <button
                         type="button"
                         onClick={completeGoalFromTimeStep}
+                        data-testid="goal-time-confirm"
                         className="w-full px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-black uppercase text-xs rounded-xl transition-all"
                       >
                         Confirmar gol
@@ -4558,7 +4581,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
               {/* TimeInputPopup — postmatch quando tempo não preenchido */}
               {actionFlow?.step === 'time' && actionFlow.selectedPlayerId && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
+                <div data-testid="postmatch-event-time-dialog" className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-fade-in">
                   <div
                     className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                     onClick={cancelActionFlow}
@@ -4577,6 +4600,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             const m = parseInt(e.target.value, 10);
                             setActionFlow(prev => prev ? { ...prev, pendingTime: (prev.pendingTime ?? 0) % 60 + m * 60 } : null);
                           }}
+                          data-testid="postmatch-event-minute"
                           className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
                         >
                           {Array.from({ length: 41 }, (_, i) => (
@@ -4592,6 +4616,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             const s = parseInt(e.target.value, 10);
                             setActionFlow(prev => prev ? { ...prev, pendingTime: Math.floor((prev.pendingTime ?? 0) / 60) * 60 + s } : null);
                           }}
+                          data-testid="postmatch-event-second"
                           className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 text-white text-sm font-mono font-bold outline-none focus:border-[#00f0ff]"
                         >
                           {Array.from({ length: 60 }, (_, i) => (
@@ -4607,11 +4632,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           const time = (actionFlow.pendingTime ?? 0);
                           completeActionFlowWithPlayer(pid, time);
                         }}
+                        data-testid="postmatch-event-confirm"
                         className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white font-black uppercase text-xs rounded-xl transition-all"
                       >
                         Confirmar
                       </button>
-                      <button onClick={cancelActionFlow} className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors">
+                      <button data-testid="postmatch-event-cancel" onClick={cancelActionFlow} className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold uppercase text-xs rounded-xl border border-zinc-700 transition-colors">
                         Cancelar
                       </button>
                     </div>
@@ -4930,6 +4956,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           <div className="w-full h-full min-h-[80px] py-3 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
                             <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo de coleta</label>
                             <p
+                              data-testid="postmatch-period-label"
                               className={`text-base sm:text-lg font-black uppercase tracking-wide ${
                                 currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
                               }`}
@@ -4940,6 +4967,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={handleEndFirstHalfCollection}
+                                data-testid="postmatch-end-first-half"
                                 className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-amber-500/70 bg-amber-500/15 text-amber-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-amber-500/25 transition-colors"
                               >
                                 Encerrar coleta do 1º tempo
@@ -4949,6 +4977,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               <button
                                 type="button"
                                 onClick={handleReturnToFirstHalfCollection}
+                                data-testid="postmatch-return-first-half"
                                 className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-sky-500/70 bg-sky-500/15 text-sky-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-sky-500/25 transition-colors"
                               >
                                 Voltar ao 1º tempo
