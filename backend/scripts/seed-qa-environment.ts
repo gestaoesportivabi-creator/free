@@ -5,8 +5,11 @@ import {
   QA_SEED_GUARD,
   ensureQaPrefix,
   isDryRun,
+  listQaMatches,
   normalizeEmail,
   qaMatchDate,
+  type QaMatchDefinition,
+  type QaMatchKey,
 } from './helpers/qa-environment';
 
 type PlannedEntity =
@@ -23,6 +26,28 @@ type PlannedEntity =
   | 'vinculosJogadores';
 
 type PlanCounts = Record<PlannedEntity, number>;
+
+interface QaMatchState {
+  definition: QaMatchDefinition;
+  competicao: {
+    id: string;
+    nome: string;
+  } | null;
+  campeonato: {
+    id: string;
+    nome: string;
+    equipeId: string | null;
+  } | null;
+  jogo: {
+    id: string;
+  } | null;
+  estatisticasEquipe: {
+    id: string;
+  } | null;
+  campeonatoJogo: {
+    id: string;
+  } | null;
+}
 
 interface QaState {
   roleId: string;
@@ -49,24 +74,6 @@ interface QaState {
     tecnicoId: string;
     clubeId: string | null;
   } | null;
-  competicao: {
-    id: string;
-    nome: string;
-  } | null;
-  campeonato: {
-    id: string;
-    nome: string;
-    equipeId: string | null;
-  } | null;
-  jogo: {
-    id: string;
-  } | null;
-  estatisticasEquipe: {
-    id: string;
-  } | null;
-  campeonatoJogo: {
-    id: string;
-  } | null;
   jogadores: Array<{
     id: string;
     nome: string;
@@ -76,6 +83,12 @@ interface QaState {
     id: string;
     jogadorId: string;
   }>;
+  matches: Record<QaMatchKey, QaMatchState>;
+}
+
+interface SeedExecutionSummary {
+  created: PlanCounts;
+  normalizedMatches: QaMatchKey[];
 }
 
 const EMPTY_COUNTS: PlanCounts = {
@@ -92,18 +105,101 @@ const EMPTY_COUNTS: PlanCounts = {
   vinculosJogadores: 0,
 };
 
+const QA_MATCHES = listQaMatches();
+
 function cloneCounts(): PlanCounts {
   return { ...EMPTY_COUNTS };
+}
+
+function zeroTeamStats() {
+  return {
+    minutosJogados: 40,
+    gols: 0,
+    golsSofridos: 0,
+    assistencias: 0,
+    cartoesAmarelos: 0,
+    cartoesVermelhos: 0,
+    passesCorretos: 0,
+    passesErrados: 0,
+    passesErradosTransicao: 0,
+    desarmesComBola: 0,
+    desarmesContraAtaque: 0,
+    desarmesSemBola: 0,
+    chutesNoGol: 0,
+    chutesFora: 0,
+    golsMarcadosJogoAberto: 0,
+    golsMarcadosBolaParada: 0,
+    golsSofridosJogoAberto: 0,
+    golsSofridosBolaParada: 0,
+  };
 }
 
 function assertGuards(): void {
   ensureQaPrefix(QA_ENVIRONMENT.tenantName, 'Tenant QA');
   ensureQaPrefix(QA_ENVIRONMENT.clubName, 'Clube QA');
   ensureQaPrefix(QA_ENVIRONMENT.teamName, 'Equipe QA');
-  ensureQaPrefix(QA_ENVIRONMENT.competitionName, 'Competicao QA');
-  ensureQaPrefix(QA_ENVIRONMENT.matchLabel, 'Partida QA');
-  ensureQaPrefix(QA_ENVIRONMENT.opponentName, 'Adversario QA');
+  QA_MATCHES.forEach((matchDefinition) => {
+    ensureQaPrefix(matchDefinition.competitionName, `Competicao QA (${matchDefinition.key})`);
+    ensureQaPrefix(matchDefinition.matchLabel, `Partida QA (${matchDefinition.key})`);
+    ensureQaPrefix(matchDefinition.opponentName, `Adversario QA (${matchDefinition.key})`);
+  });
   QA_ENVIRONMENT.playerNames.forEach((name) => ensureQaPrefix(name, 'Atleta QA'));
+}
+
+async function loadMatchState(
+  equipeId: string | null,
+  definition: QaMatchDefinition
+): Promise<QaMatchState> {
+  const competicao = await prisma.competicao.findUnique({
+    where: { nome: definition.competitionName },
+    select: { id: true, nome: true },
+  });
+
+  const campeonato = equipeId
+    ? await prisma.campeonato.findFirst({
+        where: { equipeId, nome: definition.competitionName },
+        select: { id: true, nome: true, equipeId: true },
+      })
+    : null;
+
+  const jogo = equipeId
+    ? await prisma.jogo.findFirst({
+        where: {
+          equipeId,
+          adversario: definition.opponentName,
+          campeonato: definition.competitionName,
+          data: qaMatchDate(definition.matchDate),
+        },
+        select: { id: true },
+      })
+    : null;
+
+  const estatisticasEquipe = jogo
+    ? await prisma.jogosEstatisticasEquipe.findUnique({
+        where: { jogoId: jogo.id },
+        select: { id: true },
+      })
+    : null;
+
+  const campeonatoJogo = campeonato && jogo
+    ? await prisma.campeonatosJogos.findFirst({
+        where: {
+          campeonatoId: campeonato.id,
+          jogoId: jogo.id,
+          adversario: definition.opponentName,
+        },
+        select: { id: true },
+      })
+    : null;
+
+  return {
+    definition,
+    competicao,
+    campeonato,
+    jogo,
+    estatisticasEquipe,
+    campeonatoJogo,
+  };
 }
 
 async function loadQaState(): Promise<QaState> {
@@ -185,47 +281,10 @@ async function loadQaState(): Promise<QaState> {
         })
       : [];
 
-  const competicao = await prisma.competicao.findUnique({
-    where: { nome: QA_ENVIRONMENT.competitionName },
-    select: { id: true, nome: true },
-  });
-
-  const campeonato = equipe
-    ? await prisma.campeonato.findFirst({
-        where: { equipeId: equipe.id, nome: QA_ENVIRONMENT.competitionName },
-        select: { id: true, nome: true, equipeId: true },
-      })
-    : null;
-
-  const jogo = equipe
-    ? await prisma.jogo.findFirst({
-        where: {
-          equipeId: equipe.id,
-          adversario: QA_ENVIRONMENT.opponentName,
-          campeonato: QA_ENVIRONMENT.competitionName,
-          data: qaMatchDate(),
-        },
-        select: { id: true },
-      })
-    : null;
-
-  const estatisticasEquipe = jogo
-    ? await prisma.jogosEstatisticasEquipe.findUnique({
-        where: { jogoId: jogo.id },
-        select: { id: true },
-      })
-    : null;
-
-  const campeonatoJogo = campeonato && jogo
-    ? await prisma.campeonatosJogos.findFirst({
-        where: {
-          campeonatoId: campeonato.id,
-          jogoId: jogo.id,
-          adversario: QA_ENVIRONMENT.opponentName,
-        },
-        select: { id: true },
-      })
-    : null;
+  const matches = {} as Record<QaMatchKey, QaMatchState>;
+  for (const matchDefinition of QA_MATCHES) {
+    matches[matchDefinition.key] = await loadMatchState(equipe?.id ?? null, matchDefinition);
+  }
 
   return {
     roleId: role.id,
@@ -235,13 +294,9 @@ async function loadQaState(): Promise<QaState> {
     tecnico,
     clube,
     equipe,
-    competicao,
-    campeonato,
-    jogo,
-    estatisticasEquipe,
-    campeonatoJogo,
     jogadores,
     vinculosJogadores,
+    matches,
   };
 }
 
@@ -251,13 +306,18 @@ function buildPlan(state: QaState): PlanCounts {
   if (!state.tecnico) plan.tecnico = 1;
   if (!state.clube) plan.clube = 1;
   if (!state.equipe) plan.equipe = 1;
-  if (!state.competicao) plan.competicao = 1;
-  if (!state.campeonato) plan.campeonato = 1;
-  if (!state.jogo) plan.jogo = 1;
-  if (!state.estatisticasEquipe) plan.estatisticasEquipe = 1;
-  if (!state.campeonatoJogo) plan.campeonatoJogo = 1;
   plan.jogadores = QA_ENVIRONMENT.playerNames.length - state.jogadores.length;
   plan.vinculosJogadores = QA_ENVIRONMENT.playerNames.length - state.vinculosJogadores.length;
+
+  for (const matchDefinition of QA_MATCHES) {
+    const matchState = state.matches[matchDefinition.key];
+    if (!matchState.competicao) plan.competicao += 1;
+    if (!matchState.campeonato) plan.campeonato += 1;
+    if (!matchState.jogo) plan.jogo += 1;
+    if (!matchState.estatisticasEquipe) plan.estatisticasEquipe += 1;
+    if (!matchState.campeonatoJogo) plan.campeonatoJogo += 1;
+  }
+
   return plan;
 }
 
@@ -273,6 +333,22 @@ function printPlan(title: string, plan: PlanCounts): void {
   console.log(`- total: ${sumPlan(plan)}`);
 }
 
+function printNormalizationPreview(state: QaState): void {
+  const resettableMatches = QA_MATCHES.filter(
+    (matchDefinition) => matchDefinition.resetOnSeed && state.matches[matchDefinition.key].jogo
+  );
+  if (resettableMatches.length === 0) {
+    console.log('\nPartidas QA que serao normalizadas nesta execucao');
+    console.log('- nenhuma');
+    return;
+  }
+
+  console.log('\nPartidas QA que serao normalizadas nesta execucao');
+  resettableMatches.forEach((matchDefinition) => {
+    console.log(`- ${matchDefinition.matchLabel}`);
+  });
+}
+
 function requirePasswordIfNeeded(plan: PlanCounts, dryRun: boolean): string | null {
   const password = process.env.QA_ENVIRONMENT_PASSWORD ?? '';
   if (dryRun || plan.user === 0) {
@@ -284,8 +360,164 @@ function requirePasswordIfNeeded(plan: PlanCounts, dryRun: boolean): string | nu
   return password;
 }
 
-async function executeSeed(plan: PlanCounts, password: string | null): Promise<void> {
+async function ensureQaMatch(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  equipeId: string,
+  definition: QaMatchDefinition,
+  created: PlanCounts,
+  normalizedMatches: Set<QaMatchKey>
+): Promise<void> {
+  let competicao = await tx.competicao.findUnique({
+    where: { nome: definition.competitionName },
+    select: { id: true },
+  });
+  if (!competicao) {
+    competicao = await tx.competicao.create({
+      data: { nome: definition.competitionName },
+      select: { id: true },
+    });
+    created.competicao += 1;
+  }
+
+  let campeonato = await tx.campeonato.findFirst({
+    where: { equipeId, nome: definition.competitionName },
+    select: { id: true },
+  });
+  if (!campeonato) {
+    campeonato = await tx.campeonato.create({
+      data: {
+        nome: definition.competitionName,
+        equipeId,
+        dados: {
+          qaLabel: definition.matchLabel,
+          qaScenario: definition.key,
+        },
+      },
+      select: { id: true },
+    });
+    created.campeonato += 1;
+  }
+
+  let jogo = await tx.jogo.findFirst({
+    where: {
+      equipeId,
+      adversario: definition.opponentName,
+      campeonato: definition.competitionName,
+      data: qaMatchDate(definition.matchDate),
+    },
+    select: { id: true },
+  });
+  if (!jogo) {
+    jogo = await tx.jogo.create({
+      data: {
+        equipeId,
+        adversario: definition.opponentName,
+        data: qaMatchDate(definition.matchDate),
+        campeonato: definition.competitionName,
+        competicaoId: competicao.id,
+        local: definition.matchLocation,
+        resultado: 'E',
+        golsPro: 0,
+        golsContra: 0,
+        observacoes: definition.matchLabel,
+        status: definition.status,
+        collectionPhase: definition.collectionPhase,
+        postMatchEventLog: [],
+        lineup: {
+          qaEnvironment: true,
+          qaScenario: definition.key,
+        },
+      },
+      select: { id: true },
+    });
+    created.jogo += 1;
+  } else if (definition.resetOnSeed) {
+    await tx.jogosEventos.deleteMany({ where: { jogoId: jogo.id } });
+    await tx.jogosEstatisticasJogador.deleteMany({ where: { jogoId: jogo.id } });
+    await tx.jogo.update({
+      where: { id: jogo.id },
+      data: {
+        competicaoId: competicao.id,
+        local: definition.matchLocation,
+        resultado: 'E',
+        golsPro: 0,
+        golsContra: 0,
+        observacoes: definition.matchLabel,
+        status: definition.status,
+        collectionPhase: definition.collectionPhase,
+        postMatchEventLog: [],
+        lineup: {
+          qaEnvironment: true,
+          qaScenario: definition.key,
+        },
+      },
+    });
+    normalizedMatches.add(definition.key);
+  }
+
+  const existingStats = await tx.jogosEstatisticasEquipe.findUnique({
+    where: { jogoId: jogo.id },
+    select: { id: true },
+  });
+  if (!existingStats) {
+    await tx.jogosEstatisticasEquipe.create({
+      data: {
+        jogoId: jogo.id,
+        ...zeroTeamStats(),
+      },
+    });
+    created.estatisticasEquipe += 1;
+  } else if (definition.resetOnSeed) {
+    await tx.jogosEstatisticasEquipe.update({
+      where: { jogoId: jogo.id },
+      data: zeroTeamStats(),
+    });
+    normalizedMatches.add(definition.key);
+  }
+
+  let campeonatoJogo = await tx.campeonatosJogos.findFirst({
+    where: {
+      campeonatoId: campeonato.id,
+      jogoId: jogo.id,
+    },
+    select: { id: true },
+  });
+  if (!campeonatoJogo) {
+    campeonatoJogo = await tx.campeonatosJogos.create({
+      data: {
+        campeonatoId: campeonato.id,
+        data: qaMatchDate(definition.matchDate),
+        horario: '20:00',
+        equipe: QA_ENVIRONMENT.teamName,
+        adversario: definition.opponentName,
+        competicao: definition.competitionName,
+        local: definition.matchLocation,
+        metaPontuacao: definition.matchLabel,
+        jogoId: jogo.id,
+      },
+      select: { id: true },
+    });
+    created.campeonatoJogo += 1;
+  } else if (definition.resetOnSeed) {
+    await tx.campeonatosJogos.update({
+      where: { id: campeonatoJogo.id },
+      data: {
+        data: qaMatchDate(definition.matchDate),
+        horario: '20:00',
+        equipe: QA_ENVIRONMENT.teamName,
+        adversario: definition.opponentName,
+        competicao: definition.competitionName,
+        local: definition.matchLocation,
+        metaPontuacao: definition.matchLabel,
+      },
+    });
+    normalizedMatches.add(definition.key);
+  }
+}
+
+async function executeSeed(plan: PlanCounts, password: string | null): Promise<SeedExecutionSummary> {
   const created = cloneCounts();
+  const normalizedMatches = new Set<QaMatchKey>();
   const passwordHash = password ? await bcrypt.hash(password, 10) : null;
 
   await prisma.$transaction(async (tx) => {
@@ -408,130 +640,18 @@ async function executeSeed(plan: PlanCounts, password: string | null): Promise<v
       }
     }
 
-    let competicao = await tx.competicao.findUnique({
-      where: { nome: QA_ENVIRONMENT.competitionName },
-      select: { id: true },
-    });
-    if (!competicao) {
-      competicao = await tx.competicao.create({
-        data: { nome: QA_ENVIRONMENT.competitionName },
-        select: { id: true },
-      });
-      created.competicao = 1;
-    }
-
-    let campeonato = await tx.campeonato.findFirst({
-      where: { equipeId: equipe.id, nome: QA_ENVIRONMENT.competitionName },
-      select: { id: true },
-    });
-    if (!campeonato) {
-      campeonato = await tx.campeonato.create({
-        data: {
-          nome: QA_ENVIRONMENT.competitionName,
-          equipeId: equipe.id,
-          dados: {
-            qaLabel: QA_ENVIRONMENT.matchLabel,
-          },
-        },
-        select: { id: true },
-      });
-      created.campeonato = 1;
-    }
-
-    let jogo = await tx.jogo.findFirst({
-      where: {
-        equipeId: equipe.id,
-        adversario: QA_ENVIRONMENT.opponentName,
-        campeonato: QA_ENVIRONMENT.competitionName,
-        data: qaMatchDate(),
-      },
-      select: { id: true },
-    });
-    if (!jogo) {
-      jogo = await tx.jogo.create({
-        data: {
-          equipeId: equipe.id,
-          adversario: QA_ENVIRONMENT.opponentName,
-          data: qaMatchDate(),
-          campeonato: QA_ENVIRONMENT.competitionName,
-          competicaoId: competicao.id,
-          local: QA_ENVIRONMENT.matchLocation,
-          resultado: 'E',
-          golsPro: 0,
-          golsContra: 0,
-          observacoes: QA_ENVIRONMENT.matchLabel,
-          status: 'em_andamento',
-          collectionPhase: 0,
-          postMatchEventLog: [],
-          lineup: {
-            qaEnvironment: true,
-          },
-        },
-        select: { id: true },
-      });
-      created.jogo = 1;
-    }
-
-    const estatisticasEquipe = await tx.jogosEstatisticasEquipe.findUnique({
-      where: { jogoId: jogo.id },
-      select: { id: true },
-    });
-    if (!estatisticasEquipe) {
-      await tx.jogosEstatisticasEquipe.create({
-        data: {
-          jogoId: jogo.id,
-          minutosJogados: 40,
-          gols: 0,
-          golsSofridos: 0,
-          assistencias: 0,
-          cartoesAmarelos: 0,
-          cartoesVermelhos: 0,
-          passesCorretos: 0,
-          passesErrados: 0,
-          passesErradosTransicao: 0,
-          desarmesComBola: 0,
-          desarmesContraAtaque: 0,
-          desarmesSemBola: 0,
-          chutesNoGol: 0,
-          chutesFora: 0,
-          golsMarcadosJogoAberto: 0,
-          golsMarcadosBolaParada: 0,
-          golsSofridosJogoAberto: 0,
-          golsSofridosBolaParada: 0,
-        },
-      });
-      created.estatisticasEquipe = 1;
-    }
-
-    const campeonatoJogo = await tx.campeonatosJogos.findFirst({
-      where: {
-        campeonatoId: campeonato.id,
-        jogoId: jogo.id,
-      },
-      select: { id: true },
-    });
-    if (!campeonatoJogo) {
-      await tx.campeonatosJogos.create({
-        data: {
-          campeonatoId: campeonato.id,
-          data: qaMatchDate(),
-          horario: '20:00',
-          equipe: QA_ENVIRONMENT.teamName,
-          adversario: QA_ENVIRONMENT.opponentName,
-          competicao: QA_ENVIRONMENT.competitionName,
-          local: QA_ENVIRONMENT.matchLocation,
-          metaPontuacao: QA_ENVIRONMENT.matchLabel,
-          jogoId: jogo.id,
-        },
-        });
-      created.campeonatoJogo = 1;
+    for (const matchDefinition of QA_MATCHES) {
+      await ensureQaMatch(tx, equipe.id, matchDefinition, created, normalizedMatches);
     }
   }, {
     maxWait: 10000,
     timeout: 60000,
   });
 
-  printPlan('Resumo criado nesta execucao', created);
+  return {
+    created,
+    normalizedMatches: Array.from(normalizedMatches),
+  };
 }
 
 async function main(): Promise<void> {
@@ -548,8 +668,11 @@ async function main(): Promise<void> {
   console.log(`- clube: ${QA_ENVIRONMENT.clubName}`);
   console.log(`- equipe: ${QA_ENVIRONMENT.teamName}`);
   console.log(`- usuario: ${QA_ENVIRONMENT.userEmail}`);
-  console.log(`- partida: ${QA_ENVIRONMENT.matchLabel}`);
+  QA_MATCHES.forEach((matchDefinition) => {
+    console.log(`- partida (${matchDefinition.key}): ${matchDefinition.matchLabel}`);
+  });
   printPlan('Quantidade prevista de registros a criar', plan);
+  printNormalizationPreview(state);
 
   const password = requirePasswordIfNeeded(plan, dryRun);
 
@@ -559,11 +682,20 @@ async function main(): Promise<void> {
   }
 
   if (process.env[QA_SEED_GUARD] !== 'true') {
-    throw new Error(`Execucao bloqueada. Defina ${QA_SEED_GUARD}=true para criar o ambiente QA.`);
+    throw new Error(`Execucao bloqueada. Defina ${QA_SEED_GUARD}=true para permitir a criacao do ambiente QA.`);
   }
 
-  await executeSeed(plan, password);
-  console.log('\nSeed oficial do ambiente QA concluido sem duplicar registros existentes.');
+  const summary = await executeSeed(plan, password);
+  printPlan('Resumo criado nesta execucao', summary.created);
+  console.log('\nPartidas QA normalizadas nesta execucao');
+  if (summary.normalizedMatches.length === 0) {
+    console.log('- nenhuma');
+  } else {
+    summary.normalizedMatches.forEach((key) => {
+      const matchDefinition = QA_MATCHES.find((item) => item.key === key);
+      console.log(`- ${matchDefinition?.matchLabel ?? key}`);
+    });
+  }
 }
 
 main()
