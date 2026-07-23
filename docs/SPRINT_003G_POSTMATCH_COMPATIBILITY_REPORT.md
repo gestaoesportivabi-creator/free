@@ -3,7 +3,7 @@
 Projeto: `SCOUT 21 PRO`  
 Repositorio: `free`  
 Branch: `fix/compatibilidade-pos-jogo`  
-Data: `2026-07-22`
+Data: `2026-07-23`
 
 ## Resumo executivo
 
@@ -162,3 +162,80 @@ Prioridade sugerida:
 2. cobrir `assistencia` explicita no E2E com massa previsivel;
 3. adicionar cenario dedicado para `freeKick` e `penalty` com `result = goal`;
 4. decidir se o replay salvo deve abrir em Pos-Jogo, Realtime ou oferecer escolha explicita quando o estado estiver inconsistente.
+
+## Atualizacao 003G.1 - fechamento operacional
+
+### Causa raiz confirmada do placar `1 x 0`
+
+O defeito confirmado estava na reidratacao local apos autosave do `1T`.
+
+Quando a partida QA pos-jogo abria de um fixture vazio:
+
+- o primeiro gol do `2T` entrava corretamente;
+- o autosave anterior do intervalo atualizava `match` com snapshot antigo;
+- o `useEffect` de hidratacao de `MatchScoutingWindow` reaplicava estado vazio ou defasado;
+- `matchEvents` perdia o primeiro gol do `2T`;
+- o segundo gol ficava como unico evento contabilizado;
+- o placar derivado aparecia como `1 x 0`.
+
+Correcao aplicada:
+
+- marcar a hidratacao inicial como consumida mesmo quando o fixture pos-jogo comeca vazio;
+- impedir que autosaves subsequentes do mesmo `match.id` limpem o estado local em andamento.
+
+Resultado validado:
+
+- dois gols consecutivos agora geram dois eventos distintos;
+- o log mostra dois gols;
+- o placar local vai para `2 x 0`;
+- save e reopen preservam autor, assistencia opcional, periodo e horario.
+
+### Causa da abertura imprevisivel de `QA POS-JOGO 003G`
+
+O problema era o reaproveitamento do mesmo fixture QA entre execucoes.
+
+Quando a partida ficava salva ou incompleta:
+
+- o card deixava de entrar por `scouting-open`;
+- `ScoutTable` passava a abrir `reopen-match`;
+- dependendo de `status`, `lineup` e ids ativos, o caminho de reabertura podia priorizar realtime.
+
+Correcao aplicada:
+
+- a seed oficial passou a manter e normalizar uma partida QA dedicada para pos-jogo;
+- `QA POS-JOGO 003G` volta sempre para `status = disponivel`, `collectionPhase = 0`, placar `0 x 0` e log vazio;
+- `postmatch-data-entry.spec.ts` chama essa normalizacao antes da abertura inicial;
+- o helper de abertura inicial do pos-jogo falha cedo se nao encontrar o seletor dedicado.
+
+### Automacao validada
+
+Rodada nominal:
+
+- `postmatch-data-entry.spec.ts`: aprovado
+- `qa-smoke.spec.ts`: aprovado
+- `clock-controls.spec.ts`: aprovado
+- `persistence.spec.ts`: aprovado
+- `full-match-cycle.spec.ts`: aprovado
+- `cleanup-dry-run.spec.ts`: aprovado
+
+Suite completa:
+
+- 1a execucao: `11/11` aprovados
+- 2a execucao: `11/11` aprovados
+
+Duracao observada:
+
+- suite completa 1: ~`5.7 min`
+- suite completa 2: ~`6.0 min`
+
+### Validacoes tecnicas desta rodada
+
+- backend `GET /health`: aprovado
+- backend `npm run type-check`: aprovado
+- frontend `npm run build`: aprovado
+- frontend `npm run type-check`: reprovado por erros historicos fora do escopo da Sprint
+
+Observacao:
+
+- o `build` atualiza artefatos gerados (`public/sitemap.xml` e `dist/index.html`);
+- esses arquivos nao fazem parte da correcao funcional do pos-jogo e nao devem entrar em commit desta Sprint sem justificativa adicional.

@@ -372,3 +372,14 @@ Resultado da Sprint 003G em `2026-07-22`:
 - a automacao ganhou `21Scoutpro/e2e/specs/postmatch-data-entry.spec.ts` para validar `corner + card + goal` no mesmo pipeline compartilhado;
 - na massa QA disponivel em `2026-07-22`, o card oficial reutilizavel abre primeiro a janela compartilhada de coleta, entao a validacao automatizada ficou focada no gargalo arquitetural comum entre Realtime e Pos-Jogo;
 - a selecao explicita de assistente continuou limitada no replay salvo atual e foi registrada como risco operacional remanescente.
+
+Resultado da Sprint 003G.1 em `2026-07-23`:
+
+- a partida QA dedicada `QA POS-JOGO 003G` passou a ser normalizada pela seed oficial antes da validacao automatizada;
+- a abertura inicial do pos-jogo voltou a ser previsivel pelo seletor dedicado;
+- o bug em que dois gols consecutivos no pos-jogo terminavam em placar `1 x 0` foi corrigido na hidratacao apos autosave;
+- a automacao de pos-jogo passou a validar dois gols consecutivos, assistencia opcional, save, reopen, edicao e segundo save;
+- a regressao completa do realtime e do pos-jogo passou duas vezes seguidas com `11/11` cenarios aprovados em cada rodada;
+- o `cleanup-dry-run` continuou seguro, mas segue exigindo acesso autorizado ao banco QA online;
+- o frontend continua com erros historicos de `type-check` fora do escopo desta Sprint;
+- `public/sitemap.xml` e `dist/index.html` continuam sendo artefatos gerados pelo build e nao devem entrar em commit desta correcao.

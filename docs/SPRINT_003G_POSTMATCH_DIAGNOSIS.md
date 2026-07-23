@@ -3,7 +3,7 @@
 Projeto: `SCOUT 21 PRO`  
 Repositório: `free`  
 Branch: `fix/compatibilidade-pos-jogo`  
-Data: `2026-07-22`
+Data: `2026-07-23`
 
 ## Objetivo desta leitura
 
@@ -311,3 +311,56 @@ Os sintomas mais prováveis do Pós-Jogo hoje são:
 3. alinhar o catálogo da UI com o catálogo persistível;
 4. restaurar save + reabertura sem quebrar o Realtime;
 5. cobrir o Pós-Jogo com Playwright.
+
+## Atualizacao 003G.1 - causas confirmadas em `2026-07-23`
+
+### Bug do placar `1 x 0` apos dois gols consecutivos
+
+O problema confirmado nao estava no render do placar isoladamente.
+
+O primeiro gol do `2T` podia ser apagado do estado local antes do save.
+
+Sequencia validada:
+
+1. a partida QA pos-jogo abria a partir de um fixture vazio;
+2. o operador encerrava o `1T`;
+3. `handleEndFirstHalfCollection()` fazia autosave;
+4. o autosave devolvia props novas da mesma partida;
+5. o `useEffect` de hidratacao em `MatchScoutingWindow.tsx` reaplicava um snapshot vazio ou antigo porque a hidratacao inicial ainda nao tinha sido marcada como consumida;
+6. `matchEvents` voltava para uma lista sem o primeiro gol do `2T`;
+7. o segundo gol passava a parecer o unico gol da partida;
+8. o placar derivado voltava para `1 x 0`.
+
+Causa-raiz:
+
+- reidratacao indevida apos autosave no mesmo `match.id`;
+- o fixture QA pos-jogo inicialmente vazio nao marcava `hydrationAppliedForMatchIdRef`;
+- o estado local em andamento era sobrescrito por snapshot defasado.
+
+### Abertura imprevisivel de `QA POS-JOGO 003G`
+
+A alternancia entre `scouting-open` e `reopen-match` nao vinha de aleatoriedade da UI.
+
+Ela vinha do reuso do mesmo fixture QA entre execucoes.
+
+Fatores que determinam o caminho visual:
+
+- `status`;
+- `collectionPhase`;
+- `teamStats` e `playerStats`;
+- `postMatchEventLog`;
+- `lineup.selectedPlayerIds`;
+- a decisao de `ScoutTable` entre partida "nao executada" e partida salva;
+- a heuristica do botao `reopen-match`, que ainda privilegia realtime quando a partida esta `em_andamento` com atletas ativos.
+
+Com o fixture reaproveitado:
+
+- uma execucao anterior podia deixar o card como salvo ou incompleto;
+- o teste seguinte deixava de cair no seletor dedicado de pos-jogo;
+- o fluxo podia entrar por `reopen-match` e abrir a superficie realtime.
+
+Menor impacto adotado:
+
+- a seed oficial agora normaliza `QA POS-JOGO 003G` para um estado unico antes da validacao;
+- o spec de pos-jogo exige o seletor dedicado na abertura inicial;
+- a reabertura continua validada depois do save, mas nao e mais usada como entrada inicial do cenario.
