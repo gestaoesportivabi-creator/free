@@ -242,6 +242,23 @@ export interface TechnicalAnalysis {
   mental: string;
 }
 
+export type MatchClockPersistedState =
+  | 'PRE_JOGO'
+  | 'PRIMEIRO_TEMPO'
+  | 'PAUSADO'
+  | 'SINCRONIZANDO'
+  | 'INTERVALO'
+  | 'SEGUNDO_TEMPO'
+  | 'ENCERRADO';
+
+export interface MatchClockSnapshot {
+  currentTimeSeconds: number;
+  period: '1T' | '2T';
+  state: MatchClockPersistedState;
+  isRunning: boolean;
+  firstHalfLocked: boolean;
+}
+
 export interface MatchRecord {
   id: string;
   opponent: string;
@@ -270,6 +287,7 @@ export interface MatchRecord {
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
+    clockSnapshot?: MatchClockSnapshot;
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: TechnicalAnalysis;
   };

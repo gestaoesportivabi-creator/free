@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { X, Play, Pause, Square, Users, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff, Lock, Unlock } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
+import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction, MatchClockSnapshot } from '../types';
 import { MatchType } from './MatchTypeModal';
 import {
   HALF_RELATIVE_LAST_SECOND_1T,
@@ -19,7 +19,7 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
-import { REGULATION_HALF_SECONDS, getEventStamp } from '../services/clockService';
+import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 
@@ -56,6 +56,58 @@ function parseMMSSToSeconds(s: string): number {
   }
   const fromDigits = parseManualTimeToSeconds(trimmed);
   return fromDigits ?? 0;
+}
+
+const PERSISTED_CLOCK_STATES = new Set<MatchClockSnapshot['state']>([
+  'PRE_JOGO',
+  'PRIMEIRO_TEMPO',
+  'PAUSADO',
+  'SINCRONIZANDO',
+  'INTERVALO',
+  'SEGUNDO_TEMPO',
+  'ENCERRADO',
+]);
+
+function normalizePersistedClockSnapshot(snapshot: unknown): MatchClockSnapshot | null {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return null;
+  }
+
+  const candidate = snapshot as Partial<MatchClockSnapshot>;
+  const rawSeconds = Number(candidate.currentTimeSeconds);
+  const period = candidate.period;
+  const state = candidate.state;
+
+  if (!Number.isFinite(rawSeconds)) return null;
+  if (period !== '1T' && period !== '2T') return null;
+  if (typeof state !== 'string' || !PERSISTED_CLOCK_STATES.has(state as MatchClockSnapshot['state'])) {
+    return null;
+  }
+
+  return {
+    currentTimeSeconds: Math.max(0, Math.floor(rawSeconds)),
+    period,
+    state: state as MatchClockSnapshot['state'],
+    isRunning: Boolean(candidate.isRunning),
+    firstHalfLocked: Boolean(candidate.firstHalfLocked),
+  };
+}
+
+function buildPersistedClockSnapshot(snapshot: ClockSnapshot): MatchClockSnapshot {
+  const nextState =
+    snapshot.state === 'PRIMEIRO_TEMPO' ||
+    snapshot.state === 'SEGUNDO_TEMPO' ||
+    snapshot.state === 'SINCRONIZANDO'
+      ? 'PAUSADO'
+      : snapshot.state;
+
+  return {
+    currentTimeSeconds: snapshot.currentTimeSeconds,
+    period: snapshot.period,
+    state: nextState,
+    isRunning: false,
+    firstHalfLocked: snapshot.firstHalfLocked,
+  };
 }
 
 interface MatchScoutingWindowProps {
@@ -545,6 +597,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   /** Aviso não bloqueante (ex.: canto superior direito). */
   const [topRightNotice, setTopRightNotice] = useState<string | null>(null);
+  const [needsClockSyncFallback, setNeedsClockSyncFallback] = useState(false);
   useEffect(() => {
     if (!topRightNotice) return;
     const id = window.setTimeout(() => setTopRightNotice(null), 4500);
@@ -644,10 +697,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (clockSnapshot.isRunning) {
       return { ok: true };
     }
+    if (needsClockSyncFallback) {
+      const syncResult = iniciarSincronizacao();
+      if (syncResult.ok) {
+        setSyncMinuteInput(String(Math.floor(matchTime / 60)));
+        setSyncSecondInput(String(matchTime % 60).padStart(2, '0'));
+        setSyncValidationError(null);
+        setShowClockSyncModal(true);
+      }
+      setTopRightNotice('NecessÃ¡rio sincronizar relÃ³gio antes de retomar a partida.');
+      return { ok: false, error: 'NecessÃ¡rio sincronizar relÃ³gio antes de retomar a partida.' };
+    }
     const result = continuarPartida();
     if (!options?.silent && !result.ok && result.error) setTopRightNotice(result.error);
     return result;
-  }, [clockSnapshot.isRunning, continuarPartida, isPostmatch]);
+  }, [clockSnapshot.isRunning, continuarPartida, iniciarSincronizacao, isPostmatch, matchTime, needsClockSyncFallback]);
 
   const applyClockDirective = useCallback((directive: ClockPauseDirective) => {
     if (directive === 'manual') pauseClock();
@@ -683,9 +747,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       default:
         return state;
     }
-  }, [clockSnapshot.state]);
+  }, [clockSnapshot.state, needsClockSyncFallback]);
 
   const getRealtimeBlockMessage = useCallback((): string => {
+    if (needsClockSyncFallback) {
+      return 'NecessÃ¡rio sincronizar relÃ³gio. Esta partida nÃ£o possui snapshot temporal salvo.';
+    }
     switch (clockSnapshot.state) {
       case 'PRE_JOGO':
         return 'Inicie a partida para liberar o registro de eventos.';
@@ -700,7 +767,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       default:
         return 'O cronômetro precisa estar em andamento para registrar eventos.';
     }
-  }, [clockSnapshot.state]);
+  }, [clockSnapshot.state, needsClockSyncFallback]);
 
   const getCollectionStatusMessage = useCallback((): string => {
     if (isPostmatch) {
@@ -728,13 +795,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       default:
         return 'Finalize a partida no cronômetro para concluir a coleta.';
     }
-  }, [clockSnapshot.state, currentPeriod, isPostmatch, matchEvents.length]);
+  }, [clockSnapshot.state, currentPeriod, isPostmatch, matchEvents.length, needsClockSyncFallback]);
 
   const blockRealtimeEventWhenNeeded = useCallback(() => {
-    if (isPostmatch || canRegisterRealtimeEvent) return false;
+    if (isPostmatch) return false;
+    if (needsClockSyncFallback) {
+      setTopRightNotice('Necessario sincronizar relogio. Esta partida nao possui snapshot temporal salvo.');
+      return true;
+    }
+    if (canRegisterRealtimeEvent) return false;
     setTopRightNotice(getRealtimeBlockMessage());
     return true;
-  }, [canRegisterRealtimeEvent, getRealtimeBlockMessage, isPostmatch]);
+  }, [canRegisterRealtimeEvent, getRealtimeBlockMessage, isPostmatch, needsClockSyncFallback]);
 
   const openClockSyncModal = useCallback(() => {
     if (isPostmatch) return;
@@ -778,6 +850,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setSyncValidationError(result.error ?? 'Não foi possível sincronizar o cronômetro.');
       return;
     }
+    setNeedsClockSyncFallback(false);
     setShowClockSyncModal(false);
     setSyncValidationError(null);
   }, [confirmarSincronizacao, syncMinuteInput, syncSecondInput]);
@@ -1380,6 +1453,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Carregar log de lances e escalação ao abrir (incompleto: salvar/reabrir lineup + postMatchEventLog)
   useEffect(() => {
     if (!isOpen) {
+      setNeedsClockSyncFallback(false);
       setRealtimeHydrationReady(isPostmatch);
       hydrationAppliedForMatchIdRef.current = null;
       lastSeenMatchIdForHydrationRef.current = null;
@@ -1412,6 +1486,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       // The first postmatch opening can start from a fully empty QA fixture.
       // Mark hydration as consumed for this match so later autosave prop updates
       // do not wipe the in-flight local event list back to an empty snapshot.
+      setNeedsClockSyncFallback(false);
       hydrationAppliedForMatchIdRef.current = mid;
       if (!isPostmatch) setRealtimeHydrationReady(true);
       return;
@@ -1432,6 +1507,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const has2TEvent = converted.some((e) => e.period === '2T');
     const hasPossessionProgress =
       ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
+    const persistedClockSnapshot = normalizePersistedClockSnapshot(match.lineup?.clockSnapshot);
     const phase = match.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
@@ -1477,22 +1553,39 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
-      if (hasLog && inSecondHalf) {
-        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+      if (persistedClockSnapshot) {
+        setNeedsClockSyncFallback(false);
+        hydrateClock({
+          seconds: persistedClockSnapshot.currentTimeSeconds,
+          period: persistedClockSnapshot.period,
+          firstHalfLocked: persistedClockSnapshot.firstHalfLocked,
+          state: persistedClockSnapshot.state,
+          isRunning: false,
+        });
+      } else if (hasLog && inSecondHalf) {
+        setNeedsClockSyncFallback(true);
+        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
       } else if (hasLog && !inSecondHalf) {
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+        setNeedsClockSyncFallback(true);
+        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PAUSADO', isRunning: false });
       } else if (!hasLog && inSecondHalf) {
-        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+        setNeedsClockSyncFallback(true);
+        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
       } else if (!hasLog && hasPossessionProgress) {
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
+        setNeedsClockSyncFallback(true);
+        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PAUSADO', isRunning: false });
       } else if (!hasLog && !inSecondHalf) {
+        setNeedsClockSyncFallback(false);
         hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRE_JOGO', isRunning: false });
       }
     } else if (inSecondHalf) {
+      setNeedsClockSyncFallback(false);
       setManualMinute(20);
       setManualSecond(0);
       setManualHalfPinned(true);
       hydrateClock({ seconds: REGULATION_HALF_SECONDS, firstHalfLocked: true, state: 'SEGUNDO_TEMPO', isRunning: false });
+    } else {
+      setNeedsClockSyncFallback(false);
     }
     autosaveSkipRef.current = true;
     setTimeout(() => {
@@ -1539,6 +1632,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   const handleStartSecondHalf = () => {
+    if (needsClockSyncFallback) {
+      const result = iniciarSincronizacao();
+      if (result.ok) {
+        setSyncMinuteInput(String(Math.floor(matchTime / 60)));
+        setSyncSecondInput(String(matchTime % 60).padStart(2, '0'));
+        setSyncValidationError(null);
+        setShowClockSyncModal(true);
+      }
+      setTopRightNotice('Necessario sincronizar relogio antes de continuar a partida.');
+      return;
+    }
     applySecondHalfRealtime();
   };
 
@@ -1973,6 +2077,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
     savedMatch.status = status;
     savedMatch.collectionPhase = clockSnapshot.state === 'PRE_JOGO' ? 0 : currentPeriod === '1T' ? 1 : 2;
+    const persistedClockSnapshot = !isPostmatch ? buildPersistedClockSnapshot(clockSnapshot) : undefined;
 
     const squadIds = [
       ...new Set(
@@ -1991,6 +2096,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           players: lineupPlayers,
           bench: benchPlayers,
           ballPossessionStart,
+          ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
           ...(squadIds.length > 0 ? { selectedPlayerIds: squadIds } : {}),
         };
       } else if (squadIds.length > 0) {
@@ -1998,6 +2104,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           players: [],
           bench: [],
           ballPossessionStart: 'us',
+          ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
           selectedPlayerIds: squadIds,
         };
       }
@@ -2075,6 +2182,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   );
 
   const saveSilently = async () => {
+    if (suppressBeforeUnloadRef.current) return;
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
@@ -2113,20 +2221,33 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   }, []);
 
+  const stopAutosaveSchedulers = useCallback(() => {
+    if (autosaveDebounceRef.current) {
+      clearTimeout(autosaveDebounceRef.current);
+      autosaveDebounceRef.current = null;
+    }
+    if (autosaveIntervalRef.current) {
+      clearInterval(autosaveIntervalRef.current);
+      autosaveIntervalRef.current = null;
+    }
+    autosaveQueuedRef.current = false;
+  }, []);
+
   // Finalizar coleta (status = encerrado, mas editável depois)
   const handleEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
     if (!window.confirm('Tem certeza que deseja finalizar a coleta?')) return;
 
+    suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
+    stopAutosaveSchedulers();
     await waitForAutosaveIdle();
 
     if (isPostmatch && onSave) {
       const savedMatch = buildMatchSnapshot('encerrado');
       applySaveResult(await onSave(savedMatch, { source: 'manual' }));
       commitPersistedSignature(JSON.stringify(savedMatch));
-      suppressBeforeUnloadRef.current = true;
       onClose();
       return;
     }
@@ -2139,7 +2260,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       applySaveResult(await onSave(savedMatch, { source: 'manual' }));
       commitPersistedSignature(JSON.stringify(savedMatch));
     }
-    suppressBeforeUnloadRef.current = true;
     onClose();
   };
 
@@ -2156,7 +2276,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
+    suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
+    stopAutosaveSchedulers();
     await waitForAutosaveIdle();
 
     if (onSave) {
@@ -2166,7 +2288,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       );
       commitPersistedSignature(JSON.stringify(savedMatch));
     }
-    suppressBeforeUnloadRef.current = true;
     onClose();
   };
 
@@ -3471,7 +3592,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       : 'text-amber-200'
                   }`}
                 >
-                  Estado: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {getCollectionStatusMessage()}
+                  Estado: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {needsClockSyncFallback ? 'Necessario sincronizar relogio. Esta partida nao possui snapshot temporal salvo.' : getCollectionStatusMessage()}
                 </p>
                 <button
                   type="button"

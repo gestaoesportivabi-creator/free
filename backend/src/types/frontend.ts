@@ -60,6 +60,23 @@ export interface PhysicalAssessment {
   agility: number;
 }
 
+export type MatchClockPersistedState =
+  | 'PRE_JOGO'
+  | 'PRIMEIRO_TEMPO'
+  | 'PAUSADO'
+  | 'SINCRONIZANDO'
+  | 'INTERVALO'
+  | 'SEGUNDO_TEMPO'
+  | 'ENCERRADO';
+
+export interface MatchClockSnapshot {
+  currentTimeSeconds: number;
+  period: '1T' | '2T';
+  state: MatchClockPersistedState;
+  isRunning: boolean;
+  firstHalfLocked: boolean;
+}
+
 export interface MatchRecord {
   id?: string;
   opponent: string;
@@ -106,6 +123,7 @@ export interface MatchRecord {
     ballPossessionStart: string;
     /** Elenco convocado (persistido no JSON `lineup`) */
     selectedPlayerIds?: string[];
+    clockSnapshot?: MatchClockSnapshot;
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: {
       tactical: string;
