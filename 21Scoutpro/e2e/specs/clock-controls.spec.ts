@@ -5,6 +5,7 @@ import {
   encerrarPrimeiroTempo,
   ensureClockStarted,
   iniciarSegundoTempo,
+  normalizarPartidaQaEmTempoReal,
   readClock,
   registrarEvento,
   selecionarAtletaQa,
@@ -12,6 +13,10 @@ import {
 } from '../helpers/scout-flow';
 
 test.describe.serial('QA controles do cronometro', () => {
+  test.beforeEach(async () => {
+    await normalizarPartidaQaEmTempoReal();
+  });
+
   test('inicia o cronometro e avanca o relogio', async ({ page }) => {
     await abrirColetaQaEmTempoReal(page, 'saved');
     await ensureClockStarted(page);

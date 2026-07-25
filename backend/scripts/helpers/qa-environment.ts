@@ -26,6 +26,7 @@ export const QA_MATCHES: Record<QaMatchKey, QaMatchDefinition> = {
     matchLocation: 'QA ARENA LOCAL',
     status: 'em_andamento',
     collectionPhase: 0,
+    resetOnSeed: true,
   },
   postmatch: {
     key: 'postmatch',

@@ -12,6 +12,7 @@ import {
   garantirPosseCom,
   iniciarColeta,
   iniciarSegundoTempo,
+  normalizarPartidaQaEmTempoReal,
   obterEventoRecente,
   obterUltimoEvento,
   reabrirPartida,
@@ -88,6 +89,10 @@ async function registrarEventoEmTempo(
 }
 
 test.describe.serial('QA ciclo completo da partida', () => {
+  test.beforeEach(async () => {
+    await normalizarPartidaQaEmTempoReal();
+  });
+
   test('acumula eventos, registra gol realtime, encerra e reabre a coleta', async ({ page }) => {
     await abrirColetaQaRepetivel(page);
     await garantirPrimeiroTempo(page);

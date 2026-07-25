@@ -27,6 +27,21 @@ async function isVisible(page: Page, testId: string, timeout = 1500): Promise<bo
 
 async function waitForRealtimeScout(page: Page): Promise<void> {
   await page.waitForURL(/\/scout-realtime$/, { timeout: 20_000 });
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 12_000) {
+    if (await handleRealtimeLineupModal(page)) {
+      return;
+    }
+
+    const clockPanel = page.getByTestId('match-clock-panel');
+    if (await clockPanel.isVisible().catch(() => false)) {
+      return;
+    }
+
+    await page.waitForTimeout(250);
+  }
+
   await expect(page.getByTestId('match-clock-panel')).toBeVisible();
 }
 
@@ -101,10 +116,17 @@ async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
 }
 
 async function settleRealtimeEntry(page: Page): Promise<void> {
-  await page.waitForURL(/\/scout-realtime$/, { timeout: 20_000 });
-
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 12_000) {
+  while (Date.now() - startedAt < 20_000) {
+    const isRealtimeUrl = /\/scout-realtime$/.test(page.url());
+    if (!isRealtimeUrl) {
+      const prepStart = page.getByTestId('prep-start-scout');
+      const prepOpenConfirm = page.getByTestId('prep-open-confirm');
+      if ((await prepStart.isVisible().catch(() => false)) || (await prepOpenConfirm.isVisible().catch(() => false))) {
+        return;
+      }
+    }
+
     if (await handleRealtimeLineupModal(page)) {
       return;
     }
@@ -121,6 +143,20 @@ async function settleRealtimeEntry(page: Page): Promise<void> {
 }
 
 async function ensureAtLeastFivePreparedPlayers(page: Page): Promise<void> {
+  const selectVisiblePrepPlayers = async () => {
+    const selectAll = page.getByTestId('prep-select-all');
+    if (await selectAll.isVisible().catch(() => false)) {
+      await selectAll.click();
+    }
+  };
+
+  await selectVisiblePrepPlayers();
+  const linePlayersFilter = page.getByRole('button', { name: /Atletas de linha/i });
+  if (await linePlayersFilter.isVisible().catch(() => false)) {
+    await linePlayersFilter.click();
+    await selectVisiblePrepPlayers();
+  }
+
   const cards = page.locator('[data-testid^="prep-athlete-"]');
   const total = await cards.count();
   if (total === 0) return;
@@ -212,6 +248,17 @@ export async function normalizarPartidaQaPosJogo(): Promise<void> {
   });
 }
 
+export async function normalizarPartidaQaEmTempoReal(): Promise<void> {
+  execFileSync('cmd.exe', ['/c', 'npm run seed:qa-environment'], {
+    cwd: backendDir,
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      ALLOW_QA_SEED: 'true',
+    },
+  });
+}
+
 export async function abrirColetaQaPosJogo(page: Page, preferredKind: QaMatchKind = 'scheduled'): Promise<void> {
   await loginComoQa(page);
   await abrirDadosDoJogo(page);
@@ -238,8 +285,18 @@ export async function abrirColetaQaPosJogo(page: Page, preferredKind: QaMatchKin
 export async function abrirPartidaQa(
   page: Page,
   preferredKind: QaMatchKind = 'any',
-  target: QaMatchTarget = 'clock'
+  target: QaMatchTarget = 'clock',
+  matchId?: string
 ): Promise<void> {
+  if (matchId) {
+    const byId = page.locator(`[data-testid="match-card"][data-match-id="${matchId}"]`).first();
+    if ((await byId.count()) > 0) {
+      await expect(byId).toBeVisible();
+      await byId.click();
+      return;
+    }
+  }
+
   const matchOpponent = target === 'postmatch' ? qaEnv.postmatchOpponent : qaEnv.matchOpponent;
   const matchCompetition = target === 'postmatch' ? qaEnv.postmatchCompetition : qaEnv.matchCompetition;
   const base = page.locator(
@@ -429,15 +486,15 @@ export async function salvarPartida(page: Page): Promise<void> {
   await expect(page.getByTestId('nav-dados-jogo')).toBeVisible({ timeout: 20_000 });
 }
 
-export async function reabrirPartida(page: Page): Promise<void> {
+export async function reabrirPartida(page: Page, matchId?: string): Promise<void> {
   await abrirDadosDoJogo(page);
-  await abrirPartidaQa(page, 'saved');
+  await abrirPartidaQa(page, 'saved', 'clock', matchId);
   await iniciarColeta(page);
 }
 
-export async function reabrirPartidaQaPosJogo(page: Page): Promise<void> {
+export async function reabrirPartidaQaPosJogo(page: Page, matchId?: string): Promise<void> {
   await abrirDadosDoJogo(page);
-  await abrirPartidaQa(page, 'saved', 'postmatch');
+  await abrirPartidaQa(page, 'saved', 'postmatch', matchId);
   await iniciarColeta(page);
 }
 
