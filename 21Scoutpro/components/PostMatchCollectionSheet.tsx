@@ -86,6 +86,12 @@ const ACTION_TIPO_SUBTIPO: Record<PostMatchAction, { tipo: string; subtipo: stri
   tackleWithoutBall: { tipo: 'Desarme', subtipo: 'Sem posse' },
   tackleCounter: { tipo: 'Desarme', subtipo: 'Contra-ataque' },
   save: { tipo: 'Defesa', subtipo: '' },
+  card: { tipo: 'Cartão', subtipo: '' },
+  block: { tipo: 'Bloqueio', subtipo: '' },
+  corner: { tipo: 'Escanteio', subtipo: '' },
+  freeKick: { tipo: 'Tiro Livre', subtipo: '' },
+  penalty: { tipo: 'Pênalti', subtipo: '' },
+  lateral: { tipo: 'Lateral', subtipo: '' },
 };
 
 function getTipoSubtipo(action: PostMatchAction): { tipo: string; subtipo: string } {

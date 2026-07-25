@@ -60,6 +60,23 @@ export interface PhysicalAssessment {
   agility: number;
 }
 
+export type MatchClockPersistedState =
+  | 'PRE_JOGO'
+  | 'PRIMEIRO_TEMPO'
+  | 'PAUSADO'
+  | 'SINCRONIZANDO'
+  | 'INTERVALO'
+  | 'SEGUNDO_TEMPO'
+  | 'ENCERRADO';
+
+export interface MatchClockSnapshot {
+  currentTimeSeconds: number;
+  period: '1T' | '2T';
+  state: MatchClockPersistedState;
+  isRunning: boolean;
+  firstHalfLocked: boolean;
+}
+
 export interface MatchRecord {
   id?: string;
   opponent: string;
@@ -73,13 +90,40 @@ export interface MatchRecord {
   playerStats: { [playerId: string]: MatchStats };
   teamStats: MatchStats;
   playerRelationships?: { [p1: string]: { [p2: string]: { passes: number; assists: number } } };
-  postMatchEventLog?: Array<{ id: string; time: string; period: string; playerId: string; action: string; tipo: string; subtipo: string; passToPlayerId?: string; playerName?: string; passToPlayerName?: string; zone?: 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR'; recordedByUserId?: string; recordedByName?: string }>;
+  postMatchEventLog?: Array<{
+    id: string;
+    time: string;
+    period: string;
+    playerId: string;
+    action: string;
+    tipo: string;
+    subtipo: string;
+    passToPlayerId?: string;
+    playerName?: string;
+    passToPlayerName?: string;
+    zone?: 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR';
+    recordedByUserId?: string;
+    recordedByName?: string;
+    wrongPassGeneratedTransition?: boolean;
+    result?: string;
+    cardType?: 'yellow' | 'secondYellow' | 'red';
+    cardTeam?: 'for' | 'against';
+    goalMethod?: string;
+    isOpponentGoal?: boolean;
+    assistPlayerId?: string;
+    assistPlayerName?: string;
+    foulTeam?: 'for' | 'against';
+    isForUs?: boolean;
+    kickerId?: string;
+    kickerName?: string;
+  }>;
   lineup?: {
     players: string[];
     bench: string[];
     ballPossessionStart: string;
     /** Elenco convocado (persistido no JSON `lineup`) */
     selectedPlayerIds?: string[];
+    clockSnapshot?: MatchClockSnapshot;
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: {
       tactical: string;

@@ -3,6 +3,7 @@ import {
   abrirColetaQaEmTempoReal,
   abrirLogs,
   ensureClockStarted,
+  normalizarPartidaQaEmTempoReal,
   obterUltimoEvento,
   reabrirPartida,
   registrarEvento,
@@ -12,6 +13,10 @@ import {
 } from '../helpers/scout-flow';
 
 test.describe.serial('QA persistencia e reabertura', () => {
+  test.beforeEach(async () => {
+    await normalizarPartidaQaEmTempoReal();
+  });
+
   test('salva dois eventos, reabre e edita o ultimo', async ({ page }) => {
     await abrirColetaQaEmTempoReal(page, 'saved');
     await ensureClockStarted(page);

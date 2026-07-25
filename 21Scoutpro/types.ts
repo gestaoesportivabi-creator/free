@@ -178,7 +178,13 @@ export type PostMatchAction =
   | 'tackleWithBall'
   | 'tackleWithoutBall'
   | 'tackleCounter'
-  | 'save';
+  | 'save'
+  | 'card'
+  | 'block'
+  | 'corner'
+  | 'freeKick'
+  | 'penalty'
+  | 'lateral';
 
 export interface PostMatchEvent {
   id: string;
@@ -214,6 +220,18 @@ export interface PostMatchEvent {
   foulTeam?: 'for' | 'against';
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */
   wrongPassGeneratedTransition?: boolean;
+  /** Resultado bruto do evento para reidratação fiel do MatchScoutingWindow */
+  result?: string;
+  /** Tipo do cartão quando action = 'card' */
+  cardType?: 'yellow' | 'secondYellow' | 'red';
+  /** Time do cartão quando action = 'card' */
+  cardTeam?: 'for' | 'against';
+  /** Identifica se a bola parada foi a favor da nossa equipe */
+  isForUs?: boolean;
+  /** ID do cobrador para tiro livre/pênalti */
+  kickerId?: string;
+  /** Nome do cobrador para tiro livre/pênalti */
+  kickerName?: string;
 }
 
 export interface TechnicalAnalysis {
@@ -222,6 +240,23 @@ export interface TechnicalAnalysis {
   physical: string;
   behavioral: string;
   mental: string;
+}
+
+export type MatchClockPersistedState =
+  | 'PRE_JOGO'
+  | 'PRIMEIRO_TEMPO'
+  | 'PAUSADO'
+  | 'SINCRONIZANDO'
+  | 'INTERVALO'
+  | 'SEGUNDO_TEMPO'
+  | 'ENCERRADO';
+
+export interface MatchClockSnapshot {
+  currentTimeSeconds: number;
+  period: '1T' | '2T';
+  state: MatchClockPersistedState;
+  isRunning: boolean;
+  firstHalfLocked: boolean;
 }
 
 export interface MatchRecord {
@@ -252,6 +287,7 @@ export interface MatchRecord {
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
+    clockSnapshot?: MatchClockSnapshot;
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: TechnicalAnalysis;
   };

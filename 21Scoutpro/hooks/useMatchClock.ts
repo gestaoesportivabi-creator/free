@@ -59,6 +59,7 @@ const buildSuccess = (): SyncResult => ({ ok: true });
 
 export function useMatchClock({ mode }: UseMatchClockOptions): UseMatchClockResult {
   const clockRef = useRef<ClockService>(new ClockService(mode));
+  const modeRef = useRef<ClockMode>(mode);
   const [snapshot, setSnapshot] = useState<ClockSnapshot>(() => clockRef.current.getSnapshot());
   const snapshotRef = useRef<ClockSnapshot>(snapshot);
   const [pauseSource, setPauseSource] = useState<PauseSource>(null);
@@ -94,6 +95,10 @@ export function useMatchClock({ mode }: UseMatchClockOptions): UseMatchClockResu
   }, [applySnapshot, setPauseSourceForState]);
 
   useEffect(() => {
+    if (modeRef.current === mode) {
+      return;
+    }
+    modeRef.current = mode;
     clockRef.current = new ClockService(mode);
     const nextSnapshot = clockRef.current.getSnapshot();
     snapshotRef.current = nextSnapshot;

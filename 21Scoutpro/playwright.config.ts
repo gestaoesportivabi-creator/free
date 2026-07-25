@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 dotenv.config({ path: path.join(rootDir, '.env.e2e') });
 
-const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173';
+const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173';
 
 export default defineConfig({
   testDir: './e2e/specs',

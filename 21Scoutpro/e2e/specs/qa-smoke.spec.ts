@@ -4,6 +4,7 @@ import {
   abrirLogs,
   ensureClockStarted,
   fecharLogs,
+  normalizarPartidaQaEmTempoReal,
   obterUltimoEvento,
   readClock,
   reabrirPartida,
@@ -13,6 +14,10 @@ import {
 } from '../helpers/scout-flow';
 
 test.describe.serial('QA smoke do cronometro e da coleta', () => {
+  test.beforeEach(async () => {
+    await normalizarPartidaQaEmTempoReal();
+  });
+
   test('login, abertura da partida, evento simples, save e reabertura', async ({ page }) => {
     await abrirColetaQaEmTempoReal(page, 'scheduled');
     await expect(page.getByTestId('save-match')).toHaveText('Salvar como incompleta');

@@ -4,6 +4,7 @@ import {
   QA_CLEANUP_GUARD,
   QA_ENVIRONMENT,
   isDryRun,
+  listQaMatches,
   normalizeEmail,
   qaMatchDate,
 } from './helpers/qa-environment';
@@ -39,6 +40,8 @@ const EMPTY_COUNTS: CleanupCounts = {
   tecnico: 0,
   user: 0,
 };
+
+const QA_MATCHES = listQaMatches();
 
 function sumCleanup(counts: CleanupCounts): number {
   return Object.values(counts).reduce((total, value) => total + value, 0);
@@ -115,64 +118,71 @@ async function loadCleanupTargets() {
         })
       : [];
 
-  const jogo = equipe
-    ? await prisma.jogo.findFirst({
-        where: {
-          equipeId: equipe.id,
-          adversario: QA_ENVIRONMENT.opponentName,
-          campeonato: QA_ENVIRONMENT.competitionName,
-          data: qaMatchDate(),
-        },
-        select: { id: true },
-      })
-    : null;
-
-  const campeonato = equipe
-    ? await prisma.campeonato.findFirst({
-        where: {
-          equipeId: equipe.id,
-          nome: QA_ENVIRONMENT.competitionName,
-        },
-        select: { id: true },
-      })
-    : null;
-
-  const competicao = await prisma.competicao.findUnique({
-    where: { nome: QA_ENVIRONMENT.competitionName },
-    select: { id: true },
+  const competicoes = await prisma.competicao.findMany({
+    where: {
+      nome: { in: QA_MATCHES.map((matchDefinition) => matchDefinition.competitionName) },
+    },
+    select: { id: true, nome: true },
   });
 
-  const campeonatoJogo =
-    campeonato && jogo
-      ? await prisma.campeonatosJogos.findFirst({
+  const campeonatos = equipe
+    ? await prisma.campeonato.findMany({
+        where: {
+          equipeId: equipe.id,
+          nome: { in: QA_MATCHES.map((matchDefinition) => matchDefinition.competitionName) },
+        },
+        select: { id: true, nome: true },
+      })
+    : [];
+
+  const jogos = equipe
+    ? await prisma.jogo.findMany({
+        where: {
+          equipeId: equipe.id,
+          OR: QA_MATCHES.map((matchDefinition) => ({
+            adversario: matchDefinition.opponentName,
+            campeonato: matchDefinition.competitionName,
+            data: qaMatchDate(matchDefinition.matchDate),
+          })),
+        },
+        select: { id: true, campeonato: true },
+      })
+    : [];
+
+  const campeonatoJogos =
+    campeonatos.length > 0 && jogos.length > 0
+      ? await prisma.campeonatosJogos.findMany({
           where: {
-            campeonatoId: campeonato.id,
-            jogoId: jogo.id,
+            campeonatoId: { in: campeonatos.map((item) => item.id) },
+            jogoId: { in: jogos.map((item) => item.id) },
           },
           select: { id: true },
         })
-      : null;
+      : [];
 
-  const estatisticasEquipe = jogo
-    ? await prisma.jogosEstatisticasEquipe.findUnique({
-        where: { jogoId: jogo.id },
-        select: { id: true },
-      })
-    : null;
+  const estatisticasEquipe =
+    jogos.length > 0
+      ? await prisma.jogosEstatisticasEquipe.findMany({
+          where: { jogoId: { in: jogos.map((item) => item.id) } },
+          select: { id: true },
+        })
+      : [];
 
-  const estatisticasJogador = jogo
-    ? await prisma.jogosEstatisticasJogador.findMany({
-        where: { jogoId: jogo.id },
-        select: { id: true },
-      })
-    : [];
+  const estatisticasJogador =
+    jogos.length > 0
+      ? await prisma.jogosEstatisticasJogador.findMany({
+          where: { jogoId: { in: jogos.map((item) => item.id) } },
+          select: { id: true },
+        })
+      : [];
 
-  const eventos = jogo
-    ? await prisma.jogosEventos.findMany({
-        where: { jogoId: jogo.id },
-        select: { id: true },
-      })
-    : [];
+  const eventos =
+    jogos.length > 0
+      ? await prisma.jogosEventos.findMany({
+          where: { jogoId: { in: jogos.map((item) => item.id) } },
+          select: { id: true },
+        })
+      : [];
 
   return {
     user,
@@ -181,10 +191,10 @@ async function loadCleanupTargets() {
     equipe,
     jogadores,
     vinculosJogadores,
-    jogo,
-    campeonato,
-    competicao,
-    campeonatoJogo,
+    competicoes,
+    campeonatos,
+    jogos,
+    campeonatoJogos,
     estatisticasEquipe,
     estatisticasJogador,
     eventos,
@@ -193,13 +203,13 @@ async function loadCleanupTargets() {
 
 function buildCleanupPlan(targets: Awaited<ReturnType<typeof loadCleanupTargets>>): CleanupCounts {
   return {
-    campeonatoJogo: targets.campeonatoJogo ? 1 : 0,
-    estatisticasEquipe: targets.estatisticasEquipe ? 1 : 0,
+    campeonatoJogo: targets.campeonatoJogos.length,
+    estatisticasEquipe: targets.estatisticasEquipe.length,
     estatisticasJogador: targets.estatisticasJogador.length,
     eventos: targets.eventos.length,
-    jogo: targets.jogo ? 1 : 0,
-    campeonato: targets.campeonato ? 1 : 0,
-    competicao: targets.competicao ? 1 : 0,
+    jogo: targets.jogos.length,
+    campeonato: targets.campeonatos.length,
+    competicao: targets.competicoes.length,
     vinculosJogadores: targets.vinculosJogadores.length,
     jogadores: targets.jogadores.length,
     equipe: targets.equipe ? 1 : 0,
@@ -213,14 +223,18 @@ async function runCleanup(plan: CleanupCounts, targets: Awaited<ReturnType<typeo
   const removed = { ...EMPTY_COUNTS };
 
   await prisma.$transaction(async (tx) => {
-    if (targets.campeonatoJogo) {
-      await tx.campeonatosJogos.delete({ where: { id: targets.campeonatoJogo.id } });
-      removed.campeonatoJogo = 1;
+    if (targets.campeonatoJogos.length > 0) {
+      const result = await tx.campeonatosJogos.deleteMany({
+        where: { id: { in: targets.campeonatoJogos.map((item) => item.id) } },
+      });
+      removed.campeonatoJogo = result.count;
     }
 
-    if (targets.estatisticasEquipe) {
-      await tx.jogosEstatisticasEquipe.delete({ where: { id: targets.estatisticasEquipe.id } });
-      removed.estatisticasEquipe = 1;
+    if (targets.estatisticasEquipe.length > 0) {
+      const result = await tx.jogosEstatisticasEquipe.deleteMany({
+        where: { id: { in: targets.estatisticasEquipe.map((item) => item.id) } },
+      });
+      removed.estatisticasEquipe = result.count;
     }
 
     if (targets.estatisticasJogador.length > 0) {
@@ -237,19 +251,25 @@ async function runCleanup(plan: CleanupCounts, targets: Awaited<ReturnType<typeo
       removed.eventos = result.count;
     }
 
-    if (targets.jogo) {
-      await tx.jogo.delete({ where: { id: targets.jogo.id } });
-      removed.jogo = 1;
+    if (targets.jogos.length > 0) {
+      const result = await tx.jogo.deleteMany({
+        where: { id: { in: targets.jogos.map((item) => item.id) } },
+      });
+      removed.jogo = result.count;
     }
 
-    if (targets.campeonato) {
-      await tx.campeonato.delete({ where: { id: targets.campeonato.id } });
-      removed.campeonato = 1;
+    if (targets.campeonatos.length > 0) {
+      const result = await tx.campeonato.deleteMany({
+        where: { id: { in: targets.campeonatos.map((item) => item.id) } },
+      });
+      removed.campeonato = result.count;
     }
 
-    if (targets.competicao) {
-      await tx.competicao.delete({ where: { id: targets.competicao.id } });
-      removed.competicao = 1;
+    if (targets.competicoes.length > 0) {
+      const result = await tx.competicao.deleteMany({
+        where: { id: { in: targets.competicoes.map((item) => item.id) } },
+      });
+      removed.competicao = result.count;
     }
 
     if (targets.vinculosJogadores.length > 0) {
@@ -297,6 +317,9 @@ async function main(): Promise<void> {
   const plan = buildCleanupPlan(targets);
 
   console.log('Cleanup seguro do ambiente QA oficial');
+  QA_MATCHES.forEach((matchDefinition) => {
+    console.log(`- partida QA monitorada: ${matchDefinition.matchLabel}`);
+  });
   printCounts('Registros QA localizados para remocao', plan);
 
   if (dryRun) {
