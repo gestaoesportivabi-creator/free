@@ -25,8 +25,20 @@ async function isVisible(page: Page, testId: string, timeout = 1500): Promise<bo
   }
 }
 
+async function isRealtimeCollectionReady(page: Page): Promise<boolean> {
+  if (await isVisible(page, 'match-clock-panel', 250)) {
+    return true;
+  }
+
+  if (await isVisible(page, 'collection-shell-experimental', 250)) {
+    return true;
+  }
+
+  return false;
+}
+
 async function waitForRealtimeScout(page: Page): Promise<void> {
-  await page.waitForURL(/\/scout-realtime$/, { timeout: 20_000 });
+  await page.waitForURL(/\/scout-realtime(?:\?.*)?$/, { timeout: 20_000 });
 
   const startedAt = Date.now();
   while (Date.now() - startedAt < 12_000) {
@@ -34,15 +46,19 @@ async function waitForRealtimeScout(page: Page): Promise<void> {
       return;
     }
 
-    const clockPanel = page.getByTestId('match-clock-panel');
-    if (await clockPanel.isVisible().catch(() => false)) {
+    if (await isRealtimeCollectionReady(page)) {
       return;
     }
 
     await page.waitForTimeout(250);
   }
 
-  await expect(page.getByTestId('match-clock-panel')).toBeVisible();
+  await expect
+    .poll(async () => isRealtimeCollectionReady(page), {
+      timeout: 10_000,
+      message: 'Esperava a coleta realtime abrir no fluxo atual ou no shell experimental.',
+    })
+    .toBe(true);
 }
 
 async function dismissNewsletterModal(page: Page): Promise<void> {
@@ -118,7 +134,7 @@ async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
 async function settleRealtimeEntry(page: Page): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 20_000) {
-    const isRealtimeUrl = /\/scout-realtime$/.test(page.url());
+    const isRealtimeUrl = /\/scout-realtime(?:\?.*)?$/.test(page.url());
     if (!isRealtimeUrl) {
       const prepStart = page.getByTestId('prep-start-scout');
       const prepOpenConfirm = page.getByTestId('prep-open-confirm');
@@ -131,15 +147,19 @@ async function settleRealtimeEntry(page: Page): Promise<void> {
       return;
     }
 
-    const clockPanel = page.getByTestId('match-clock-panel');
-    if (await clockPanel.isVisible().catch(() => false)) {
+    if (await isRealtimeCollectionReady(page)) {
       return;
     }
 
     await page.waitForTimeout(250);
   }
 
-  await expect(page.getByTestId('match-clock-panel')).toBeVisible();
+  await expect
+    .poll(async () => isRealtimeCollectionReady(page), {
+      timeout: 10_000,
+      message: 'Esperava a coleta realtime estabilizar no fluxo atual ou no shell experimental.',
+    })
+    .toBe(true);
 }
 
 async function ensureAtLeastFivePreparedPlayers(page: Page): Promise<void> {
@@ -323,7 +343,7 @@ export async function iniciarColeta(page: Page): Promise<void> {
   if (await isVisible(page, 'reopen-match')) {
     await page.getByTestId('reopen-match').click();
     const openedRealtime = await page
-      .waitForURL(/\/scout-realtime$/, { timeout: 5_000 })
+      .waitForURL(/\/scout-realtime(?:\?.*)?$/, { timeout: 5_000 })
       .then(() => true)
       .catch(() => false);
 
@@ -481,7 +501,7 @@ export async function salvarPartida(page: Page): Promise<void> {
   const saveButton = page.getByTestId('save-match');
   await expect(saveButton).toBeVisible();
   await saveButton.click();
-  await page.waitForURL(/\/dashboard$/, { timeout: 20_000 });
+  await page.waitForURL(/\/dashboard(?:\?.*)?$/, { timeout: 20_000 });
   await page.getByTestId('save-match').waitFor({ state: 'hidden', timeout: 20_000 });
   await expect(page.getByTestId('nav-dados-jogo')).toBeVisible({ timeout: 20_000 });
 }
