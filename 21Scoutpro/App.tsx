@@ -49,6 +49,7 @@ import { applyRouteMeta } from './utils/seo';
 import { track, trackPageView } from './utils/analytics';
 import { clearLegacyWellnessLocalStorage } from './utils/wellnessStaffData';
 import { AssistantChatPage } from './components/assistant/AssistantChatPage';
+import { withCollectionExperience } from './utils/collectionExperience';
 
 const SLIDES = [
     {
@@ -909,14 +910,16 @@ export default function App() {
 
   const openAssistant = () => {
     setAssistantOpen(true);
-    window.history.pushState({}, '', '/dashboard/assistente');
-    trackPageView('/dashboard/assistente');
+    const assistantUrl = withCollectionExperience('/dashboard/assistente', window.location.search);
+    window.history.pushState({}, '', assistantUrl);
+    trackPageView(assistantUrl);
   };
 
   const closeAssistant = () => {
     setAssistantOpen(false);
-    window.history.pushState({}, '', '/dashboard');
-    trackPageView('/dashboard');
+    const dashboardUrl = withCollectionExperience('/dashboard', window.location.search);
+    window.history.pushState({}, '', dashboardUrl);
+    trackPageView(dashboardUrl);
   };
 
   const handleUpdateUser = async (updatedData: Partial<User>) => {
@@ -1501,7 +1504,10 @@ export default function App() {
       });
       trackPageView('/');
     } else if (currentRoute === 'app') {
-      const appUrl = assistantOpen ? '/dashboard/assistente' : '/dashboard';
+      const appUrl = withCollectionExperience(
+        assistantOpen ? '/dashboard/assistente' : '/dashboard',
+        window.location.search
+      );
       window.history.pushState({}, '', appUrl);
       trackPageView(appUrl);
     }

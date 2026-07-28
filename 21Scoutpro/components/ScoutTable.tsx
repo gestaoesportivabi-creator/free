@@ -12,6 +12,7 @@ import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
+import { resolveCollectionExperience } from '../utils/collectionExperience';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
 const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
@@ -177,6 +178,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
   onDeleteChampionshipMatch,
   isFreePlan = false,
 }) => {
+    const collectionExperience = resolveCollectionExperience(
+        typeof window !== 'undefined' ? window.location.search : undefined
+    );
+
     // Debug: log initialData quando recebido
     useEffect(() => {
         if (initialData) {
@@ -1978,7 +1983,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         selectedPlayerIds?: string[];
     }) => {
         localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
-        window.location.assign('/scout-realtime');
+        window.location.assign(`/scout-realtime${window.location.search || ''}`);
     };
 
     const handleMatchClick = (item: CalendarMatchItem) => {
@@ -2922,6 +2927,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
                                 sidebarRetracted={true}
+                                collectionExperience={collectionExperience}
                             />
                         );
                     })()}
@@ -3920,6 +3926,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                         setSelectedExtraTimeMinutes(5);
                         setSelectedPlayersForMatch(new Set());
                     }}
+                    collectionExperience={collectionExperience}
                 />
             )}
         </div>

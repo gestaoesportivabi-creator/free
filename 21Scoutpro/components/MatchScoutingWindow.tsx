@@ -22,6 +22,8 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
+import { CollectionShellExperimental } from './CollectionShellExperimental';
+import { resolveCollectionExperience, type CollectionExperience } from '../utils/collectionExperience';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -130,6 +132,7 @@ interface MatchScoutingWindowProps {
   takeFullWidth?: boolean;
   /** Quando true, alinha à esquerda com sidebar retraída (64px); quando false, com sidebar expandida (256px) */
   sidebarRetracted?: boolean;
+  collectionExperience?: CollectionExperience;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -422,8 +425,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   recordedByUser,
   takeFullWidth,
   sidebarRetracted = false,
+  collectionExperience,
 }) => {
   const isPostmatch = mode === 'postmatch';
+  const resolvedCollectionExperience =
+    collectionExperience ??
+    resolveCollectionExperience(typeof window !== 'undefined' ? window.location.search : undefined);
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
   const [persistedMatchId, setPersistedMatchId] = useState<string>(() => {
     const id = match?.id != null ? String(match.id).trim() : '';
@@ -1097,7 +1104,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           break;
         }
         case 'shot':
-          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, rawT, periodOverride);
+          registerSharedFinalization({
+            playerId,
+            result: flow.details as 'inside' | 'outside' | 'post' | 'blocked',
+            timeOverride: rawT,
+            periodOverride,
+          });
           break;
         case 'foul':
           handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride);
@@ -1281,7 +1293,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!realtimeHydrationReady) return;
     if (!isMatchStarted && !showLineupModal) {
       const Lm = match.lineup;
+      const hasLocalLineupReady =
+        lineupPlayers.length === 5 &&
+        ballPossessionStart != null &&
+        squadActiveIds.length === 5;
       if (
+        hasLocalLineupReady ||
         Lm &&
         Array.isArray(Lm.players) &&
         Lm.players.length === 5 &&
@@ -1300,7 +1317,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setShowLineupModal(true);
       }
     }
-  }, [hydrateClock, isOpen, isMatchStarted, isPostmatch, realtimeHydrationReady, selectedPlayerIds, players, match?.collectionPhase, match?.id, match?.lineup]);
+  }, [
+    hydrateClock,
+    isOpen,
+    isMatchStarted,
+    isPostmatch,
+    realtimeHydrationReady,
+    selectedPlayerIds,
+    players,
+    match?.collectionPhase,
+    match?.id,
+    match?.lineup,
+    lineupPlayers,
+    ballPossessionStart,
+    squadActiveIds,
+  ]);
 
   // Jogadores ativos na coleta = só após trancar o locker com 5 IDs; sem ativos = ninguém selecionável na coleta
   useEffect(() => {
@@ -2793,6 +2824,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     setSelectedAction(null);
   };
+
+  const registerSharedFinalization = ({
+    playerId,
+    result,
+    timeOverride,
+    periodOverride,
+  }: {
+    playerId: string;
+    result: 'inside' | 'outside' | 'post' | 'blocked';
+    timeOverride?: number;
+    periodOverride?: '1T' | '2T';
+  }) => {
+    handleRegisterShot(result, playerId, timeOverride, periodOverride);
+  };
   
   // Registrar escanteio (zone opcional: Defesa/Ataque - Esquerda/Direita)
   const handleRegisterCorner = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
@@ -3313,6 +3358,24 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return lines;
   }, [formatRecentEventAction, lastThreeEvents]);
 
+  const shellEligiblePlayers = useMemo(() => {
+    return activePlayers.map((player) => ({
+      id: String(player.id).trim(),
+      name: player.nickname?.trim() || player.name || 'Atleta',
+      jerseyNumber: player.jerseyNumber ?? null,
+    }));
+  }, [activePlayers]);
+
+  const shellRecentEvents = useMemo(() => {
+    return lastCommandDisplayLines.map((line) => ({
+      id: line.key,
+      timeLabel: formatTime(line.absoluteTime),
+      playerName: line.playerName,
+      actionText: line.actionText,
+      zone: line.zone,
+    }));
+  }, [formatTime, lastCommandDisplayLines]);
+
   const isBlockedByPenalty = !!penaltyStep;
 
   const expelledPlayerIds = useMemo(() => {
@@ -3500,6 +3563,46 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         return null;
     }
   })();
+  const hasRealtimeShellEntry = squadActiveIds.length === 5;
+  const shouldRenderExperimentalShell =
+    resolvedCollectionExperience === 'shell' && (isPostmatch || hasRealtimeShellEntry || isMatchStarted);
+  const hasShellEligiblePlayers = shellEligiblePlayers.length > 0;
+  const shellDisabledReason =
+    !hasShellEligiblePlayers
+      ? 'Nenhum atleta elegivel esta disponivel para registrar a Finalizacao.'
+      : !isPostmatch && !isMatchStarted
+      ? 'Inicie a partida para liberar o registro da Finalizacao no shell experimental.'
+      : isRealtimeActionLocked
+        ? getRealtimeBlockMessage()
+        : null;
+  const shellClockPrimaryAction = clockPrimaryAction
+    ? {
+        label: clockPrimaryAction.label,
+        onClick: clockPrimaryAction.onClick,
+        disabled: clockPrimaryAction.disabled,
+        testId:
+          clockSnapshot.state === 'PRE_JOGO'
+            ? 'shell-clock-start'
+            : clockSnapshot.state === 'PAUSADO'
+              ? 'shell-clock-continue'
+              : clockSnapshot.state === 'INTERVALO'
+                ? 'shell-clock-start-second-half'
+                : 'shell-clock-pause',
+      }
+    : null;
+  const shellPostmatchPeriodAction = isPostmatch
+    ? currentPeriod === '1T'
+      ? {
+          label: 'Encerrar coleta do 1o tempo',
+          onClick: handleEndFirstHalfCollection,
+          testId: 'shell-postmatch-end-first-half',
+        }
+      : {
+          label: 'Voltar ao 1o tempo',
+          onClick: handleReturnToFirstHalfCollection,
+          testId: 'shell-postmatch-return-first-half',
+        }
+    : null;
 
   const isRealtimePage = window.location.pathname === '/scout-realtime';
   const useFullViewport = isRealtimePage || takeFullWidth;
@@ -3916,6 +4019,47 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               )}
             </div>
           </div>
+        ) : shouldRenderExperimentalShell ? (
+          <CollectionShellExperimental
+            mode={isPostmatch ? 'postmatch' : 'realtime'}
+            clockTimeLabel={formatTime(matchTime)}
+            clockStateLabel={isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}
+            currentPeriod={currentPeriod}
+            score={{
+              teamName: (teamName || 'Nossa equipe').toUpperCase(),
+              opponentName: (match.opponent || 'Adversario').toUpperCase(),
+              goalsFor,
+              goalsAgainst,
+            }}
+            fouls={{
+              for: foulsForCurrentPeriod,
+              against: foulsAgainstCurrentPeriod,
+            }}
+            eligiblePlayers={shellEligiblePlayers}
+            recentEvents={shellRecentEvents}
+            collectionStatusMessage={getCollectionStatusMessage()}
+            hasUnsavedChanges={hasUnsavedChanges}
+            finalizationEnabled={hasShellEligiblePlayers && (isPostmatch || !isRealtimeActionLocked)}
+            disabledReason={shellDisabledReason}
+            showPausedAlert={!isPostmatch && clockSnapshot.state === 'PAUSADO'}
+            clockPrimaryAction={shellClockPrimaryAction}
+            onOpenClockSync={!isPostmatch ? openClockSyncModal : null}
+            postmatchPeriodAction={shellPostmatchPeriodAction}
+            manualTime={
+              isPostmatch
+                ? {
+                    minute: manualMinute,
+                    second: manualSecond,
+                    onMinuteChange: setManualMinute,
+                    onSecondChange: setManualSecond,
+                  }
+                : undefined
+            }
+            onOpenLogs={() => setShowLogsView(true)}
+            onSave={handleSaveLater}
+            onCancelCurrentFlow={cancelActionFlow}
+            onRegisterFinalization={registerSharedFinalization}
+          />
         ) : (
         <>
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}

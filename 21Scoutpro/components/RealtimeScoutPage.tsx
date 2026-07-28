@@ -4,6 +4,7 @@ import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
+import { resolveCollectionExperience, withCollectionExperience } from '../utils/collectionExperience';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -25,6 +26,9 @@ export const RealtimeScoutPage: React.FC = () => {
   const [match, setMatch] = useState<MatchRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const collectionExperience = resolveCollectionExperience(
+    typeof window !== 'undefined' ? window.location.search : undefined
+  );
 
   useEffect(() => {
     const loadRealtimeMatch = async () => {
@@ -95,12 +99,13 @@ export const RealtimeScoutPage: React.FC = () => {
 
   // Manter URL sempre em /scout-realtime: não permitir voltar para /dashboard nesta aba
   useEffect(() => {
+    const realtimeUrl = `/scout-realtime${window.location.search || ''}`;
     if (window.location.pathname !== '/scout-realtime') {
-      window.history.replaceState({}, '', '/scout-realtime');
+      window.history.replaceState({}, '', realtimeUrl);
     }
     const handlePopState = () => {
       if (window.location.pathname !== '/scout-realtime') {
-        window.history.replaceState({}, '', '/scout-realtime');
+        window.history.replaceState({}, '', realtimeUrl);
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -113,7 +118,7 @@ export const RealtimeScoutPage: React.FC = () => {
       window.close();
       return;
     }
-    window.location.assign('/dashboard');
+    window.location.assign(withCollectionExperience('/dashboard', window.location.search));
   };
 
   const handleSave = async (
@@ -195,6 +200,7 @@ export const RealtimeScoutPage: React.FC = () => {
         matchType={scoutData.matchType}
         extraTimeMinutes={scoutData.extraTimeMinutes}
         selectedPlayerIds={scoutData.selectedPlayerIds}
+        collectionExperience={collectionExperience}
       />
     </div>
   );
