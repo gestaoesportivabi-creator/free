@@ -49,7 +49,12 @@ import { applyRouteMeta } from './utils/seo';
 import { track, trackPageView } from './utils/analytics';
 import { clearLegacyWellnessLocalStorage } from './utils/wellnessStaffData';
 import { AssistantChatPage } from './components/assistant/AssistantChatPage';
-import { withCollectionExperience } from './utils/collectionExperience';
+import {
+  SHELL_COLLECTION_EXPERIENCE,
+  getExperienceActivationRequest,
+  setStoredCollectionExperience,
+  withCollectionExperience,
+} from './utils/collectionExperience';
 
 const SLIDES = [
     {
@@ -250,6 +255,7 @@ export default function App() {
   const [sidebarRetracted, setSidebarRetracted] = useState(false); // desktop: true = recolhida, false = expandida (padrão expandida)
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [collectionExperienceNotice, setCollectionExperienceNotice] = useState<string | null>(null);
   /** Blog público sem token: não bloquear 1.º paint com “Carregando…” */
   const [isInitializing, setIsInitializing] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -411,6 +417,37 @@ export default function App() {
     const t = setInterval(() => setLiveNow(new Date()), 60000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const requestedExperience = getExperienceActivationRequest(window.location.search);
+    if (!requestedExperience) return;
+
+    setStoredCollectionExperience(requestedExperience);
+
+    setCollectionExperienceNotice(
+      requestedExperience === SHELL_COLLECTION_EXPERIENCE
+        ? 'Shell experimental ativado. Abra a proxima coleta pela navegacao normal.'
+        : 'Interface atual ativada. Abra a proxima coleta pela navegacao normal.'
+    );
+
+    const params = new URLSearchParams(window.location.search);
+    params.delete('experiencia');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, []);
+
+  useEffect(() => {
+    if (!collectionExperienceNotice) return;
+
+    const timer = window.setTimeout(() => {
+      setCollectionExperienceNotice(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timer);
+  }, [collectionExperienceNotice]);
 
   // Nome e escudo do time da aba Configurações (para card Próximo jogo na Visão Geral)
   const [overviewTeamSettings, setOverviewTeamSettings] = useState<{ teamName: string; teamShieldUrl: string }>({ teamName: '', teamShieldUrl: '' });
@@ -1574,53 +1611,68 @@ export default function App() {
     return <RealtimeScoutPage />;
   }
 
+  const collectionExperienceToast = collectionExperienceNotice ? (
+    <div className="fixed bottom-4 right-4 z-[120] max-w-sm rounded-2xl border border-[#10b981]/40 bg-black/95 px-4 py-3 shadow-2xl shadow-black/60">
+      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#10b981]">
+        Experiencia de coleta
+      </p>
+      <p className="mt-1 text-sm text-zinc-200">{collectionExperienceNotice}</p>
+    </div>
+  ) : null;
+
   // Blog público (sem exigir login)
   if (currentRoute === 'blog') {
     return (
-      <BlogPage
-        slug={blogSlug}
-        lang={blogLang}
-        currentUser={currentUser}
-        onHome={() => {
-          setBlogSlug(null);
-          setCurrentRoute('landing');
-          window.history.pushState({}, '', '/');
-        }}
-        onLogin={() => {
-          track('cta_login_click', { from: 'blog' });
-          setBlogSlug(null);
-          setCurrentRoute('login');
-          window.history.pushState({}, '', '/login');
-        }}
-        onOpenPost={(s, lang) => {
-          const next = s || null;
-          const nextLang = (lang ?? blogLang) as BlogLang;
-          setBlogSlug(next);
-          setBlogLang(nextLang);
-          setCurrentRoute('blog');
-          window.history.pushState({}, '', blogPathFor(nextLang, next));
-        }}
-        onChangeLang={(lang) => {
-          setBlogLang(lang);
-          setBlogSlug(null);
-          setCurrentRoute('blog');
-          window.history.pushState({}, '', blogPathFor(lang));
-        }}
-        onGoToDashboard={() => {
-          setCurrentRoute('app');
-          window.history.pushState({}, '', '/dashboard');
-        }}
-      />
+      <>
+        <BlogPage
+          slug={blogSlug}
+          lang={blogLang}
+          currentUser={currentUser}
+          onHome={() => {
+            setBlogSlug(null);
+            setCurrentRoute('landing');
+            window.history.pushState({}, '', '/');
+          }}
+          onLogin={() => {
+            track('cta_login_click', { from: 'blog' });
+            setBlogSlug(null);
+            setCurrentRoute('login');
+            window.history.pushState({}, '', '/login');
+          }}
+          onOpenPost={(s, lang) => {
+            const next = s || null;
+            const nextLang = (lang ?? blogLang) as BlogLang;
+            setBlogSlug(next);
+            setBlogLang(nextLang);
+            setCurrentRoute('blog');
+            window.history.pushState({}, '', blogPathFor(nextLang, next));
+          }}
+          onChangeLang={(lang) => {
+            setBlogLang(lang);
+            setBlogSlug(null);
+            setCurrentRoute('blog');
+            window.history.pushState({}, '', blogPathFor(lang));
+          }}
+          onGoToDashboard={() => {
+            setCurrentRoute('app');
+            window.history.pushState({}, '', '/dashboard');
+          }}
+        />
+        {collectionExperienceToast}
+      </>
     );
   }
 
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return (
-      <LandingPage
-        onGetStarted={() => setCurrentRoute('login')}
-        onGoToLogin={() => setCurrentRoute('login')}
-      />
+      <>
+        <LandingPage
+          onGetStarted={() => setCurrentRoute('login')}
+          onGoToLogin={() => setCurrentRoute('login')}
+        />
+        {collectionExperienceToast}
+      </>
     );
   }
 
@@ -1641,10 +1693,13 @@ export default function App() {
     }
 
     return (
-      <Login
-        onLogin={handleLoginWithRoute}
-        onBackToHome={() => setCurrentRoute('landing')}
-      />
+      <>
+        <Login
+          onLogin={handleLoginWithRoute}
+          onBackToHome={() => setCurrentRoute('landing')}
+        />
+        {collectionExperienceToast}
+      </>
     );
   }
 
@@ -2184,6 +2239,7 @@ export default function App() {
         {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
         </div>
       </main>
+      {collectionExperienceToast}
     </div>
   );
 }

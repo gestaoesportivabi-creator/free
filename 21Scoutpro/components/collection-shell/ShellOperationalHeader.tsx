@@ -19,6 +19,7 @@ interface ShellOperationalHeaderProps {
   postmatchPeriodAction?: ShellPeriodAction | null;
   onOpenLogs: () => void;
   onSave: () => void;
+  onReturnToCurrentExperience?: (() => void) | null;
 }
 
 export const ShellOperationalHeader: React.FC<ShellOperationalHeaderProps> = ({
@@ -33,6 +34,7 @@ export const ShellOperationalHeader: React.FC<ShellOperationalHeaderProps> = ({
   postmatchPeriodAction,
   onOpenLogs,
   onSave,
+  onReturnToCurrentExperience,
 }) => {
   const clockStateText =
     mode === 'postmatch' ? `POS-JOGO · ${currentPeriod}` : `${clockStateLabel} · ${currentPeriod}`;
@@ -51,6 +53,16 @@ export const ShellOperationalHeader: React.FC<ShellOperationalHeaderProps> = ({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {onReturnToCurrentExperience ? (
+            <button
+              type="button"
+              onClick={onReturnToCurrentExperience}
+              data-testid="shell-return-current"
+              className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-200 transition-colors hover:bg-zinc-800"
+            >
+              Voltar para interface atual
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSave}

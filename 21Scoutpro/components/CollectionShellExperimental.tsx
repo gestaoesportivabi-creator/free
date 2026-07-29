@@ -50,6 +50,8 @@ export interface CollectionShellExperimentalProps {
   manualTime?: ShellManualTime;
   onOpenLogs: () => void;
   onSave: () => void;
+  onReturnToCurrentExperience?: (() => void) | null;
+  experienceNotice?: string | null;
   onCancelCurrentFlow: () => void;
   onRegisterFinalization: (input: {
     playerId: string;
@@ -101,6 +103,8 @@ export const CollectionShellExperimental: React.FC<CollectionShellExperimentalPr
   manualTime,
   onOpenLogs,
   onSave,
+  onReturnToCurrentExperience,
+  experienceNotice,
   onCancelCurrentFlow,
   onRegisterFinalization,
 }) => {
@@ -301,6 +305,7 @@ export const CollectionShellExperimental: React.FC<CollectionShellExperimentalPr
           postmatchPeriodAction={postmatchPeriodAction}
           onOpenLogs={onOpenLogs}
           onSave={onSave}
+          onReturnToCurrentExperience={onReturnToCurrentExperience}
         />
 
         <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(300px,0.82fr)]">
@@ -339,6 +344,7 @@ export const CollectionShellExperimental: React.FC<CollectionShellExperimentalPr
               mode={mode}
               collectionStatusMessage={collectionStatusMessage}
               alertMessage={shellAlert}
+              experienceNotice={experienceNotice}
             />
             <ShellRecentEvents recentEvents={recentEvents} />
           </aside>

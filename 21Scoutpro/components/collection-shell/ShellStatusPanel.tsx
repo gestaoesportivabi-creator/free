@@ -6,6 +6,7 @@ interface ShellStatusPanelProps {
   mode: 'realtime' | 'postmatch';
   collectionStatusMessage: string;
   alertMessage?: string | null;
+  experienceNotice?: string | null;
 }
 
 export const ShellStatusPanel: React.FC<ShellStatusPanelProps> = ({
@@ -13,6 +14,7 @@ export const ShellStatusPanel: React.FC<ShellStatusPanelProps> = ({
   mode,
   collectionStatusMessage,
   alertMessage,
+  experienceNotice,
 }) => {
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
@@ -54,6 +56,18 @@ export const ShellStatusPanel: React.FC<ShellStatusPanelProps> = ({
             </div>
           </div>
         </div>
+
+        {experienceNotice ? (
+          <div
+            data-testid="shell-experience-notice"
+            className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-3 text-cyan-100"
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em]">
+              Mudanca programada
+            </p>
+            <p className="mt-1 text-sm">{experienceNotice}</p>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">

@@ -23,7 +23,12 @@ import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../s
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 import { CollectionShellExperimental } from './CollectionShellExperimental';
-import { resolveCollectionExperience, type CollectionExperience } from '../utils/collectionExperience';
+import {
+  CURRENT_COLLECTION_EXPERIENCE,
+  resolveCollectionExperience,
+  setStoredCollectionExperience,
+  type CollectionExperience,
+} from '../utils/collectionExperience';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -428,9 +433,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   collectionExperience,
 }) => {
   const isPostmatch = mode === 'postmatch';
-  const resolvedCollectionExperience =
+  const initialCollectionExperience =
     collectionExperience ??
     resolveCollectionExperience(typeof window !== 'undefined' ? window.location.search : undefined);
+  const [resolvedCollectionExperience, setResolvedCollectionExperience] =
+    useState<CollectionExperience>(initialCollectionExperience);
+  const [collectionExperienceNotice, setCollectionExperienceNotice] = useState<string | null>(null);
+  const previousOpenStateRef = useRef<boolean>(isOpen);
+  const collectionSessionMatchIdRef = useRef<string>(match?.id != null ? String(match.id).trim() : '');
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
   const [persistedMatchId, setPersistedMatchId] = useState<string>(() => {
     const id = match?.id != null ? String(match.id).trim() : '';
@@ -447,6 +457,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   }, [match.id]);
 
+  useEffect(() => {
+    const currentMatchId = match?.id != null ? String(match.id).trim() : '';
+    const nextExperience =
+      collectionExperience ??
+      resolveCollectionExperience(typeof window !== 'undefined' ? window.location.search : undefined);
+    const isOpening = isOpen && !previousOpenStateRef.current;
+    const matchChangedWhileOpen =
+      isOpen && collectionSessionMatchIdRef.current !== currentMatchId;
+
+    if (isOpening || matchChangedWhileOpen) {
+      setResolvedCollectionExperience(nextExperience);
+      setCollectionExperienceNotice(null);
+      collectionSessionMatchIdRef.current = currentMatchId;
+    }
+
+    if (!isOpen) {
+      collectionSessionMatchIdRef.current = currentMatchId;
+    }
+
+    previousOpenStateRef.current = isOpen;
+  }, [collectionExperience, isOpen, match.id]);
+
   const applySaveResult = useCallback((r: MatchRecord | undefined | void) => {
     if (r && typeof r === 'object' && r.id != null) {
       const sid = String(r.id).trim();
@@ -459,6 +491,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const commitPersistedSignature = useCallback((signature: string) => {
     lastAutosaveSignatureRef.current = signature;
     setLastPersistedSignature(signature);
+  }, []);
+  const handleReturnToCurrentExperience = useCallback(() => {
+    setStoredCollectionExperience(CURRENT_COLLECTION_EXPERIENCE);
+    setCollectionExperienceNotice(
+      'A nova experiencia sera aplicada ao abrir a proxima coleta.'
+    );
   }, []);
   const [manualMinute, setManualMinute] = useState<number>(0); // postmatch: minuto absoluto 0–40 (20+ = 2º tempo)
   const [manualSecond, setManualSecond] = useState<number>(0); // postmatch: segundo 0–59
@@ -4057,6 +4095,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             }
             onOpenLogs={() => setShowLogsView(true)}
             onSave={handleSaveLater}
+            onReturnToCurrentExperience={handleReturnToCurrentExperience}
+            experienceNotice={collectionExperienceNotice}
             onCancelCurrentFlow={cancelActionFlow}
             onRegisterFinalization={registerSharedFinalization}
           />
