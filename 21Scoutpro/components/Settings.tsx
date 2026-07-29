@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { Save, User as UserIcon, Lock, CheckCircle, Shield, Plus } from 'lucide-react';
+import { CollectionExperienceSelector } from './CollectionExperienceSelector';
+import {
+  SHELL_COLLECTION_EXPERIENCE,
+  setStoredCollectionExperience,
+  type CollectionExperience,
+  resolveCollectionExperience,
+} from '../utils/collectionExperience';
 
 const CURRENT_TEAM_STORAGE_KEY = 'scout21_settings_current_team';
 
@@ -28,6 +35,12 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
   const [teamStartDate, setTeamStartDate] = useState('');
   const [teamEndDate, setTeamEndDate] = useState('');
   const [teamShieldUrl, setTeamShieldUrl] = useState('');
+  const [collectionExperience, setCollectionExperience] = useState<CollectionExperience>(() =>
+    resolveCollectionExperience()
+  );
+  const [experienceFeedback, setExperienceFeedback] = useState<string>(
+    'A experiencia selecionada sera usada na proxima abertura da coleta.'
+  );
 
   useEffect(() => {
     if (currentUser) {
@@ -56,6 +69,10 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
         setTeamShieldUrl((prev) => (prev !== '' ? prev : data.shieldUrl || ''));
       }
     } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    setCollectionExperience(resolveCollectionExperience());
   }, []);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,6 +159,16 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
     setTimeout(() => setSuccess(''), 3000);
   };
 
+  const handleCollectionExperienceChange = (nextExperience: CollectionExperience) => {
+    setCollectionExperience(nextExperience);
+    setStoredCollectionExperience(nextExperience);
+    setExperienceFeedback(
+      nextExperience === SHELL_COLLECTION_EXPERIENCE
+        ? 'Shell experimental ativado. A nova experiencia sera aplicada ao abrir a proxima coleta.'
+        : 'Interface atual ativada. A nova experiencia sera aplicada ao abrir a proxima coleta.'
+    );
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-12">
       
@@ -179,6 +206,11 @@ export const Settings: React.FC<SettingsProps> = ({ currentUser, onUpdateUser })
 
         {/* Settings Forms */}
         <div className="md:col-span-2 space-y-8">
+            <CollectionExperienceSelector
+                value={collectionExperience}
+                feedbackMessage={experienceFeedback}
+                onChange={handleCollectionExperienceChange}
+            />
             
             {/* 1. Profile Form */}
             <form onSubmit={handleSubmit} className="bg-black p-8 rounded-3xl border border-zinc-800 shadow-xl space-y-6">

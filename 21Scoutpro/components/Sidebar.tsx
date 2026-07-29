@@ -392,6 +392,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         <button 
           onClick={() => { setActiveTab('settings'); onNavigate?.(); }}
           title={retracted ? 'Configurações' : undefined}
+          data-testid="nav-settings"
           className={`w-full flex items-center text-zinc-400 hover:bg-zinc-900 hover:text-[#00f0ff] border border-zinc-900 hover:border-[#00f0ff]/30 transition-colors font-bold rounded-lg uppercase tracking-wide whitespace-nowrap ${retracted ? 'justify-center p-2.5 mb-2' : 'justify-center space-x-2 px-3 py-2 mb-3 text-xs'}`}
         >
           <Settings size={retracted ? 20 : 14} />
