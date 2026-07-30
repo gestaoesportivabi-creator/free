@@ -6,8 +6,23 @@ import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
 import { resolveCollectionExperience, withCollectionExperience } from '../utils/collectionExperience';
 
-// Recurso legado: tempo real está isolado/desativado na UI principal.
-// Este componente permanece para possível reativação futura controlada.
+function getRecordedByUserFromSession(): { id?: string; name: string } | undefined {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) return undefined;
+    const encodedPayload = token.split('.')[1];
+    if (!encodedPayload) return undefined;
+    const normalized = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as {
+      userId?: string;
+      email?: string;
+    };
+    if (!payload.userId && !payload.email) return undefined;
+    return { id: payload.userId, name: payload.email ?? 'Operador autenticado' };
+  } catch {
+    return undefined;
+  }
+}
 
 interface RealtimeScoutData {
   matchId?: string;
@@ -145,10 +160,13 @@ export const RealtimeScoutPage: React.FC = () => {
         exitRealtimeScout();
       } else if (!saved && !isAutosave) {
         alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
+      } else if (!saved && isAutosave) {
+        throw new Error('Autosave não foi confirmado pelo servidor.');
       }
       return saved;
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
+      if (isAutosave) throw err;
       if (!isAutosave) {
         alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
       }
@@ -201,6 +219,7 @@ export const RealtimeScoutPage: React.FC = () => {
         extraTimeMinutes={scoutData.extraTimeMinutes}
         selectedPlayerIds={scoutData.selectedPlayerIds}
         collectionExperience={collectionExperience}
+        recordedByUser={getRecordedByUserFromSession()}
       />
     </div>
   );

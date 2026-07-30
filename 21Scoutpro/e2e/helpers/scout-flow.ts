@@ -9,6 +9,18 @@ type QaMatchTarget = 'clock' | 'postmatch';
 
 const backendDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../backend');
 
+function runQaEnvironmentSeed(): void {
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  execFileSync(npmCommand, ['run', 'seed:qa-environment'], {
+    cwd: backendDir,
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      ALLOW_QA_SEED: 'true',
+    },
+  });
+}
+
 export type LoggedEventSnapshot = {
   period: string;
   time: string;
@@ -83,11 +95,15 @@ async function dismissNewsletterModal(page: Page): Promise<void> {
 }
 
 async function resolveLineupConfirmButton(page: Page) {
+  const byRole = page.getByRole('button', { name: /Confirmar Escalação e Iniciar Partida/i });
+  if (await byRole.isVisible().catch(() => false)) {
+    return byRole;
+  }
   const byTestId = page.getByTestId('lineup-confirm-start');
   if (await byTestId.isVisible().catch(() => false)) {
     return byTestId;
   }
-  return page.getByRole('button', { name: /Confirmar Escalação e Iniciar Partida/i });
+  return byRole;
 }
 
 async function resolveLineupPlayerOptions(page: Page) {
@@ -112,6 +128,11 @@ async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
       const nextOption = options.first();
       await expect(nextOption).toBeVisible();
       await nextOption.click();
+      await expect
+        .poll(async () => page.locator('text=Atletas em quadra (').textContent().catch(() => null), {
+          timeout: 2_000,
+        })
+        .not.toBe(selected);
       selected = await page.locator('text=Atletas em quadra (').textContent().catch(() => null);
       if (selected?.includes('(5/5)')) {
         break;
@@ -258,25 +279,11 @@ export async function abrirDadosDoJogo(page: Page): Promise<void> {
 }
 
 export async function normalizarPartidaQaPosJogo(): Promise<void> {
-  execFileSync('cmd.exe', ['/c', 'npm run seed:qa-environment'], {
-    cwd: backendDir,
-    encoding: 'utf-8',
-    env: {
-      ...process.env,
-      ALLOW_QA_SEED: 'true',
-    },
-  });
+  runQaEnvironmentSeed();
 }
 
 export async function normalizarPartidaQaEmTempoReal(): Promise<void> {
-  execFileSync('cmd.exe', ['/c', 'npm run seed:qa-environment'], {
-    cwd: backendDir,
-    encoding: 'utf-8',
-    env: {
-      ...process.env,
-      ALLOW_QA_SEED: 'true',
-    },
-  });
+  runQaEnvironmentSeed();
 }
 
 export async function abrirColetaQaPosJogo(page: Page, preferredKind: QaMatchKind = 'scheduled'): Promise<void> {
@@ -298,7 +305,12 @@ export async function abrirColetaQaPosJogo(page: Page, preferredKind: QaMatchKin
     throw new Error('Nao foi possivel abrir a coleta QA de pos-jogo pelo seletor dedicado. Normalize a partida QA antes do teste quando o card estiver reaproveitando estado salvo.');
   }
   await expect(page.getByTestId('save-match')).toBeVisible();
-  await expect(page.getByTestId('postmatch-period-label')).toBeVisible();
+  await expect
+    .poll(async () =>
+      (await page.getByTestId('postmatch-period-label').isVisible().catch(() => false)) ||
+      (await page.getByTestId('collection-shell-experimental').isVisible().catch(() => false))
+    )
+    .toBe(true);
   await expect(page.getByTestId('clock-state')).toHaveCount(0);
 }
 

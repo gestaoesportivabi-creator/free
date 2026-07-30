@@ -1,33 +1,30 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ShellFinalizationFlow } from './collection-shell/ShellFinalizationFlow';
-import { ShellOperationalHeader } from './collection-shell/ShellOperationalHeader';
-import { ShellRecentEvents } from './collection-shell/ShellRecentEvents';
-import { ShellStatusPanel } from './collection-shell/ShellStatusPanel';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RotateCw } from 'lucide-react';
+import { ShellActionDeck } from './collection-shell/ShellActionDeck';
+import { ShellAthleteRail } from './collection-shell/ShellAthleteRail';
+import { ShellCommandBar } from './collection-shell/ShellCommandBar';
+import { getEventSpecsForMode } from './collection-shell/eventSpecs';
+import { ShellStage } from './collection-shell/ShellStage';
+import { ShellTimelineStrip } from './collection-shell/ShellTimelineStrip';
+import { pushShellMetric } from './collection-shell/metrics';
 import {
-  FinalizationResult,
+  SharedEventInput,
   ShellClockAction,
   ShellEligiblePlayer,
   ShellFoulSnapshot,
-  ShellManualTime,
-  ShellPeriodAction,
+  ShellPersistenceSnapshot,
   ShellRecentEvent,
   ShellScoreSnapshot,
-  ShellStep,
 } from './collection-shell/types';
+import { useShellFeedback } from './collection-shell/useShellFeedback';
+import { useShellFlow } from './collection-shell/useShellFlow';
+import { useShellShortcuts } from './collection-shell/useShellShortcuts';
 
-interface ShellMetricEntry {
-  type: 'start' | 'interaction' | 'cancel' | 'confirm' | 'success' | 'error';
-  mode: 'realtime' | 'postmatch';
-  durationMs?: number;
-  interactionCount?: number;
-  detail?: string;
-  createdAt: string;
-}
-
-declare global {
-  interface Window {
-    __scout21CollectionShellMetrics__?: ShellMetricEntry[];
-  }
+interface ActiveMetricFlow {
+  eventId: string;
+  inputMethod: 'touch' | 'keyboard' | 'preset';
+  interactionCount: number;
+  startedAt: number;
 }
 
 export interface CollectionShellExperimentalProps {
@@ -35,52 +32,29 @@ export interface CollectionShellExperimentalProps {
   clockTimeLabel: string;
   clockStateLabel: string;
   currentPeriod: '1T' | '2T';
+  eventTime: { seconds: number; period: '1T' | '2T' };
   score: ShellScoreSnapshot;
   fouls: ShellFoulSnapshot;
   eligiblePlayers: ShellEligiblePlayer[];
+  benchPlayers: ShellEligiblePlayer[];
+  stickyAthleteId: string | null;
   recentEvents: ShellRecentEvent[];
-  collectionStatusMessage: string;
+  latestEventCreatedAt?: number | null;
   hasUnsavedChanges: boolean;
-  finalizationEnabled: boolean;
+  persistence: ShellPersistenceSnapshot;
+  eventsEnabled: boolean;
   disabledReason?: string | null;
-  showPausedAlert?: boolean;
   clockPrimaryAction?: ShellClockAction | null;
-  onOpenClockSync?: (() => void) | null;
-  postmatchPeriodAction?: ShellPeriodAction | null;
-  manualTime?: ShellManualTime;
   onOpenLogs: () => void;
   onSave: () => void;
   onReturnToCurrentExperience?: (() => void) | null;
   experienceNotice?: string | null;
+  recoveryNotice?: string | null;
+  reconciliationNotice?: string | null;
   onCancelCurrentFlow: () => void;
-  onRegisterFinalization: (input: {
-    playerId: string;
-    result: FinalizationResult;
-  }) => void | Promise<void>;
-}
-
-const SUCCESS_RESET_DELAY_MS = 900;
-
-function isLocalMetricEnvironment(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-}
-
-function pushLocalMetric(entry: Omit<ShellMetricEntry, 'createdAt'>): void {
-  if (!isLocalMetricEnvironment() || typeof window === 'undefined') return;
-  const nextEntry: ShellMetricEntry = {
-    ...entry,
-    createdAt: new Date().toISOString(),
-  };
-  const bucket = window.__scout21CollectionShellMetrics__ ?? [];
-  bucket.push(nextEntry);
-  window.__scout21CollectionShellMetrics__ = bucket;
-  console.info('[collection-shell]', nextEntry.type, {
-    mode: nextEntry.mode,
-    durationMs: nextEntry.durationMs,
-    interactionCount: nextEntry.interactionCount,
-    detail: nextEntry.detail,
-  });
+  onSelectStickyAthlete: (id: string | null) => void;
+  onRegisterEvent: (input: SharedEventInput) => void | Promise<void>;
+  onUndoEvent: (eventId: string) => void;
 }
 
 export const CollectionShellExperimental: React.FC<CollectionShellExperimentalProps> = ({
@@ -88,268 +62,492 @@ export const CollectionShellExperimental: React.FC<CollectionShellExperimentalPr
   clockTimeLabel,
   clockStateLabel,
   currentPeriod,
+  eventTime,
   score,
   fouls,
   eligiblePlayers,
+  benchPlayers,
+  stickyAthleteId,
   recentEvents,
-  collectionStatusMessage,
+  latestEventCreatedAt,
   hasUnsavedChanges,
-  finalizationEnabled,
+  persistence,
+  eventsEnabled,
   disabledReason,
-  showPausedAlert = false,
   clockPrimaryAction,
-  onOpenClockSync,
-  postmatchPeriodAction,
-  manualTime,
   onOpenLogs,
   onSave,
   onReturnToCurrentExperience,
   experienceNotice,
+  recoveryNotice,
+  reconciliationNotice,
   onCancelCurrentFlow,
-  onRegisterFinalization,
+  onSelectStickyAthlete,
+  onRegisterEvent,
+  onUndoEvent,
 }) => {
-  const [step, setStep] = useState<ShellStep>('IDLE');
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [selectedResult, setSelectedResult] = useState<FinalizationResult | null>(null);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const flowStartTimeRef = useRef<number | null>(null);
-  const interactionCountRef = useRef(0);
-  const confirmInFlightRef = useRef(false);
-
-  const selectedPlayer = useMemo(() => {
-    if (!selectedPlayerId) return null;
-    return eligiblePlayers.find((player) => player.id === selectedPlayerId) ?? null;
-  }, [eligiblePlayers, selectedPlayerId]);
-
-  const selectedResultLabel = useMemo(() => {
-    switch (selectedResult) {
-      case 'inside':
-        return 'No gol';
-      case 'outside':
-        return 'Para fora';
-      case 'blocked':
-        return 'Bloqueada';
-      default:
-        return null;
-    }
-  }, [selectedResult]);
-
-  useEffect(() => {
-    if (step !== 'SUCCESS') return;
-    const timer = window.setTimeout(() => {
-      setStep('IDLE');
-      setSelectedPlayerId(null);
-      setSelectedResult(null);
-      setLocalError(null);
-    }, SUCCESS_RESET_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [step]);
-
-  const registerInteraction = (detail: string) => {
-    interactionCountRef.current += 1;
-    pushLocalMetric({
-      type: 'interaction',
-      mode,
-      detail,
-      interactionCount: interactionCountRef.current,
-    });
-  };
-
-  const resetFlow = (reason?: string) => {
-    if (flowStartTimeRef.current != null) {
-      pushLocalMetric({
-        type: 'cancel',
-        mode,
-        detail: reason ?? 'cancelled',
-        durationMs: Date.now() - flowStartTimeRef.current,
-        interactionCount: interactionCountRef.current,
-      });
-    }
-    flowStartTimeRef.current = null;
-    interactionCountRef.current = 0;
-    confirmInFlightRef.current = false;
-    setStep('IDLE');
-    setSelectedPlayerId(null);
-    setSelectedResult(null);
-    setLocalError(null);
-    onCancelCurrentFlow();
-  };
-
-  const startFlow = () => {
-    if (!finalizationEnabled) {
-      setLocalError(disabledReason ?? 'A Finalizacao ainda nao pode ser registrada neste momento.');
-      return;
-    }
-    onCancelCurrentFlow();
-    flowStartTimeRef.current = Date.now();
-    interactionCountRef.current = 1;
-    setSelectedPlayerId(null);
-    setSelectedResult(null);
-    setLocalError(null);
-    setStep('SELECTING_ATHLETE');
-    pushLocalMetric({
-      type: 'start',
-      mode,
-      interactionCount: interactionCountRef.current,
-      detail: 'finalization',
-    });
-  };
-
-  const handleBack = () => {
-    registerInteraction('back');
-    setLocalError(null);
-    if (step === 'SELECTING_RESULT') {
-      setSelectedResult(null);
-      setStep('SELECTING_ATHLETE');
-      return;
-    }
-    if (step === 'READY_TO_CONFIRM') {
-      setStep('SELECTING_RESULT');
-      return;
-    }
-    resetFlow('back-to-idle');
-  };
-
-  const handleConfirm = async () => {
-    if (!selectedPlayerId || !selectedResult || confirmInFlightRef.current) {
-      if (!selectedPlayerId || !selectedResult) {
-        setLocalError('Selecione atleta e resultado antes de confirmar.');
+  const specs = useMemo(() => getEventSpecsForMode(mode), [mode]);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [nextEventTime, setNextEventTime] = useState<{ seconds: number; period: '1T' | '2T' } | null>(null);
+  const [isPortraitTablet, setIsPortraitTablet] = useState(false);
+  const [isBelowRecommended, setIsBelowRecommended] = useState(false);
+  const [politeAnnouncement, setPoliteAnnouncement] = useState('Shell de coleta pronto.');
+  const [assertiveAnnouncement, setAssertiveAnnouncement] = useState('');
+  const metricFlowRef = useRef<ActiveMetricFlow | null>(null);
+  const lastReportedErrorRef = useRef<string | null>(null);
+  const { soundEnabled, setSoundEnabled, success: playSuccessFeedback } = useShellFeedback();
+  const isAthleteEligible = useCallback(
+    (step: { athleteRole?: 'goalkeeper' | 'bench' }, athleteId: string) => {
+      if (!step.athleteRole) return true;
+      if (step.athleteRole === 'bench') {
+        return benchPlayers.some((candidate) => candidate.id === athleteId);
       }
-      return;
-    }
-
-    confirmInFlightRef.current = true;
-    registerInteraction('confirm');
-    setLocalError(null);
-    setStep('CONFIRMING');
-
-    try {
-      await onRegisterFinalization({
-        playerId: selectedPlayerId,
-        result: selectedResult,
-      });
-
-      const durationMs =
-        flowStartTimeRef.current != null ? Date.now() - flowStartTimeRef.current : undefined;
-
-      pushLocalMetric({
-        type: 'confirm',
-        mode,
-        interactionCount: interactionCountRef.current,
-        durationMs,
-        detail: selectedResult,
-      });
-      pushLocalMetric({
+      const athlete = eligiblePlayers.find((candidate) => candidate.id === athleteId);
+      return step.athleteRole !== 'goalkeeper' || athlete?.isGoalkeeper === true;
+    },
+    [benchPlayers, eligiblePlayers]
+  );
+  const flow = useShellFlow({
+    mode,
+    stickyAthleteId,
+    isAthleteEligible,
+    onRegister: onRegisterEvent,
+    onSuccess: (registeredSpec, _draft, durationMs) => {
+      setNextEventTime(null);
+      playSuccessFeedback();
+      const metricFlow = metricFlowRef.current;
+      pushShellMetric({
         type: 'success',
         mode,
-        interactionCount: interactionCountRef.current,
+        eventId: registeredSpec.id,
         durationMs,
-        detail: selectedResult,
+        interactionCount: metricFlow?.interactionCount ?? 0,
+        inputMethod: metricFlow?.inputMethod,
       });
+      setAssertiveAnnouncement(`${registeredSpec.label} registrada com sucesso.`);
+      metricFlowRef.current = null;
+    },
+  });
 
-      flowStartTimeRef.current = null;
-      interactionCountRef.current = 0;
-      confirmInFlightRef.current = false;
-      setStep('SUCCESS');
-    } catch (error) {
-      confirmInFlightRef.current = false;
-      setStep('READY_TO_CONFIRM');
-      setLocalError('Nao foi possivel registrar a Finalizacao. Tente novamente.');
-      pushLocalMetric({
-        type: 'error',
-        mode,
-        interactionCount: interactionCountRef.current,
-        durationMs: flowStartTimeRef.current != null ? Date.now() - flowStartTimeRef.current : undefined,
-        detail: error instanceof Error ? error.message : 'unknown-error',
-      });
+  const selectedAthlete = useMemo(() => {
+    const id = flow.status === 'IDLE' ? stickyAthleteId : flow.draft?.playerId;
+    return eligiblePlayers.find((player) => player.id === id) ?? null;
+  }, [eligiblePlayers, flow.draft?.playerId, stickyAthleteId]);
+
+  useEffect(() => {
+    if (flow.status !== 'SUCCESS') return;
+    const timer = window.setTimeout(flow.resetSuccess, 900);
+    return () => window.clearTimeout(timer);
+  }, [flow.resetSuccess, flow.status]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const portrait = window.matchMedia(
+      '(orientation: portrait) and (min-width: 600px) and (max-width: 1024px)'
+    );
+    const belowRecommended = window.matchMedia('(max-width: 1023px)');
+    const update = () => {
+      setIsPortraitTablet(portrait.matches);
+      setIsBelowRecommended(belowRecommended.matches && !portrait.matches);
+    };
+    update();
+    portrait.addEventListener?.('change', update);
+    belowRecommended.addEventListener?.('change', update);
+    return () => {
+      portrait.removeEventListener?.('change', update);
+      belowRecommended.removeEventListener?.('change', update);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showShortcuts) return;
+    const dialog = document.querySelector<HTMLElement>('[data-testid="shell-shortcuts-dialog"]');
+    const focusable = Array.from(
+      dialog?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input, select, textarea') ?? []
+    );
+    focusable[0]?.focus();
+    const handleDialogKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowShortcuts(false);
+        return;
+      }
+      if (event.key === 'Tab' && focusable.length > 0) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeyboard);
+    return () => window.removeEventListener('keydown', handleDialogKeyboard);
+  }, [showShortcuts]);
+
+  useEffect(() => {
+    if (flow.status === 'STEP' && flow.currentStep) {
+      setPoliteAnnouncement(
+        `${flow.spec?.label ?? 'Evento'}. ${flow.currentStep.label}`
+      );
+      window.setTimeout(() => {
+        const selector =
+          flow.currentStep?.kind === 'ATHLETE' ||
+          flow.currentStep?.kind === 'SECONDARY_ATHLETE'
+            ? '[data-shell-athlete="true"]:not(:disabled)'
+            : '[data-shell-option="true"]:not(:disabled)';
+        document.querySelector<HTMLElement>(selector)?.focus();
+      }, 0);
+    } else if (flow.status === 'READY_TO_CONFIRM') {
+      setPoliteAnnouncement(`${flow.spec?.label ?? 'Evento'} pronto para confirmar.`);
+    } else if (flow.status === 'CONFIRMING') {
+      setPoliteAnnouncement('Registrando evento.');
     }
+  }, [flow.currentStep, flow.spec?.label, flow.status]);
+
+  useEffect(() => {
+    if (!flow.error || lastReportedErrorRef.current === flow.error) return;
+    lastReportedErrorRef.current = flow.error;
+    const metricFlow = metricFlowRef.current;
+    pushShellMetric({
+      type: 'error',
+      mode,
+      eventId: metricFlow?.eventId,
+      durationMs: metricFlow ? Date.now() - metricFlow.startedAt : undefined,
+      interactionCount: metricFlow?.interactionCount,
+      inputMethod: metricFlow?.inputMethod,
+      detail: flow.error,
+    });
+    setAssertiveAnnouncement(`Erro ao registrar evento: ${flow.error}`);
+  }, [flow.error, mode]);
+
+  const beginMetricFlow = (
+    spec: (typeof specs)[number],
+    inputMethod: ActiveMetricFlow['inputMethod'],
+    interactionCount = 0
+  ) => {
+    metricFlowRef.current = {
+      eventId: spec.id,
+      inputMethod,
+      interactionCount,
+      startedAt: Date.now(),
+    };
+    lastReportedErrorRef.current = null;
+    pushShellMetric({ type: 'start', mode, eventId: spec.id, inputMethod });
   };
 
-  const nextStepMessage = useMemo(() => {
-    switch (step) {
-      case 'SELECTING_ATHLETE':
-        return 'Proximo passo: selecione o atleta responsavel pela Finalizacao.';
-      case 'SELECTING_RESULT':
-        return 'Proximo passo: escolha o resultado oficial da Finalizacao.';
-      case 'READY_TO_CONFIRM':
-        return 'Proximo passo: revise e confirme para registrar o evento.';
-      case 'CONFIRMING':
-        return 'Registrando Finalizacao...';
-      case 'SUCCESS':
-        return 'Finalizacao registrada com sucesso.';
-      default:
-        return 'Proximo passo: iniciar o fluxo de Finalizacao.';
+  const trackInteraction = (detail?: string, type: 'interaction' | 'skip' = 'interaction') => {
+    const active = metricFlowRef.current;
+    if (active) active.interactionCount += 1;
+    pushShellMetric({
+      type,
+      mode,
+      eventId: active?.eventId,
+      stepId: flow.currentStep?.id,
+      inputMethod: active?.inputMethod,
+      interactionCount: active?.interactionCount,
+      detail,
+    });
+  };
+
+  const startEvent = (
+    spec: (typeof specs)[number],
+    legacyCompatibility = false,
+    inputMethod: ActiveMetricFlow['inputMethod'] = 'touch'
+  ) => {
+    if (!eventsEnabled) return;
+    onCancelCurrentFlow();
+    const previousMetricFlow = metricFlowRef.current;
+    if (previousMetricFlow) {
+      pushShellMetric({
+        type: 'cancel',
+        mode,
+        eventId: previousMetricFlow.eventId,
+        durationMs: Date.now() - previousMetricFlow.startedAt,
+        interactionCount: previousMetricFlow.interactionCount,
+        inputMethod: previousMetricFlow.inputMethod,
+        detail: 'replaced-by-new-event',
+      });
     }
-  }, [step]);
+    beginMetricFlow(spec, inputMethod);
+    flow.start(spec, {
+      forceReview: legacyCompatibility && !stickyAthleteId,
+      patch: nextEventTime
+        ? { timeOverride: nextEventTime.seconds, periodOverride: nextEventTime.period }
+        : undefined,
+    });
+  };
 
-  const shellAlert =
-    localError ||
-    (!finalizationEnabled ? disabledReason ?? null : null) ||
-    (showPausedAlert ? 'Cronometro pausado. Retome a partida para registrar novos eventos.' : null);
+  const selectAthlete = (id: string) => {
+    if (
+      flow.status === 'STEP' &&
+      (flow.currentStep?.kind === 'ATHLETE' || flow.currentStep?.kind === 'SECONDARY_ATHLETE')
+    ) {
+      if (!isAthleteEligible(flow.currentStep, id)) return;
+      if (flow.currentStep.kind === 'SECONDARY_ATHLETE' && flow.draft?.playerId === id) return;
+      trackInteraction(id);
+      if (flow.currentStep.kind === 'ATHLETE') onSelectStickyAthlete(id);
+      flow.selectAthlete(id);
+      return;
+    }
+    if (flow.status === 'STEP' && flow.spec) {
+      onSelectStickyAthlete(id);
+      flow.replaceAthlete(id, true);
+      return;
+    }
+    onSelectStickyAthlete(stickyAthleteId === id ? null : id);
+  };
 
-  return (
-    <div
-      data-testid="collection-shell-experimental"
-      className="flex-1 min-h-0 overflow-hidden bg-black px-4 pb-4 pt-3"
-    >
-      <div className="grid h-full min-h-0 gap-3">
-        <ShellOperationalHeader
-          mode={mode}
-          clockTimeLabel={clockTimeLabel}
-          clockStateLabel={clockStateLabel}
-          currentPeriod={currentPeriod}
-          score={score}
-          fouls={fouls}
-          clockPrimaryAction={clockPrimaryAction}
-          onOpenClockSync={onOpenClockSync}
-          postmatchPeriodAction={postmatchPeriodAction}
-          onOpenLogs={onOpenLogs}
-          onSave={onSave}
-          onReturnToCurrentExperience={onReturnToCurrentExperience}
-        />
+  const undo = (inputMethod: 'touch' | 'keyboard' = 'touch') => {
+    const latest = [...recentEvents].reverse()[0];
+    if (!latest || !latestEventCreatedAt || Date.now() - latestEventCreatedAt > 30_000) return;
+    onUndoEvent(latest.id);
+    pushShellMetric({ type: 'undo', mode, eventId: latest.id, inputMethod });
+    setAssertiveAnnouncement('Último evento desfeito.');
+  };
 
-        <div className="grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(300px,0.82fr)]">
-          <ShellFinalizationFlow
-            mode={mode}
-            step={step}
-            nextStepMessage={nextStepMessage}
-            currentPeriod={currentPeriod}
-            eligiblePlayers={eligiblePlayers}
-            selectedPlayer={selectedPlayer}
-            selectedResultLabel={selectedResultLabel}
-            finalizationEnabled={finalizationEnabled}
-            manualTime={manualTime}
-            onStartFlow={startFlow}
-            onPlayerSelect={(playerId) => {
-              registerInteraction('player-selected');
-              setSelectedPlayerId(playerId);
-              setLocalError(null);
-              setStep('SELECTING_RESULT');
-            }}
-            onResultSelect={(result) => {
-              registerInteraction(`result-${result}`);
-              setSelectedResult(result);
-              setLocalError(null);
-              setStep('READY_TO_CONFIRM');
-            }}
-            onBack={handleBack}
-            onCancel={() => resetFlow('cancel-button')}
-            onConfirm={handleConfirm}
-            confirmDisabled={step !== 'READY_TO_CONFIRM' || confirmInFlightRef.current}
-          />
+  const confirmShellFlow = () => {
+    trackInteraction('confirm');
+    const active = metricFlowRef.current;
+    pushShellMetric({
+      type: 'confirm',
+      mode,
+      eventId: active?.eventId,
+      interactionCount: active?.interactionCount,
+      inputMethod: active?.inputMethod,
+    });
+    flow.confirm();
+  };
 
-          <aside className="flex min-h-0 flex-col gap-4">
-            <ShellStatusPanel
-              hasUnsavedChanges={hasUnsavedChanges}
-              mode={mode}
-              collectionStatusMessage={collectionStatusMessage}
-              alertMessage={shellAlert}
-              experienceNotice={experienceNotice}
-            />
-            <ShellRecentEvents recentEvents={recentEvents} />
-          </aside>
+  useShellShortcuts({
+    enabled: !showShortcuts,
+    inStep: flow.status === 'STEP',
+    specs,
+    athletes: [...eligiblePlayers, ...benchPlayers],
+    options: flow.currentStep?.options ?? [],
+    onStartEvent: (spec) => {
+      pushShellMetric({ type: 'shortcut', mode, eventId: spec.id, inputMethod: 'keyboard' });
+      startEvent(spec, false, 'keyboard');
+    },
+    onSelectAthlete: selectAthlete,
+    onSelectOption: (option) => {
+      trackInteraction(option.value);
+      flow.chooseOption(option);
+    },
+    onEscape: flow.status === 'IDLE'
+      ? () => undefined
+      : () => {
+          trackInteraction('back');
+          flow.back();
+        },
+    onConfirm: confirmShellFlow,
+    onSkip: flow.currentStep?.skipLabel
+      ? () => {
+          trackInteraction('__skip__', 'skip');
+          flow.selectValue('__skip__');
+        }
+      : undefined,
+    onUndo: () => undo('keyboard'),
+    onClockToggle: clockPrimaryAction && !clockPrimaryAction.disabled ? clockPrimaryAction.onClick : undefined,
+    onToggleOverlay: () => setShowShortcuts((value) => !value),
+  });
+
+  const displayStep =
+    flow.status === 'STEP' && flow.currentStep?.kind === 'ATHLETE'
+      ? 'SELECTING_ATHLETE'
+      : flow.status === 'STEP'
+        ? 'SELECTING_RESULT'
+        : flow.status;
+
+  if (isPortraitTablet) {
+    return (
+      <div data-testid="collection-shell-experimental" className="fixed inset-0 z-[400] grid place-items-center bg-black p-8 text-center">
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="shell-orientation-title"
+          aria-describedby="shell-orientation-description"
+          data-testid="shell-portrait-blocker"
+          className="max-w-md rounded-3xl border-2 border-cyan-400 bg-zinc-950 p-8 text-white"
+        >
+          <RotateCw size={48} className="mx-auto text-cyan-300" aria-hidden="true" />
+          <h2 id="shell-orientation-title" className="mt-4 text-2xl font-black uppercase">
+            Gire o tablet
+          </h2>
+          <p id="shell-orientation-description" className="mt-3 text-base leading-7 text-zinc-200">
+            A coleta Shell exige orientação paisagem para manter atletas, ações e relógio visíveis.
+          </p>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div data-testid="collection-shell-experimental" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-black">
+      <style>{`
+        @media (prefers-reduced-motion: reduce) {
+          [data-testid="collection-shell-experimental"] *,
+          [data-testid="collection-shell-experimental"] *::before,
+          [data-testid="collection-shell-experimental"] *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
+      `}</style>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="shell-live-polite">
+        {politeAnnouncement}
+      </div>
+      <div className="sr-only" role="alert" aria-live="assertive" aria-atomic="true" data-testid="shell-live-assertive">
+        {assertiveAnnouncement}
+      </div>
+      <ShellCommandBar
+        mode={mode}
+        clockTimeLabel={clockTimeLabel}
+        clockStateLabel={clockStateLabel}
+        currentPeriod={currentPeriod}
+        score={score}
+        fouls={fouls}
+        persistence={persistence}
+        clockPrimaryAction={clockPrimaryAction}
+        onOpenLogs={onOpenLogs}
+        onSave={onSave}
+        onReturnToCurrentExperience={onReturnToCurrentExperience}
+        onToggleShortcuts={() => setShowShortcuts(true)}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((value) => !value)}
+      />
+      <div className="flex min-h-0 flex-1 max-[1279px]:flex-col">
+        <ShellAthleteRail
+          athletes={eligiblePlayers}
+          benchPlayers={benchPlayers}
+          stickyAthleteId={stickyAthleteId}
+          autoExpandBench={flow.currentStep?.athleteRole === 'bench'}
+          onSelect={selectAthlete}
+        />
+        <ShellStage
+          status={flow.status}
+          displayStep={displayStep}
+          spec={flow.spec}
+          draft={flow.draft}
+          step={flow.currentStep}
+          stickyAthlete={selectedAthlete}
+          lastEventText={[...recentEvents].reverse()[0]?.actionText}
+          error={flow.error}
+          eventTime={nextEventTime ?? eventTime}
+          onChoose={(value) => {
+            trackInteraction(value, value === '__skip__' ? 'skip' : 'interaction');
+            const option = flow.currentStep?.options?.find((candidate) => candidate.value === value);
+            if (option) flow.chooseOption(option);
+            else flow.selectValue(value);
+          }}
+          onBack={() => {
+            trackInteraction('back');
+            flow.back();
+          }}
+          onCancel={() => {
+            const active = metricFlowRef.current;
+            pushShellMetric({
+              type: 'cancel',
+              mode,
+              eventId: active?.eventId,
+              durationMs: active ? Date.now() - active.startedAt : undefined,
+              interactionCount: active?.interactionCount,
+              inputMethod: active?.inputMethod,
+            });
+            metricFlowRef.current = null;
+            flow.cancel();
+            setPoliteAnnouncement('Fluxo cancelado.');
+          }}
+          onConfirm={confirmShellFlow}
+          onSetTime={(seconds, period) => {
+            setNextEventTime({ seconds, period });
+            flow.setTimeOverride(seconds, period);
+          }}
+        />
+      </div>
+      <ShellActionDeck
+        specs={specs}
+        enabled={eventsEnabled}
+        disabledReason={disabledReason}
+        onStart={startEvent}
+        onPreset={(spec, preset) => {
+          if (!eventsEnabled) return;
+          onCancelCurrentFlow();
+          const previousMetricFlow = metricFlowRef.current;
+          if (previousMetricFlow) {
+            pushShellMetric({
+              type: 'cancel',
+              mode,
+              eventId: previousMetricFlow.eventId,
+              durationMs: Date.now() - previousMetricFlow.startedAt,
+              interactionCount: previousMetricFlow.interactionCount,
+              inputMethod: previousMetricFlow.inputMethod,
+              detail: 'replaced-by-preset',
+            });
+          }
+          pushShellMetric({ type: 'preset', mode, eventId: spec.id, inputMethod: 'preset', detail: preset.id });
+          beginMetricFlow(spec, 'preset', 2);
+          flow.start(spec, {
+            patch: {
+              ...preset.patch,
+              ...(nextEventTime
+                ? { timeOverride: nextEventTime.seconds, periodOverride: nextEventTime.period }
+                : {}),
+            },
+          });
+        }}
+      />
+      <ShellTimelineStrip recentEvents={recentEvents} latestEventCreatedAt={latestEventCreatedAt} onUndo={() => undo('touch')} onOpenLogs={onOpenLogs} />
+
+      {experienceNotice && (
+        <div data-testid="shell-experience-notice" className="fixed right-4 top-16 z-[240] rounded-xl border border-cyan-500/40 bg-zinc-950 px-4 py-3 text-xs text-cyan-100">
+          {experienceNotice}
+        </div>
+      )}
+      {recoveryNotice && (
+        <div data-testid="shell-recovery-notice" className="fixed left-1/2 top-16 z-[240] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-zinc-950 px-4 py-3 text-xs font-bold uppercase text-amber-100">
+          {recoveryNotice}
+        </div>
+      )}
+      {reconciliationNotice && (
+        <div data-testid="shell-reconciliation-notice" className="fixed left-1/2 top-28 z-[240] -translate-x-1/2 rounded-xl border border-violet-500/40 bg-zinc-950 px-4 py-3 text-xs font-bold text-violet-100">
+          {reconciliationNotice}
+        </div>
+      )}
+      {isBelowRecommended && (
+        <div data-testid="shell-viewport-warning" role="status" className="fixed bottom-16 left-1/2 z-[230] -translate-x-1/2 rounded-xl border border-amber-400 bg-zinc-950 px-4 py-3 text-xs font-bold text-amber-100">
+          Viewport abaixo do recomendado. Use tablet em paisagem ou tela com pelo menos 1024px.
+        </div>
+      )}
+
+      {showShortcuts && (
+        <div data-testid="shell-shortcuts-dialog" className="fixed inset-0 z-[250] grid place-items-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-label="Atalhos de teclado">
+          <div className="max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-950 p-6 text-zinc-100">
+            <div className="flex items-center justify-between gap-8">
+              <h2 className="text-lg font-black uppercase">Atalhos</h2>
+              <button type="button" onClick={() => setShowShortcuts(false)} className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-bold uppercase">Fechar</button>
+            </div>
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              1–5 atletas · G Gol · F Finalização · L Falta · D Desarme · E Defesa · K Cartão · S Substituição · B Bloqueio · C Escanteio · P Pênalti · T Tiro livre · Z Zona de chute ·
+              1–4 escolhem opções · 0 pula etapa opcional · Setas percorrem controles · Esc volta · Enter confirma · Cmd/Ctrl+Z desfaz · Espaço controla o relógio · ? abre esta ajuda.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

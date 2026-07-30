@@ -21,14 +21,27 @@ import {
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
-import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
+import { getMatchClockEventRule, type ClockPauseDirective, type MatchClockEventType } from '../utils/matchClockEventRules';
 import { CollectionShellExperimental } from './CollectionShellExperimental';
+import type { SharedEventInput } from './collection-shell/types';
+import { applySubstitution } from '../utils/substitution';
 import {
   CURRENT_COLLECTION_EXPERIENCE,
+  SHELL_COLLECTION_EXPERIENCE,
   resolveCollectionExperience,
   setStoredCollectionExperience,
   type CollectionExperience,
 } from '../utils/collectionExperience';
+import {
+  clearCollectionSaveQueue,
+  collectionQueueSignature,
+  enqueueCollectionSnapshot,
+  markCollectionSaveFailure,
+  readCollectionSaveQueue,
+  reconcileCollectionSaveQueue,
+  resetCollectionSaveBackoff,
+  type CollectionSaveQueueEntry,
+} from '../utils/collectionSaveQueue';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -199,7 +212,7 @@ const TEAM_EVENT_FAKE_PLAYER_NAME = 'Equipe';
 
 interface MatchEvent {
   id: string;
-  type: 'pass' | 'shot' | 'foul' | 'goal' | 'card' | 'tackle' | 'save' | 'block' | 'corner' | 'freeKick' | 'penalty' | 'lateral';
+  type: 'pass' | 'keyPass' | 'assist' | 'shot' | 'foul' | 'goal' | 'card' | 'tackle' | 'save' | 'block' | 'corner' | 'freeKick' | 'penalty' | 'lateral';
   playerId?: string;
   playerName?: string;
   time: number; // segundos
@@ -231,6 +244,7 @@ interface MatchEvent {
   goalPeriod?: number;
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */
   wrongPassGeneratedTransition?: boolean;
+  zone?: LateralResult;
 }
 
 /** Converte PostMatchEvent[] (do banco/API) para MatchEvent[] (estado da janela de coleta). */
@@ -285,6 +299,10 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         break;
       case 'passCorrect':
         type = 'pass';
+        result = 'correct';
+        break;
+      case 'keyPass':
+        type = 'keyPass';
         result = 'correct';
         break;
       case 'passWrong':
@@ -350,7 +368,7 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         type = 'lateral';
         break;
       case 'assist':
-        type = 'goal';
+        type = 'assist';
         break;
       default:
         type = 'pass';
@@ -393,7 +411,12 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       event.passToPlayerId = String(pe.passToPlayerId).trim();
       event.passToPlayerName = pe.passToPlayerName ?? playerById.get(event.passToPlayerId)?.name;
     }
-    if (pe.zone && zoneToResult[pe.zone]) event.result = zoneToResult[pe.zone];
+    if (pe.zone && zoneToResult[pe.zone]) {
+      event.zone = zoneToResult[pe.zone];
+      if (type === 'lateral' || type === 'corner' || type === 'foul') {
+        event.result = zoneToResult[pe.zone];
+      }
+    }
     else if (pe.result) event.result = pe.result as MatchEvent['result'];
     if (pe.goalMethod) event.goalMethod = pe.goalMethod;
     if (pe.isOpponentGoal === true || (pe.action === 'goal' && pe.subtipo === 'Contra')) {
@@ -448,6 +471,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   });
   const persistedMatchIdRef = useRef<string>(isPersistedServerMatchId(match?.id != null ? String(match.id).trim() : '') ? String(match.id).trim() : '');
   const [lastPersistedSignature, setLastPersistedSignature] = useState<string>('');
+  const lastPersistedEventIdsRef = useRef<Set<string>>(
+    new Set((match.postMatchEventLog ?? []).map((event) => String(event.id).trim()))
+  );
+  const [shellPersistence, setShellPersistence] = useState<{
+    state: 'saved' | 'saving' | 'queued';
+    queuedCount: number;
+    lastSavedAt?: number;
+    retryAt?: number;
+  }>({ state: 'saved', queuedCount: 0 });
+  const [reconciliationNotice, setReconciliationNotice] = useState<string | null>(null);
+  const [hasQueueConflict, setHasQueueConflict] = useState(false);
 
   useEffect(() => {
     const id = match?.id != null ? String(match.id).trim() : '';
@@ -488,9 +522,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     }
   }, []);
-  const commitPersistedSignature = useCallback((signature: string) => {
+  const commitPersistedSignature = useCallback((signature: string, snapshot?: MatchRecord) => {
     lastAutosaveSignatureRef.current = signature;
     setLastPersistedSignature(signature);
+    if (snapshot) {
+      lastPersistedEventIdsRef.current = new Set(
+        (snapshot.postMatchEventLog ?? []).map((event) => String(event.id).trim())
+      );
+      lastPersistedQueueSignatureRef.current = collectionQueueSignature(snapshot);
+    }
   }, []);
   const handleReturnToCurrentExperience = useCallback(() => {
     setStoredCollectionExperience(CURRENT_COLLECTION_EXPERIENCE);
@@ -506,6 +546,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null); // ID do jogador selecionado para ação
+  const [shellStickyAthleteId, setShellStickyAthleteId] = useState<string | null>(null);
+  const [shellLatestEventCreatedAt, setShellLatestEventCreatedAt] = useState<number | null>(null);
   const [goalsFor, setGoalsFor] = useState<number>(0); // Gols da nossa equipe
   const [goalsAgainst, setGoalsAgainst] = useState<number>(0); // Gols do adversário
   const [foulsForCount, setFoulsForCount] = useState<number>(0); // Faltas nossa equipe (máx. 5)
@@ -581,8 +623,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const autosaveInFlightRef = useRef<boolean>(false);
   const autosaveQueuedRef = useRef<boolean>(false);
   const autosaveSkipRef = useRef<boolean>(true);
+  const queueRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutosaveSignatureRef = useRef<string>('');
+  const lastPersistedQueueSignatureRef = useRef<string>('');
+  /** Cada retomada de rede invalida o backoff de tentativas iniciadas antes dela. */
+  const queueResumeSeqRef = useRef<number>(0);
+  const saveSilentlyRef = useRef<(() => Promise<void>) | null>(null);
   const suppressBeforeUnloadRef = useRef<boolean>(false);
+  const shellQueueEnabled = resolvedCollectionExperience === SHELL_COLLECTION_EXPERIENCE;
+  const getCollectionQueueMatchId = useCallback(
+    () =>
+      persistedMatchIdRef.current ||
+      collectionSessionMatchIdRef.current ||
+      String(match?.id ?? '').trim(),
+    [match?.id]
+  );
   /** Só hidrata do `match` uma vez por id enquanto a janela está aberta (evita refresh do pai sobrescrever lances locais). */
   const hydrationAppliedForMatchIdRef = useRef<string | null>(null);
   const lastSeenMatchIdForHydrationRef = useRef<string | null>(null);
@@ -670,6 +725,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   } = useMatchClock({ mode: isPostmatch ? 'postmatch' : 'realtime' });
   const matchTime = clockSnapshot.currentTimeSeconds;
   const currentPeriod = clockSnapshot.period;
+  const previousShellPeriodRef = useRef(currentPeriod);
   const isRunning = clockSnapshot.isRunning;
   const firstHalfLocked = clockSnapshot.firstHalfLocked;
   const isMatchEnded = clockSnapshot.state === 'ENCERRADO';
@@ -763,12 +819,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (directive === 'event') pauseClockForEvent();
   }, [pauseClock, pauseClockForEvent]);
 
-  const applyEventClockBehavior = useCallback((type: MatchEvent['type'], result?: MatchEvent['result']) => {
+  const applyEventClockBehavior = useCallback((type: MatchClockEventType, result?: MatchEvent['result']) => {
     const rule = getMatchClockEventRule(type, typeof result === 'string' ? result : undefined);
     applyClockDirective(rule.pauseAfterRegister);
   }, [applyClockDirective]);
 
-  const applyPreActionClockBehavior = useCallback((type: MatchEvent['type'], result?: MatchEvent['result']) => {
+  const applyPreActionClockBehavior = useCallback((type: MatchClockEventType, result?: MatchEvent['result']) => {
     const rule = getMatchClockEventRule(type, typeof result === 'string' ? result : undefined);
     applyClockDirective(rule.pauseBeforeFlow);
   }, [applyClockDirective]);
@@ -936,6 +992,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     switch (type) {
       case 'pass':
         return { tipo: 'Passe', subtipo: result === 'correct' ? 'Certo' : 'Errado' };
+      case 'keyPass':
+        return { tipo: 'Passe-chave', subtipo: 'Passe-chave' };
+      case 'assist':
+        return { tipo: 'Assistência', subtipo: 'Assistência avulsa' };
       case 'shot':
         if (result === 'inside') return { tipo: 'Finalização', subtipo: 'No gol' };
         if (result === 'outside') return { tipo: 'Finalização', subtipo: 'Pra fora' };
@@ -1142,33 +1202,41 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           break;
         }
         case 'shot':
-          registerSharedFinalization({
+          registerSharedEvent({
+            action: 'shot',
             playerId,
             result: flow.details as 'inside' | 'outside' | 'post' | 'blocked',
             timeOverride: rawT,
             periodOverride,
-          });
+          }, { applyPreAction: false });
           break;
         case 'foul':
-          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride);
+          registerSharedEvent({ action: 'foul', team: flow.foulTeam ?? 'for', playerId, timeOverride: rawT, periodOverride }, { applyPreAction: false });
           break;
         case 'tackle':
-          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride);
+          registerSharedEvent({ action: 'tackle', result: flow.details ?? undefined, playerId, timeOverride: rawT, periodOverride }, { applyPreAction: false });
           break;
         case 'card':
-          handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride, flow.cardTeam ?? 'for');
+          registerSharedEvent({
+            action: 'card',
+            cardType: flow.cardType ?? 'yellow',
+            playerId,
+            team: flow.cardTeam ?? 'for',
+            timeOverride: rawT,
+            periodOverride,
+          }, { applyPreAction: false });
           break;
         case 'save':
-          handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride);
+          registerSharedEvent({ action: 'save', result: flow.details ?? undefined, playerId, timeOverride: rawT, periodOverride }, { applyPreAction: false });
           break;
         case 'lateral':
           handleRegisterLateral(flow.zone, playerId, rawT, periodOverride);
           break;
         case 'corner':
-          handleRegisterCorner(flow.zone, playerId, rawT, periodOverride);
+          registerSharedEvent({ action: 'corner', zone: flow.zone, playerId, timeOverride: rawT, periodOverride }, { applyPreAction: false });
           break;
         case 'block':
-          handleRegisterBlock(playerId, rawT, periodOverride);
+          registerSharedEvent({ action: 'block', playerId, timeOverride: rawT, periodOverride }, { applyPreAction: false });
           break;
         default:
           break;
@@ -1388,6 +1456,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setActivePlayers(active);
   }, [isOpen, isPostmatch, players, squadActiveIds]);
 
+  useEffect(() => {
+    if (previousShellPeriodRef.current !== currentPeriod) {
+      previousShellPeriodRef.current = currentPeriod;
+      setShellStickyAthleteId(null);
+    }
+  }, [currentPeriod]);
+
+  useEffect(() => {
+    if (!shellStickyAthleteId) return;
+    const remainsAvailable = activePlayers.some(
+      (player) => String(player.id).trim() === shellStickyAthleteId
+    );
+    const remainsOnCourt =
+      isPostmatch ||
+      lineupPlayers.length === 0 ||
+      lineupPlayers.some((id) => String(id).trim() === shellStickyAthleteId);
+    if (!remainsAvailable || !remainsOnCourt) setShellStickyAthleteId(null);
+  }, [activePlayers, isPostmatch, lineupPlayers, shellStickyAthleteId]);
+
   const allSquadPlayers = useMemo(() => {
     const ids = [...new Set([...lineupPlayers, ...benchPlayers])];
     const list = ids
@@ -1542,9 +1629,43 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    const log = match.postMatchEventLog;
+    let hydrationMatch = match;
+    let reconciliation: ReturnType<typeof reconcileCollectionSaveQueue> = 'none';
+    if (shellQueueEnabled && mid && typeof window !== 'undefined') {
+      const queued = readCollectionSaveQueue(window.localStorage, mid);
+      reconciliation = reconcileCollectionSaveQueue(queued, match);
+      if (reconciliation === 'restore-local' && queued) {
+        setHasQueueConflict(false);
+        hydrationMatch = queued.snapshot;
+        setShellPersistence({
+          state: 'queued',
+          queuedCount: Math.max(queued.pendingEventIds.length, 1),
+          retryAt: queued.nextAttemptAt,
+        });
+        setReconciliationNotice(
+          `Reconciliação: retomando ${queued.pendingEventIds.length || 1} evento(s) da fila local.`
+        );
+      } else if (reconciliation === 'server-ahead') {
+        setHasQueueConflict(false);
+        clearCollectionSaveQueue(window.localStorage, mid);
+        setShellPersistence({ state: 'saved', queuedCount: 0, lastSavedAt: Date.now() });
+        setReconciliationNotice(null);
+      } else if (reconciliation === 'conflict') {
+        setHasQueueConflict(true);
+        setShellPersistence({
+          state: 'queued',
+          queuedCount: Math.max(queued?.pendingEventIds.length ?? 0, 1),
+          retryAt: queued?.nextAttemptAt,
+        });
+        setReconciliationNotice(
+          'Reconciliação pendente: servidor e fila local divergiram; nenhum evento foi sobrescrito.'
+        );
+      }
+    }
+
+    const log = hydrationMatch.postMatchEventLog;
     const hasLog = log != null && log.length > 0;
-    const L = match.lineup;
+    const L = hydrationMatch.lineup;
     const hasLineupData =
       L != null &&
       ((Array.isArray(L.players) && L.players.length > 0) ||
@@ -1575,9 +1696,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     const has2TEvent = converted.some((e) => e.period === '2T');
     const hasPossessionProgress =
-      ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
-    const persistedClockSnapshot = normalizePersistedClockSnapshot(match.lineup?.clockSnapshot);
-    const phase = match.collectionPhase;
+      ((hydrationMatch.possessionSecondsWith ?? 0) + (hydrationMatch.possessionSecondsWithout ?? 0)) > 0;
+    const persistedClockSnapshot = normalizePersistedClockSnapshot(hydrationMatch.lineup?.clockSnapshot);
+    const phase = hydrationMatch.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
     }
@@ -1621,7 +1742,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setSquadActiveIds(titFb.length > 0 && titFb.length <= 5 ? titFb : []);
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
-      setSubstitutionHistory(match.substitutionHistory ?? []);
+      setSubstitutionHistory(hydrationMatch.substitutionHistory ?? []);
       if (persistedClockSnapshot) {
         setNeedsClockSyncFallback(false);
         hydrateClock({
@@ -1660,14 +1781,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setTimeout(() => {
       autosaveSkipRef.current = false;
       try {
-        const initialSnapshot = JSON.stringify(buildMatchSnapshot('em_andamento'));
-        commitPersistedSignature(initialSnapshot);
+        if (reconciliation !== 'restore-local') {
+          const initialSnapshot = buildMatchSnapshot('em_andamento');
+          commitPersistedSignature(JSON.stringify(initialSnapshot), initialSnapshot);
+        }
       } catch (_) {}
       if (!isPostmatch) {
         setRealtimeHydrationReady(true);
       }
     }, 0);
-  }, [commitPersistedSignature, hydrateClock, isOpen, isPostmatch, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
+  }, [commitPersistedSignature, hydrateClock, isOpen, isPostmatch, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players, shellQueueEnabled]);
 
   // Toggle cronômetro
   // Encerrar tempo (primeira metade → modal de intervalo; segunda metade → fim de jogo)
@@ -1878,6 +2001,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     switch (e.type) {
       case 'goal': return 'goal';
       case 'pass': return e.result === 'correct' ? 'passCorrect' : 'passWrong';
+      case 'keyPass': return 'keyPass';
+      case 'assist': return 'assist';
       case 'shot':
         if (e.result === 'inside') return 'shotOn';
         if (e.result === 'outside') return 'shotOff';
@@ -2075,7 +2200,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       };
       if (e.playerName) postEvent.playerName = e.playerName;
       if (e.result) postEvent.result = e.result;
-      if ((action === 'passCorrect' || action === 'passWrong') && e.passToPlayerId) {
+      if ((action === 'passCorrect' || action === 'passWrong' || action === 'keyPass' || action === 'assist') && e.passToPlayerId) {
         postEvent.passToPlayerId = String(e.passToPlayerId).trim();
         if (e.passToPlayerName) postEvent.passToPlayerName = e.passToPlayerName;
       }
@@ -2088,7 +2213,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         defesaEsquerda: 'DF_ESQ',
         defesaDireita: 'DF_DIR',
       };
-      if (e.result && lateralToZone[e.result]) postEvent.zone = lateralToZone[e.result];
+      const eventZone = e.zone ?? (e.result && lateralToZone[e.result] ? e.result : undefined);
+      if (eventZone && lateralToZone[eventZone]) postEvent.zone = lateralToZone[eventZone];
       if (recordedByUser) {
         postEvent.recordedByUserId = recordedByUser.id;
         postEvent.recordedByName = recordedByUser.name;
@@ -2247,37 +2373,226 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       editDraft ||
       autosaveInFlightRef.current ||
       autosaveQueuedRef.current ||
-      hasPendingSnapshotChanges
+      hasPendingSnapshotChanges ||
+      shellPersistence.state !== 'saved'
   );
+
+  const queueSnapshotLocally = (snapshot: MatchRecord): CollectionSaveQueueEntry | null => {
+    if (!shellQueueEnabled || hasQueueConflict || typeof window === 'undefined') return null;
+    const queueMatchId = getCollectionQueueMatchId();
+    if (!queueMatchId) return null;
+    // Avanço puro de relógio/posse não é conteúdo pendente: enfileirar isso manteria a
+    // fila eternamente com uma entrada e o chip preso em "na fila".
+    const hasPendingContent =
+      collectionQueueSignature(snapshot) !== lastPersistedQueueSignatureRef.current;
+    if (!hasPendingContent && !readCollectionSaveQueue(window.localStorage, queueMatchId)) {
+      return null;
+    }
+    try {
+      const entry = enqueueCollectionSnapshot(
+        window.localStorage,
+        queueMatchId,
+        snapshot,
+        lastPersistedEventIdsRef.current
+      );
+      setShellPersistence({
+        state: 'queued',
+        queuedCount: Math.max(entry.pendingEventIds.length, 1),
+        retryAt: entry.nextAttemptAt,
+      });
+      return entry;
+    } catch (error) {
+      console.warn('[save-queue] não foi possível gravar localStorage:', error);
+      return null;
+    }
+  };
+
+  /**
+   * Reagendamentos (retry, debounce, intervalo, retomada) precisam executar a versão mais
+   * recente: uma cópia antiga capturaria `matchEvents` desatualizado e salvaria um snapshot
+   * sem os últimos lances, disputando a fila com a versão atual.
+   */
+  const runSaveSilently = () => {
+    void saveSilentlyRef.current?.();
+  };
 
   const saveSilently = async () => {
     if (suppressBeforeUnloadRef.current) return;
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
+    if (hasQueueConflict) return;
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
     const snapshot = buildMatchSnapshot('em_andamento');
-    const signature = JSON.stringify(snapshot);
-    if (signature === lastAutosaveSignatureRef.current) return;
+    const queuedEntry = queueSnapshotLocally(snapshot);
+    const snapshotToSave = queuedEntry?.snapshot ?? snapshot;
+    const signature = JSON.stringify(snapshotToSave);
+    if (!queuedEntry && signature === lastAutosaveSignatureRef.current) return;
 
     if (autosaveInFlightRef.current) {
       autosaveQueuedRef.current = true;
       return;
     }
+    if (queuedEntry && queuedEntry.nextAttemptAt > Date.now()) {
+      if (queueRetryTimeoutRef.current) clearTimeout(queueRetryTimeoutRef.current);
+      queueRetryTimeoutRef.current = setTimeout(() => {
+        queueRetryTimeoutRef.current = null;
+        runSaveSilently();
+      }, queuedEntry.nextAttemptAt - Date.now());
+      return;
+    }
 
     autosaveInFlightRef.current = true;
+    const attemptResumeSeq = queueResumeSeqRef.current;
+    if (shellQueueEnabled) {
+      setShellPersistence((current) => ({ ...current, state: 'saving' }));
+    }
     try {
-      const saveResult = await onSave(snapshot, { source: 'autosave' });
+      const saveResult = await onSave(snapshotToSave, { source: 'autosave' });
       applySaveResult(saveResult);
-      commitPersistedSignature(signature);
+      commitPersistedSignature(signature, snapshotToSave);
+      if (shellQueueEnabled && typeof window !== 'undefined') {
+        const queueMatchId = queuedEntry?.matchId || getCollectionQueueMatchId();
+        if (queuedEntry && queueMatchId) {
+          clearCollectionSaveQueue(window.localStorage, queueMatchId, queuedEntry.signature);
+        }
+        const remaining = queueMatchId
+          ? readCollectionSaveQueue(window.localStorage, queueMatchId)
+          : null;
+        if (remaining) {
+          setShellPersistence({
+            state: 'queued',
+            queuedCount: Math.max(remaining.pendingEventIds.length, 1),
+            retryAt: remaining.nextAttemptAt,
+          });
+          autosaveQueuedRef.current = true;
+        } else {
+          setShellPersistence({
+            state: 'saved',
+            queuedCount: 0,
+            lastSavedAt: Date.now(),
+          });
+          setReconciliationNotice(null);
+        }
+      }
     } catch (error) {
       console.warn('[autosave] falhou ao salvar partida em andamento:', error);
+      if (!queuedEntry && shellQueueEnabled) {
+        // Falha de um autosave só de relógio: não há conteúdo pendente para enfileirar,
+        // então o chip volta ao estado anterior em vez de ficar preso em "salvando".
+        setShellPersistence((current) =>
+          current.state === 'saving'
+            ? { ...current, state: current.queuedCount > 0 ? 'queued' : 'saved' }
+            : current
+        );
+      }
+      if (queuedEntry && typeof window !== 'undefined') {
+        // Uma tentativa concorrente pode já ter drenado a fila: nesse caso a falha é de
+        // um envio obsoleto e não deve ressuscitar a entrada nem rebaixar o chip.
+        const current = readCollectionSaveQueue(window.localStorage, queuedEntry.matchId);
+        const staleAfterResume = queueResumeSeqRef.current !== attemptResumeSeq;
+        if (current) {
+          const next = staleAfterResume
+            ? resetCollectionSaveBackoff(window.localStorage, current.matchId) ?? current
+            : markCollectionSaveFailure(window.localStorage, current);
+          setShellPersistence({
+            state: 'queued',
+            queuedCount: Math.max(next.pendingEventIds.length, 1),
+            retryAt: next.nextAttemptAt,
+          });
+          if (!autosaveQueuedRef.current) {
+            if (queueRetryTimeoutRef.current) clearTimeout(queueRetryTimeoutRef.current);
+            queueRetryTimeoutRef.current = setTimeout(() => {
+              queueRetryTimeoutRef.current = null;
+              runSaveSilently();
+            }, Math.max(0, next.nextAttemptAt - Date.now()));
+          }
+        }
+      }
     } finally {
       autosaveInFlightRef.current = false;
       if (autosaveQueuedRef.current) {
         autosaveQueuedRef.current = false;
-        void saveSilently();
+        runSaveSilently();
       }
+    }
+  };
+
+  useEffect(() => {
+    saveSilentlyRef.current = saveSilently;
+  });
+
+  useEffect(() => {
+    if (
+      !shellQueueEnabled ||
+      hasQueueConflict ||
+      persistableDraftSignature === null ||
+      persistableDraftSignature === lastPersistedSignature
+    ) {
+      return;
+    }
+    try {
+      queueSnapshotLocally(JSON.parse(persistableDraftSignature) as MatchRecord);
+    } catch {
+      // Snapshot inválido não deve bloquear o autosave existente.
+    }
+  }, [
+    hasQueueConflict,
+    lastPersistedSignature,
+    persistableDraftSignature,
+    shellQueueEnabled,
+  ]);
+
+  const saveSnapshotManually = async (
+    snapshot: MatchRecord,
+    options: { saveAsIncomplete?: boolean } = {}
+  ): Promise<boolean> => {
+    if (!onSave) return true;
+    const queuedEntry = queueSnapshotLocally(snapshot);
+    if (shellQueueEnabled) {
+      setShellPersistence((current) => ({ ...current, state: 'saving' }));
+    }
+    try {
+      const result = await onSave(snapshot, {
+        source: 'manual',
+        saveAsIncomplete: options.saveAsIncomplete,
+      });
+      applySaveResult(result);
+      const signature = JSON.stringify(snapshot);
+      commitPersistedSignature(signature, snapshot);
+      if (queuedEntry && typeof window !== 'undefined') {
+        clearCollectionSaveQueue(
+          window.localStorage,
+          queuedEntry.matchId,
+          queuedEntry.signature
+        );
+      }
+      if (shellQueueEnabled) {
+        setShellPersistence({
+          state: 'saved',
+          queuedCount: 0,
+          lastSavedAt: Date.now(),
+        });
+        setReconciliationNotice(null);
+      }
+      return true;
+    } catch (error) {
+      console.warn('[save] falhou; snapshot preservado na fila local:', error);
+      if (queuedEntry && typeof window !== 'undefined') {
+        const failed = markCollectionSaveFailure(window.localStorage, queuedEntry);
+        setShellPersistence({
+          state: 'queued',
+          queuedCount: Math.max(failed.pendingEventIds.length, 1),
+          retryAt: failed.nextAttemptAt,
+        });
+        if (queueRetryTimeoutRef.current) clearTimeout(queueRetryTimeoutRef.current);
+        queueRetryTimeoutRef.current = setTimeout(() => {
+          queueRetryTimeoutRef.current = null;
+          void saveSnapshotManually(snapshot, options);
+        }, Math.max(0, failed.nextAttemptAt - Date.now()));
+      }
+      suppressBeforeUnloadRef.current = false;
+      return false;
     }
   };
 
@@ -2299,6 +2614,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       clearInterval(autosaveIntervalRef.current);
       autosaveIntervalRef.current = null;
     }
+    if (queueRetryTimeoutRef.current) {
+      clearTimeout(queueRetryTimeoutRef.current);
+      queueRetryTimeoutRef.current = null;
+    }
     autosaveQueuedRef.current = false;
   }, []);
 
@@ -2315,8 +2634,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (isPostmatch && onSave) {
       const savedMatch = buildMatchSnapshot('encerrado');
-      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
-      commitPersistedSignature(JSON.stringify(savedMatch));
+      if (!(await saveSnapshotManually(savedMatch))) return;
       onClose();
       return;
     }
@@ -2326,8 +2644,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     if (onSave) {
       const savedMatch = buildMatchSnapshot('encerrado');
-      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
-      commitPersistedSignature(JSON.stringify(savedMatch));
+      if (!(await saveSnapshotManually(savedMatch))) return;
     }
     onClose();
   };
@@ -2352,10 +2669,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (onSave) {
       const savedMatch = buildMatchSnapshot('em_andamento');
-      applySaveResult(
-        await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
-      );
-      commitPersistedSignature(JSON.stringify(savedMatch));
+      if (!(await saveSnapshotManually(savedMatch, { saveAsIncomplete: true }))) return;
     }
     onClose();
   };
@@ -2368,7 +2682,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
     autosaveDebounceRef.current = setTimeout(() => {
-      void saveSilently();
+      runSaveSilently();
     }, 800);
 
     return () => {
@@ -2398,26 +2712,60 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
     autosaveIntervalRef.current = setInterval(() => {
-      void saveSilently();
+      runSaveSilently();
     }, 30000);
     return () => {
       if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
     };
-  }, [isOpen, isPostmatch, isMatchStarted, saveSilently]);
+  }, [isOpen, isPostmatch, isMatchStarted]);
+
+  useEffect(() => {
+    if (!isOpen || !shellQueueEnabled || hasQueueConflict) return;
+    const reconcileOnResume = () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      queueResumeSeqRef.current += 1;
+      if (typeof window !== 'undefined') {
+        const queueMatchId = getCollectionQueueMatchId();
+        // Sem isso a retomada só drenaria depois do backoff acumulado durante a queda.
+        if (queueMatchId) resetCollectionSaveBackoff(window.localStorage, queueMatchId);
+      }
+      if (queueRetryTimeoutRef.current) {
+        clearTimeout(queueRetryTimeoutRef.current);
+        queueRetryTimeoutRef.current = null;
+      }
+      runSaveSilently();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') reconcileOnResume();
+    };
+    window.addEventListener('online', reconcileOnResume);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('online', reconcileOnResume);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [getCollectionQueueMatchId, hasQueueConflict, isOpen, shellQueueEnabled]);
+
+  useEffect(() => () => {
+    if (queueRetryTimeoutRef.current) {
+      clearTimeout(queueRetryTimeoutRef.current);
+      queueRetryTimeoutRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen || !hasUnsavedChanges || suppressBeforeUnloadRef.current) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (suppressBeforeUnloadRef.current) return;
       if (hasPendingSnapshotChanges) {
-        void saveSilently();
+        runSaveSilently();
       }
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [hasPendingSnapshotChanges, hasUnsavedChanges, isOpen, saveSilently]);
+  }, [hasPendingSnapshotChanges, hasUnsavedChanges, isOpen]);
 
   const handleCloseWithSilentSave = async () => {
     if (!hasUnsavedChanges) {
@@ -2583,7 +2931,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       alert('Selecione um atleta primeiro.');
       return;
     }
-    applyPreActionClockBehavior(action as MatchEvent['type']);
+    applyPreActionClockBehavior(action as MatchClockEventType);
     startActionFlow(action, selectedPlayerId);
     setSelectedAction(action);
   };
@@ -2833,6 +3181,84 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedPlayerId(receiverId); // Receptor vira o jogador selecionado
   };
 
+  const handleRegisterSharedPass = (
+    result: 'correct' | 'wrong',
+    playerId: string,
+    receiverId?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T',
+    wrongPassGeneratedTransition?: boolean,
+    zone?: string
+  ) => {
+    handleRegisterPass(
+      result,
+      playerId,
+      timeOverride,
+      periodOverride,
+      wrongPassGeneratedTransition
+    );
+    if (!receiverId && !zone) return;
+    const receiver = receiverId
+      ? activePlayers.find((player) => String(player.id).trim() === receiverId)
+      : null;
+    setMatchEvents((current) => {
+      let index = -1;
+      for (let candidate = current.length - 1; candidate >= 0; candidate -= 1) {
+        const event = current[candidate];
+        if (event.type === 'pass' && String(event.playerId ?? '').trim() === playerId) {
+          index = candidate;
+          break;
+        }
+      }
+      if (index < 0) return current;
+      const next = [...current];
+      next[index] = {
+        ...next[index],
+        ...(receiverId && {
+          passToPlayerId: receiverId,
+          passToPlayerName: receiver?.name ?? '',
+        }),
+        ...(zone && { zone: zone as LateralResult }),
+      };
+      return next;
+    });
+  };
+
+  const handleRegisterEnrichment = (
+    type: 'keyPass' | 'assist',
+    playerId: string,
+    relatedPlayerId?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T',
+    zone?: string
+  ) => {
+    const rawTime = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const stamp = eventTimeAndPeriod(rawTime, periodOverride);
+    const player = activePlayers.find((candidate) => String(candidate.id).trim() === playerId);
+    const relatedPlayer = relatedPlayerId
+      ? activePlayers.find((candidate) => String(candidate.id).trim() === relatedPlayerId)
+      : null;
+    const labels = getTipoSubtipo(type);
+    const event: MatchEvent = {
+      id: `${type}-${Date.now()}`,
+      type,
+      playerId,
+      playerName: player?.name ?? '',
+      time: stamp.time,
+      period: stamp.period,
+      result: type === 'keyPass' ? 'correct' : undefined,
+      tipo: labels.tipo,
+      subtipo: labels.subtipo,
+      ...(relatedPlayerId && {
+        passToPlayerId: relatedPlayerId,
+        passToPlayerName: relatedPlayer?.name ?? '',
+      }),
+      ...(zone && { zone: zone as LateralResult }),
+    };
+    setMatchEvents((current) => [...current, event]);
+    setSelectedAction(null);
+  };
+
   // Registrar resultado de chute — posse fica selecionável depois (usuário define com Com posse / Sem posse)
   const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const pid = playerIdOverride ?? selectedPlayerId;
@@ -2874,7 +3300,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     timeOverride?: number;
     periodOverride?: '1T' | '2T';
   }) => {
-    handleRegisterShot(result, playerId, timeOverride, periodOverride);
+    registerSharedEvent(
+      { action: 'shot', playerId, result, timeOverride, periodOverride },
+      { applyPreAction: false }
+    );
   };
   
   // Registrar escanteio (zone opcional: Defesa/Ataque - Esquerda/Direita)
@@ -2902,6 +3331,230 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setMatchEvents(prev => [...prev, newEvent]);
     applyEventClockBehavior('corner', zone);
     setSelectedAction(null);
+  };
+
+  function handleSharedSubstitution(
+    playerOutId?: string,
+    playerInId?: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T'
+  ) {
+    if (!playerOutId || !playerInId) {
+      throw new Error('Selecione quem sai e quem entra.');
+    }
+    const rawTime = timeOverride ?? (getTimeForEvent() ?? matchTime);
+    const stamp = eventTimeAndPeriod(rawTime, periodOverride);
+    const incomingPlayer = players.find((player) => String(player.id).trim() === playerInId);
+    const next = applySubstitution({
+      lineup: lineupPlayers,
+      bench: benchPlayers,
+      history: substitutionHistory,
+      counts: substitutionCounts,
+      currentGoalkeeperId,
+      playerOutId,
+      playerInId,
+      time: stamp.time,
+      period: stamp.period,
+      incomingIsGoalkeeper: incomingPlayer?.position === 'Goleiro',
+    });
+
+    setLineupPlayers(next.lineup);
+    setBenchPlayers(next.bench);
+    setSubstitutionHistory(next.history);
+    setSubstitutionCounts(next.counts);
+    setCurrentGoalkeeperId(next.currentGoalkeeperId);
+    setSquadActiveIds((current) =>
+      current.map((id) => (String(id).trim() === playerOutId ? playerInId : id))
+    );
+    if (shellStickyAthleteId === playerOutId) setShellStickyAthleteId(null);
+    setSelectedAction(null);
+  }
+
+  function attachZoneToLatestEvent(
+    type: MatchEvent['type'],
+    playerId: string,
+    zone?: string
+  ) {
+    if (!zone) return;
+    setMatchEvents((current) => {
+      let index = -1;
+      for (let candidate = current.length - 1; candidate >= 0; candidate -= 1) {
+        const event = current[candidate];
+        if (event.type === type && String(event.playerId ?? '').trim() === playerId) {
+          index = candidate;
+          break;
+        }
+      }
+      if (index < 0) return current;
+      const next = [...current];
+      next[index] = { ...next[index], zone: zone as LateralResult };
+      return next;
+    });
+  }
+
+  function overrideLatestEventStamp(
+    type: MatchEvent['type'],
+    playerId: string,
+    timeOverride?: number,
+    periodOverride?: '1T' | '2T'
+  ) {
+    if (timeOverride == null && periodOverride == null) return;
+    const stamp = eventTimeAndPeriod(timeOverride ?? (getTimeForEvent() ?? matchTime), periodOverride);
+    setMatchEvents((current) => {
+      let index = -1;
+      for (let candidate = current.length - 1; candidate >= 0; candidate -= 1) {
+        const event = current[candidate];
+        if (event.type === type && String(event.playerId ?? '').trim() === playerId) {
+          index = candidate;
+          break;
+        }
+      }
+      if (index < 0) return current;
+      const next = [...current];
+      next[index] = { ...next[index], time: stamp.time, period: stamp.period };
+      return next;
+    });
+  }
+
+  const registerSharedEvent = (
+    input: SharedEventInput,
+    options: { applyPreAction?: boolean } = {}
+  ) => {
+    const playerId =
+      input.playerId ??
+      (input.team === 'against' ? OPPONENT_FAKE_PLAYER_ID : TEAM_EVENT_FAKE_PLAYER_ID);
+    const periodOverride = input.periodOverride;
+    const timeOverride =
+      input.timeOverride == null
+        ? undefined
+        : isPostmatch && periodOverride === '2T'
+          ? REGULATION_HALF_SECONDS + input.timeOverride
+          : input.timeOverride;
+    if (
+      options.applyPreAction !== false &&
+      input.action !== 'substitution' &&
+      input.action !== 'keyPass' &&
+      input.action !== 'assist'
+    ) {
+      applyPreActionClockBehavior(input.action as MatchClockEventType, input.result as MatchEvent['result']);
+    }
+
+    switch (input.action) {
+      case 'shot':
+        handleRegisterShot(
+          (input.result ?? 'inside') as 'inside' | 'outside' | 'post' | 'blocked',
+          playerId,
+          timeOverride,
+          periodOverride
+        );
+        attachZoneToLatestEvent('shot', playerId, input.zone);
+        break;
+      case 'foul':
+        handleRegisterFoul(input.team ?? 'for', playerId, timeOverride, periodOverride);
+        attachZoneToLatestEvent('foul', playerId, input.zone);
+        break;
+      case 'tackle':
+        handleRegisterTackle(
+          (input.result ?? 'withBall') as 'withBall' | 'withoutBall' | 'counter',
+          playerId,
+          timeOverride,
+          periodOverride
+        );
+        attachZoneToLatestEvent('tackle', playerId, input.zone);
+        break;
+      case 'save':
+        handleRegisterSave(
+          (input.result ?? 'simple') as 'simple' | 'hard' | 'outside',
+          playerId,
+          timeOverride,
+          periodOverride
+        );
+        attachZoneToLatestEvent('save', playerId, input.zone);
+        break;
+      case 'block':
+        handleRegisterBlock(playerId, timeOverride, periodOverride);
+        break;
+      case 'corner':
+        handleRegisterCorner(input.zone as LateralResult | undefined, playerId, timeOverride, periodOverride);
+        break;
+      case 'goal': {
+        const assist = input.secondaryPlayerId
+          ? activePlayers.find((player) => String(player.id).trim() === input.secondaryPlayerId)
+          : null;
+        const isOpponent = input.isOpponentGoal === true || input.team === 'against';
+        handleRegisterGoal(
+          input.result === 'contra' ? 'contra' : 'normal',
+          isOpponent,
+          isOpponent ? null : playerId,
+          input.goalMethod,
+          timeOverride ?? null,
+          periodOverride ?? null,
+          input.secondaryPlayerId ?? null,
+          assist?.name ?? null
+        );
+        attachZoneToLatestEvent('goal', playerId, input.zone);
+        break;
+      }
+      case 'card':
+        handleRegisterCard(
+          input.cardType ?? 'yellow',
+          playerId,
+          timeOverride,
+          periodOverride,
+          input.team ?? 'for'
+        );
+        break;
+      case 'penalty':
+        handleRegisterPenalty(
+          input.team ?? 'for',
+          input.team === 'against' ? null : playerId,
+          (input.result ?? 'noGoal') as 'goal' | 'saved' | 'outside' | 'post' | 'noGoal'
+        );
+        overrideLatestEventStamp('penalty', playerId, timeOverride, periodOverride);
+        break;
+      case 'freeKick':
+        handleRegisterFreeKick(
+          input.team ?? 'for',
+          input.team === 'against' ? null : playerId,
+          (input.result ?? 'noGoal') as 'goal' | 'saved' | 'outside' | 'post' | 'noGoal'
+        );
+        overrideLatestEventStamp('freeKick', playerId, timeOverride, periodOverride);
+        break;
+      case 'pass':
+        handleRegisterSharedPass(
+          (input.result ?? 'correct') as 'correct' | 'wrong',
+          playerId,
+          input.secondaryPlayerId,
+          timeOverride,
+          periodOverride,
+          input.wrongPassGeneratedTransition,
+          input.zone
+        );
+        break;
+      case 'keyPass':
+      case 'assist':
+        handleRegisterEnrichment(
+          input.action,
+          playerId,
+          input.secondaryPlayerId,
+          timeOverride,
+          periodOverride,
+          input.zone
+        );
+        break;
+      case 'lateral':
+        handleRegisterLateral(
+          input.zone as LateralResult | undefined,
+          playerId,
+          timeOverride,
+          periodOverride
+        );
+        break;
+      case 'substitution':
+        handleSharedSubstitution(input.playerId, input.secondaryPlayerId, timeOverride, periodOverride);
+        break;
+    }
+    if (input.action !== 'substitution') setShellLatestEventCreatedAt(Date.now());
   };
 
   // Registrar lateral (cronômetro já parado ao clicar em LATERAL); zona opcional (preenchida em outro momento)
@@ -3358,7 +4011,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Últimos 3 comandos para log
   const lastThreeEvents = useMemo(() => {
-    return [...matchEvents].reverse().slice(0, 3).reverse();
+    return [...matchEvents].reverse().slice(0, 5).reverse();
   }, [matchEvents]);
 
   // Linhas de exibição para "Últimos comandos": passes viram duas linhas (quem deu / quem recebeu)
@@ -3401,8 +4054,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       id: String(player.id).trim(),
       name: player.nickname?.trim() || player.name || 'Atleta',
       jerseyNumber: player.jerseyNumber ?? null,
+      position: player.position ?? null,
+      isGoalkeeper:
+        player.position === 'Goleiro' || String(player.id).trim() === currentGoalkeeperId,
     }));
-  }, [activePlayers]);
+  }, [activePlayers, currentGoalkeeperId]);
+
+  const shellBenchPlayers = useMemo(() => {
+    const activeIds = new Set(activePlayers.map((player) => String(player.id).trim()));
+    return benchPlayers
+      .map((id) => players.find((player) => String(player.id).trim() === String(id).trim()))
+      .filter((player): player is Player => player != null)
+      .filter((player) => !activeIds.has(String(player.id).trim()))
+      .map((player) => ({
+        id: String(player.id).trim(),
+        name: player.nickname?.trim() || player.name || 'Atleta',
+        jerseyNumber: player.jerseyNumber ?? null,
+        position: player.position ?? null,
+        isGoalkeeper: player.position === 'Goleiro',
+      }));
+  }, [activePlayers, benchPlayers, players]);
 
   const shellRecentEvents = useMemo(() => {
     return lastCommandDisplayLines.map((line) => ({
@@ -3413,6 +4084,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       zone: line.zone,
     }));
   }, [formatTime, lastCommandDisplayLines]);
+
+  const deleteOfficialEvent = (eventId: string) => {
+    const updated = matchEvents.filter((event) => event.id !== eventId);
+    if (updated.length === matchEvents.length) return;
+    setMatchEvents(updated);
+    recalcGoalsAndFoulsFromEvents(updated);
+    setShellLatestEventCreatedAt(null);
+    if (editingEventId === eventId) {
+      setEditingEventId(null);
+      setEditDraft(null);
+    }
+  };
 
   const isBlockedByPenalty = !!penaltyStep;
 
@@ -3659,7 +4342,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           </div>
         )}
 
-        {/* DADOS DA PARTIDA - placar centralizado e botão sair na mesma box */}
+        {/* DADOS DA PARTIDA - placar centralizado e botão sair na mesma box (hidden when Shell is active — Shell has its own CommandBar) */}
+        {!shouldRenderExperimentalShell && (
         <div className="bg-zinc-950 border-b border-zinc-800 p-1.5 shrink-0">
           <div className="flex items-center justify-between mb-1">
             <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
@@ -3770,6 +4454,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             </div>
           )}
         </div>
+        )}
 
         {showLogsView ? (
           /* Tela de Logs do jogo */
@@ -4033,10 +4718,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const updated = matchEvents.filter(e => e.id !== event.id);
-                                    setMatchEvents(updated);
-                                    recalcGoalsAndFoulsFromEvents(updated);
-                                    if (editingEventId === event.id) { setEditingEventId(null); setEditDraft(null); }
+                                    deleteOfficialEvent(event.id);
                                   }}
                                   data-testid="event-delete"
                                   className="px-2 py-1 rounded bg-red-600/80 hover:bg-red-500 border border-red-500/50 text-white text-xs font-bold"
@@ -4063,6 +4745,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             clockTimeLabel={formatTime(matchTime)}
             clockStateLabel={isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}
             currentPeriod={currentPeriod}
+            eventTime={{
+              seconds: isPostmatch
+                ? currentPeriod === '2T'
+                  ? Math.max(0, manualMinute * 60 + manualSecond - REGULATION_HALF_SECONDS)
+                  : manualMinute * 60 + manualSecond
+                : matchTime,
+              period: currentPeriod,
+            }}
             score={{
               teamName: (teamName || 'Nossa equipe').toUpperCase(),
               opponentName: (match.opponent || 'Adversario').toUpperCase(),
@@ -4074,31 +4764,37 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               against: foulsAgainstCurrentPeriod,
             }}
             eligiblePlayers={shellEligiblePlayers}
+            benchPlayers={shellBenchPlayers}
+            stickyAthleteId={shellStickyAthleteId}
             recentEvents={shellRecentEvents}
-            collectionStatusMessage={getCollectionStatusMessage()}
+            latestEventCreatedAt={shellLatestEventCreatedAt}
             hasUnsavedChanges={hasUnsavedChanges}
-            finalizationEnabled={hasShellEligiblePlayers && (isPostmatch || !isRealtimeActionLocked)}
+            persistence={shellPersistence}
+            eventsEnabled={hasShellEligiblePlayers && (isPostmatch || !isRealtimeActionLocked)}
             disabledReason={shellDisabledReason}
-            showPausedAlert={!isPostmatch && clockSnapshot.state === 'PAUSADO'}
             clockPrimaryAction={shellClockPrimaryAction}
-            onOpenClockSync={!isPostmatch ? openClockSyncModal : null}
-            postmatchPeriodAction={shellPostmatchPeriodAction}
-            manualTime={
-              isPostmatch
-                ? {
-                    minute: manualMinute,
-                    second: manualSecond,
-                    onMinuteChange: setManualMinute,
-                    onSecondChange: setManualSecond,
-                  }
-                : undefined
-            }
             onOpenLogs={() => setShowLogsView(true)}
             onSave={handleSaveLater}
             onReturnToCurrentExperience={handleReturnToCurrentExperience}
             experienceNotice={collectionExperienceNotice}
+            recoveryNotice={
+              !isPostmatch &&
+              match.status === 'em_andamento' &&
+              match.lineup?.clockSnapshot
+                ? `Retomando de ${formatTime(match.lineup.clockSnapshot.currentTimeSeconds)}`
+                : null
+            }
+            reconciliationNotice={reconciliationNotice}
             onCancelCurrentFlow={cancelActionFlow}
-            onRegisterFinalization={registerSharedFinalization}
+            onSelectStickyAthlete={setShellStickyAthleteId}
+            onRegisterEvent={(input) =>
+              registerSharedEvent({
+                ...input,
+                recordedByUserId: recordedByUser?.id,
+                recordedByName: recordedByUser?.name,
+              })
+            }
+            onUndoEvent={deleteOfficialEvent}
           />
         ) : (
         <>

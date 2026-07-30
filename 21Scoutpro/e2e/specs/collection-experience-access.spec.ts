@@ -222,8 +222,10 @@ test.describe.serial('Acesso digno ao shell experimental', () => {
     await expect(page.getByTestId('event-selector-shot')).toBeVisible();
 
     await page.goto('/dashboard?experiencia=shell');
-    await expect(page.getByText('Experiencia de coleta')).toBeVisible();
     await expect(page).not.toHaveURL(/\/scout-realtime/);
+    await expect
+      .poll(() => page.evaluate((key) => window.localStorage.getItem(key), COLLECTION_EXPERIENCE_STORAGE_KEY))
+      .toBe(SHELL_COLLECTION_EXPERIENCE);
     await abrirConfiguracoes(page);
     await expect(page.getByTestId('collection-experience-shell')).toHaveAttribute(
       'aria-checked',

@@ -167,6 +167,7 @@ export interface MatchStats {
 export type PostMatchAction =
   | 'goal'
   | 'assist'
+  | 'keyPass'
   | 'passCorrect'
   | 'passWrong'
   | 'passTransicao'

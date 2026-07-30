@@ -25,6 +25,11 @@ yarn-error.log*
 CREDENCIAIS_BANCO.md
 VERCEL_CONFIG.md
 *.zip
+docs/ACESSOS_COLABORADOR*.md
+docs/*COLABORADOR*.local.md
+docs/ACESSOS*.local.md
+!**/.template.md
+!docs/ONBOARDING_COLABORADOR.template.md
 
 # IDE
 .vscode

@@ -1,42 +1,65 @@
-# 📚 Documentação SCOUT 21 PRO
+# Documentação SCOUT 21 PRO
 
-Esta pasta contém toda a documentação do projeto organizada por categoria.
+## Comece aqui (IA / colaborador novo)
 
-## 📁 Estrutura
+1. **[ONBOARDING_IA.md](./ONBOARDING_IA.md)** — caminho, stack, como rodar, regras  
+2. **[MCP_CURSOR.md](./MCP_CURSOR.md)** — Supabase Scout/Fiscal + auth Cursor  
+3. **[ONBOARDING_COLABORADOR.template.md](./ONBOARDING_COLABORADOR.template.md)** — checklist de acessos (sem senhas)  
+4. `ACESSOS_COLABORADOR.local.md` — preenchido na máquina (**gitignored**)  
+5. Raiz: **[AGENTS.md](../AGENTS.md)**
+
+Pasta local correta: `/Users/bno/Documents/Projetos/apps/scout21`
+
+---
+
+## Coleta / cronômetro / QA (Fase 003)
+
+- [QA_GUIDE.md](./QA_GUIDE.md)
+- [QA_ENVIRONMENT.md](./QA_ENVIRONMENT.md)
+- [EVENT_MATRIX.md](./EVENT_MATRIX.md)
+- [COLLECTION_UX_GLOSSARY.md](./COLLECTION_UX_GLOSSARY.md)
+- Relatórios: `SPRINT_003A_REPORT.md` … `SPRINT_003E_1_VISUAL_POLISH_REPORT.md`
+
+## Coleta V2 / Shell experimental (Fase 004)
+
+- [PLANO_MESTRE_COLETA_V2.md](./PLANO_MESTRE_COLETA_V2.md) — plano mestre (layout, sprints, portão §14)
+- Relatórios: `SPRINT_004C_1A_SHELL_VISUAL_ARCHITECTURE_REPORT.md`, `SPRINT_004C_1B_SHELL_ACCESS_REPORT.md`, `SPRINT_004D_REPORT.md` … `SPRINT_004H_REPORT.md`
+- [SPRINT_004H_OPERATOR_READINESS.md](./SPRINT_004H_OPERATOR_READINESS.md) — protocolo A/B (sem resultados inventados)
+- [SHELL_METRICS_OPERATOR_COLLECTION.md](./SHELL_METRICS_OPERATOR_COLLECTION.md) — como exportar `__scout21CollectionShellMetricSummary__`
+- [SPRINT_004J_DECISION_GATE.md](./SPRINT_004J_DECISION_GATE.md) — critérios de promoção e decisão **não promover**
+- [SPRINT_004J_REPORT.md](./SPRINT_004J_REPORT.md) — fechamento 004J / evidência agregada
+
+## Produto / integrações
+
+- [ACESSO_ATLETA.md](./ACESSO_ATLETA.md)
+- [TELEGRAM_BOT.md](./TELEGRAM_BOT.md) / [TELEGRAM_COACH.md](./TELEGRAM_COACH.md)
+- [INTEGRACAO_PAPERCLIP.md](./INTEGRACAO_PAPERCLIP.md)
+- [SETUP_SUPABASE_UNICO.md](./SETUP_SUPABASE_UNICO.md)
+
+## Setup / deploy
+
+- [setup/DEPLOY.md](./setup/DEPLOY.md)
+- [setup/DATABASE_OPTIONS.md](./setup/DATABASE_OPTIONS.md)
+- Backend: `../backend/docs/APLICAR_MIGRACOES_SUPABASE.md`
+
+## Schema / banco (referência)
+
+- Pasta [database/](./database/) — prompts de modelagem  
+- Fonte viva: `backend/prisma/schema.prisma`
+
+## Arquivo / legado
+
+- [archive/](./archive/) — histórico (Google Sheets etc.). **Não** usar como verdade atual.
+
+---
+
+## Estrutura antiga (mapa)
 
 ### `/database`
-Documentação relacionada ao schema e estrutura do banco de dados:
-- **ENTIDADES_CONCEITUAIS_LANDING_PAGE.md** - Entidades conceituais extraídas da landing page
-- **PROMPT_2_PERFIS_E_RESPONSABILIDADES.md** - Perfis de usuário e responsabilidades
-- **PROMPT_3_GESTAO_DE_EQUIPE.md** - Estrutura de gestão de equipe
-- **PROMPT_4_PROGRAMACAO.md** - Lógica de programação (treinos e jogos)
-- **PROMPT_5_JOGO_EVENTO_CENTRAL.md** - Jogo como evento central
-- **PROMPT_6_SCOUT_E_INDICADORES.md** - Scout e indicadores de performance
-- **PROMPT_7_EVOLUCAO_E_RANKING.md** - Evolução e ranking de atletas
-- **PROMPT_8_MULTI_CLUBE_E_ESCALA.md** - Multi-tenancy e escalabilidade
-- **PROMPT_9_SCHEMA_FINAL.md** - Schema Prisma final
-- **VALIDACAO_FINAL.md** - Validação do schema final
+Entidades e prompts de schema.
 
 ### `/setup`
-Guias de configuração e deploy:
-- **DEPLOY.md** - Guia completo de deploy
-- **VERCEL_CONFIG.md** - Configuração do Vercel
-- **DATABASE_OPTIONS.md** - Opções de banco de dados
-- **GOOGLE_APPS_SCRIPT_SETUP.md** - Setup do Google Apps Script
-- **GOOGLE_DRIVE_SETUP.md** - Setup do Google Drive
-- **GOOGLE_SHEETS_SETUP.md** - Setup do Google Sheets
-- **scripts-README.md** - Documentação dos scripts
+Deploy e opções de banco (parte ainda cita Sheets — preferir Supabase).
 
 ### `/archive`
-Documentos temporários, de debug e histórico mantidos para referência:
-- Arquivos de teste e correção
-- Instruções temporárias
-- Guias antigos
-- Documentação de integração histórica
-
-## 🔍 Como Usar
-
-1. **Para entender o banco de dados:** Comece por `database/ENTIDADES_CONCEITUAIS_LANDING_PAGE.md` e siga pelos prompts em ordem
-2. **Para fazer deploy:** Consulte `setup/DEPLOY.md`
-3. **Para configurar integrações:** Veja os arquivos em `setup/`
-4. **Para referência histórica:** Consulte `archive/` se necessário
+Debug e guias obsoletos.

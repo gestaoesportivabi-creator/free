@@ -68,10 +68,10 @@ Este repositório está ligado ao controlo de agentes **Paperclip** (Scout 21). 
    ```
    Frontend estará em `http://localhost:5173`
 
-7. **Criar conta:**
-   - Acesse `http://localhost:5173`
-   - Clique em "Criar Conta Grátis"
-   - Preencha os dados e crie sua conta
+7. **Login:**
+   - Admin seed: `admin@admin.com` / `admin` (ou só `admin`)
+   - Guia completo para agentes: [AGENTS.md](./AGENTS.md) e [docs/ONBOARDING_IA.md](./docs/ONBOARDING_IA.md)
+   - MCP Supabase: [docs/MCP_CURSOR.md](./docs/MCP_CURSOR.md)
 
 ## 📦 Build para Produção
 
