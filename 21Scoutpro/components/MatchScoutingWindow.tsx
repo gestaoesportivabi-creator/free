@@ -4970,9 +4970,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex-[8] flex flex-col gap-1 min-h-0 flex-1">
+                <div className="flex-[8] flex flex-col gap-1 min-h-0 flex-1 overflow-hidden">
                   {/* Sem posse | GOL | Com posse - três botões iguais em uma linha */}
-                  <div className="flex gap-1 flex-1 min-h-0">
+                  <div className="relative z-20 flex gap-1 shrink-0 min-h-[48px]">
                     <button
                       onClick={() => setBallPossessionNow('sem')}
                       disabled={isBlockedByPenalty || isRealtimeActionLocked}
@@ -5031,11 +5031,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
 
                   {/* Layout - FALTA/ESCANTEIO | TEMPO | PASSE/CHUTE - ocupa 80%, tamanhos similares, cronômetro maior */}
-                  <div className="flex-[3] flex flex-col min-h-0 gap-1">
+                  <div className="flex-1 flex flex-col min-h-0 gap-1 overflow-hidden">
                     {/* Linha central: FALTA/ESCANTEIO | TEMPO (maior) | PASSE/CHUTE */}
-                    <div className="flex-1 flex items-stretch justify-center gap-1 min-h-0">
+                    <div className="flex-1 flex items-stretch justify-center gap-1 min-h-0 overflow-hidden">
                       {/* Esquerda - FALTA e ESCANTEIO */}
-                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
                         <button
                           onClick={() => {
                             if (shouldDisableRealtimeEventButtons) return;
@@ -5072,17 +5072,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
 
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
-                      <div data-testid="match-clock-panel" className="flex flex-col items-center justify-center gap-1 flex-[2] min-w-0 min-h-0">
+                      <div data-testid="match-clock-panel" className="relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden">
                         {isPostmatch ? (
-                          <div className="w-full h-full min-h-[80px] py-3 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
-                            <label className="text-zinc-400 text-[10px] font-bold uppercase">Tempo de coleta</label>
+                          <div className="w-full h-full min-h-[80px] py-2 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
                             <p
                               data-testid="postmatch-period-label"
-                              className={`text-base sm:text-lg font-black uppercase tracking-wide ${
+                              className={`text-sm sm:text-base font-black uppercase tracking-wide ${
                                 currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
                               }`}
                             >
-                              {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
+                              {currentPeriod === '1T' ? '1º tempo · coleta' : '2º tempo · coleta'}
                             </p>
                             {currentPeriod === '1T' && (
                               <button
@@ -5107,21 +5106,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           </div>
                         ) : (
                           <>
-                            <div className="w-full flex flex-col items-center gap-0.5 shrink-0">
-                              <span className="text-zinc-500 text-[10px] font-bold uppercase">Tempo oficial</span>
+                            <div className="w-full flex flex-col items-center gap-0.5 shrink-0 px-1">
                               <span
-                                className={`text-xs font-black uppercase tracking-wide ${
+                                data-testid="clock-state"
+                                className={`text-[11px] font-black uppercase tracking-[0.12em] text-center leading-tight ${
                                   currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
                                 }`}
                               >
-                                {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
-                              </span>
-                              <span data-testid="clock-state" className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-300">
                                 {getClockStateLabel(clockSnapshot.state)}
+                                {clockSnapshot.state !== 'PRE_JOGO' &&
+                                clockSnapshot.state !== 'INTERVALO' &&
+                                clockSnapshot.state !== 'ENCERRADO'
+                                  ? ` · ${currentPeriod === '1T' ? '1T' : '2T'}`
+                                  : ''}
                               </span>
                             </div>
-                            <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-4 flex flex-col items-center justify-center gap-2">
-                              <div data-testid="clock-time" className="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight tabular-nums">
+                            <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-2 flex flex-col items-center justify-center gap-1.5 shrink-0">
+                              <div data-testid="clock-time" className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight tabular-nums leading-none">
                                 {formatTime(matchTime)}
                               </div>
                               {clockPrimaryAction ? (
@@ -5138,12 +5139,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                           ? 'clock-start-second-half'
                                           : 'clock-pause'
                                   }
-                                  className={`w-full min-h-[56px] px-3 py-3 rounded-lg border-2 font-black uppercase text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border-2 font-black uppercase text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
                                 >
                                   {clockPrimaryAction.label}
                                 </button>
                               ) : (
-                                <div className="w-full min-h-[56px] px-3 py-3 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-500 text-xs font-bold uppercase flex items-center justify-center">
+                                <div className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-500 text-xs font-bold uppercase flex items-center justify-center">
                                   Partida encerrada
                                 </div>
                               )}
@@ -5152,7 +5153,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 onClick={openClockSyncModal}
                                 disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
                                 data-testid="clock-sync"
-                                className={`w-full px-3 py-2 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
+                                className={`w-full px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
                                   clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
                                     ? 'border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed'
                                     : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
@@ -5161,61 +5162,63 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 Sincronizar cronômetro
                               </button>
                               {isPausedByEvent && (
-                                <p className="text-center text-[10px] font-bold uppercase text-emerald-200">
-                                  O evento pausou o relógio. Use Continuar partida para retomar.
+                                <p className="text-center text-[10px] font-bold uppercase text-emerald-200 leading-tight">
+                                  Evento pausou o relógio. Continue a partida.
                                 </p>
                               )}
                               {isRealtimeActionLocked && (
-                                <p className="text-center text-[10px] font-bold uppercase text-amber-200">
+                                <p className="text-center text-[10px] font-bold uppercase text-amber-200 leading-tight">
                                   {getRealtimeBlockMessage()}
                                 </p>
                               )}
                             </div>
-                            {currentPeriod === '1T' && canEndTime && !isMatchEnded && (
-                              <button
-                                onClick={handleEndTime}
-                                data-testid="clock-end-period"
-                                className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                              >
-                                Encerrar Tempo
-                              </button>
-                            )}
-                            {currentPeriod === '2T' && !isMatchEnded && (
-                              <button
-                                type="button"
-                                onClick={handleEndMatchRealtime}
-                                data-testid="clock-end-match"
-                                className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                              >
-                                Encerrar partida
-                              </button>
-                            )}
-                            {currentPeriod === '1T' && !isMatchEnded && (
-                              <button
-                                type="button"
-                                onClick={handleEndFirstHalfCollection}
-                                data-testid="clock-end-first-half"
-                                className="w-full px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/70 text-amber-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                              >
-                                Encerrar coleta do 1º tempo
-                              </button>
-                            )}
-                            {currentPeriod === '2T' && !isMatchEnded && (
-                              <button
-                                type="button"
-                                onClick={handleReturnToFirstHalfCollection}
-                                data-testid="clock-return-first-half"
-                                className="w-full px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/70 text-sky-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                              >
-                                Voltar ao 1º tempo
-                              </button>
-                            )}
+                            <div className="w-full flex flex-col gap-1 shrink-0">
+                              {currentPeriod === '1T' && canEndTime && !isMatchEnded && (
+                                <button
+                                  onClick={handleEndTime}
+                                  data-testid="clock-end-period"
+                                  className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                                >
+                                  Encerrar Tempo
+                                </button>
+                              )}
+                              {currentPeriod === '2T' && !isMatchEnded && (
+                                <button
+                                  type="button"
+                                  onClick={handleEndMatchRealtime}
+                                  data-testid="clock-end-match"
+                                  className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                                >
+                                  Encerrar partida
+                                </button>
+                              )}
+                              {currentPeriod === '1T' && !isMatchEnded && (
+                                <button
+                                  type="button"
+                                  onClick={handleEndFirstHalfCollection}
+                                  data-testid="clock-end-first-half"
+                                  className="w-full px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/70 text-amber-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                                >
+                                  Encerrar coleta do 1º tempo
+                                </button>
+                              )}
+                              {currentPeriod === '2T' && !isMatchEnded && (
+                                <button
+                                  type="button"
+                                  onClick={handleReturnToFirstHalfCollection}
+                                  data-testid="clock-return-first-half"
+                                  className="w-full px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/70 text-sky-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
+                                >
+                                  Voltar ao 1º tempo
+                                </button>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
 
                       {/* Direita - Vertical: COM posse = PASSE/CHUTE; SEM posse = DESARME/DEFESA - tamanhos similares */}
-                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
                         {ballPossessionNow === 'com' ? (
                           <>
                             <button
@@ -5299,7 +5302,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
 
                     {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO, CARTÃO ADVERSÁRIO */}
-                    <div className="grid grid-cols-5 gap-1 shrink-0 min-h-[56px]">
+                    <div className="relative z-20 grid grid-cols-5 gap-1 shrink-0 min-h-[56px] bg-black">
                       <button
                         onClick={() => {
                           if (shouldDisableRealtimeEventButtons) return;
