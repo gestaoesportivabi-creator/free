@@ -22,7 +22,23 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
+import {
+  buildClockProductTourSteps,
+  type ClockTourStepDefinition,
+  type ClockTourTargetId,
+} from '../content/clockProductTour';
 import { ClockHelpPanel } from './guide/ClockHelpPanel';
+
+const CLOCK_TOUR_COMPLETED_STORAGE_KEY = 'scout21.clockTour.v1.completed';
+
+function readClockTourCompleted(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(CLOCK_TOUR_COMPLETED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -638,6 +654,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [showClockSyncModal, setShowClockSyncModal] = useState(false);
   const [showEndMatchModal, setShowEndMatchModal] = useState(false);
   const [showClockHelpPanel, setShowClockHelpPanel] = useState(false);
+  const [hasCompletedClockTour, setHasCompletedClockTour] = useState<boolean>(() =>
+    readClockTourCompleted()
+  );
+  const [activeClockTourStepId, setActiveClockTourStepId] = useState<string | null>(null);
   const [isEndingMatch, setIsEndingMatch] = useState(false);
   const [syncMinuteInput, setSyncMinuteInput] = useState<string>('0');
   const [syncSecondInput, setSyncSecondInput] = useState<string>('00');
@@ -3509,6 +3529,108 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
   })();
 
+  const clockTourSteps = useMemo(
+    () =>
+      buildClockProductTourSteps({
+        clockState: clockSnapshot.state,
+        currentPeriod,
+        hasClockSyncFallback: needsClockSyncFallback,
+        isMatchStarted,
+        canShowPlayerStep: isMatchStarted && allSquadPlayers.length > 0,
+        canShowPassStep: isMatchStarted && canRegisterRealtimeEvent,
+        canSaveIncomplete: !isMatchEnded,
+        canFinishCollection: isMatchEnded,
+      }),
+    [
+      allSquadPlayers.length,
+      canRegisterRealtimeEvent,
+      clockSnapshot.state,
+      currentPeriod,
+      isMatchEnded,
+      isMatchStarted,
+      needsClockSyncFallback,
+    ]
+  );
+
+  const activeClockTourStep = useMemo<ClockTourStepDefinition | null>(() => {
+    if (!showClockHelpPanel) return null;
+
+    return (
+      clockTourSteps.find((step) => step.id === activeClockTourStepId) ??
+      clockTourSteps.find((step) => step.role === 'current') ??
+      clockTourSteps[0] ??
+      null
+    );
+  }, [activeClockTourStepId, clockTourSteps, showClockHelpPanel]);
+
+  const activeClockTourIndex = useMemo(() => {
+    if (!activeClockTourStep) return -1;
+    return clockTourSteps.findIndex((step) => step.id === activeClockTourStep.id);
+  }, [activeClockTourStep, clockTourSteps]);
+
+  useEffect(() => {
+    if (!showClockHelpPanel) return;
+
+    const nextStep =
+      clockTourSteps.find((step) => step.id === activeClockTourStepId) ??
+      clockTourSteps.find((step) => step.role === 'current') ??
+      clockTourSteps[0] ??
+      null;
+
+    if (nextStep && nextStep.id !== activeClockTourStepId) {
+      setActiveClockTourStepId(nextStep.id);
+    }
+  }, [activeClockTourStepId, clockTourSteps, showClockHelpPanel]);
+
+  const openClockProductTour = useCallback(() => {
+    setActiveClockTourStepId('welcome');
+    setShowClockHelpPanel(true);
+  }, []);
+
+  const closeClockProductTour = useCallback(() => {
+    setShowClockHelpPanel(false);
+    setActiveClockTourStepId(null);
+  }, []);
+
+  const completeClockProductTour = useCallback(() => {
+    try {
+      window.localStorage.setItem(CLOCK_TOUR_COMPLETED_STORAGE_KEY, 'true');
+    } catch {
+      // Ignore storage failures and keep the tour usable.
+    }
+    setHasCompletedClockTour(true);
+    closeClockProductTour();
+  }, [closeClockProductTour]);
+
+  const goToPreviousClockTourStep = useCallback(() => {
+    if (activeClockTourIndex <= 0) return;
+    setActiveClockTourStepId(clockTourSteps[activeClockTourIndex - 1]?.id ?? null);
+  }, [activeClockTourIndex, clockTourSteps]);
+
+  const goToNextClockTourStep = useCallback(() => {
+    if (activeClockTourIndex < 0 || activeClockTourIndex >= clockTourSteps.length - 1) return;
+    setActiveClockTourStepId(clockTourSteps[activeClockTourIndex + 1]?.id ?? null);
+  }, [activeClockTourIndex, clockTourSteps]);
+
+  const openFullClockGuide = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.open('/guia-de-uso#cronometro', '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const isClockTourTargetHighlighted = useCallback(
+    (targetId: ClockTourTargetId) =>
+      showClockHelpPanel && activeClockTourStep?.targetId === targetId,
+    [activeClockTourStep, showClockHelpPanel]
+  );
+
+  const getClockTourTargetClass = useCallback(
+    (targetId: ClockTourTargetId) =>
+      isClockTourTargetHighlighted(targetId)
+        ? 'ring-2 ring-[#00f0ff] ring-offset-2 ring-offset-zinc-950 shadow-[0_0_0_2px_rgba(0,240,255,0.18)]'
+        : '',
+    [isClockTourTargetHighlighted]
+  );
+
   const isRealtimePage = window.location.pathname === '/scout-realtime';
   const useFullViewport = isRealtimePage || takeFullWidth;
   const leftOffset = sidebarRetracted ? 'left-16' : 'left-64';
@@ -3581,11 +3703,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 {!isPostmatch && (
                   <button
                     type="button"
-                    onClick={() => setShowClockHelpPanel(true)}
+                    onClick={openClockProductTour}
                     data-testid="clock-help-open"
-                    className="min-h-[36px] rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-200 transition-colors hover:bg-zinc-800"
+                    className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-200 transition-colors hover:bg-zinc-800"
                   >
-                    Como usar o cronometro
+                    {hasCompletedClockTour ? 'Rever tour' : 'Tour guiado'}
+                    {!hasCompletedClockTour ? (
+                      <span className="rounded-full border border-[#00f0ff]/50 bg-[#00f0ff]/10 px-1.5 py-0.5 text-[9px] font-black tracking-[0.18em] text-[#00f0ff]">
+                        NOVO
+                      </span>
+                    ) : null}
                   </button>
                 )}
               </div>
@@ -3594,12 +3721,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <button
                     onClick={handleEndCollection}
                     data-testid="end-collection"
+                    data-tour-highlighted={isClockTourTargetHighlighted('end-collection') ? 'true' : undefined}
                     disabled={isPostmatch ? matchEvents.length < 1 : !isMatchEnded}
                     className={`px-4 py-2.5 rounded-xl border-2 text-xs font-bold tracking-wide transition-all ${
                       (isPostmatch && matchEvents.length >= 1) || isMatchEnded
                         ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400 text-emerald-100 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-500/10'
                         : 'bg-zinc-800 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                    }`}
+                    } ${getClockTourTargetClass('end-collection')}`}
                   >
                     Finalizar coleta
                   </button>
@@ -3618,7 +3746,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   type="button"
                   onClick={handleSaveLater}
                   data-testid="save-match"
-                  className="px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors"
+                  data-tour-highlighted={isClockTourTargetHighlighted('save-match') ? 'true' : undefined}
+                  className={`px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors ${getClockTourTargetClass('save-match')}`}
                 >
                   Salvar como incompleta
                 </button>
@@ -3941,7 +4070,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}
         <div className="flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
           {/* Painel Esquerdo - Seleção de Jogador (ocupa toda a altura; lista + substituição preenchem o card) */}
-          <div className={`rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
+          <div
+            data-testid="player-selector-panel"
+            data-tour-highlighted={isClockTourTargetHighlighted('player-selector-panel') ? 'true' : undefined}
+            className={`rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
             shouldHighlightPlayerPanel ? 'w-64 min-w-[10rem] max-w-[17rem] animate-pulse' : 'w-52 min-w-[7rem] max-w-[14rem]'
           } ${
             goalStep === 'time'
@@ -3956,10 +4088,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     ? 'border-purple-500/70'
                     : freeKickStep === 'kicker' && pendingFreeKickTeam === 'for' && pendingFreeKickResultToRegister
                       ? 'border-violet-500/70'
-                      : penaltyStep === 'kicker' && pendingPenaltyTeam === 'for'
+                    : penaltyStep === 'kicker' && pendingPenaltyTeam === 'for'
                         ? 'border-fuchsia-500/70'
                         : 'border-zinc-800'
-          }`}>
+          } ${getClockTourTargetClass('player-selector-panel')}`}>
             <h3 className={`font-bold uppercase mb-2 text-center shrink-0 ${shouldHighlightPlayerPanel ? 'text-[#00f0ff] text-base' : 'text-white text-sm'}`}>
               {goalStep === 'time'
                 ? 'GOL — tempo'
@@ -5092,7 +5224,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
 
                       {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
-                      <div data-testid="match-clock-panel" className="relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden">
+                      <div
+                        data-testid="match-clock-panel"
+                        data-tour-highlighted={isClockTourTargetHighlighted('match-clock-panel') ? 'true' : undefined}
+                        className={`relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden ${getClockTourTargetClass('match-clock-panel')}`}
+                      >
                         {isPostmatch ? (
                           <div className="w-full h-full min-h-[80px] py-2 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
                             <p
@@ -5150,6 +5286,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   type="button"
                                   onClick={clockPrimaryAction.onClick}
                                   disabled={clockPrimaryAction.disabled}
+                                  data-tour-highlighted={isClockTourTargetHighlighted('clock-primary') ? 'true' : undefined}
                                   data-testid={
                                     clockSnapshot.state === 'PRE_JOGO'
                                       ? 'clock-start'
@@ -5159,7 +5296,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                           ? 'clock-start-second-half'
                                           : 'clock-pause'
                                   }
-                                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border-2 font-black uppercase text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'}`}
+                                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border-2 font-black uppercase text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'} ${getClockTourTargetClass('clock-primary')}`}
                                 >
                                   {clockPrimaryAction.label}
                                 </button>
@@ -5173,11 +5310,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 onClick={openClockSyncModal}
                                 disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
                                 data-testid="clock-sync"
+                                data-tour-highlighted={isClockTourTargetHighlighted('clock-sync') ? 'true' : undefined}
                                 className={`w-full px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
                                   clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
                                     ? 'border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed'
                                     : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
-                                }`}
+                                } ${getClockTourTargetClass('clock-sync')}`}
                               >
                                 Sincronizar cronômetro
                               </button>
@@ -5244,6 +5382,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             <button
                               onClick={() => handleSelectAction('pass')}
                               data-testid="event-selector-pass"
+                              data-tour-highlighted={isClockTourTargetHighlighted('event-selector-pass') ? 'true' : undefined}
                               disabled={shouldDisableRealtimeEventButtons}
                               className={`flex-1 min-h-0 w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors ${
                                 shouldDisableRealtimeEventButtons
@@ -5253,7 +5392,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   : selectedAction === 'pass'
                                   ? 'bg-zinc-100 border-white text-black'
                                   : 'bg-zinc-900 border-zinc-700/50 text-zinc-500 hover:bg-zinc-800 hover:border-white hover:text-white'
-                              }`}
+                              } ${getClockTourTargetClass('event-selector-pass')}`}
                             >
                               PASSE
                             </button>
@@ -5893,7 +6032,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         {!isPostmatch && (
           <ClockHelpPanel
             isOpen={showClockHelpPanel}
-            onClose={() => setShowClockHelpPanel(false)}
+            step={activeClockTourStep}
+            currentIndex={activeClockTourIndex >= 0 ? activeClockTourIndex : 0}
+            totalSteps={clockTourSteps.length}
+            canGoBack={activeClockTourIndex > 0}
+            canGoNext={activeClockTourIndex >= 0 && activeClockTourIndex < clockTourSteps.length - 1}
+            hasCompleted={hasCompletedClockTour}
+            onBack={goToPreviousClockTourStep}
+            onNext={goToNextClockTourStep}
+            onClose={closeClockProductTour}
+            onComplete={completeClockProductTour}
+            onOpenReference={openFullClockGuide}
           />
         )}
 
