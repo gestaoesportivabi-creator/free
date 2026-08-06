@@ -8,6 +8,7 @@ import { EmailAuthPurpose } from '@prisma/client';
 import prisma from '../config/database';
 import { consumeEmailAuthToken } from '../services/email/authToken.service';
 import {
+  resendVerificationEmail,
   sendMagicLinkEmail,
   sendPasswordResetEmail,
 } from '../services/email/email.service';
@@ -151,6 +152,43 @@ export const authEmailController = {
     } catch (error) {
       console.error('[auth/verify-email]', error);
       return res.status(500).json({ success: false, error: 'Erro ao confirmar e-mail' });
+    }
+  },
+
+  /**
+   * POST /api/auth/resend-verification — autenticado.
+   * Serve o banner "confirme seu e-mail" do dashboard. Ao contrário do
+   * forgot-password, aqui o utilizador já provou identidade com o JWT.
+   */
+  resendVerification: async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Usuário não autenticado' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, emailVerifiedAt: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'Usuário não encontrado' });
+      }
+
+      if (user.emailVerifiedAt) {
+        return res.json({ success: true, message: 'Seu e-mail já está confirmado.', alreadyVerified: true });
+      }
+
+      await resendVerificationEmail({ userId: user.id, email: user.email, name: user.name });
+
+      return res.json({
+        success: true,
+        message: 'Enviámos um novo link de confirmação para o seu e-mail.',
+      });
+    } catch (error) {
+      console.error('[auth/resend-verification]', error);
+      return res.status(500).json({ success: false, error: 'Erro ao reenviar confirmação' });
     }
   },
 };

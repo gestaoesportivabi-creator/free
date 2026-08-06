@@ -54,6 +54,8 @@ model User {
   @@index([telegramCoachChatId])
   coachAssistantAudits CoachAssistantAudit[]
   emailAuthTokens      EmailAuthToken[]
+  subscription         Subscription?
+  trialEmailLogs       TrialEmailLog[]
   @@map("users")
 }
 
@@ -78,6 +80,62 @@ model EmailAuthToken {
   @@index([userId, purpose])
   @@index([tokenHash])
   @@map("email_auth_tokens")
+}
+
+/// Estado comercial da conta. Fonte de verdade para features e para o teste de 30 dias.
+/// `trialing` é o estado inicial de toda conta criada por auto-cadastro.
+/// Os campos `provider*` ficam nulos até a integração de pagamento — ver docs/PLANO_MESTRE_TRIAL_30D.md.
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  expired
+
+  @@map("scout_subscription_status")
+}
+
+/// Assinatura 1:1 com User. Separa o plano comercial de `Role`, que no Scout também
+/// determina o tipo de tenant (ESSENCIAL→Tecnico, COMPETICAO→Clube) e não pode ser reaproveitada.
+model Subscription {
+  id     String @id @default(uuid())
+  userId String @unique @map("user_id")
+
+  /// ESSENCIAL | COMPETICAO | PERFORMANCE — plano concedido, não o Role do utilizador.
+  plan   String             @db.VarChar(30)
+  status SubscriptionStatus @default(trialing)
+
+  trialStartedAt   DateTime? @map("trial_started_at") @db.Timestamptz(6)
+  trialEndsAt      DateTime? @map("trial_ends_at") @db.Timestamptz(6)
+  currentPeriodEnd DateTime? @map("current_period_end") @db.Timestamptz(6)
+  canceledAt       DateTime? @map("canceled_at") @db.Timestamptz(6)
+
+  /// Ganchos de pagamento — preenchidos apenas quando o billing entrar.
+  provider               String? @db.VarChar(30)
+  providerCustomerId     String? @map("provider_customer_id")
+  providerSubscriptionId String? @map("provider_subscription_id")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, trialEndsAt])
+  @@map("scout_subscriptions")
+}
+
+/// Garante idempotência do cron de ciclo de vida: um e-mail por chave por utilizador.
+model TrialEmailLog {
+  id       String   @id @default(uuid())
+  userId   String   @map("user_id")
+  emailKey String   @map("email_key") @db.VarChar(60)
+  sentAt   DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, emailKey])
+  @@index([sentAt])
+  @@map("scout_trial_email_logs")
 }
 
 model CoachAssistantAudit {
@@ -170,6 +228,8 @@ model Jogador {
   isAtivo             Boolean                    @default(true) @map("is_ativo")
   createdAt           DateTime                   @default(now()) @map("created_at")
   updatedAt           DateTime                   @updatedAt @map("updated_at")
+  /// Atleta de demonstração criado no onboarding. Ver Jogo.isDemo.
+  isDemo              Boolean                    @default(false) @map("is_demo")
   avaliacoesFisicas   AvaliacaoFisica[]
   bem_estar_diario    bem_estar_diario[]
   equipes             EquipesJogadores[]
@@ -222,6 +282,9 @@ model Jogo {
   createdAt           DateTime                   @default(now()) @map("created_at")
   status              String?                    @default("encerrado") @db.VarChar(50)
   collectionPhase     Int                        @default(0) @map("collection_phase") @db.SmallInt
+  /// Dado de demonstração criado no onboarding. Removível em bloco e excluído
+  /// da métrica de ativação — ver docs/PLANO_MESTRE_TRIAL_30D.md (§4.2, §4.4).
+  isDemo              Boolean                    @default(false) @map("is_demo")
   campeonatosJogos    CampeonatosJogos[]
   competicao          Competicao?                @relation(fields: [competicaoId], references: [id])
   equipe              Equipe                     @relation(fields: [equipeId], references: [id])

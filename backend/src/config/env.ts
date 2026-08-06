@@ -64,6 +64,21 @@ export const env = {
   EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO || 'scout21@intersomos.com.br',
   /** Desliga envio real (útil em dev); tokens ainda são gerados */
   EMAIL_DISABLED: process.env.EMAIL_DISABLED === 'true',
+
+  // ── Teste gratuito de 30 dias (docs/PLANO_MESTRE_TRIAL_30D.md) ──
+
+  /** Duração do teste em dias. */
+  TRIAL_DURATION_DAYS: parseInt(process.env.TRIAL_DURATION_DAYS || '30', 10),
+  /** Plano concedido durante o teste — completo, é o que vende o produto. */
+  TRIAL_PLAN: process.env.TRIAL_PLAN || 'PERFORMANCE',
+  /** Dias de tolerância antes de exigir e-mail verificado para escrever. */
+  EMAIL_VERIFICATION_GRACE_DAYS: parseInt(process.env.EMAIL_VERIFICATION_GRACE_DAYS || '7', 10),
+  /** Freio de emergência: desliga o auto-cadastro sem precisar de deploy. */
+  SIGNUP_ENABLED: process.env.SIGNUP_ENABLED !== 'false',
+  /** Tentativas de cadastro por IP por hora. */
+  SIGNUP_RATE_LIMIT_PER_IP_HOUR: parseInt(process.env.SIGNUP_RATE_LIMIT_PER_IP_HOUR || '3', 10),
+  /** Bloqueio de e-mails descartáveis no cadastro. */
+  DISPOSABLE_EMAIL_BLOCKLIST: process.env.DISPOSABLE_EMAIL_BLOCKLIST !== 'false',
 };
 
 // Validações

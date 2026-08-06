@@ -11,6 +11,8 @@ import { renderEmailVerifyEmail } from './templates/email-verify';
 import { renderMagicLinkEmail } from './templates/magic-link';
 import { renderPasswordResetEmail } from './templates/password-reset';
 import { renderWelcomeEmail } from './templates/welcome';
+import { renderTrialWelcomeEmail } from './templates/trial-welcome';
+import { renderTrialLifecycleEmail, type TrialEmailKey } from './templates/trial-lifecycle';
 import type { EmailRecipient, SendEmailResult } from './types';
 
 async function deliverEmail(
@@ -87,6 +89,60 @@ export async function sendEmailVerificationEmail(recipient: EmailRecipient): Pro
     expiresHours: getTokenTtlHours(EmailAuthPurpose.email_verify),
   });
   return deliverEmail('email_verify', recipient.email, subject, html);
+}
+
+/**
+ * Boas-vindas do auto-cadastro: um único e-mail que junta acolhimento,
+ * verificação e a promessa de não-cobrança.
+ *
+ * Substitui o par welcome+verify para quem entra pelo teste gratuito — dois
+ * e-mails ao mesmo tempo diluem a atenção e dobram o risco de spam.
+ */
+export async function sendTrialWelcomeEmail(params: {
+  userId: string;
+  email: string;
+  name: string;
+  trialEndsAt: Date;
+  trialDays: number;
+}): Promise<SendEmailResult | void> {
+  try {
+    const { rawToken } = await createEmailAuthToken(params.userId, EmailAuthPurpose.email_verify);
+    const verifyUrl = buildFrontendAuthUrl('/login/verify-email', rawToken);
+    const { subject, html } = renderTrialWelcomeEmail({
+      recipientName: params.name,
+      verifyUrl,
+      trialEndsAt: params.trialEndsAt,
+      trialDays: params.trialDays,
+    });
+    return await deliverEmail('trial_welcome', params.email, subject, html);
+  } catch (error) {
+    // Nunca derruba o cadastro: a conta já existe e o utilizador já tem sessão.
+    console.error('[email] trial welcome failed:', error);
+  }
+}
+
+/** Reenvio do link de verificação, a pedido do utilizador. */
+export async function resendVerificationEmail(recipient: EmailRecipient): Promise<SendEmailResult | void> {
+  try {
+    return await sendEmailVerificationEmail(recipient);
+  } catch (error) {
+    console.error('[email] resend verification failed:', error);
+  }
+}
+
+/** E-mail do ciclo de vida do teste, disparado pelo cron diário. */
+export async function sendTrialLifecycleEmail(
+  key: TrialEmailKey,
+  recipient: EmailRecipient,
+  context: { daysRemaining: number; trialDays: number; playerCount: number; matchCount: number }
+): Promise<SendEmailResult> {
+  const appUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/dashboard`;
+  const { subject, html } = renderTrialLifecycleEmail(key, {
+    recipientName: recipient.name,
+    appUrl,
+    ...context,
+  });
+  return deliverEmail('trial_lifecycle', recipient.email, subject, html);
 }
 
 /** Boas-vindas + verificação opcional após cadastro */

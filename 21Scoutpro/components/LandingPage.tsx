@@ -6,6 +6,12 @@ import { NewsletterTriggerButton } from './NewsletterPopup';
 interface LandingPageProps {
   onGetStarted: () => void;
   onGoToLogin?: () => void;
+  /**
+   * Leva ao cadastro self-service. Os CTAs de aquisição apontavam todos para o
+   * WhatsApp, o que impunha atendimento humano como gargalo do funil.
+   * Ver docs/PLANO_MESTRE_TRIAL_30D.md (§6).
+   */
+  onGoToSignup?: () => void;
 }
 
 // Hook para animações ao scroll
@@ -146,16 +152,26 @@ const WhatsAppIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLogin }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLogin, onGoToSignup }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [contactError, setContactError] = useState<string>('');
   const [contactSending, setContactSending] = useState(false);
 
-  const WHATSAPP_CADASTRO = 'https://wa.me/5548991486176?text=Olá!%20Gostaria%20de%20criar%20uma%20conta%20no%20SCOUT21.';
-
   const trackWhatsApp = (where: string) => track('cta_whatsapp_click', { where });
+
+  /**
+   * CTA de aquisição. O WhatsApp continua no site como suporte e venda
+   * consultiva — deixou apenas de ser a porta de entrada, que agora é
+   * self-service e mensurável ponta a ponta.
+   */
+  const goToSignup = (where: string) => (event: React.MouseEvent) => {
+    if (!onGoToSignup) return; // sem handler, deixa o href navegar normalmente
+    event.preventDefault();
+    track('cta_signup_click', { where });
+    onGoToSignup();
+  };
   const trackLogin = (where: string) => {
     track('cta_login_click', { where });
     onGoToLogin?.();
@@ -246,14 +262,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
             </div>
             <div className="hidden md:flex items-center gap-4">
               <NewsletterTriggerButton source="nav-desktop" />
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('nav-desktop-cadastrese')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] transition-colors text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
+              <a href="/criar-conta" onClick={goToSignup('nav-desktop')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#00f0ff] transition-colors text-sm font-medium">Teste grátis</a>
               <button onClick={() => trackLogin('nav-desktop')} className="px-4 py-2.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm uppercase tracking-wider rounded-lg transition-all">Login</button>
             </div>
             <div className="flex items-center gap-2 md:hidden">
               <button type="button" onClick={() => setMobileMenuOpen((o) => !o)} className="p-2 text-zinc-400 hover:text-white rounded-lg" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}>
                 {mobileMenuOpen ? <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg> : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>}
               </button>
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('nav-mobile-cadastrese')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#25D366] text-sm font-medium"><WhatsAppIcon className="w-5 h-5" /> Cadastre-se</a>
+              <a href="/criar-conta" onClick={goToSignup('nav-mobile')} className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#00f0ff] text-sm font-medium">Teste grátis</a>
               <button onClick={() => trackLogin('nav-mobile')} className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg">Login</button>
             </div>
           </div>
@@ -282,7 +298,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
               Indicadores, scout e análise de performance para transformar dados em insights poderosos para o dia a dia do clube.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-start items-start sm:items-center pt-2">
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" onClick={() => trackWhatsApp('hero-comecar-agora')} className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
+              <a href="/criar-conta" onClick={goToSignup('hero')} className="group px-6 py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-sm rounded-lg transition-all flex items-center gap-2 shrink-0 shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.5)]">
                 Começar Agora
                 <ArrowRight className="group-hover:translate-x-0.5 transition-transform" size={18} />
               </a>
@@ -553,6 +569,60 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
         </div>
       </section>
 
+      {/*
+        Seção do teste gratuito.
+        Existe para matar a objeção nº 1 de qualquer trial — "vão me cobrar sem avisar".
+        O silêncio sobre as condições gera desconfiança; dizer com todas as letras
+        que não há cartão nem cobrança automática é o que converte.
+      */}
+      <section id="teste-gratis" className="py-24 px-4 sm:px-6 bg-black border-t border-zinc-800">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#00f0ff] mb-3">
+              Comece sem risco
+            </p>
+            <h2 className="landing-headline text-4xl md:text-5xl text-white leading-tight">
+              Como funciona o teste grátis
+            </h2>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
+            {[
+              { icon: '⏱️', title: '30 dias completos', desc: 'Acesso total à plataforma, sem compromisso nenhum.' },
+              { icon: '💳', title: 'Sem cartão', desc: 'Não pedimos cartão de crédito nem Pix. Nenhum dado de pagamento.' },
+              { icon: '🔓', title: 'Produto inteiro', desc: 'Todos os recursos liberados durante o teste, sem versão capada.' },
+              { icon: '💾', title: 'Dados preservados', desc: 'Ao final, tudo o que você registrou continua seu e exportável.' },
+            ].map((item) => (
+              <div key={item.title} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 text-left">
+                <div className="text-2xl mb-3" aria-hidden>{item.icon}</div>
+                <h3 className="text-sm font-bold text-white mb-2">{item.title}</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center space-y-6">
+            <p className="landing-body-medium text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+              Ao final dos 30 dias você decide se continua. <strong className="text-white">Sem cobrança
+              automática, sem renovação surpresa.</strong> Seus dados permanecem acessíveis para
+              consulta e exportação.
+            </p>
+
+            <a
+              href="/criar-conta"
+              onClick={goToSignup('secao-teste-gratis')}
+              className="inline-flex items-center gap-2 px-8 py-4 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-base rounded-xl transition-all shadow-[0_0_28px_rgba(0,240,255,0.3)]"
+            >
+              Começar teste de 30 dias <ArrowRight className="w-5 h-5" />
+            </a>
+
+            <p className="text-xs text-zinc-600">
+              Leva menos de um minuto. Nenhum contato comercial necessário.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section id="contato" className="py-32 px-4 sm:px-6 bg-gradient-to-br from-zinc-900 to-black border-y border-zinc-800">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <h2 className="landing-headline text-5xl md:text-6xl text-white leading-tight">
@@ -580,7 +650,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onGoToLo
                   </li>
                 ))}
               </ul>
-              <a href={WHATSAPP_CADASTRO} target="_blank" rel="noopener noreferrer" className="mt-auto w-full py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-base rounded-xl transition-all shrink-0 text-center block">
+              <a href="/criar-conta" onClick={goToSignup('plano-essencial')} className="mt-auto w-full py-3.5 bg-[#00f0ff] hover:bg-[#00d4e6] text-black font-semibold text-base rounded-xl transition-all shrink-0 text-center block">
                 Cadastrar Grátis
               </a>
             </div>

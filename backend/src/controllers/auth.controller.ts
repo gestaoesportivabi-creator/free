@@ -11,9 +11,19 @@ import prisma from '../config/database';
 import { env } from '../config/env';
 import { UnauthorizedError } from '../utils/errors';
 import { getAthleteEquipeId, normalizeAccessEmail } from '../utils/athleteAccount.helper';
-import { sendAccountCreatedEmails } from '../services/email/email.service';
+import { sendAccountCreatedEmails, sendTrialWelcomeEmail } from '../services/email/email.service';
+import { validateSignup } from '../utils/signup.validation';
+import { captureSignupLead } from '../services/signupLead.service';
+import {
+  computeTrialEnd,
+  getTrialDurationDays,
+  getTrialPlan,
+} from '../utils/subscription.helper';
 
-const ALLOWED_REGISTER_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
+/**
+ * O auto-cadastro público já não aceita role do cliente — é sempre ESSENCIAL/Técnico.
+ * Ver `register` abaixo e docs/PLANO_MESTRE_TRIAL_30D.md (§3.3).
+ */
 /** Planos que podem ser atribuídos pelo admin (não inclui ADMINISTRADOR) */
 const ADMIN_ASSIGNABLE_ROLES = ['ESSENCIAL', 'COMPETICAO', 'PERFORMANCE'];
 
@@ -180,110 +190,127 @@ export const authController = {
   /**
    * POST /api/auth/register
    */
+  /**
+   * POST /api/auth/register — auto-cadastro público com teste de 30 dias.
+   *
+   * Diferenças em relação à versão anterior, todas obrigatórias para uso público:
+   *  - transacional: falha no meio já não deixa User órfão com o e-mail queimado;
+   *  - cria a Equipe (sem ela o dashboard nasce vazio — ver PLANO_MESTRE_TRIAL_30D §1.6);
+   *  - cria a Subscription em trial;
+   *  - `roleName` deixa de ser aceite do cliente (era escalonamento de privilégio).
+   */
   register: async (req: Request, res: Response) => {
     try {
-      const { email, password, name, roleName = 'ESSENCIAL' } = req.body;
-
-      if (!email || !password || !name) {
-        return res.status(400).json({
+      if (process.env.SIGNUP_ENABLED === 'false') {
+        return res.status(503).json({
           success: false,
-          error: 'Email, senha e nome são obrigatórios',
+          error: 'signup_disabled',
+          message: 'O cadastro está temporariamente indisponível. Tente novamente em breve.',
         });
       }
 
-      if (roleName === 'ATLETA' || !ALLOWED_REGISTER_ROLES.includes(roleName)) {
+      const parsed = validateSignup(req.body ?? {});
+      if (!parsed.ok) {
         return res.status(400).json({
           success: false,
-          error: 'Role não permitida para auto-registro',
+          error: parsed.failure.code,
+          field: parsed.failure.field,
+          message: parsed.failure.message,
         });
       }
 
-      // Verificar limite de cadastro
+      const { name, email, password, teamName, phone } = parsed.value;
+
+      // Teto de contas: captura o lead em vez de perder o contacto.
       if (env.MAX_REGISTERED_USERS) {
         const currentCount = await prisma.user.count({ where: { isActive: true } });
         if (currentCount >= env.MAX_REGISTERED_USERS) {
-          return res.status(400).json({
+          void captureSignupLead({ name, email, phone, source: 'signup-waitlist' });
+          console.warn('[register] Teto MAX_REGISTERED_USERS atingido — lead em lista de espera:', email);
+          return res.status(503).json({
             success: false,
-            error: 'Limite máximo de usuários atingido. Contacte o administrador.',
+            error: 'capacity_reached',
+            message:
+              'Estamos com as vagas de teste esgotadas no momento. Guardámos o seu contacto e avisamos assim que abrir.',
           });
         }
       }
 
-      // Verificar se usuário já existe (select mínimo: evita SELECT em colunas ausentes no DB, ex.: last_login_at)
-      const existing = await prisma.user.findUnique({
-        where: { email },
-        select: { id: true },
-      });
-
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
       if (existing) {
-        return res.status(400).json({
+        return res.status(409).json({
           success: false,
-          error: 'Email já cadastrado',
+          error: 'email_taken',
+          field: 'email',
+          message: 'Já existe uma conta com este e-mail. Tente entrar ou recuperar a senha.',
         });
       }
 
-      // Buscar role
-      const role = await prisma.role.findUnique({
-        where: { name: roleName },
-      });
-
+      // Auto-cadastro é sempre técnico. O tipo de tenant não é escolha do cliente.
+      const role = await prisma.role.findUnique({ where: { name: 'ESSENCIAL' } });
       if (!role) {
-        return res.status(400).json({
-          success: false,
-          error: 'Role inválida',
-        });
+        console.error('[register] Role ESSENCIAL ausente. Rode `npm run seed:roles`.');
+        return res.status(500).json({ success: false, error: 'Configuração de planos indisponível' });
       }
 
-      // Hash da senha
       const passwordHash = await bcrypt.hash(password, 10);
+      const now = new Date();
+      const trialEndsAt = computeTrialEnd(now);
 
-      // Criar usuário
-      const user = await prisma.user.create({
-        data: {
-          email,
-          passwordHash,
-          name,
-          roleId: role.id,
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: { select: { name: true } },
-        },
-      });
+      const created = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email,
+            passwordHash,
+            name,
+            roleId: role.id,
+            teamDisplayName: teamName,
+          },
+          select: { id: true, email: true, name: true },
+        });
 
-      // Criar registro específico baseado no role
-      if (roleName === 'ESSENCIAL') {
-        await prisma.tecnico.create({
+        const tecnico = await tx.tecnico.create({
+          data: { userId: user.id, nome: name },
+          select: { id: true },
+        });
+
+        // Sem Equipe o tenantMiddleware devolve equipe_ids vazio e todas as
+        // listas do dashboard voltam vazias. É este create que evita o beco sem saída.
+        const equipe = await tx.equipe.create({
+          data: {
+            nome: teamName,
+            tecnicoId: tecnico.id,
+            temporada: String(now.getFullYear()),
+          },
+          select: { id: true, nome: true },
+        });
+
+        const subscription = await tx.subscription.create({
           data: {
             userId: user.id,
-            nome: user.name,
+            plan: getTrialPlan(),
+            status: 'trialing',
+            trialStartedAt: now,
+            trialEndsAt,
           },
+          select: { plan: true, trialEndsAt: true },
         });
-      } else if (roleName === 'COMPETICAO') {
-        // Se houver dados do clube no body, usar; senão, usar nome do usuário
-        const { razaoSocial, cnpj, cidade, estado } = req.body;
-        await prisma.clube.create({
-          data: {
-            userId: user.id,
-            razaoSocial: razaoSocial || user.name,
-            cnpj: cnpj || '',
-            cidade: cidade || null,
-            estado: estado || null,
-          },
-        });
-      }
 
-      void sendAccountCreatedEmails({
-        userId: user.id,
-        email: user.email,
-        name: user.name,
+        return { user, tecnico, equipe, subscription };
       });
 
-      // Gerar token
+      // Efeitos colaterais fora da transação: nunca devem derrubar o cadastro.
+      void sendTrialWelcomeEmail({
+        userId: created.user.id,
+        email: created.user.email,
+        name: created.user.name,
+        trialEndsAt,
+        trialDays: getTrialDurationDays(),
+      });
+      void captureSignupLead({ name, email, phone, source: 'signup' });
+
       const token = jwt.sign(
-        { userId: user.id, email: user.email },
+        { userId: created.user.id, email: created.user.email },
         env.JWT_SECRET,
         { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions
       );
@@ -293,21 +320,57 @@ export const authController = {
         data: {
           token,
           user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: mapRoleForFrontend(user.role.name),
-            planName: user.role.name,
+            id: created.user.id,
+            email: created.user.email,
+            name: created.user.name,
+            role: mapRoleForFrontend('ESSENCIAL'),
+            // Plano efetivo do teste, não o Role — é isto que o frontend usa para liberar features.
+            planName: created.subscription.plan,
+            teamDisplayName: teamName,
+            equipeId: created.equipe.id,
           },
+          subscription: {
+            plan: created.subscription.plan,
+            status: 'trialing',
+            trialEndsAt,
+            trialDaysRemaining: getTrialDurationDays(),
+          },
+          onboarding: { next: '/bem-vindo' },
         },
       });
     } catch (error: any) {
       console.error('❌ Erro ao criar conta:', error);
+      if (isDatabaseUnavailable(error)) {
+        return res.status(503).json({
+          success: false,
+          error: 'database_unavailable',
+          message: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+        });
+      }
       return res.status(500).json({
         success: false,
-        error: error?.message || 'Erro ao criar conta',
+        error: 'internal',
+        message: 'Não foi possível criar a conta. Tente novamente.',
         details: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
       });
+    }
+  },
+
+  /**
+   * POST /api/auth/check-email — validação de unicidade em tempo real no formulário.
+   * Responde sempre 200 para não virar oráculo de enumeração fora do formulário;
+   * o rate-limit da rota é a defesa real.
+   */
+  checkEmail: async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email ?? '').trim().toLowerCase();
+      if (!email) return res.json({ success: true, available: true });
+
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      return res.json({ success: true, available: !existing });
+    } catch {
+      // Falha de verificação não pode travar o formulário: o register valida de novo.
+      return res.json({ success: true, available: true });
     }
   },
 

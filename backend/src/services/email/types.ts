@@ -7,7 +7,9 @@ export type TransactionalEmailId =
   | 'password_reset'
   | 'magic_link'
   | 'welcome'
-  | 'email_verify';
+  | 'email_verify'
+  | 'trial_welcome'
+  | 'trial_lifecycle';
 
 export interface EmailRecipient {
   userId: string;
@@ -36,6 +38,13 @@ export interface EmailVerifyTemplateProps {
   recipientName: string;
   verifyUrl: string;
   expiresHours: number;
+}
+
+export interface TrialWelcomeTemplateProps {
+  recipientName: string;
+  verifyUrl: string;
+  trialEndsAt: Date;
+  trialDays: number;
 }
 
 export interface SendEmailResult {

@@ -9,6 +9,8 @@
     "start": "node dist/app.js",
     "migrate": "tsx scripts/run-migrations.ts",
     "migrate:create": "tsx scripts/create-migration.ts",
+    "migrate:apply": "tsx scripts/apply-migration.ts",
+    "backfill:subscriptions": "tsx scripts/backfill-subscriptions.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:demo": "tsx scripts/seed-demo-data.ts",
     "seed:chopinzinho": "tsx scripts/seed-chopinzinho-lnf.ts",

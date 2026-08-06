@@ -11,6 +11,10 @@ import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 import { tenantMiddleware } from './middleware/tenant.middleware';
 import { requireStaff } from './middleware/athleteScope.middleware';
+import {
+  requireActiveSubscription,
+  subscriptionContext,
+} from './middleware/subscription.middleware';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -26,6 +30,7 @@ import teamsRoutes from './routes/teams.routes';
 import wellnessRoutes from './routes/wellness.routes';
 import championshipsRoutes from './routes/championships.routes';
 import leadsRoutes from './routes/leads.routes';
+import trialRoutes from './routes/trial.routes';
 import meRoutes from './routes/me.routes';
 import telegramRoutes from './routes/telegram.routes';
 import assistantRoutes from './routes/assistant.routes';
@@ -75,29 +80,45 @@ app.get('/health', (_req, res) => {
 // Rotas públicas (sem autenticação)
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
+// Cron do ciclo de vida do teste — protegido por Bearer CRON_SECRET no próprio router.
+app.use('/api/cron', trialRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/assistant', assistantRoutes);
 
 // Assistente web (dashboard) — JWT + tenant; todos os usuarios logados
 app.use('/api/web-assistant', authMiddleware, tenantMiddleware(), webAssistantRoutes);
 
-// Portal do atleta
-app.use('/api/me', authMiddleware, tenantMiddleware(), meRoutes);
+// Portal do atleta e contexto da conta.
+// Recebe subscriptionContext() mas NÃO requireActiveSubscription(): precisa responder
+// mesmo com o teste expirado, senão o frontend não consegue mostrar a tela de expiração.
+app.use('/api/me', authMiddleware, subscriptionContext(), tenantMiddleware(), meRoutes);
 
-// Rotas protegidas (staff — com autenticação e tenant)
-app.use('/api/teams', authMiddleware, tenantMiddleware(), requireStaff, teamsRoutes);
-app.use('/api/players', authMiddleware, tenantMiddleware(), requireStaff, playersRoutes);
-app.use('/api/matches', authMiddleware, tenantMiddleware(), requireStaff, matchesRoutes);
-app.use('/api/schedules', authMiddleware, tenantMiddleware(), requireStaff, schedulesRoutes);
-app.use('/api/assessments', authMiddleware, tenantMiddleware(), requireStaff, assessmentsRoutes);
-app.use('/api/stat-targets', authMiddleware, tenantMiddleware(), requireStaff, statTargetsRoutes);
-app.use('/api/championship-matches', authMiddleware, tenantMiddleware(), requireStaff, championshipMatchesRoutes);
-app.use('/api/time-controls', authMiddleware, tenantMiddleware(), requireStaff, timeControlsRoutes);
-app.use('/api/wellness', authMiddleware, tenantMiddleware(), requireStaff, wellnessRoutes);
-app.use('/api/championships', authMiddleware, tenantMiddleware(), requireStaff, championshipsRoutes);
+/**
+ * Rotas de dados (staff).
+ * Ordem obrigatória: auth → assinatura → tenant → papel.
+ * A assinatura vem antes do tenant porque o 402 de teste expirado não depende de equipa.
+ */
+const staffGuard = [
+  authMiddleware,
+  subscriptionContext(),
+  requireActiveSubscription(),
+  tenantMiddleware(),
+  requireStaff,
+] as const;
+
+app.use('/api/teams', ...staffGuard, teamsRoutes);
+app.use('/api/players', ...staffGuard, playersRoutes);
+app.use('/api/matches', ...staffGuard, matchesRoutes);
+app.use('/api/schedules', ...staffGuard, schedulesRoutes);
+app.use('/api/assessments', ...staffGuard, assessmentsRoutes);
+app.use('/api/stat-targets', ...staffGuard, statTargetsRoutes);
+app.use('/api/championship-matches', ...staffGuard, championshipMatchesRoutes);
+app.use('/api/time-controls', ...staffGuard, timeControlsRoutes);
+app.use('/api/wellness', ...staffGuard, wellnessRoutes);
+app.use('/api/championships', ...staffGuard, championshipsRoutes);
 
 // Competições são globais (sem tenant, mas com auth) — staff only
-app.use('/api/competitions', authMiddleware, requireStaff, competitionsRoutes);
+app.use('/api/competitions', authMiddleware, subscriptionContext(), requireActiveSubscription(), requireStaff, competitionsRoutes);
 
 // Middleware de tratamento de erros (deve ser o último)
 app.use(errorMiddleware);

@@ -49,3 +49,6 @@ CREDENCIAIS_BANCO.md
 VERCEL_CONFIG.md
 .vercel
 .env.vercel
+
+# Documentos locais com acessos/credenciais — nunca versionar
+docs/*.local.md

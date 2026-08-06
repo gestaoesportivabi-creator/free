@@ -191,6 +191,22 @@ const NewsletterModal: React.FC<NewsletterModalProps> = ({ open, onClose, source
   );
 };
 
+/**
+ * Rotas onde nenhum popup automático deve aparecer: o utilizador já está a
+ * converter e qualquer interrupção só compete com o formulário.
+ */
+const CONVERSION_PATHS = [
+  '/criar-conta', '/cadastro', '/signup', '/registro', '/register',
+  '/bem-vindo', '/login', '/termos', '/termos-de-uso',
+  '/privacidade', '/politica-de-privacidade',
+];
+
+function isConversionPath(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  return CONVERSION_PATHS.includes(path) || path.startsWith('/dashboard');
+}
+
 /** Popup auto-ativado (scroll 55% ou 25s) + gatilho manual via botão "Newsletter" no header. */
 export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'newsletter_popup' }) => {
   const [open, setOpen] = useState(false);
@@ -198,6 +214,9 @@ export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'news
 
   useEffect(() => {
     if (readStoredState()) return;
+    // Nunca sobrepor o cadastro, o onboarding ou as páginas legais: são o funil
+    // de conversão principal, e um segundo CTA por cima só rouba a atenção.
+    if (isConversionPath()) return;
     let done = false;
 
     const openAuto = () => {

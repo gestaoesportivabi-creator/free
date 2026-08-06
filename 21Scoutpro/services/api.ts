@@ -6,7 +6,7 @@
  */
 
 import { getApiUrl, API_RESOURCES } from '../config';
-import { Player, MatchRecord, PhysicalAssessment, WeeklySchedule, StatTargets, Team } from '../types';
+import { Player, MatchRecord, PhysicalAssessment, WeeklySchedule, StatTargets, Team, SubscriptionPlanName } from '../types';
 
 // Tipos de resposta da API
 interface ApiResponse<T> {
@@ -746,6 +746,95 @@ async function meFetch<T>(path: string, options?: RequestInit): Promise<T | null
     throw e;
   }
 }
+
+// ───────── Teste gratuito de 30 dias ─────────
+// Ver docs/PLANO_MESTRE_TRIAL_30D.md
+
+export type TrialStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
+
+export interface SubscriptionSnapshot {
+  plan: SubscriptionPlanName;
+  status: TrialStatus;
+  isTrialing: boolean;
+  trialDaysRemaining: number | null;
+  trialEndsAt: string | null;
+  isExpired: boolean;
+  emailVerificationOverdue: boolean;
+}
+
+export interface OnboardingStep {
+  id: string;
+  label: string;
+  done: boolean;
+  href?: string;
+}
+
+export interface OnboardingSnapshot {
+  steps: OnboardingStep[];
+  completed: number;
+  total: number;
+  isComplete: boolean;
+  /** Ativação real: pelo menos um jogo não-demo registado. */
+  isActivated: boolean;
+  playerCount: number;
+  matchCount: number;
+  hasDemoData: boolean;
+}
+
+export const accountApi = {
+  getSubscription: () => meFetch<SubscriptionSnapshot>('subscription'),
+  getOnboarding: () => meFetch<OnboardingSnapshot>('onboarding'),
+  seedDemoData: () =>
+    meFetch<{ players: number; matches: number }>('demo-data', { method: 'POST' }),
+  clearDemoData: () =>
+    meFetch<{ players: number; matches: number }>('demo-data', { method: 'DELETE' }),
+};
+
+export interface SignupPayload {
+  name: string;
+  email: string;
+  password: string;
+  teamName: string;
+  acceptedTerms: boolean;
+}
+
+export const authApi = {
+  register: async (payload: SignupPayload) => {
+    const response = await fetch(`${getApiUrl()}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { ok: response.ok, body: await response.json() };
+  },
+  checkEmail: async (email: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${getApiUrl()}/auth/check-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json();
+      return result?.available !== false;
+    } catch {
+      // Falha de verificação não trava o formulário — o register revalida.
+      return true;
+    }
+  },
+  resendVerification: async (): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('token') || '';
+      const response = await fetch(`${getApiUrl()}/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      return result?.success === true;
+    } catch {
+      return false;
+    }
+  },
+};
 
 export const meApi = {
   getProfile: () => meFetch<Record<string, unknown>>('profile'),

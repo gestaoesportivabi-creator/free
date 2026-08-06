@@ -3,6 +3,12 @@ import { Sidebar } from './components/Sidebar';
 import { Login } from './components/Login';
 import { AuthEmailAction, AuthEmailActionKind } from './components/AuthEmailAction';
 import { LandingPage } from './components/LandingPage';
+import { SignUp } from './components/SignUp';
+import { WelcomeWizard } from './components/onboarding/WelcomeWizard';
+import { LegalPage } from './components/legal/LegalPage';
+import { TrialBanner } from './components/TrialBanner';
+import { OnboardingChecklist } from './components/OnboardingChecklist';
+import { useSubscription } from './hooks/useSubscription';
 import { GeneralScout } from './components/GeneralScout';
 import { PhysicalScout } from './components/PhysicalScout';
 import { PhysicalAssessmentTab } from './components/PhysicalAssessment'; 
@@ -202,10 +208,29 @@ function isLoginRelatedPath(p: string): boolean {
   );
 }
 
+/** Rotas do teste gratuito — ver docs/PLANO_MESTRE_TRIAL_30D.md */
+const SIGNUP_PATHS = ['/criar-conta', '/cadastro', '/signup'];
+const WELCOME_PATH = '/bem-vindo';
+
+function isSignupPath(p: string): boolean {
+  return SIGNUP_PATHS.includes(p);
+}
+
+function matchLegalPath(p: string): 'terms' | 'privacy' | null {
+  if (p === '/termos' || p === '/termos-de-uso') return 'terms';
+  if (p === '/privacidade' || p === '/politica-de-privacidade') return 'privacy';
+  return null;
+}
+
+type AppRoute = 'landing' | 'login' | 'app' | 'blog' | 'signup' | 'welcome' | 'legal';
+
 /** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
-function getInitialRouteFromPath(): 'landing' | 'login' | 'app' | 'blog' {
+function getInitialRouteFromPath(): AppRoute {
   const p = normalizePathname();
   if (matchBlogPath(p)) return 'blog';
+  if (matchLegalPath(p)) return 'legal';
+  if (isSignupPath(p)) return 'signup';
+  if (p === WELCOME_PATH) return 'welcome';
   if (isLoginRelatedPath(p)) {
     return 'login';
   }
@@ -226,8 +251,11 @@ function blogPathFor(lang: BlogLang, slug?: string | null): string {
 }
 
 export default function App() {
-  // Route state: 'landing' | 'login' | 'app' | 'blog' (blog público /blog e /blog/:slug)
-  const [currentRoute, setCurrentRoute] = useState<'landing' | 'login' | 'app' | 'blog'>(getInitialRouteFromPath);
+  // Route state: landing | login | app | blog | signup | welcome | legal
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>(getInitialRouteFromPath);
+  const [legalDoc, setLegalDoc] = useState<'terms' | 'privacy'>(
+    () => matchLegalPath(normalizePathname()) ?? 'terms'
+  );
   const [blogSlug, setBlogSlug] = useState<string | null>(getInitialBlogSlugFromPath);
   const [blogLang, setBlogLang] = useState<BlogLang>(getInitialBlogLangFromPath);
   
@@ -239,6 +267,20 @@ export default function App() {
   /** Fisiologia: telas reais só Performance / admin */
   const performanceTier = useMemo(() => isPerformanceTierUser(currentUser), [currentUser]);
   const isAthleteUser = currentUser?.role === 'Atleta';
+
+  /**
+   * Estado do teste gratuito. Consultado no servidor porque a expiração é
+   * calculada por data a cada requisição — um JWT emitido há 20 dias não sabe
+   * que o teste já acabou. Ver docs/PLANO_MESTRE_TRIAL_30D.md (§2.2).
+   */
+  const {
+    subscription: trialSubscription,
+    onboarding,
+    refresh: refreshSubscription,
+    clearDemoData,
+    isClearingDemo,
+  } = useSubscription(Boolean(currentUser) && !isAthleteUser);
+
   const [athleteProfile, setAthleteProfile] = useState<Record<string, unknown> | null>(null);
   const [athleteToday, setAthleteToday] = useState<AthleteTodayData | null>(null);
 
@@ -1358,7 +1400,12 @@ export default function App() {
         setCurrentRoute('blog');
         setBlogSlug(initialBlogSlug);
         setBlogLang(initialBlogLang);
-      } else if (p === '/registro' || p === '/register') setCurrentRoute('login');
+      } else if (matchLegalPath(p)) {
+        setLegalDoc(matchLegalPath(p)!);
+        setCurrentRoute('legal');
+      } else if (isSignupPath(p)) setCurrentRoute('signup');
+      else if (p === WELCOME_PATH) setCurrentRoute('welcome');
+      else if (p === '/registro' || p === '/register') setCurrentRoute('signup');
       else if (p === '/login') setCurrentRoute('login');
       else if (p === '/dashboard/assistente') {
         setCurrentRoute('login');
@@ -1481,6 +1528,30 @@ export default function App() {
       trackPageView(blogUrl);
       return;
     }
+    if (currentRoute === 'signup') {
+      window.history.pushState({}, '', '/criar-conta');
+      applyRouteMeta({
+        title: 'Criar conta — Teste grátis de 30 dias | SCOUT 21 PRO',
+        description:
+          'Crie sua conta no SCOUT21 e teste a plataforma completa por 30 dias. Sem cartão de crédito, sem Pix, sem cobrança automática.',
+        path: '/criar-conta',
+        lang: 'pt-BR',
+        image: '/og-cover.jpg',
+      });
+      trackPageView('/criar-conta');
+      return;
+    }
+    if (currentRoute === 'welcome') {
+      window.history.pushState({}, '', WELCOME_PATH);
+      trackPageView(WELCOME_PATH);
+      return;
+    }
+    if (currentRoute === 'legal') {
+      const legalUrl = legalDoc === 'terms' ? '/termos' : '/privacidade';
+      window.history.pushState({}, '', legalUrl);
+      trackPageView(legalUrl);
+      return;
+    }
     if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
       trackPageView('/login');
@@ -1524,7 +1595,25 @@ export default function App() {
         setBlogSlug(null);
         return;
       }
-      if (path === '/login' || path === '/registro' || path === '/register' || path === '/dashboard' || matchAuthEmailPath(path)) {
+      const legal = matchLegalPath(path);
+      if (legal) {
+        setLegalDoc(legal);
+        setCurrentRoute('legal');
+        setBlogSlug(null);
+        return;
+      }
+      if (isSignupPath(path) || path === '/registro' || path === '/register') {
+        setAssistantOpen(false);
+        setCurrentRoute('signup');
+        setBlogSlug(null);
+        return;
+      }
+      if (path === WELCOME_PATH) {
+        setCurrentRoute(currentUser ? 'welcome' : 'login');
+        setBlogSlug(null);
+        return;
+      }
+      if (path === '/login' || path === '/dashboard' || matchAuthEmailPath(path)) {
         setAssistantOpen(false);
         setCurrentRoute('login');
         setBlogSlug(null);
@@ -1608,12 +1697,61 @@ export default function App() {
     );
   }
 
+  // Páginas legais — públicas, acessíveis sem sessão (exigência do aceite no cadastro)
+  if (currentRoute === 'legal') {
+    return (
+      <LegalPage
+        document={legalDoc}
+        onBack={() => setCurrentRoute(currentUser ? 'app' : 'landing')}
+      />
+    );
+  }
+
+  // Cadastro público — porta de entrada do teste de 30 dias
+  if (currentRoute === 'signup') {
+    return (
+      <SignUp
+        onSignedUp={(user) => {
+          setCurrentUser(user);
+          // Vai direto ao wizard: o dashboard vazio é o que mata a ativação.
+          setCurrentRoute('welcome');
+        }}
+        onGoToLogin={() => setCurrentRoute('login')}
+        onBackToHome={() => setCurrentRoute('landing')}
+      />
+    );
+  }
+
+  // Wizard de primeiro acesso
+  if (currentRoute === 'welcome') {
+    if (!currentUser) {
+      setCurrentRoute('login');
+      return null;
+    }
+    return (
+      <WelcomeWizard
+        user={currentUser}
+        onSkip={() => {
+          setActiveTab('dashboard');
+          setCurrentRoute('app');
+        }}
+        onFinish={(destination) => {
+          // A carga de dados é disparada pelo efeito que observa currentUser +
+          // activeTab; basta escolher a aba de destino e trocar de rota.
+          setActiveTab(destination === 'dashboard' ? 'dashboard' : 'table');
+          setCurrentRoute('app');
+        }}
+      />
+    );
+  }
+
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return (
       <LandingPage
-        onGetStarted={() => setCurrentRoute('login')}
+        onGetStarted={() => setCurrentRoute('signup')}
         onGoToLogin={() => setCurrentRoute('login')}
+        onGoToSignup={() => setCurrentRoute('signup')}
       />
     );
   }
@@ -1638,6 +1776,7 @@ export default function App() {
       <Login
         onLogin={handleLoginWithRoute}
         onBackToHome={() => setCurrentRoute('landing')}
+        onSwitchToRegister={() => setCurrentRoute('signup')}
       />
     );
   }
@@ -2174,7 +2313,26 @@ export default function App() {
             </a>
           </header>
         )}
+        {/* Estado do teste gratuito — só para staff; atletas herdam o acesso do técnico. */}
+        {!isAthleteUser && trialSubscription && (
+          <TrialBanner
+            subscription={trialSubscription}
+            emailVerified={!trialSubscription.emailVerificationOverdue || Boolean(onboarding?.steps.find((s) => s.id === 'email')?.done)}
+            onRefresh={refreshSubscription}
+          />
+        )}
         <div className="flex-1 p-4 sm:p-6 min-w-0 print:p-0 overflow-x-hidden">
+        {!isAthleteUser && activeTab === 'dashboard' && onboarding && !isLoading && (
+          <OnboardingChecklist
+            onboarding={onboarding}
+            onNavigate={(stepId) => {
+              if (stepId === 'roster') handleTabChange('players');
+              else if (stepId === 'match') handleTabChange('table');
+            }}
+            onClearDemo={clearDemoData}
+            isClearingDemo={isClearingDemo}
+          />
+        )}
         {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}
         </div>
       </main>
