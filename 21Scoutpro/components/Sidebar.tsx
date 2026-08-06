@@ -130,6 +130,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
     ],
   };
 
+  const guideItem: MenuItem = {
+    id: 'guide',
+    label: 'Guia de Uso',
+    icon: BookOpen,
+    restricted: false,
+  };
+
   const visibleCategories = isAthlete
     ? [athleteCategory]
     : categories
@@ -140,8 +147,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         .filter((cat) => cat.items.length > 0);
 
   const visibleStandaloneItems = isAthlete
-    ? athleteStandalone
-    : standaloneItems.filter((item) => !item.restricted);
+    ? [...athleteStandalone, guideItem]
+    : [...standaloneItems.filter((item) => !item.restricted), guideItem];
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -241,6 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                   key={item.id}
                   onClick={() => { setActiveTab(item.id); onNavigate?.(); }}
                   title={retracted ? item.label : undefined}
+                  data-testid={item.id === 'guide' ? 'nav-guide' : undefined}
                   className={`w-full flex items-center rounded-xl transition-all duration-200 group overflow-hidden ${
                     retracted ? 'justify-center p-2.5' : 'space-x-3 px-4 py-3'
                   } ${

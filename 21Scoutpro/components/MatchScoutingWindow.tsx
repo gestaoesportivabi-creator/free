@@ -22,6 +22,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
+import { ClockHelpPanel } from './guide/ClockHelpPanel';
 
 /** Converte MM:SS ou dígitos (ex.: "0125") para segundos. */
 function parseManualTimeToSeconds(input: string): number | null {
@@ -568,6 +569,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   
   const [showPenaltyTeamSelection, setShowPenaltyTeamSelection] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setShowClockHelpPanel(false);
+    }
+  }, [isOpen]);
+
   // Novo fluxo: Ação → Detalhes (popup) → Jogador (lista lateral) → Tempo (popup se necessário)
   type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
   const [actionFlow, setActionFlow] = useState<{
@@ -630,6 +637,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const isMatchEnded = clockSnapshot.state === 'ENCERRADO';
   const [showClockSyncModal, setShowClockSyncModal] = useState(false);
   const [showEndMatchModal, setShowEndMatchModal] = useState(false);
+  const [showClockHelpPanel, setShowClockHelpPanel] = useState(false);
   const [isEndingMatch, setIsEndingMatch] = useState(false);
   const [syncMinuteInput, setSyncMinuteInput] = useState<string>('0');
   const [syncSecondInput, setSyncSecondInput] = useState<string>('00');
@@ -3561,14 +3569,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
             {/* Log no extremo esquerdo, Finalizar Coleta no extremo direito */}
             <div className="flex items-center justify-between w-full">
-              <button
-                type="button"
-                onClick={() => setShowLogsView(true)}
-                data-testid="logs-open"
-                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] font-semibold transition-colors"
-              >
-                <List size={14} /> Eventos da partida
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLogsView(true)}
+                  data-testid="logs-open"
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#00f0ff]/40 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-[10px] font-semibold transition-colors"
+                >
+                  <List size={14} /> Eventos da partida
+                </button>
+                {!isPostmatch && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClockHelpPanel(true)}
+                    data-testid="clock-help-open"
+                    className="min-h-[36px] rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-200 transition-colors hover:bg-zinc-800"
+                  >
+                    Como usar o cronometro
+                  </button>
+                )}
+              </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2">
                   <button
@@ -5868,6 +5888,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {!isPostmatch && (
+          <ClockHelpPanel
+            isOpen={showClockHelpPanel}
+            onClose={() => setShowClockHelpPanel(false)}
+          />
         )}
 
         {showEndMatchModal && !isPostmatch && (
