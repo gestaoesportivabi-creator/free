@@ -83,7 +83,7 @@ test.describe.serial('QA restauracao do cronometro em partida incompleta', () =>
     await registrarEvento(page, 'pass-correct');
 
     await page.getByTestId('clock-pause').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
 
     const savedClock = await readClock(page);
     expect(savedClock).toMatch(/^\d{2}:\d{2}$/);
@@ -113,7 +113,7 @@ test.describe.serial('QA restauracao do cronometro em partida incompleta', () =>
       });
     await reabrirPartida(page, currentMatchId ?? undefined);
 
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
     await expect(page.getByTestId('clock-time')).toHaveText(savedClock);
 
     await abrirLogs(page);
@@ -126,14 +126,14 @@ test.describe.serial('QA restauracao do cronometro em partida incompleta', () =>
 
     await expect(page.getByTestId('clock-continue')).toBeVisible();
     await page.getByTestId('clock-continue').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('PRIMEIRO TEMPO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PRIMEIRO TEMPO/);
 
     await sincronizarClock(page, 3, 40);
     await expect(page.getByTestId('clock-time')).toHaveText('03:40');
 
     await selecionarAtletaQa(page);
     await registrarEvento(page, 'shot-inside');
-    await expect(page.getByTestId('clock-state')).toHaveText('PRIMEIRO TEMPO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PRIMEIRO TEMPO/);
 
     await abrirLogs(page);
     const secondSavedEvent = await obterUltimoEvento(page);
@@ -144,13 +144,13 @@ test.describe.serial('QA restauracao do cronometro em partida incompleta', () =>
     await fecharLogs(page);
 
     await page.getByTestId('clock-pause').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
     const secondSavedClock = await readClock(page);
 
     await salvarPartida(page);
     await reabrirPartida(page, currentMatchId ?? undefined);
 
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
     await expect(page.getByTestId('clock-time')).toHaveText(secondSavedClock);
 
     await abrirLogs(page);

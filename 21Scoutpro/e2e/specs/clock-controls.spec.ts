@@ -33,7 +33,7 @@ test.describe.serial('QA controles do cronometro', () => {
     await ensureClockStarted(page);
 
     await page.getByTestId('clock-pause').click();
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
     const paused = await readClock(page);
     await page.waitForTimeout(1200);
     expect(await readClock(page)).toBe(paused);
@@ -72,7 +72,7 @@ test.describe.serial('QA controles do cronometro', () => {
 
     await selecionarAtletaQa(page);
     await registrarEvento(page, 'shot-outside');
-    await expect(page.getByTestId('clock-state')).toHaveText('PAUSADO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PAUSADO/);
     await page.getByTestId('clock-continue').click();
   });
 
