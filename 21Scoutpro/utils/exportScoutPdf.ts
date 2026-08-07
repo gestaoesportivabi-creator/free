@@ -21,7 +21,7 @@ const BRAND_NAME = 'SCOUT21';
 const HEADER_PHRASE_PART1 = 'SCOUT21';
 const HEADER_PHRASE_PART2 = ' — Gestão esportiva baseada em dados para decisões vencedoras.';
 const WHATSAPP = '(48) 99148-6176';
-const SITE = 'https://gestaoesportiva-free.vercel.app';
+const SITE = 'https://scout21.com.br';
 
 // Ícone WhatsApp - converte SVG para PNG via canvas (jsPDF não suporta SVG em addImage)
 function loadWhatsAppIconPng(): Promise<string | null> {

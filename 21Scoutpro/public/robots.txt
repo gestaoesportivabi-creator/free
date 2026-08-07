@@ -4,4 +4,4 @@ Disallow: /dashboard
 Disallow: /login
 Disallow: /registro
 
-Sitemap: https://scout21.vercel.app/sitemap.xml
+Sitemap: https://scout21.com.br/sitemap.xml

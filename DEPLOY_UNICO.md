@@ -55,8 +55,8 @@ NODE_ENV=production
 
 ### Opcionais:
 ```
-CORS_ORIGIN=https://scout21.vercel.app
-FRONTEND_URL=https://scout21.vercel.app
+CORS_ORIGIN=https://scout21.com.br
+FRONTEND_URL=https://scout21.com.br
 ```
 
 **⚠️ IMPORTANTE:** Sem `DIRECT_URL`, o Prisma falha no build. O schema exige essa variável.
@@ -76,9 +76,9 @@ vercel --prod
 
 ## ✅ Verificar se Funcionou
 
-1. **Frontend:** `https://scout21.vercel.app`
-2. **Backend Health:** `https://scout21.vercel.app/api/health`
-3. **Backend Auth:** `https://scout21.vercel.app/api/auth/register`
+1. **Frontend:** `https://scout21.com.br`
+2. **Backend Health:** `https://scout21.com.br/api/health`
+3. **Backend Auth:** `https://scout21.com.br/api/auth/register`
 
 ## 🔍 Troubleshooting
 

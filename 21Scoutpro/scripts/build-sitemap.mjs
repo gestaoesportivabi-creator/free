@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const ORIGIN = 'https://scout21.vercel.app';
+const ORIGIN = 'https://scout21.com.br';
 
 /** Extrai { slug, date, translations } de um arquivo posts.XX.ts simples. */
 function parsePosts(filePath) {

@@ -1,9 +1,9 @@
 {
-  "$comment": "Coloque este conteúdo como `vercel.json` no repositório legado (gestaoesportiva-free) para consolidar autoridade de SEO em scout21.vercel.app. Alternativamente, configure 'Redirect' direto no painel de Domains do projeto legado — ver doc/SCOUT21_SEO_RUNBOOK.md §6.",
+  "$comment": "Redirect 301 do host legado para o domínio canônico scout21.com.br. Preferir configurar no painel Domains do Vercel.",
   "redirects": [
     {
       "source": "/(.*)",
-      "destination": "https://scout21.vercel.app/$1",
+      "destination": "https://scout21.com.br/$1",
       "permanent": true
     }
   ]
