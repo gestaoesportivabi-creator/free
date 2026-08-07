@@ -1,11 +1,13 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, Suspense } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Login } from './components/Login';
 import { AuthEmailAction, AuthEmailActionKind } from './components/AuthEmailAction';
-import { LandingPage } from './components/LandingPage';
 import { SignUp } from './components/SignUp';
 import { WelcomeWizard } from './components/onboarding/WelcomeWizard';
 import { LegalPage } from './components/legal/LegalPage';
+const LandingPage = React.lazy(() =>
+  import('./components/LandingPage').then((m) => ({ default: m.LandingPage }))
+);
 import { TrialBanner } from './components/TrialBanner';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
 import { useSubscription } from './hooks/useSubscription';
@@ -1748,11 +1750,19 @@ export default function App() {
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return (
-      <LandingPage
-        onGetStarted={() => setCurrentRoute('signup')}
-        onGoToLogin={() => setCurrentRoute('login')}
-        onGoToSignup={() => setCurrentRoute('signup')}
-      />
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">
+            Carregando…
+          </div>
+        }
+      >
+        <LandingPage
+          onGetStarted={() => setCurrentRoute('signup')}
+          onGoToLogin={() => setCurrentRoute('login')}
+          onGoToSignup={() => setCurrentRoute('signup')}
+        />
+      </Suspense>
     );
   }
 
