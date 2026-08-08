@@ -176,3 +176,31 @@ export function isEmailVerificationOverdue(
   const deadline = startedAt.getTime() + getEmailVerificationGraceDays() * DAY_MS;
   return now.getTime() > deadline;
 }
+
+/**
+ * Plano efetivo a devolver ao frontend na sessão (login, profile, magic-link).
+ *
+ * Sem isto, um utilizador em teste recebe o nome do Role (ESSENCIAL) e o React
+ * aplica os cadeados do plano gratuito — quebrando a promessa de "produto
+ * completo durante o teste" logo no segundo login.
+ *
+ * Devolve `undefined` para atletas: eles não têm plano próprio, herdam o acesso
+ * do técnico, e o frontend trata `planName` ausente como sem restrição de UI.
+ */
+export async function resolveSessionPlanName(
+  prismaClient: { subscription: { findUnique: (args: { where: { userId: string } }) => Promise<Subscription | null> } },
+  userId: string,
+  roleName: string,
+  isAthlete: boolean
+): Promise<string | undefined> {
+  if (isAthlete) return undefined;
+  if (roleName === 'ADMINISTRADOR') return roleName;
+
+  try {
+    const subscription = await prismaClient.subscription.findUnique({ where: { userId } });
+    return resolveEffectiveAccess({ roleName }, subscription).plan;
+  } catch {
+    // Falha a consultar a assinatura não pode impedir o login.
+    return roleName;
+  }
+}

@@ -18,6 +18,7 @@ import {
   computeTrialEnd,
   getTrialDurationDays,
   getTrialPlan,
+  resolveSessionPlanName,
 } from '../utils/subscription.helper';
 
 /**
@@ -148,7 +149,7 @@ export const authController = {
             email: user.email,
             name: user.name,
             role: mapRoleForFrontend(roleName),
-            planName: isAthlete ? undefined : roleName,
+            planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
             isPlatformAdmin: roleName === 'ADMINISTRADOR',
             ...(isAthlete && user.jogadorId
               ? {
@@ -574,7 +575,7 @@ export const authController = {
         name: user.name,
         email: user.email,
         role: mapRoleForFrontend(roleName),
-        planName: isAthlete ? undefined : roleName,
+        planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
         isPlatformAdmin: roleName === 'ADMINISTRADOR',
         photoUrl: user.photoUrl ?? undefined,
         ...(isAthlete && user.jogadorId

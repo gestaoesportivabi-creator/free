@@ -10,6 +10,8 @@
  * (ver docs/PLANO_MESTRE_TRIAL_30D.md §4.4) e permite remoção em bloco.
  */
 
+import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 
 const DEMO_ROSTER = [
@@ -74,123 +76,120 @@ export async function seedDemoData(equipeId: string): Promise<DemoSeedResult> {
   const rand = makeRandom(equipeId);
   const today = new Date();
 
-  return prisma.$transaction(async (tx) => {
-    // 1. Elenco
-    const jogadorIds: string[] = [];
-    for (const entry of DEMO_ROSTER) {
-      const jogador = await tx.jogador.create({
-        data: {
-          nome: entry.nome,
-          apelido: entry.apelido,
-          numeroCamisa: entry.numero,
-          funcaoEmQuadra: entry.funcao,
-          idade: intBetween(rand, 18, 33),
-          peDominante: rand() > 0.75 ? 'Esquerdo' : 'Direito',
-          isAtivo: true,
-          isDemo: true,
-        },
-        select: { id: true },
-      });
+  /**
+   * Sem transação interativa de propósito.
+   *
+   * O Supabase é acedido por pgbouncer em modo transação: cada query pode sair
+   * numa conexão diferente, então uma `$transaction(async tx => ...)` com ~90
+   * escritas sequenciais estoura com P2028 ("Transaction not found"). Usamos
+   * `createMany` em lote, que é uma única instrução por tabela e ainda por cima
+   * muito mais rápido. Se algo falhar no meio, `clearDemoData` limpa pelo flag.
+   */
+  const jogadorIds = DEMO_ROSTER.map(() => randomUUID());
 
-      await tx.equipesJogadores.create({
-        data: {
-          equipeId,
-          jogadorId: jogador.id,
-          dataInicio: new Date(today.getFullYear(), 0, 1),
-        },
-      });
+  await prisma.jogador.createMany({
+    data: DEMO_ROSTER.map((entry, index) => ({
+      id: jogadorIds[index],
+      nome: entry.nome,
+      apelido: entry.apelido,
+      numeroCamisa: entry.numero,
+      funcaoEmQuadra: entry.funcao,
+      idade: intBetween(rand, 18, 33),
+      peDominante: rand() > 0.75 ? 'Esquerdo' : 'Direito',
+      isAtivo: true,
+      isDemo: true,
+    })),
+  });
 
-      jogadorIds.push(jogador.id);
-    }
+  await prisma.equipesJogadores.createMany({
+    data: jogadorIds.map((jogadorId) => ({
+      equipeId,
+      jogadorId,
+      dataInicio: new Date(today.getFullYear(), 0, 1),
+    })),
+  });
 
-    // 2. Jogos, um a cada 7 dias para trás — dá série temporal aos gráficos.
-    let matches = 0;
-    for (let i = 0; i < DEMO_OPPONENTS.length; i += 1) {
-      const data = new Date(today.getTime() - (i + 1) * 7 * 86_400_000);
-      const golsPro = intBetween(rand, 0, 6);
-      const golsContra = intBetween(rand, 0, 5);
-      const resultado = golsPro > golsContra ? 'V' : golsPro < golsContra ? 'D' : 'E';
+  const jogos: Prisma.JogoCreateManyInput[] = [];
+  const statsEquipe: Prisma.JogosEstatisticasEquipeCreateManyInput[] = [];
+  const statsJogador: Prisma.JogosEstatisticasJogadorCreateManyInput[] = [];
+  const linha = jogadorIds.slice(1, 11);
 
-      const chutesNoGol = golsPro + intBetween(rand, 3, 9);
-      const chutesFora = intBetween(rand, 4, 12);
-      const passesCorretos = intBetween(rand, 180, 340);
-      const passesErrados = intBetween(rand, 30, 80);
+  for (let i = 0; i < DEMO_OPPONENTS.length; i += 1) {
+    const jogoId = randomUUID();
+    const data = new Date(today.getTime() - (i + 1) * 7 * 86_400_000);
+    const golsPro = intBetween(rand, 0, 6);
+    const golsContra = intBetween(rand, 0, 5);
+    const resultado = golsPro > golsContra ? 'V' : golsPro < golsContra ? 'D' : 'E';
 
-      const jogo = await tx.jogo.create({
-        data: {
-          equipeId,
-          adversario: DEMO_OPPONENTS[i],
-          data,
-          campeonato: 'Campeonato de Demonstração',
-          local: i % 2 === 0 ? 'Casa' : 'Fora',
-          resultado,
-          golsPro,
-          golsContra,
-          status: 'encerrado',
-          collectionPhase: 2,
-          isDemo: true,
-        },
-        select: { id: true },
-      });
+    jogos.push({
+      id: jogoId,
+      equipeId,
+      adversario: DEMO_OPPONENTS[i],
+      data,
+      campeonato: 'Campeonato de Demonstração',
+      local: i % 2 === 0 ? 'Casa' : 'Fora',
+      resultado,
+      golsPro,
+      golsContra,
+      status: 'encerrado',
+      collectionPhase: 2,
+      isDemo: true,
+    });
 
-      await tx.jogosEstatisticasEquipe.create({
-        data: {
-          jogoId: jogo.id,
-          minutosJogados: 40,
-          gols: golsPro,
-          golsSofridos: golsContra,
-          assistencias: Math.max(0, golsPro - intBetween(rand, 0, 1)),
-          passesCorretos,
-          passesErrados,
-          passesErradosTransicao: intBetween(rand, 2, 12),
-          desarmesComBola: intBetween(rand, 5, 18),
-          desarmesSemBola: intBetween(rand, 4, 15),
-          desarmesContraAtaque: intBetween(rand, 1, 6),
-          chutesNoGol,
-          chutesFora,
-          cartoesAmarelos: intBetween(rand, 0, 3),
-          cartoesVermelhos: rand() > 0.9 ? 1 : 0,
-          golsMarcadosJogoAberto: Math.max(0, golsPro - intBetween(rand, 0, 2)),
-          golsMarcadosBolaParada: Math.min(golsPro, intBetween(rand, 0, 2)),
-          golsSofridosJogoAberto: Math.max(0, golsContra - intBetween(rand, 0, 2)),
-          golsSofridosBolaParada: Math.min(golsContra, intBetween(rand, 0, 2)),
-        },
-      });
+    statsEquipe.push({
+      jogoId,
+      minutosJogados: 40,
+      gols: golsPro,
+      golsSofridos: golsContra,
+      assistencias: Math.max(0, golsPro - intBetween(rand, 0, 1)),
+      passesCorretos: intBetween(rand, 180, 340),
+      passesErrados: intBetween(rand, 30, 80),
+      passesErradosTransicao: intBetween(rand, 2, 12),
+      desarmesComBola: intBetween(rand, 5, 18),
+      desarmesSemBola: intBetween(rand, 4, 15),
+      desarmesContraAtaque: intBetween(rand, 1, 6),
+      chutesNoGol: golsPro + intBetween(rand, 3, 9),
+      chutesFora: intBetween(rand, 4, 12),
+      cartoesAmarelos: intBetween(rand, 0, 3),
+      cartoesVermelhos: rand() > 0.9 ? 1 : 0,
+      golsMarcadosJogoAberto: Math.max(0, golsPro - intBetween(rand, 0, 2)),
+      golsMarcadosBolaParada: Math.min(golsPro, intBetween(rand, 0, 2)),
+      golsSofridosJogoAberto: Math.max(0, golsContra - intBetween(rand, 0, 2)),
+      golsSofridosBolaParada: Math.min(golsContra, intBetween(rand, 0, 2)),
+    });
 
-      // Distribui os gols do jogo entre os atletas de linha, para o ranking fazer sentido.
-      let golsRestantes = golsPro;
-      const linha = jogadorIds.slice(1, 11);
-
-      for (const jogadorId of jogadorIds) {
-        const isLinha = linha.includes(jogadorId);
-        const gols = isLinha && golsRestantes > 0 && rand() > 0.55
+    // Distribui os gols entre os atletas de linha, para o ranking fazer sentido.
+    let golsRestantes = golsPro;
+    for (const jogadorId of jogadorIds) {
+      const isLinha = linha.includes(jogadorId);
+      const gols =
+        isLinha && golsRestantes > 0 && rand() > 0.55
           ? Math.min(golsRestantes, intBetween(rand, 1, 2))
           : 0;
-        golsRestantes -= gols;
+      golsRestantes -= gols;
 
-        await tx.jogosEstatisticasJogador.create({
-          data: {
-            jogoId: jogo.id,
-            jogadorId,
-            minutosJogados: intBetween(rand, 12, 40),
-            gols,
-            assistencias: isLinha && rand() > 0.7 ? 1 : 0,
-            passesCorretos: intBetween(rand, 12, 45),
-            passesErrados: intBetween(rand, 2, 12),
-            desarmesComBola: intBetween(rand, 0, 5),
-            desarmesSemBola: intBetween(rand, 0, 4),
-            chutesNoGol: isLinha ? intBetween(rand, 0, 4) : 0,
-            chutesFora: isLinha ? intBetween(rand, 0, 3) : 0,
-            cartoesAmarelos: rand() > 0.85 ? 1 : 0,
-          },
-        });
-      }
-
-      matches += 1;
+      statsJogador.push({
+        jogoId,
+        jogadorId,
+        minutosJogados: intBetween(rand, 12, 40),
+        gols,
+        assistencias: isLinha && rand() > 0.7 ? 1 : 0,
+        passesCorretos: intBetween(rand, 12, 45),
+        passesErrados: intBetween(rand, 2, 12),
+        desarmesComBola: intBetween(rand, 0, 5),
+        desarmesSemBola: intBetween(rand, 0, 4),
+        chutesNoGol: isLinha ? intBetween(rand, 0, 4) : 0,
+        chutesFora: isLinha ? intBetween(rand, 0, 3) : 0,
+        cartoesAmarelos: rand() > 0.85 ? 1 : 0,
+      });
     }
+  }
 
-    return { players: jogadorIds.length, matches };
-  }, { timeout: 30_000 });
+  await prisma.jogo.createMany({ data: jogos });
+  await prisma.jogosEstatisticasEquipe.createMany({ data: statsEquipe });
+  await prisma.jogosEstatisticasJogador.createMany({ data: statsJogador });
+
+  return { players: jogadorIds.length, matches: jogos.length };
 }
 
 export async function clearDemoData(equipeId: string): Promise<DemoSeedResult> {
@@ -205,23 +204,21 @@ export async function clearDemoData(equipeId: string): Promise<DemoSeedResult> {
   const jogoIds = jogos.map((j) => j.id);
   const jogadorIds = vinculos.map((v) => v.jogadorId);
 
-  await prisma.$transaction(async (tx) => {
-    // Estatísticas e eventos caem por cascade do Jogo, mas apagamos explicitamente
-    // as do jogador para não deixar órfãos ligados a jogos reais.
-    if (jogadorIds.length > 0) {
-      await tx.jogosEstatisticasJogador.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
-      await tx.jogosEventos.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
-      await tx.equipesJogadores.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
-    }
+  // Sequencial e sem transação interativa — ver nota em seedDemoData sobre pgbouncer.
+  // A ordem importa: dependentes primeiro, para não violar chave estrangeira.
+  if (jogadorIds.length > 0) {
+    await prisma.jogosEstatisticasJogador.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
+    await prisma.jogosEventos.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
+    await prisma.equipesJogadores.deleteMany({ where: { jogadorId: { in: jogadorIds } } });
+  }
 
-    if (jogoIds.length > 0) {
-      await tx.jogo.deleteMany({ where: { id: { in: jogoIds } } });
-    }
+  if (jogoIds.length > 0) {
+    await prisma.jogo.deleteMany({ where: { id: { in: jogoIds } } });
+  }
 
-    if (jogadorIds.length > 0) {
-      await tx.jogador.deleteMany({ where: { id: { in: jogadorIds }, isDemo: true } });
-    }
-  }, { timeout: 30_000 });
+  if (jogadorIds.length > 0) {
+    await prisma.jogador.deleteMany({ where: { id: { in: jogadorIds }, isDemo: true } });
+  }
 
   return { players: jogadorIds.length, matches: jogoIds.length };
 }

@@ -2295,10 +2295,10 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 // UI Components
 const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, options: any[]}> = ({value, onChange, options}) => (
     <div className="relative">
-        <select 
-            value={value} 
+        <select
+            value={value}
             onChange={onChange}
-            className="w-full bg-black border border-zinc-800 text-white py-2.5 px-3 rounded-lg focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] outline-none text-xs font-bold appearance-none uppercase"
+            className="w-full bg-black border border-zinc-800 text-white py-2.5 pl-3 pr-9 rounded-lg focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] outline-none text-xs font-bold appearance-none uppercase truncate"
         >
             {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>

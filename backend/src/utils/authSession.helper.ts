@@ -3,6 +3,8 @@ import prisma from '../config/database';
 import { env } from '../config/env';
 import { getAthleteEquipeId } from './athleteAccount.helper';
 
+import { resolveSessionPlanName } from './subscription.helper';
+
 function mapRoleForFrontend(roleName: string): string {
   if (roleName === 'ATLETA') return 'ATLETA';
   const MAP: Record<string, string> = {
@@ -64,7 +66,7 @@ export async function buildAuthSessionForUser(userId: string): Promise<{
       email: user.email,
       name: user.name,
       role: mapRoleForFrontend(roleName),
-      planName: isAthlete ? undefined : roleName,
+      planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
       isPlatformAdmin: roleName === 'ADMINISTRADOR',
       ...(isAthlete && user.jogadorId
         ? {

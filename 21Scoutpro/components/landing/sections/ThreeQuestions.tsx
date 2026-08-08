@@ -25,8 +25,9 @@ const BLOCKS = [
       </>
     ),
     proof: 'Score 62 · Sessão moderada · 3 atletas sinalizados',
-    img: '/scout21pro-dashboard-mockup.jpg',
-    alt: 'Painel SCOUT21 com indicadores de prontidão da equipe',
+    img: '/shots/dashboard.png',
+    alt: 'Painel do SCOUT21 mostrando status operacional do dia, elenco disponível e indicadores da equipe',
+    label: 'scout21.com.br/dashboard',
   },
   {
     id: 'jogo',
@@ -44,8 +45,9 @@ const BLOCKS = [
       </>
     ),
     proof: 'Realtime · Postmatch · FSM de cronômetro',
-    img: '/gestaoespo.png',
-    alt: 'Interface de coleta e gestão SCOUT21',
+    img: '/shots/coleta-ao-vivo.png',
+    alt: 'Coleta ao vivo do SCOUT21: cronômetro rodando, atleta selecionado e botões de gol, falta, escanteio e mais',
+    label: 'scout21.com.br/scout-realtime',
   },
   {
     id: 'risco',
@@ -61,8 +63,9 @@ const BLOCKS = [
       </>
     ),
     proof: 'Alertas interpretativos no painel',
-    img: '/scout21pro-feature-card.jpg',
-    alt: 'Recursos de análise e alerta no SCOUT21',
+    img: '/shots/scout-coletivo.png',
+    alt: 'Scout coletivo do SCOUT21 com totais de jogos, médias de gols e distribuição de estatísticas',
+    label: 'scout21.com.br/dashboard',
   },
 ] as const;
 
@@ -108,7 +111,7 @@ export const ThreeQuestions: React.FC<ThreeQuestionsProps> = ({ goToSignup }) =>
                     {block.proof}
                   </p>
                 </div>
-                <ScreenshotFrame src={block.img} alt={block.alt} />
+                <ScreenshotFrame src={block.img} alt={block.alt} label={block.label} maxAspect="16 / 10" />
               </div>
             );
           })}
