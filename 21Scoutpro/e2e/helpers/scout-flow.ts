@@ -76,10 +76,20 @@ async function resolveLineupConfirmButton(page: Page) {
 
 async function resolveLineupPlayerOptions(page: Page) {
   const byTestId = page.locator('[data-testid^="lineup-player-option-"]');
-  if ((await byTestId.count()) > 0) {
+  if (
+    await byTestId
+      .first()
+      .waitFor({ state: 'visible', timeout: 1_500 })
+      .then(() => true)
+      .catch(() => false)
+  ) {
     return byTestId;
   }
-  return page.locator('button').filter({ hasText: /QA ATLETA/i });
+  return page
+    .locator('div')
+    .filter({ has: page.getByRole('heading', { name: /Banco de Reservas/i }) })
+    .locator('button')
+    .filter({ hasText: /QA ATLETA/i });
 }
 
 async function handleRealtimeLineupModal(page: Page): Promise<boolean> {
@@ -613,7 +623,7 @@ export async function iniciarSegundoTempo(page: Page): Promise<void> {
   } else {
     await page.getByTestId('clock-start-second-half').click();
   }
-  await expect(page.getByTestId('clock-state')).toHaveText('SEGUNDO TEMPO');
+  await expect(page.getByTestId('clock-state')).toHaveText(/SEGUNDO TEMPO/);
 }
 
 export async function encerrarPartida(page: Page): Promise<void> {

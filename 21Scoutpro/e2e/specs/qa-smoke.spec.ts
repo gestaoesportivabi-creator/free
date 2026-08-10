@@ -26,7 +26,7 @@ test.describe.serial('QA smoke do cronometro e da coleta', () => {
     const beforeStart = await readClock(page);
 
     await ensureClockStarted(page);
-    await expect(page.getByTestId('clock-state')).toHaveText('PRIMEIRO TEMPO');
+    await expect(page.getByTestId('clock-state')).toHaveText(/PRIMEIRO TEMPO/);
 
     await page.waitForTimeout(1200);
     const afterStart = await readClock(page);

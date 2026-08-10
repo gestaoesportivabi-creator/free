@@ -36,6 +36,7 @@ import { DashboardTodayBlock } from './components/DashboardTodayBlock';
 import { DashboardSquadAvailability } from './components/DashboardSquadAvailability';
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
+import { FirstMatchOnboarding } from './components/FirstMatchOnboarding';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
@@ -57,6 +58,7 @@ import { applyRouteMeta } from './utils/seo';
 import { track, trackPageView } from './utils/analytics';
 import { clearLegacyWellnessLocalStorage } from './utils/wellnessStaffData';
 import { AssistantChatPage } from './components/assistant/AssistantChatPage';
+import { UsageGuidePage } from './components/guide/UsageGuidePage';
 
 const SLIDES = [
     {
@@ -108,6 +110,7 @@ const TAB_LABELS: Record<string, string> = {
   championship: 'Tabela de Campeonato',
   'management-report': 'Relatório gerencial',
   table: 'Dados do Jogo',
+  guide: 'Guia de Uso',
   general: 'Scout Coletivo',
   individual: 'Scout Individual',
   ranking: 'Ranking',
@@ -134,6 +137,7 @@ const TAB_REQUIRED_RESOURCES: Record<string, string[]> = {
   schedule: ['schedules'],
   championship: ['championshipMatches', 'competitions', 'championships', 'matches'],
   table: ['players', 'competitions', 'matches', 'championshipMatches', 'championships', 'schedules', 'teams'],
+  guide: [],
   general: ['matches', 'players', 'championshipMatches'],
   individual: ['matches', 'players', 'timeControls'],
   ranking: [],
@@ -166,6 +170,22 @@ const INITIAL_LOADED_RESOURCES: Record<string, boolean> = {
 function normalizePathname(): string {
   if (typeof window === 'undefined') return '/';
   return window.location.pathname.replace(/\/$/, '') || '/';
+}
+
+const GUIDE_PATH = '/guia-de-uso';
+
+function isGuidePath(path?: string): boolean {
+  const p = path ?? normalizePathname();
+  return p === GUIDE_PATH;
+}
+
+function buildAppPath(activeTab: string, assistantOpen: boolean, guideSearch: string): string {
+  if (assistantOpen) return '/dashboard/assistente';
+  if (activeTab === 'guide') {
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    return `${GUIDE_PATH}${guideSearch}${hash}`;
+  }
+  return '/dashboard';
 }
 
 /**
@@ -205,6 +225,7 @@ function isLoginRelatedPath(p: string): boolean {
     p === '/registro' ||
     p === '/register' ||
     p === '/dashboard' ||
+    p === GUIDE_PATH ||
     p === '/dashboard/assistente' ||
     matchAuthEmailPath(p) != null
   );
@@ -287,6 +308,10 @@ export default function App() {
   const [athleteToday, setAthleteToday] = useState<AthleteTodayData | null>(null);
 
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [guideSearch, setGuideSearch] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return isGuidePath() ? window.location.search : '';
+  });
   const [assistantOpen, setAssistantOpen] = useState(() => isAssistantPath());
   const [scoutWindowOpen, setScoutWindowOpen] = useState(false); // true quando a janela Scout da Partida está aberta (para esconder a sidebar)
   const [sidebarOpen, setSidebarOpen] = useState(false); // drawer da sidebar em mobile
@@ -943,6 +968,9 @@ export default function App() {
 
   const handleTabChange = (tab: string) => {
       setAssistantOpen(false);
+      if (tab === 'guide') {
+        setGuideSearch(isGuidePath() ? window.location.search : '');
+      }
       setActiveTab(tab);
       const resources = TAB_REQUIRED_RESOURCES[tab] ?? [];
       const missing = resources.filter(r => !loadedResources[r]);
@@ -959,8 +987,9 @@ export default function App() {
 
   const closeAssistant = () => {
     setAssistantOpen(false);
-    window.history.pushState({}, '', '/dashboard');
-    trackPageView('/dashboard');
+    const nextUrl = buildAppPath(activeTab, false, guideSearch);
+    window.history.pushState({}, '', nextUrl);
+    trackPageView(nextUrl);
   };
 
   const handleUpdateUser = async (updatedData: Partial<User>) => {
@@ -1412,6 +1441,8 @@ export default function App() {
       else if (p === '/dashboard/assistente') {
         setCurrentRoute('login');
         setAssistantOpen(true);
+      } else if (p === GUIDE_PATH) {
+        setCurrentRoute('login');
       } else if (p === '/dashboard') setCurrentRoute('login');
       else if (p === '/' || p === '') setCurrentRoute('landing');
     };
@@ -1487,7 +1518,10 @@ export default function App() {
             loadChampionships();
           }
           setCurrentUser(nextUser);
-          if (isAthleteRestore) {
+          if (p === GUIDE_PATH) {
+            setGuideSearch(window.location.search);
+            setActiveTab('guide');
+          } else if (isAthleteRestore) {
             setActiveTab('athlete-home');
           }
           if (u.teamDisplayName != null || u.teamShieldUrl != null) {
@@ -1574,11 +1608,11 @@ export default function App() {
       });
       trackPageView('/');
     } else if (currentRoute === 'app') {
-      const appUrl = assistantOpen ? '/dashboard/assistente' : '/dashboard';
+      const appUrl = buildAppPath(activeTab, assistantOpen, guideSearch);
       window.history.pushState({}, '', appUrl);
       trackPageView(appUrl);
     }
-  }, [currentRoute, isInitializing, blogSlug, blogLang]);
+  }, [currentRoute, isInitializing, blogSlug, blogLang, activeTab, assistantOpen, guideSearch]);
 
   // Voltar/avançar no browser: sincronizar blog com a URL
   useEffect(() => {
@@ -1615,6 +1649,14 @@ export default function App() {
         setBlogSlug(null);
         return;
       }
+      if (path === GUIDE_PATH) {
+        setAssistantOpen(false);
+        setGuideSearch(window.location.search);
+        setActiveTab('guide');
+        setCurrentRoute(currentUser ? 'app' : 'login');
+        setBlogSlug(null);
+        return;
+      }
       if (path === '/login' || path === '/dashboard' || matchAuthEmailPath(path)) {
         setAssistantOpen(false);
         setCurrentRoute('login');
@@ -1638,6 +1680,10 @@ export default function App() {
   // Handle login with route change
   const handleLoginWithRoute = (user: User) => {
     handleLogin(user);
+    if (isGuidePath()) {
+      setGuideSearch(window.location.search);
+      setActiveTab('guide');
+    }
     setCurrentRoute('app');
     if (isAssistantPath()) setAssistantOpen(true);
   };
@@ -1817,6 +1863,14 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (activeTab === 'guide') {
+      return (
+        <TabBackgroundWrapper>
+          <UsageGuidePage onBackToDashboard={() => handleTabChange('dashboard')} />
+        </TabBackgroundWrapper>
+      );
+    }
+
     if (isAthleteUser) {
       switch (activeTab) {
         case 'athlete-home':
@@ -2200,6 +2254,15 @@ export default function App() {
               </section>
 
               {/* 1. Próxima Partida - início da visão geral */}
+              <FirstMatchOnboarding
+                hasTeam={Boolean(overviewTeamSettings.teamName.trim())}
+                playerCount={players.length}
+                matchCount={matches.length}
+                onOpenSettings={() => handleTabChange('settings')}
+                onOpenSquad={() => handleTabChange('team')}
+                onCreateFirstMatch={() => handleTabChange('table')}
+              />
+
               <section className="shrink-0">
                 <DashboardNextGameCard
                   nextMatch={overviewStats.nextMatch}
