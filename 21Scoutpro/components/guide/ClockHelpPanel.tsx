@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { ArrowRight, BookOpen, Check, ChevronLeft, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowRight, BookOpen, Check, ChevronLeft, GripVertical, X } from 'lucide-react';
 import { ClockTourStepDefinition } from '../../content/clockProductTour';
 
 interface ClockHelpPanelProps {
@@ -31,6 +31,16 @@ export const ClockHelpPanel: React.FC<ClockHelpPanelProps> = ({
   onComplete,
   onOpenReference,
 }) => {
+  const panelRef = useRef<HTMLElement>(null);
+  const dragStartRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -44,6 +54,58 @@ export const ClockHelpPanel: React.FC<ClockHelpPanelProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const clampPosition = (left: number, top: number) => {
+    const panelBounds = panelRef.current?.getBoundingClientRect();
+    if (!panelBounds) return { left, top };
+
+    const inset = 12;
+    return {
+      left: Math.min(
+        Math.max(inset, left),
+        Math.max(inset, window.innerWidth - panelBounds.width - inset)
+      ),
+      top: Math.min(
+        Math.max(inset, top),
+        Math.max(inset, window.innerHeight - panelBounds.height - inset)
+      ),
+    };
+  };
+
+  const startDragging = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+
+    const panelBounds = panelRef.current?.getBoundingClientRect();
+    if (!panelBounds) return;
+
+    dragStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      left: panelBounds.left,
+      top: panelBounds.top,
+    };
+    setPosition({ left: panelBounds.left, top: panelBounds.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const dragPanel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const dragStart = dragStartRef.current;
+    if (!dragStart || dragStart.pointerId !== event.pointerId) return;
+
+    setPosition(
+      clampPosition(
+        dragStart.left + event.clientX - dragStart.x,
+        dragStart.top + event.clientY - dragStart.y
+      )
+    );
+  };
+
+  const stopDragging = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragStartRef.current?.pointerId !== event.pointerId) return;
+    dragStartRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   if (!isOpen || !step) return null;
 
   return (
@@ -51,24 +113,39 @@ export const ClockHelpPanel: React.FC<ClockHelpPanelProps> = ({
       className="pointer-events-none fixed inset-0 z-[121] flex items-end justify-end p-3 sm:items-start sm:p-4"
     >
       <aside
+        ref={panelRef}
         role="complementary"
         aria-modal="false"
         aria-labelledby="clock-help-panel-title"
         data-testid="clock-tour-panel"
         data-step-id={step.id}
-        className="pointer-events-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-zinc-700 bg-black shadow-2xl shadow-black/40"
+        className={`pointer-events-auto flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-zinc-700 bg-black shadow-2xl shadow-black/40 ${
+          position ? 'fixed' : ''
+        }`}
+        style={position ?? undefined}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 sm:px-5">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#00f0ff]">
-              Tour guiado
-            </p>
-            <h2
-              id="clock-help-panel-title"
-              className="mt-1 text-lg font-black uppercase tracking-wide text-white"
-            >
-              Proximo passo da coleta
-            </h2>
+          <div
+            className="-ml-1 flex min-w-0 flex-1 touch-none cursor-grab items-center gap-1 active:cursor-grabbing"
+            data-testid="clock-tour-drag-handle"
+            onPointerDown={startDragging}
+            onPointerMove={dragPanel}
+            onPointerUp={stopDragging}
+            onPointerCancel={stopDragging}
+            aria-label="Arraste o painel do tour para outra posicao"
+          >
+            <GripVertical size={18} className="shrink-0 text-zinc-600" aria-hidden="true" />
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#00f0ff]">
+                Tour guiado
+              </p>
+              <h2
+                id="clock-help-panel-title"
+                className="mt-1 text-lg font-black uppercase tracking-wide text-white"
+              >
+                Proximo passo da coleta
+              </h2>
+            </div>
           </div>
           <button
             type="button"
