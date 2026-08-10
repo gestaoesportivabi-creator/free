@@ -28,6 +28,7 @@ import { DashboardTodayBlock } from './components/DashboardTodayBlock';
 import { DashboardSquadAvailability } from './components/DashboardSquadAvailability';
 import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
+import { FirstMatchOnboarding } from './components/FirstMatchOnboarding';
 import { SPORT_CONFIGS } from './constants';
 import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
@@ -2104,6 +2105,15 @@ export default function App() {
               </section>
 
               {/* 1. Próxima Partida - início da visão geral */}
+              <FirstMatchOnboarding
+                hasTeam={Boolean(overviewTeamSettings.teamName.trim())}
+                playerCount={players.length}
+                matchCount={matches.length}
+                onOpenSettings={() => handleTabChange('settings')}
+                onOpenSquad={() => handleTabChange('team')}
+                onCreateFirstMatch={() => handleTabChange('table')}
+              />
+
               <section className="shrink-0">
                 <DashboardNextGameCard
                   nextMatch={overviewStats.nextMatch}
