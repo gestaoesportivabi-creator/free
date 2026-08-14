@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { User } from '../types';
 import { getApiUrl } from '../config';
+import { track } from '../utils/analytics';
 
 const LOGO_IMAGE = '/public-logo.png.png';
 
@@ -114,11 +115,15 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignedUp, onGoToLogin, onBackT
         const field = result?.field as keyof FieldErrors | undefined;
         const message = result?.message || result?.error || 'Não foi possível criar a conta.';
         setErrors(field && field !== 'general' ? { [field]: message } : { general: message });
+        // Motivo real da falha (email_taken, senha fraca etc.), não só "erro genérico" — é o que falta hoje pra medir onde o funil trava.
+        track('signup_error', { reason: result?.error || 'unknown' });
         return;
       }
 
       const data = result.data;
       localStorage.setItem('token', data.token);
+      // Conversão real do trial: até agora só media o clique no CTA, não o cadastro concluído.
+      track('signup_completed', { plan: data.user?.planName });
 
       onSignedUp({
         id: data.user.id,
