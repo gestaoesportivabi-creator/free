@@ -58,10 +58,10 @@ export const env = {
   HERMES_WEB_API_URL: process.env.HERMES_WEB_API_URL || '',
   HERMES_WEB_API_KEY: process.env.HERMES_WEB_API_KEY || '',
 
-  /** Resend — e-mails transacionais (1A) */
+  /** Resend — e-mails transacionais (domínio scout21.com.br verificado) */
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
-  EMAIL_FROM: process.env.EMAIL_FROM || 'SCOUT21 <scout21@intersomos.com.br>',
-  EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO || 'scout21@intersomos.com.br',
+  EMAIL_FROM: process.env.EMAIL_FROM || 'SCOUT21 <contato@scout21.com.br>',
+  EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO || 'contato@scout21.com.br',
   /** Desliga envio real (útil em dev); tokens ainda são gerados */
   EMAIL_DISABLED: process.env.EMAIL_DISABLED === 'true',
 

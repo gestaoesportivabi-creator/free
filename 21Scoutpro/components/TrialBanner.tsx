@@ -68,7 +68,7 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
             Seu teste terminou. Você continua a poder <strong>consultar e exportar</strong> tudo o que registou.
           </p>
           <a
-            href="mailto:scout21@intersomos.com.br?subject=Continuar%20com%20o%20SCOUT21"
+            href="mailto:contato@scout21.com.br?subject=Continuar%20com%20o%20SCOUT21"
             className="text-xs font-semibold text-red-200 hover:text-red-100 underline"
           >
             Falar sobre continuar

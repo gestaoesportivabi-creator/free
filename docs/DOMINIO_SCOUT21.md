@@ -35,14 +35,47 @@ CORS_ORIGIN=https://scout21.com.br
 PUBLIC_API_URL=https://scout21.com.br
 ```
 
-Opcional (e-mail, depois de verificar domínio na Resend):
+Opcional (e-mail — domínio verificado na Resend + caixa na Hostinger):
 
 ```bash
-EMAIL_FROM=SCOUT21 <nao-responda@scout21.com.br>
+EMAIL_FROM=SCOUT21 <contato@scout21.com.br>
 EMAIL_REPLY_TO=contato@scout21.com.br
+# RESEND_API_KEY=... (já deve existir; manter)
 ```
 
-Redeploy após salvar envs.
+## 7. E-mail — contato@scout21.com.br
+
+A API usa **Resend** (`backend/src/services/email/email.service.ts`):
+
+| Campo | Função |
+|-------|--------|
+| `EMAIL_FROM` | Remetente que aparece na caixa do destinatário |
+| `EMAIL_REPLY_TO` | Para onde vai a resposta do utilizador |
+| `RESEND_API_KEY` | Chave da Resend |
+
+Defaults no código: `contato@scout21.com.br` (FROM + Reply-To).
+
+### Checklist Hostinger + Resend
+
+1. **Hostinger → E-mails**  
+   Criar caixa `contato@scout21.com.br` (ou forward para o Gmail que você lê).
+
+2. **Resend → Domains → Add `scout21.com.br`**  
+   Copiar os registros (SPF, DKIM, opcional DMARC) para a zona DNS da Hostinger.  
+   Aguardar status **Verified**.
+
+3. **Vercel → Environment Variables (Production)**  
+   ```
+   EMAIL_FROM=SCOUT21 <contato@scout21.com.br>
+   EMAIL_REPLY_TO=contato@scout21.com.br
+   FRONTEND_URL=https://scout21.com.br
+   ```
+   Redeploy.
+
+4. **Teste**  
+   Cadastro em `/criar-conta` ou “esqueci a senha” — o e-mail deve chegar de `contato@scout21.com.br` e “Responder” deve ir para essa caixa.
+
+**Atenção:** sem domínio verificado na Resend, o envio falha ou cai em spam. O domínio antigo `intersomos.com.br` deixa de ser o default.
 
 ## 4. Código (já no repo)
 

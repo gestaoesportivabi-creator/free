@@ -13,7 +13,7 @@ import { ArrowLeft } from 'lucide-react';
  * Este texto é uma base séria mas NÃO substitui revisão jurídica antes de produção.
  */
 
-const CONTACT_EMAIL = 'scout21@intersomos.com.br';
+const CONTACT_EMAIL = 'contato@scout21.com.br';
 const LAST_UPDATE = '6 de agosto de 2026';
 
 interface LegalPageProps {
