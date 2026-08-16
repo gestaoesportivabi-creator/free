@@ -77,6 +77,31 @@ Defaults no código: `contato@scout21.com.br` (FROM + Reply-To).
 
 **Atenção:** sem domínio verificado na Resend, o envio falha ou cai em spam. O domínio antigo `intersomos.com.br` deixa de ser o default.
 
+### Sintoma: "não recebi o link" (reset de senha / magic link)
+
+Causa mais comum: **`RESEND_API_KEY` ausente no Vercel**. O token é criado no banco e o
+envio é descartado — a API responde sucesso normalmente (mensagem genérica por segurança).
+
+Como confirmar:
+
+1. `email_auth_tokens` tem registro novo, `used_at` nulo → o pedido chegou ao backend
+2. Logs do Vercel mostram `[email] NÃO ENVIADO (...): RESEND_API_KEY ausente`
+3. `GET /api/auth/admin/system/health` (admin) → `email.sendingEnabled: false`
+
+Variáveis que precisam existir em **Production**:
+
+| Variável | Valor |
+|---|---|
+| `RESEND_API_KEY` | chave da Resend |
+| `EMAIL_FROM` | `SCOUT21 <contato@scout21.com.br>` |
+| `EMAIL_REPLY_TO` | `contato@scout21.com.br` |
+| `FRONTEND_URL` | `https://scout21.com.br` |
+
+Depois de salvar: **redeploy** (env nova só entra em build novo).
+
+Notas de TTL e limite: magic link expira em **15 min**, reset em **60 min**; há
+rate-limit por e-mail (~1h) nas rotas `/auth/magic-link` e `/auth/forgot-password`.
+
 ## 4. Código (já no repo)
 
 - `CANONICAL_ORIGIN` → `https://scout21.com.br` (`21Scoutpro/utils/seo.ts`)

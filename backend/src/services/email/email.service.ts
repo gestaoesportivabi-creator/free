@@ -22,7 +22,16 @@ async function deliverEmail(
   html: string
 ): Promise<SendEmailResult> {
   if (!isEmailSendingEnabled()) {
-    if (env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'production') {
+      // Em produção este caminho é uma falha operacional, não um modo de dev:
+      // o token é criado e o utilizador nunca recebe o link. Silenciar isto
+      // custou um diagnóstico inteiro — ver docs/DOMINIO_SCOUT21.md §7.
+      console.error(
+        `[email] NÃO ENVIADO (${id}) → ${to}: ${
+          env.EMAIL_DISABLED ? 'EMAIL_DISABLED=true' : 'RESEND_API_KEY ausente'
+        }`
+      );
+    } else {
       console.info(`[email] skip send (${id}) → ${to} | ${subject}`);
     }
     return { id, skipped: true };
