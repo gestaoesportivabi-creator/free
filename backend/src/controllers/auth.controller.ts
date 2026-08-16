@@ -68,9 +68,9 @@ export const authController = {
 
       let identifier = String(email).trim();
 
-      // Atalho: "admin" aceito como admin@admin.com (credenciais padrão do seed)
+      // Atalho: "admin" → conta ADMINISTRADOR primária
       if (identifier.toLowerCase() === 'admin') {
-        identifier = 'admin@admin.com';
+        identifier = 'gestaoesportivabi@gmail.com';
       }
 
       // Buscar por email (normalizado) primeiro; se não encontrar, buscar por nome
