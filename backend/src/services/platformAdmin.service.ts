@@ -5,6 +5,7 @@
 import prisma from '../config/database';
 import { env } from '../config/env';
 import { isHermesWebConfigured } from '../services/webAssistant.service';
+import { isEmailSendingEnabled } from '../services/email/resend.client';
 import {
   getLastMatchSummary,
   getMatchHistory,
@@ -417,6 +418,17 @@ export async function getSystemHealth() {
     hermesWeb: isHermesWebConfigured(),
     maxRegisteredUsers: env.MAX_REGISTERED_USERS || null,
     nodeEnv: env.NODE_ENV ?? process.env.NODE_ENV ?? 'unknown',
+    // E-mail: sem chave configurada os tokens são criados e o envio é silenciosamente
+    // ignorado — sintoma clássico de "não recebi o link".
+    email: {
+      sendingEnabled: isEmailSendingEnabled(),
+      resendKey: Boolean(env.RESEND_API_KEY?.trim()),
+      disabledFlag: env.EMAIL_DISABLED,
+      from: env.EMAIL_FROM,
+      replyTo: env.EMAIL_REPLY_TO,
+      /** Base dos links do e-mail: se apontar para localhost, o link chega morto. */
+      frontendUrl: env.FRONTEND_URL,
+    },
   };
 }
 

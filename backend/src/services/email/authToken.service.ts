@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { EmailAuthPurpose } from '@prisma/client';
 import prisma from '../../config/database';
+import { env } from '../../config/env';
 
 const TTL_MINUTES: Record<EmailAuthPurpose, number> = {
   password_reset: 60,
@@ -13,7 +14,7 @@ function hashToken(raw: string): string {
 }
 
 export function buildFrontendAuthUrl(path: string, token: string): string {
-  const base = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+  const base = env.FRONTEND_URL.replace(/\/$/, '');
   return `${base}${path}?token=${encodeURIComponent(token)}`;
 }
 

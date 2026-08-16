@@ -21,8 +21,13 @@ export const env = {
   // CORS
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
   
-  // Frontend
-  FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+  /**
+   * Base dos links enviados por e-mail (reset de senha, magic link, verificação).
+   * Em produção NÃO pode cair em localhost: o utilizador receberia um link morto.
+   */
+  FRONTEND_URL:
+    process.env.FRONTEND_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://scout21.com.br' : 'http://localhost:5173'),
 
   // Admin
   MAX_REGISTERED_USERS: process.env.MAX_REGISTERED_USERS
