@@ -1,8 +1,12 @@
 import React from 'react';
 import { SectionHeading } from '../shared/SectionHeading';
 import { useInView } from '../useInView';
+import { track } from '../../../utils/analytics';
+import { JP7_PATH } from '../../../utils/jacksonPollock7';
 
-const COLUMNS = [
+type FeatureItem = string | { label: string; href: string };
+
+const COLUMNS: { title: string; items: FeatureItem[] }[] = [
   {
     title: 'Elenco e rotina',
     items: [
@@ -31,7 +35,7 @@ const COLUMNS = [
       'PSR treinos e jogos',
       'Qualidade de sono',
       'Bem-estar diário',
-      'Avaliação física',
+      { label: 'Avaliação física (7 dobras)', href: JP7_PATH },
       'Musculação + lesões',
     ],
   },
@@ -46,7 +50,7 @@ const COLUMNS = [
       'Scout adversário (YouTube)',
     ],
   },
-] as const;
+];
 
 export const FeatureGrid: React.FC = () => {
   const [ref, inView] = useInView();
@@ -72,17 +76,42 @@ export const FeatureGrid: React.FC = () => {
                 {col.title}
               </h3>
               <ul className="space-y-2.5">
-                {col.items.map((item) => (
-                  <li key={item} className="landing-body text-sm text-zinc-400">
-                    {item}
-                  </li>
-                ))}
+                {col.items.map((item) => {
+                  if (typeof item === 'string') {
+                    return (
+                      <li key={item} className="landing-body text-sm text-zinc-400">
+                        {item}
+                      </li>
+                    );
+                  }
+                  return (
+                    <li key={item.href} className="landing-body text-sm">
+                      <a
+                        href={item.href}
+                        onClick={() => track('cta_calculator_jp7_click', { where: 'feature-grid' })}
+                        className="text-[#00f0ff] hover:underline"
+                      >
+                        {item.label}
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
         </div>
         <p className="mt-12 text-center text-xs text-zinc-600 font-mono">
           20 áreas no menu · 117 endpoints · 34 modelos — um único lugar
+        </p>
+        <p className="mt-4 text-center text-sm text-zinc-500">
+          <a
+            href={JP7_PATH}
+            onClick={() => track('cta_calculator_jp7_click', { where: 'feature-grid-footer' })}
+            className="text-[#00f0ff] hover:underline"
+          >
+            Calculadora Jackson &amp; Pollock 7 dobras
+          </a>
+          {' — grátis, sem login'}
         </p>
       </div>
     </section>

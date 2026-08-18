@@ -38,6 +38,14 @@ const FAQ_JSON_LD = {
     },
     {
       '@type': 'Question',
+      name: 'Tem calculadora de % de gordura sem cadastro?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Sim. Jackson & Pollock 7 dobras + Siri, no mesmo motor da avaliação física do SCOUT21. Um atleta você calcula agora em scout21.com.br/calculadoras/jackson-pollock-7-dobras; o elenco e a tendência ficam no teste grátis.',
+      },
+    },
+    {
+      '@type': 'Question',
       name: 'Coleto sozinho durante o jogo?',
       acceptedAnswer: {
         '@type': 'Answer',
@@ -51,6 +59,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onGetStarted: _onGetStarted,
   onGoToLogin,
   onGoToSignup,
+  onGoToCalculator,
 }) => {
   useEffect(() => {
     document.title = 'SCOUT21 — Prontidão, scout e carga de treino para futsal';
@@ -90,10 +99,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   const trackBlog = (where: string) => track('cta_blog_click', { where });
+  const goToCalculator = (where: string) => (event: React.MouseEvent) => {
+    event.preventDefault();
+    track('cta_calculator_jp7_click', { where });
+    if (onGoToCalculator) onGoToCalculator();
+    else window.location.assign('/calculadoras/jackson-pollock-7-dobras');
+  };
 
   return (
     <div className="landing-page min-h-screen bg-black text-white">
-      <LandingNav goToSignup={goToSignup} trackLogin={trackLogin} trackBlog={trackBlog} />
+      <LandingNav
+        goToSignup={goToSignup}
+        goToCalculator={goToCalculator}
+        trackLogin={trackLogin}
+        trackBlog={trackBlog}
+      />
       <Hero goToSignup={goToSignup} />
       <Audience />
       <PainPoints />

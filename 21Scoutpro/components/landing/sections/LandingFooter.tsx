@@ -12,6 +12,14 @@ export const LandingFooter: React.FC = () => (
       <div className="pt-8 border-t border-zinc-900 space-y-3">
         <p className="landing-body text-zinc-500 text-sm">
           <a
+            href="/calculadoras/jackson-pollock-7-dobras"
+            onClick={() => track('cta_calculator_jp7_click', { where: 'footer' })}
+            className="text-[#00f0ff] hover:underline"
+          >
+            Calculadora 7 dobras
+          </a>
+          {' · '}
+          <a
             href="/blog"
             onClick={() => track('cta_blog_click', { where: 'footer' })}
             className="text-[#00f0ff] hover:underline"

@@ -19,6 +19,14 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
+import {
+  SKINFOLD_KEYS,
+  classifyBodyFatReference,
+  computeJacksonPollock7,
+  type BodyFatReferenceBand,
+} from '../utils/jacksonPollock7';
+
+export { classifyBodyFatReference, type BodyFatReferenceBand } from '../utils/jacksonPollock7';
 
 interface PhysicalAssessmentProps {
   players: Player[];
@@ -26,9 +34,6 @@ interface PhysicalAssessmentProps {
   onSaveAssessment: (assessment: PhysicalAssessment) => void;
   onDeleteAssessment?: (id: string) => void;
 }
-
-/** Faixas alinhadas ao modal de interpretação: Ideal = atletas; Adequado = saudável; Elevado = acima do limite */
-export type BodyFatReferenceBand = 'ideal' | 'adequado' | 'elevado';
 
 type LastSavedResults = {
   sum7Mm: number;
@@ -38,54 +43,6 @@ type LastSavedResults = {
   leanMassKg: number | null;
   imc: number | null;
   referenceBand: BodyFatReferenceBand;
-};
-
-/**
- * Homens: Ideal 6–13%, Adequado 14–20%, Elevado &gt;25%.
- * Mulheres: Ideal 14–20%, Adequado 21–30%, Elevado &gt;35%.
- * Valores entre faixas (ex.: homem 21–25%) classificam como Adequado até o limite de Elevado.
- */
-export function classifyBodyFatReference(bf: number, sex: 'M' | 'F'): BodyFatReferenceBand {
-  if (sex === 'M') {
-    if (bf > 25) return 'elevado';
-    if (bf >= 6 && bf <= 13) return 'ideal';
-    if (bf >= 14 && bf <= 20) return 'adequado';
-    return 'adequado';
-  }
-  if (bf > 35) return 'elevado';
-  if (bf >= 14 && bf <= 20) return 'ideal';
-  if (bf >= 21 && bf <= 30) return 'adequado';
-  return 'adequado';
-}
-
-const SKINFOLD_KEYS = [
-  { key: 'chest' as const, label: 'Peito (mm)' },
-  { key: 'axilla' as const, label: 'Axilar média (mm)' },
-  { key: 'triceps' as const, label: 'Tríceps (mm)' },
-  { key: 'subscapular' as const, label: 'Subescapular (mm)' },
-  { key: 'abdominal' as const, label: 'Abdômen (mm)' },
-  { key: 'suprailiac' as const, label: 'Supra-ilíaca (mm)' },
-  { key: 'thigh' as const, label: 'Coxa (mm)' },
-];
-
-function computeJacksonPollock7(
-  skinfolds: Record<string, number>,
-  sex: 'M' | 'F',
-  age: number
-): { sum7: number; bodyDensity: number; bodyFatPercent: number } {
-  const sum7 = SKINFOLD_KEYS.reduce((acc, { key }) => acc + (skinfolds[key] || 0), 0);
-  let bodyDensity: number;
-  if (sex === 'F') {
-    bodyDensity = 1.097 - 0.00046971 * sum7 + 0.00000056 * sum7 * sum7 - 0.00012828 * age;
-  } else {
-    bodyDensity = 1.112 - 0.00043499 * sum7 + 0.00000055 * sum7 * sum7 - 0.00028826 * age;
-  }
-  const bodyFatPercent = 495 / bodyDensity - 450;
-  return {
-    sum7,
-    bodyDensity,
-    bodyFatPercent: Number.isFinite(bodyFatPercent) ? bodyFatPercent : NaN,
-  };
 }
 
 /** Densidade a partir do % gordura (inversa da Siri) quando não há como recalcular por dobras */

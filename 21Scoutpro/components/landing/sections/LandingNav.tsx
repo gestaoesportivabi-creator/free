@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { NewsletterTriggerButton } from '../../NewsletterPopup';
 import { scrollToSection } from '../shared/scroll';
 import type { LandingPageProps } from '../types';
+import { JP7_PATH } from '../../../utils/jacksonPollock7';
 
 const NAV_LINKS = [
   { href: '#perguntas', label: 'Produto' },
   { href: '#assistente', label: 'IA' },
+  { href: JP7_PATH, label: 'Calculadora' },
   { href: '#telegram', label: 'Telegram' },
-  { href: '#teste-gratis', label: 'Teste grátis' },
   { href: '#faq', label: 'FAQ' },
 ] as const;
 
@@ -15,16 +16,28 @@ interface LandingNavProps {
   onGoToSignup?: LandingPageProps['onGoToSignup'];
   onGoToLogin?: LandingPageProps['onGoToLogin'];
   goToSignup: (where: string) => (e: React.MouseEvent) => void;
+  goToCalculator: (where: string) => (e: React.MouseEvent) => void;
   trackLogin: (where: string) => void;
   trackBlog: (where: string) => void;
 }
 
 export const LandingNav: React.FC<LandingNavProps> = ({
   goToSignup,
+  goToCalculator,
   trackLogin,
   trackBlog,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleNavClick = (href: string, where: string, e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (href.startsWith('#')) {
+      scrollToSection(e, href);
+      setMobileMenuOpen(false);
+      return;
+    }
+    goToCalculator(where)(e);
+    setMobileMenuOpen(false);
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50">
@@ -33,16 +46,17 @@ export const LandingNav: React.FC<LandingNavProps> = ({
           <a href="/" className="flex items-center shrink-0" aria-label="SCOUT21 — início">
             <img src="/public-logo.png.png" alt="SCOUT21" className="h-12 md:h-14 w-auto" />
           </a>
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6 lg:gap-8">
             {NAV_LINKS.map(({ href, label }) => (
               <a
                 key={href}
                 href={href}
-                onClick={(e) => {
-                  scrollToSection(e, href);
-                  setMobileMenuOpen(false);
-                }}
-                className="text-zinc-400 hover:text-white transition-colors text-sm font-medium"
+                onClick={(e) => handleNavClick(href, 'nav-desktop', e)}
+                className={`transition-colors text-sm font-medium ${
+                  href === JP7_PATH
+                    ? 'text-[#00f0ff] hover:text-white'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
               >
                 {label}
               </a>
@@ -90,6 +104,13 @@ export const LandingNav: React.FC<LandingNavProps> = ({
               )}
             </button>
             <a
+              href={JP7_PATH}
+              onClick={goToCalculator('nav-mobile')}
+              className="text-[#00f0ff] text-sm font-medium"
+            >
+              Calculadora
+            </a>
+            <a
               href="/criar-conta"
               onClick={goToSignup('nav-mobile')}
               className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#00f0ff] text-sm font-medium"
@@ -111,11 +132,10 @@ export const LandingNav: React.FC<LandingNavProps> = ({
               <a
                 key={href}
                 href={href}
-                onClick={(e) => {
-                  scrollToSection(e, href);
-                  setMobileMenuOpen(false);
-                }}
-                className="text-zinc-400 hover:text-white text-sm font-medium py-2"
+                onClick={(e) => handleNavClick(href, 'nav-mobile-menu', e)}
+                className={`text-sm font-medium py-2 ${
+                  href === JP7_PATH ? 'text-[#00f0ff]' : 'text-zinc-400 hover:text-white'
+                }`}
               >
                 {label}
               </a>

@@ -8,6 +8,9 @@ import { LegalPage } from './components/legal/LegalPage';
 const LandingPage = React.lazy(() =>
   import('./components/LandingPage').then((m) => ({ default: m.LandingPage }))
 );
+const JacksonPollock7Page = React.lazy(() =>
+  import('./components/calculator/JacksonPollock7Page').then((m) => ({ default: m.JacksonPollock7Page }))
+);
 import { TrialBanner } from './components/TrialBanner';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
 import { useSubscription } from './hooks/useSubscription';
@@ -244,7 +247,11 @@ function matchLegalPath(p: string): 'terms' | 'privacy' | null {
   return null;
 }
 
-type AppRoute = 'landing' | 'login' | 'app' | 'blog' | 'signup' | 'welcome' | 'legal';
+function isCalculatorPath(p: string): boolean {
+  return p === '/calculadoras/jackson-pollock-7-dobras' || p === '/calculadora/jackson-pollock-7-dobras';
+}
+
+type AppRoute = 'landing' | 'login' | 'app' | 'blog' | 'signup' | 'welcome' | 'legal' | 'calculator';
 
 /** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
 function getInitialRouteFromPath(): AppRoute {
@@ -252,6 +259,7 @@ function getInitialRouteFromPath(): AppRoute {
   if (matchBlogPath(p)) return 'blog';
   if (matchLegalPath(p)) return 'legal';
   if (isSignupPath(p)) return 'signup';
+  if (isCalculatorPath(p)) return 'calculator';
   if (p === WELCOME_PATH) return 'welcome';
   if (isLoginRelatedPath(p)) {
     return 'login';
@@ -1587,6 +1595,11 @@ export default function App() {
       trackPageView(legalUrl);
       return;
     }
+    if (currentRoute === 'calculator') {
+      window.history.pushState({}, '', '/calculadoras/jackson-pollock-7-dobras');
+      trackPageView('/calculadoras/jackson-pollock-7-dobras');
+      return;
+    }
     if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
       trackPageView('/login');
@@ -1640,6 +1653,11 @@ export default function App() {
       if (isSignupPath(path) || path === '/registro' || path === '/register') {
         setAssistantOpen(false);
         setCurrentRoute('signup');
+        setBlogSlug(null);
+        return;
+      }
+      if (isCalculatorPath(path)) {
+        setCurrentRoute('calculator');
         setBlogSlug(null);
         return;
       }
@@ -1792,6 +1810,20 @@ export default function App() {
     );
   }
 
+  if (currentRoute === 'calculator') {
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">
+            Carregando…
+          </div>
+        }
+      >
+        <JacksonPollock7Page />
+      </Suspense>
+    );
+  }
+
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return (
@@ -1806,6 +1838,10 @@ export default function App() {
           onGetStarted={() => setCurrentRoute('signup')}
           onGoToLogin={() => setCurrentRoute('login')}
           onGoToSignup={() => setCurrentRoute('signup')}
+          onGoToCalculator={() => {
+            setCurrentRoute('calculator');
+            window.history.pushState({}, '', '/calculadoras/jackson-pollock-7-dobras');
+          }}
         />
       </Suspense>
     );

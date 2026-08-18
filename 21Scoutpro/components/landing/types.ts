@@ -6,6 +6,7 @@ export interface LandingPageProps {
    * WhatsApp fica como suporte. Ver docs/PLANO_MESTRE_TRIAL_30D.md
    */
   onGoToSignup?: () => void;
+  onGoToCalculator?: () => void;
 }
 
 export type SignupWhere =

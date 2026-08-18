@@ -1,5 +1,5 @@
 /**
- * Shell público — landing, cadastro, login, blog e legais.
+ * Shell público — landing, cadastro, login, blog, calculadoras e legais.
  * Carrega sem o bundle do dashboard (App.tsx). Após login/signup,
  * navega para /dashboard ou /bem-vindo para hidratar o app autenticado.
  */
@@ -22,7 +22,11 @@ const AuthEmailAction = lazy(() =>
   import('./components/AuthEmailAction').then((m) => ({ default: m.AuthEmailAction }))
 );
 
-type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal';
+const JacksonPollock7Page = lazy(() =>
+  import('./components/calculator/JacksonPollock7Page').then((m) => ({ default: m.JacksonPollock7Page }))
+);
+
+type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal' | 'calculator';
 
 function normalizePathname(): string {
   return window.location.pathname.replace(/\/$/, '') || '/';
@@ -51,12 +55,18 @@ function matchAuthEmailPath(p: string): { kind: 'reset-password' | 'magic-link' 
 }
 
 const SIGNUP_PATHS = ['/criar-conta', '/cadastro', '/signup'];
+const CALCULATOR_PATH = '/calculadoras/jackson-pollock-7-dobras';
+
+function isCalculatorPath(p: string): boolean {
+  return p === CALCULATOR_PATH || p === '/calculadora/jackson-pollock-7-dobras';
+}
 
 function getInitialRoute(): PublicRoute {
   const p = normalizePathname();
   if (matchBlogPath(p)) return 'blog';
   if (matchLegalPath(p)) return 'legal';
   if (SIGNUP_PATHS.includes(p)) return 'signup';
+  if (isCalculatorPath(p)) return 'calculator';
   if (p === '/login' || matchAuthEmailPath(p)) return 'login';
   return 'landing';
 }
@@ -118,6 +128,19 @@ export function PublicApp() {
       trackPageView(path);
       return;
     }
+    if (route === 'calculator') {
+      applyRouteMeta({
+        title: 'Calculadora Jackson & Pollock 7 dobras | % gordura (Siri) | SCOUT21',
+        description:
+          'Calcule Σ7, densidade corporal e % de gordura (Jackson & Pollock 7 dobras + Siri). Grátis, para um atleta. Grave o elenco no SCOUT21.',
+        path: CALCULATOR_PATH,
+      });
+      trackPageView(CALCULATOR_PATH);
+      if (normalizePathname() !== CALCULATOR_PATH) {
+        window.history.replaceState({}, '', CALCULATOR_PATH);
+      }
+      return;
+    }
     if (route === 'login') {
       if (!matchAuthEmailPath(normalizePathname())) {
         window.history.replaceState({}, '', '/login');
@@ -177,6 +200,8 @@ export function PublicApp() {
         />
       ) : null}
 
+      {route === 'calculator' ? <JacksonPollock7Page /> : null}
+
       {route === 'signup' ? (
         <SignUp
           onSignedUp={(_user: User) => goWelcome()}
@@ -235,6 +260,10 @@ export function PublicApp() {
           onGoToSignup={() => {
             setRoute('signup');
             window.history.pushState({}, '', '/criar-conta');
+          }}
+          onGoToCalculator={() => {
+            setRoute('calculator');
+            window.history.pushState({}, '', CALCULATOR_PATH);
           }}
         />
       ) : null}

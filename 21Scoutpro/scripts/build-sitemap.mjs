@@ -36,6 +36,7 @@ const files = [
 
 const staticUrls = [
   { loc: `${ORIGIN}/`, changefreq: 'weekly', priority: '1.0' },
+  { loc: `${ORIGIN}/calculadoras/jackson-pollock-7-dobras`, changefreq: 'monthly', priority: '0.85' },
   { loc: `${ORIGIN}/blog`, changefreq: 'daily', priority: '0.8' },
   { loc: `${ORIGIN}/blog/en`, changefreq: 'daily', priority: '0.7' },
   { loc: `${ORIGIN}/blog/es`, changefreq: 'daily', priority: '0.7' },

@@ -29,6 +29,10 @@ const FAQS = [
     a: 'Sim. Exportáveis a qualquer momento, inclusive após o teste. Leitura continua liberada se o teste expirar.',
   },
   {
+    q: 'Tem calculadora de % de gordura sem cadastro?',
+    a: 'Sim. Jackson & Pollock 7 dobras + Siri, no mesmo motor da avaliação física do SCOUT21. Um atleta você calcula agora; o elenco, a tendência e o cruzamento com PSE/PSR ficam no teste grátis.',
+  },
+  {
     q: 'Coleto sozinho durante o jogo?',
     a: 'Sim. A coleta ao vivo foi desenhada para uma pessoa só, com poucos toques por evento.',
   },
