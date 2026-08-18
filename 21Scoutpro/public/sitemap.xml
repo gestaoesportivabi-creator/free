@@ -31,6 +31,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://scout21.com.br/blog/jackson-pollock-7-dobras-no-futsal</loc>
+    <lastmod>2026-08-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.com.br/blog/por-que-dados-no-banco-importam-mais-que-no-papel</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -139,6 +145,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://scout21.com.br/blog/en/jackson-pollock-7-site-skinfolds-futsal</loc>
+    <lastmod>2026-08-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://scout21.com.br/blog/en/why-database-beats-spreadsheet</loc>
     <lastmod>2026-04-12</lastmod>
     <changefreq>monthly</changefreq>
@@ -243,6 +255,12 @@
   <url>
     <loc>https://scout21.com.br/blog/en/daily-content-cadence-how-to-measure-quality-without-losing-speed</loc>
     <lastmod>2026-05-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://scout21.com.br/blog/es/jackson-pollock-7-pliegues-futsal</loc>
+    <lastmod>2026-08-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

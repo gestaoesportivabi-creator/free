@@ -11,14 +11,14 @@ export type SkinfoldKey =
   | 'suprailiac'
   | 'thigh';
 
-export const SKINFOLD_KEYS: { key: SkinfoldKey; label: string }[] = [
-  { key: 'chest', label: 'Peito (mm)' },
-  { key: 'axilla', label: 'Axilar média (mm)' },
-  { key: 'triceps', label: 'Tríceps (mm)' },
-  { key: 'subscapular', label: 'Subescapular (mm)' },
-  { key: 'abdominal', label: 'Abdômen (mm)' },
-  { key: 'suprailiac', label: 'Supra-ilíaca (mm)' },
-  { key: 'thigh', label: 'Coxa (mm)' },
+export const SKINFOLD_KEYS: { key: SkinfoldKey; label: string; hint: string }[] = [
+  { key: 'chest', label: 'Peito (mm)', hint: 'Diagonal, entre axila e mamilo (homens); acima da mama (mulheres).' },
+  { key: 'axilla', label: 'Axilar média (mm)', hint: 'Vertical, na linha axilar média, altura do xifoide.' },
+  { key: 'triceps', label: 'Tríceps (mm)', hint: 'Vertical, face posterior do braço, meio acrômio–olécrano.' },
+  { key: 'subscapular', label: 'Subescapular (mm)', hint: 'Diagonal, 1–2 cm abaixo do ângulo inferior da escápula.' },
+  { key: 'abdominal', label: 'Abdômen (mm)', hint: 'Vertical, 2 cm à direita da cicatriz umbilical.' },
+  { key: 'suprailiac', label: 'Supra-ilíaca (mm)', hint: 'Diagonal, imediatamente acima da crista ilíaca.' },
+  { key: 'thigh', label: 'Coxa (mm)', hint: 'Vertical, face anterior, meio da distância virilha–patela.' },
 ];
 
 /**
@@ -43,6 +43,17 @@ export function bandLabel(band: BodyFatReferenceBand): string {
   if (band === 'ideal') return 'Faixa de atletas';
   if (band === 'adequado') return 'Adequado';
   return 'Elevado';
+}
+
+/** Texto para a comissão — não é laudo nem autorização de carga. */
+export function bandBlurb(band: BodyFatReferenceBand): string {
+  if (band === 'ideal') {
+    return 'Na faixa típica de atletas desta calculadora. O número só vira decisão quando entra no histórico do jogador e cruza com PSE, sono e lesão.';
+  }
+  if (band === 'adequado') {
+    return 'Dentro do aceitável para acompanhamento. Não autorize carga, dieta ou retorno a jogo só com este valor — olhe a tendência e a prontidão.';
+  }
+  return 'Acima da faixa de referência usada aqui. Não é diagnóstico. Repita a coleta com o mesmo avaliador e grave no elenco antes de mudar o plano.';
 }
 
 export function computeJacksonPollock7(
@@ -80,3 +91,4 @@ export function computeImc(weightKg: number, heightCm: number): number | null {
 }
 
 export const JP7_PATH = '/calculadoras/jackson-pollock-7-dobras';
+export const JP7_BLOG_PATH = '/blog/jackson-pollock-7-dobras-no-futsal';

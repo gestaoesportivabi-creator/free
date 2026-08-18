@@ -12,7 +12,7 @@ export type BlogBlock =
   | { type: 'quote'; text: string; cite?: string }
   | { type: 'callout'; kind?: 'info' | 'tip' | 'warn'; title?: string; text: string }
   | { type: 'cta-newsletter'; text?: string }
-  | { type: 'cta-product'; text?: string };
+  | { type: 'cta-product'; text?: string; href?: string; button?: string };
 
 export interface BlogPost {
   slug: string;

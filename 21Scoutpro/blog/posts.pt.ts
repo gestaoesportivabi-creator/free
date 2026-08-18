@@ -6,6 +6,145 @@ import type { BlogPost } from './types';
  */
 export const POSTS_PT: BlogPost[] = [
   {
+    slug: 'jackson-pollock-7-dobras-no-futsal',
+    lang: 'pt-BR',
+    title: 'Jackson & Pollock 7 dobras no futsal: o número só decide quando entra no elenco',
+    subtitle:
+      'A calculadora entrega % de gordura em um atleta. A comissão precisa da série, da data e do cruzamento com carga. Sem isso, vira print.',
+    date: '2026-08-18',
+    updatedDate: '2026-08-18',
+    readMinutes: 8,
+    author: 'Redação SCOUT21',
+    heroEmoji: '📏',
+    tags: ['fisiologia', 'avaliação física', 'Jackson Pollock', 'futsal'],
+    excerpt:
+      'Jackson & Pollock 7 dobras + Siri estima % de gordura. No futsal o valor isolado não autoriza carga. O que muda o jogo é gravar no jogador e olhar a tendência.',
+    keywords: [
+      'jackson pollock 7 dobras',
+      'calculadora percentual de gordura futsal',
+      'avaliação física futsal',
+      'dobras cutâneas',
+      'equação de Siri',
+      'composição corporal atleta',
+    ],
+    translations: {
+      en: 'jackson-pollock-7-site-skinfolds-futsal',
+      es: 'jackson-pollock-7-pliegues-futsal',
+    },
+    coverImage: '/blog-covers/monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'VO2 Master',
+      photographerUrl: 'https://www.pexels.com/@vo2-master-1061578389',
+      photoUrl: 'https://www.pexels.com/photo/man-with-training-date-on-tablet-20523364/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Toda comissão já passou por isso: o preparador mede as dobras, anota num papel, manda foto no grupo. Na semana seguinte ninguém acha o número. No mês seguinte o atleta “parece mais pesado”, mas não há série para discutir. O protocolo não falhou. Falhou o lugar onde o dado mora.',
+      },
+      {
+        type: 'p',
+        text:
+          'Jackson & Pollock de 7 dobras, com conversão de Siri, continua sendo um jeito clássico de estimar densidade corporal e percentual de gordura quando o clube tem adipômetro e um avaliador treinado. Serve para rotina. Não serve como laudo, não autoriza dieta e não libera retorno a jogo.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Calculadora livre, mesmo motor do produto',
+        text:
+          'O SCOUT21 abriu a calculadora sem login para um atleta. É o mesmo cálculo da avaliação física do elenco. Use, confira, e se fizer sentido grave a série no teste grátis.',
+      },
+      {
+        type: 'cta-product',
+        text: 'Calcule Σ7, densidade e % de gordura agora — sem cadastro, para um atleta.',
+        href: '/calculadoras/jackson-pollock-7-dobras?utm_source=blog-jp7',
+        button: 'Abrir a calculadora',
+      },
+      { type: 'h2', text: 'O que o protocolo realmente entrega' },
+      {
+        type: 'p',
+        text:
+          'Você soma sete sítios em milímetros (peito, axilar média, tríceps, subescapular, abdômen, supra-ilíaca e coxa). A equação, específica por sexo, estima a densidade corporal a partir dessa soma, do quadrado da soma e da idade. A equação de Siri converte densidade em % de gordura: (495 ÷ BD) − 450. Se houver peso, estima-se massa gorda e magra. Altura entra só no IMC — outro indicador, outra conversa.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Homens: faixa típica de atletas ~6–13%; adequado ~14–20%; elevado >25%.',
+          'Mulheres: atletas ~14–20%; adequado ~21–30%; elevado >35%.',
+          'Intervalos entre faixas nesta calculadora ficam em “adequado” até o limiar de elevado.',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'Não é diagnóstico',
+        text:
+          'Em atletas de elite o viés frente ao DXA pode ser relevante. A acurácia depende do adipômetro, dos pontos anatômicos e de quem mede. Trate como rotina de elenco, não como exame clínico.',
+      },
+      { type: 'h2', text: 'Como coletar sem estragar o número' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Mesmo lado do corpo em todas as dobras, atleta em pé, pele seca.',
+          'Adipômetro calibrado. Duas ou três medidas por sítio; use a média.',
+          'Não misture avaliadores na mesma série se puder evitar — a tendência sofre.',
+          'Anote data, atleta e quem mediu. Sem isso, o próximo número não compara com nada.',
+        ],
+      },
+      {
+        type: 'p',
+        text:
+          'Peito: prega diagonal entre axila e mamilo (homens) ou acima da mama (mulheres). Axilar média: vertical na linha axilar, altura do xifoide. Tríceps: face posterior do braço. Subescapular: diagonal abaixo do ângulo da escápula. Abdômen: vertical a 2 cm da cicatriz umbilical. Supra-ilíaca: diagonal acima da crista. Coxa: face anterior, meio da coxa.',
+      },
+      { type: 'h2', text: 'Por que o print não substitui o elenco' },
+      {
+        type: 'p',
+        text:
+          'Um percentual isolado não responde se o atleta aguenta treinar forte hoje. Quem responde é o cruzamento: composição ao longo das semanas, PSE e PSR da sessão, sono, bem-estar e lesão aberta. Sem gravar no jogador, a comissão discute memória. Com histórico, discute série.',
+      },
+      {
+        type: 'quote',
+        text: 'O número solto impressiona no grupo. A tendência muda a convocação.',
+      },
+      {
+        type: 'list',
+        items: [
+          '% gordura subiu e o sono caiu: olhe carga, não só o adipômetro.',
+          'Faixa adequada com lesão ativa: o dado de dobra não devolve o atleta à quadra.',
+          'Faixa de atletas com ACWR alto: prontidão manda, composição espera.',
+        ],
+      },
+      { type: 'cta-newsletter', text: 'Assine para receber textos práticos de fisiologia e rotina de comissão.' },
+      { type: 'h2', text: 'O fluxo que a gente recomenda' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Meça um atleta na calculadora livre e confira se o protocolo da comissão está alinhado.',
+          'Copie o resultado para o grupo se precisar — e trate isso como rascunho.',
+          'Abra o teste grátis, cadastre o elenco e grave a dobra no jogador, com data.',
+          'Repita no microciclo. Decida carga com a série + PSE/PSR/sono, não com um print.',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'tip',
+        title: 'Atalho mental',
+        text:
+          'Se a avaliação física vive no WhatsApp, você não tem avaliação física. Tem recorte. O SCOUT21 existe para o segundo caso virar o primeiro.',
+      },
+      {
+        type: 'cta-product',
+        text: 'Grave a dobra no jogador, veja a tendência e cruze com prontidão. 30 dias, sem cartão.',
+        href: '/criar-conta?utm_source=blog-jp7',
+        button: 'Começar o teste grátis',
+      },
+    ],
+  },
+  {
     slug: 'por-que-dados-no-banco-importam-mais-que-no-papel',
     lang: 'pt-BR',
     title: 'Por que dados no banco valem mais do que qualquer planilha no futsal',
@@ -1023,6 +1162,12 @@ export const POSTS_PT: BlogPost[] = [
         type: 'p',
         text:
           'O módulo de Fisiologia do SCOUT 21 organiza Monitoramento Fisiológico, PSE, PSR, Bem-Estar Diário e Avaliação Física no mesmo ecossistema da gestão e do scout. Isso encurta a distância entre coleta e ação.',
+      },
+      {
+        type: 'cta-product',
+        text: 'Quer estimar % de gordura de um atleta agora, sem login? Jackson & Pollock 7 dobras, o mesmo motor da avaliação física.',
+        href: '/calculadoras/jackson-pollock-7-dobras?utm_source=blog-fisiologia',
+        button: 'Abrir a calculadora 7 dobras',
       },
       {
         type: 'callout',

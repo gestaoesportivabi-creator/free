@@ -7,6 +7,114 @@ import type { BlogPost } from './types';
  */
 export const POSTS_ES: BlogPost[] = [
   {
+    slug: 'jackson-pollock-7-pliegues-futsal',
+    lang: 'es',
+    title: 'Jackson & Pollock 7 pliegues en futsal: el número solo decide cuando entra al plantel',
+    subtitle:
+      'La calculadora entrega % de grasa de un atleta. El cuerpo técnico necesita la serie, la fecha y el cruce con la carga. Si no, es un pantallazo.',
+    date: '2026-08-18',
+    updatedDate: '2026-08-18',
+    readMinutes: 8,
+    author: 'Redacción SCOUT21',
+    heroEmoji: '📏',
+    tags: ['fisiología', 'evaluación física', 'Jackson Pollock', 'futsal'],
+    excerpt:
+      'Jackson & Pollock 7 pliegues + Siri estima % de grasa. En futsal el valor suelto no autoriza carga. Lo que cambia la convocatoria es guardarlo en el jugador y mirar la tendencia.',
+    keywords: [
+      'jackson pollock 7 pliegues',
+      'calculadora porcentaje de grasa futsal',
+      'evaluación física futsal',
+      'pliegues cutáneos',
+      'ecuación de Siri',
+      'composición corporal atleta',
+    ],
+    translations: {
+      'pt-BR': 'jackson-pollock-7-dobras-no-futsal',
+      en: 'jackson-pollock-7-site-skinfolds-futsal',
+    },
+    coverImage: '/blog-covers/monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'VO2 Master',
+      photographerUrl: 'https://www.pexels.com/@vo2-master-1061578389',
+      photoUrl: 'https://www.pexels.com/photo/man-with-training-date-on-tablet-20523364/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Todo cuerpo técnico pasó por esto: el preparador mide los pliegues, anota en un papel, manda foto al grupo. A la semana nadie encuentra el número. Al mes el atleta “se ve más pesado”, pero no hay serie para discutir. No falló el protocolo. Falló el lugar donde vive el dato.',
+      },
+      {
+        type: 'p',
+        text:
+          'Jackson & Pollock de 7 pliegues, con conversión de Siri, sigue siendo una forma clásica de estimar densidad corporal y % de grasa cuando el club tiene adipómetro y un evaluador entrenado. Sirve para rutina. No es laudo, no autoriza dieta y no habilita el retorno a cancha.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Calculadora libre, el mismo motor del producto',
+        text:
+          'SCOUT21 abrió la calculadora sin login para un atleta. Es el mismo cálculo de la evaluación física del plantel. Usala, contrastala y, si cierra, guardá la serie en la prueba gratis.',
+      },
+      {
+        type: 'cta-product',
+        text: 'Calculá Σ7, densidad y % de grasa ahora — sin cuenta, para un atleta.',
+        href: '/calculadoras/jackson-pollock-7-dobras?utm_source=blog-jp7',
+        button: 'Abrir la calculadora',
+      },
+      { type: 'h2', text: 'Qué entrega de verdad el protocolo' },
+      {
+        type: 'p',
+        text:
+          'Sumás siete sitios en milímetros (pecho, axilar media, tríceps, subescapular, abdomen, suprailiaca y muslo). La ecuación, específica por sexo, estima la densidad a partir de esa suma, del cuadrado de la suma y de la edad. Siri convierte densidad en % de grasa: (495 ÷ BD) − 450. Con peso, masa grasa y magra. La altura entra solo en el IMC.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Hombres: banda típica de atletas ~6–13%; adecuado ~14–20%; elevado >25%.',
+          'Mujeres: atletas ~14–20%; adecuado ~21–30%; elevado >35%.',
+          'Los valores entre bandas en esta calculadora quedan en “adecuado” hasta el umbral de elevado.',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'No es diagnóstico',
+        text:
+          'En atletas de élite el sesgo frente a DXA puede ser relevante. La exactitud depende del adipómetro, de los puntos anatómicos y de quien mide. Tratalo como rutina de plantel, no como examen clínico.',
+      },
+      { type: 'h2', text: 'Cómo recolectar sin romper el número' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'El mismo lado del cuerpo en todos los pliegues, atleta de pie, piel seca.',
+          'Adipómetro calibrado. Dos o tres medidas por sitio; usá el promedio.',
+          'No mezcles evaluadores en la misma serie si podés evitarlo: la tendencia sufre.',
+          'Anotá fecha, atleta y quién midió. Sin eso, el próximo número no compara con nada.',
+        ],
+      },
+      { type: 'h2', text: 'Por qué el pantallazo no reemplaza al plantel' },
+      {
+        type: 'p',
+        text:
+          'Un porcentaje suelto no responde si el atleta aguanta entrenar fuerte hoy. Responde el cruce: composición a lo largo de las semanas, PSE y PSR de la sesión, sueño, bienestar y lesión abierta. Sin guardarlo en el jugador, el cuerpo técnico discute memoria. Con historial, discute serie.',
+      },
+      {
+        type: 'quote',
+        text: 'El número suelto impresiona en el grupo. La tendencia cambia la convocatoria.',
+      },
+      { type: 'cta-newsletter', text: 'Recibí textos prácticos de fisiología y rutina de cuerpo técnico.' },
+      {
+        type: 'cta-product',
+        text: 'Guardá el pliegue en el jugador, mirá la tendencia y cruzala con la prontitud. 30 días, sin tarjeta.',
+        href: '/criar-conta?utm_source=blog-jp7',
+        button: 'Empezar la prueba gratis',
+      },
+    ],
+  },
+  {
     slug: 'por-que-datos-en-la-base',
     lang: 'es',
     title: 'Por qué los datos en la base valen más que cualquier planilla en el futsal',

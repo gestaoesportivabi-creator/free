@@ -7,6 +7,114 @@ import type { BlogPost } from './types';
  */
 export const POSTS_EN: BlogPost[] = [
   {
+    slug: 'jackson-pollock-7-site-skinfolds-futsal',
+    lang: 'en',
+    title: 'Jackson & Pollock 7-site skinfolds in futsal: the number only decides once it sits on the roster',
+    subtitle:
+      'The calculator gives body-fat % for one athlete. Staff need the series, the date and the cross-check with load. Otherwise it is just a screenshot.',
+    date: '2026-08-18',
+    updatedDate: '2026-08-18',
+    readMinutes: 8,
+    author: 'SCOUT21 editorial',
+    heroEmoji: '📏',
+    tags: ['physiology', 'physical assessment', 'Jackson Pollock', 'futsal'],
+    excerpt:
+      'Jackson & Pollock 7 sites + Siri estimates body-fat %. In futsal a single value does not clear load. What changes the call is storing it on the player and reading the trend.',
+    keywords: [
+      'jackson pollock 7 skinfolds',
+      'body fat calculator futsal',
+      'futsal physical assessment',
+      'skinfold protocol',
+      'Siri equation',
+      'athlete body composition',
+    ],
+    translations: {
+      'pt-BR': 'jackson-pollock-7-dobras-no-futsal',
+      es: 'jackson-pollock-7-pliegues-futsal',
+    },
+    coverImage: '/blog-covers/monitoramento-fisiologico-no-futsal-com-pse-psr-e-bem-estar.jpg',
+    coverCredit: {
+      source: 'Pexels',
+      photographer: 'VO2 Master',
+      photographerUrl: 'https://www.pexels.com/@vo2-master-1061578389',
+      photoUrl: 'https://www.pexels.com/photo/man-with-training-date-on-tablet-20523364/',
+    },
+    blocks: [
+      {
+        type: 'p',
+        text:
+          'Every staff has been here: the fitness coach measures skinfolds, writes them on paper, drops a photo in the group. Next week nobody finds the number. Next month the athlete “looks heavier”, but there is no series to argue with. The protocol did not fail. The place where the data lives did.',
+      },
+      {
+        type: 'p',
+        text:
+          'Jackson & Pollock 7 sites, converted with Siri, remains a classic way to estimate body density and body-fat % when the club has a caliper and a trained tester. It is a routine tool. It is not a clinical report, it does not prescribe a diet, and it does not clear return to play.',
+      },
+      {
+        type: 'callout',
+        kind: 'info',
+        title: 'Free calculator, same engine as the product',
+        text:
+          'SCOUT21 opened the calculator with no login, for one athlete. It is the same math as physical assessment on the roster. Use it, check it, then store the series in the free trial if it fits.',
+      },
+      {
+        type: 'cta-product',
+        text: 'Work out Σ7, density and body-fat % now — no account, one athlete.',
+        href: '/calculadoras/jackson-pollock-7-dobras?utm_source=blog-jp7',
+        button: 'Open the calculator',
+      },
+      { type: 'h2', text: 'What the protocol actually delivers' },
+      {
+        type: 'p',
+        text:
+          'You sum seven sites in millimetres (chest, mid-axilla, triceps, subscapular, abdomen, suprailiac and thigh). A sex-specific equation estimates body density from that sum, the square of the sum, and age. Siri turns density into body-fat %: (495 ÷ BD) − 450. Weight yields fat and lean mass. Height is only for BMI — a different conversation.',
+      },
+      {
+        type: 'list',
+        items: [
+          'Men: typical athlete band ~6–13%; adequate ~14–20%; elevated >25%.',
+          'Women: athletes ~14–20%; adequate ~21–30%; elevated >35%.',
+          'Values between bands in this calculator stay “adequate” until the elevated threshold.',
+        ],
+      },
+      {
+        type: 'callout',
+        kind: 'warn',
+        title: 'Not a diagnosis',
+        text:
+          'In elite athletes bias versus DXA can be material. Accuracy hangs on the caliper, the landmarks and the tester. Treat it as roster routine, not a clinical exam.',
+      },
+      { type: 'h2', text: 'How to collect without wrecking the number' },
+      {
+        type: 'list',
+        ordered: true,
+        items: [
+          'Same side of the body for every fold, athlete standing, dry skin.',
+          'Calibrated caliper. Two or three trials per site; use the mean.',
+          'Do not mix testers in the same series if you can avoid it — the trend suffers.',
+          'Record date, athlete and who measured. Without that, the next number compares to nothing.',
+        ],
+      },
+      { type: 'h2', text: 'Why a screenshot is not a roster' },
+      {
+        type: 'p',
+        text:
+          'A single percentage does not answer whether the athlete can train hard today. The cross-check does: composition over weeks, session RPE and PSR, sleep, wellness and open injury. Unstored, staff argue from memory. With history, they argue from the series.',
+      },
+      {
+        type: 'quote',
+        text: 'A lone number impresses the group chat. The trend changes selection.',
+      },
+      { type: 'cta-newsletter', text: 'Get practical notes on physiology and staff routine.' },
+      {
+        type: 'cta-product',
+        text: 'Store the fold on the player, read the trend, cross-check readiness. 30 days, no card.',
+        href: '/criar-conta?utm_source=blog-jp7',
+        button: 'Start the free trial',
+      },
+    ],
+  },
+  {
     slug: 'why-database-beats-spreadsheet',
     lang: 'en',
     title: 'Why a real database beats another spreadsheet for your squad',

@@ -703,11 +703,11 @@ const BlockRenderer: React.FC<{
             Scout estruturado, fisiologia, calendário e relatório gerencial — tudo num banco único.
           </p>
           <a
-            href="/"
-            onClick={() => track('blog_product_cta', { source: postSlug, lang })}
+            href={block.href || '/'}
+            onClick={() => track('blog_product_cta', { source: postSlug, lang, href: block.href || '/' })}
             className="inline-flex items-center gap-2 rounded-lg border border-[#00f0ff] px-6 py-3 text-sm font-semibold uppercase tracking-wider text-[#00f0ff] hover:bg-[#00f0ff] hover:text-black transition-colors"
           >
-            Testar o SCOUT 21
+            {block.button || 'Testar o SCOUT 21'}
           </a>
         </div>
       );
