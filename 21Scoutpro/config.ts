@@ -13,9 +13,15 @@ import type { User } from './types';
 // Em desenvolvimento: http://localhost:3000/api
 // Em produção: usar URL relativa (/api) se VITE_API_URL não estiver definida
 export const getApiUrl = () => {
-  // Deploy único no Vercel (front + /api no mesmo domínio). URL absoluta
-  // antiga (gestaoesportiva-free.vercel.app) quebrava o login quando o
-  // domínio canónico passou a ser scout21.com.br.
+  // No browser, o host real manda: o build da Vercel já chegou a emitir
+  // `localhost:3000/api` com import.meta.env.PROD=false, e o login quebra.
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return '/api';
+    }
+  }
+
   if (import.meta.env.PROD) {
     return '/api';
   }

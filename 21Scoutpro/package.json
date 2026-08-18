@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/build-sitemap.mjs",
-    "build": "vite build",
+    "build": "vite build --mode production",
     "preview": "vite preview",
     "push:blog-only": "node scripts/push-blog-only.mjs",
     "type-check": "tsc --noEmit",

@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://gestaoesportiva-free.vercel.app',
+        target: 'https://scout21.com.br',
         changeOrigin: true,
         secure: true,
       },
