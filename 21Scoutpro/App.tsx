@@ -1820,8 +1820,7 @@ export default function App() {
           token={authEmail.token}
           onLogin={handleLoginWithRoute}
           onBackToLogin={() => {
-            setCurrentRoute('login');
-            window.history.pushState({}, '', '/login');
+            window.location.assign('/login');
           }}
         />
       );

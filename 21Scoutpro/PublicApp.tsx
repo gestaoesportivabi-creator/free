@@ -201,8 +201,7 @@ export function PublicApp() {
                 token={authEmail.token}
                 onLogin={() => goDashboard()}
                 onBackToLogin={() => {
-                  setRoute('login');
-                  window.history.pushState({}, '', '/login');
+                  window.location.assign('/login');
                 }}
               />
             );

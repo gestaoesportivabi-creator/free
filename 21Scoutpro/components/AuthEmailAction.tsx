@@ -250,7 +250,7 @@ export const AuthEmailAction: React.FC<AuthEmailActionProps> = ({
                 onClick={onBackToLogin}
                 className="w-full py-3 border border-white/20 rounded-xl text-sm uppercase tracking-wider hover:border-[#00f0ff]"
               >
-                Ir para login
+                {done && kind === 'reset-password' ? 'Entrar com a nova senha' : 'Ir para login'}
               </button>
             )}
           </div>
