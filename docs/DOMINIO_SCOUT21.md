@@ -39,7 +39,7 @@ Opcional (e-mail — domínio verificado na Resend + caixa na Hostinger):
 
 ```bash
 EMAIL_FROM=SCOUT21 <contato@scout21.com.br>
-EMAIL_REPLY_TO=contato@scout21.com.br
+EMAIL_REPLY_TO=gestaoesportivabi@gmail.com
 # RESEND_API_KEY=... (já deve existir; manter)
 ```
 
@@ -53,7 +53,7 @@ A API usa **Resend** (`backend/src/services/email/email.service.ts`):
 | `EMAIL_REPLY_TO` | Para onde vai a resposta do utilizador |
 | `RESEND_API_KEY` | Chave da Resend |
 
-Defaults no código: `contato@scout21.com.br` (FROM + Reply-To).
+Defaults no código: FROM `contato@scout21.com.br`. Reply-To aponta para `gestaoesportivabi@gmail.com` enquanto `contato@` não tiver caixa/MX na Hostinger.
 
 ### Checklist Hostinger + Resend
 
@@ -67,8 +67,9 @@ Defaults no código: `contato@scout21.com.br` (FROM + Reply-To).
 3. **Vercel → Environment Variables (Production)**  
    ```
    EMAIL_FROM=SCOUT21 <contato@scout21.com.br>
-   EMAIL_REPLY_TO=contato@scout21.com.br
+   EMAIL_REPLY_TO=gestaoesportivabi@gmail.com
    FRONTEND_URL=https://scout21.com.br
+   PUBLIC_API_URL=https://scout21.com.br
    ```
    Redeploy.
 
@@ -94,7 +95,8 @@ Variáveis que precisam existir em **Production**:
 |---|---|
 | `RESEND_API_KEY` | chave da Resend |
 | `EMAIL_FROM` | `SCOUT21 <contato@scout21.com.br>` |
-| `EMAIL_REPLY_TO` | `contato@scout21.com.br` |
+| `EMAIL_REPLY_TO` | caixa humana que recebe (hoje `gestaoesportivabi@gmail.com`; `contato@` ainda não tem MX) |
+| `PUBLIC_API_URL` | `https://scout21.com.br` |
 | `FRONTEND_URL` | `https://scout21.com.br` |
 
 Depois de salvar: **redeploy** (env nova só entra em build novo).

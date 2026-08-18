@@ -214,8 +214,7 @@ function isAssistantPath(path?: string): boolean {
 function matchAuthEmailPath(p: string): { kind: AuthEmailActionKind; token: string } | null {
   const m = p.match(/^\/login\/(reset-password|magic-link|verify-email)$/);
   if (!m || typeof window === 'undefined') return null;
-  const token = new URLSearchParams(window.location.search).get('token');
-  if (!token) return null;
+  const token = new URLSearchParams(window.location.search).get('token') || '';
   return { kind: m[1] as AuthEmailActionKind, token };
 }
 

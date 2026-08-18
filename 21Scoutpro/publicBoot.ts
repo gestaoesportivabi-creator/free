@@ -18,10 +18,8 @@ function matchLegalPath(p: string): boolean {
   );
 }
 
-function matchAuthEmailPath(p: string): boolean {
-  const m = p.match(/^\/login\/(reset-password|magic-link|verify-email)$/);
-  if (!m) return false;
-  return Boolean(new URLSearchParams(window.location.search).get('token'));
+function isAuthEmailPath(p: string): boolean {
+  return /^\/login\/(reset-password|magic-link|verify-email)$/.test(p);
 }
 
 const SIGNUP_PATHS = ['/criar-conta', '/cadastro', '/signup'];
@@ -39,7 +37,7 @@ export function shouldBootPublicApp(): boolean {
   if (matchBlogPath(p)) return true;
   if (matchLegalPath(p)) return true;
   if (SIGNUP_PATHS.includes(p)) return true;
-  if (p === '/login' || matchAuthEmailPath(p)) return true;
+  if (p === '/login' || isAuthEmailPath(p)) return true;
   if (p === '/' || p === '') return true;
   if (p === '/newsletter') return true;
   return false;

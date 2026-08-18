@@ -13,20 +13,18 @@ import type { User } from './types';
 // Em desenvolvimento: http://localhost:3000/api
 // Em produção: usar URL relativa (/api) se VITE_API_URL não estiver definida
 export const getApiUrl = () => {
-  // Vite usa import.meta.env ao invés de process.env
-  const apiUrl = import.meta.env.VITE_API_URL;
-  
-  // Se VITE_API_URL estiver definida, usar ela
-  if (apiUrl) {
-    return apiUrl;
-  }
-  
-  // Se estiver em produção (Vercel), usar URL relativa
+  // Deploy único no Vercel (front + /api no mesmo domínio). URL absoluta
+  // antiga (gestaoesportiva-free.vercel.app) quebrava o login quando o
+  // domínio canónico passou a ser scout21.com.br.
   if (import.meta.env.PROD) {
     return '/api';
   }
-  
-  // Em desenvolvimento, usar localhost
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    return apiUrl;
+  }
+
   return 'http://localhost:3000/api';
 };
 

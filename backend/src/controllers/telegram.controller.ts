@@ -44,7 +44,7 @@ export const telegramController = {
     }
     try {
       const [me, webhookInfo] = await Promise.all([getTelegramMe(), getTelegramWebhookInfo()]);
-      const expectedUrl = `${(env.PUBLIC_API_URL || 'https://gestaoesportiva-free.vercel.app').replace(/\/$/, '')}/api/telegram/webhook`;
+      const expectedUrl = `${(env.PUBLIC_API_URL || 'https://scout21.com.br').replace(/\/$/, '')}/api/telegram/webhook`;
       return res.json({
         success: true,
         data: {

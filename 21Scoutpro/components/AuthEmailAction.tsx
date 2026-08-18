@@ -50,61 +50,89 @@ export const AuthEmailAction: React.FC<AuthEmailActionProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(kind !== 'reset-password');
+  const [isLoading, setIsLoading] = useState(kind === 'verify-email' && Boolean(token));
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    if (kind === 'reset-password' || !token) return;
+    if (kind === 'verify-email') return;
+    if (!token) {
+      setError('Link inválido. Peça um novo e-mail pelo login.');
+    }
+  }, [kind, token]);
+
+  const consumeToken = async (endpoint: '/auth/magic-link/verify' | '/auth/verify-email') => {
+    const response = await fetch(`${getApiUrl()}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    return response.json();
+  };
+
+  useEffect(() => {
+    if (kind !== 'verify-email') return;
+    if (!token) {
+      setError('Link inválido. Peça um novo e-mail de confirmação.');
+      setIsLoading(false);
+      return;
+    }
 
     let cancelled = false;
     (async () => {
       setIsLoading(true);
       setError('');
       try {
-        const endpoint =
-          kind === 'magic-link' ? '/auth/magic-link/verify' : '/auth/verify-email';
-        const response = await fetch(`${getApiUrl()}${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        });
-        const result = await response.json();
-
+        const result = await consumeToken('/auth/verify-email');
         if (cancelled) return;
-
-        if (kind === 'magic-link' && result.success && result.data) {
-          localStorage.setItem('token', result.data.token);
-          onLogin(mapApiUser(result.data.user));
-          return;
-        }
-
-        if (kind === 'verify-email' && result.success) {
+        if (result.success) {
           setMessage(result.message || 'E-mail confirmado com sucesso.');
           setDone(true);
-          setIsLoading(false);
-          return;
+        } else {
+          setError(result.error || 'Link inválido ou expirado.');
         }
-
-        setError(result.error || 'Link inválido ou expirado.');
-        setIsLoading(false);
       } catch {
-        if (!cancelled) {
-          setError('Erro de conexão. Tente novamente.');
-          setIsLoading(false);
-        }
+        if (!cancelled) setError('Erro de conexão. Tente novamente.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [kind, token, onLogin]);
+  }, [kind, token]);
+
+  const handleMagicLink = async () => {
+    if (!token) {
+      setError('Link inválido. Peça um novo link de acesso.');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await consumeToken('/auth/magic-link/verify');
+      if (result.success && result.data) {
+        localStorage.setItem('token', result.data.token);
+        onLogin(mapApiUser(result.data.user));
+        return;
+      }
+      setError(result.error || 'Link inválido ou expirado.');
+    } catch {
+      setError('Erro de conexão. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setMessage('');
 
+    if (!token) {
+      setError('Link inválido. Peça um novo e-mail de redefinição.');
+      return;
+    }
     if (password.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres.');
       return;
@@ -139,7 +167,7 @@ export const AuthEmailAction: React.FC<AuthEmailActionProps> = ({
     kind === 'reset-password'
       ? 'Nova senha'
       : kind === 'magic-link'
-        ? 'Entrando…'
+        ? 'Entrar sem senha'
         : 'Confirmar e-mail';
 
   return (
@@ -154,6 +182,21 @@ export const AuthEmailAction: React.FC<AuthEmailActionProps> = ({
           <div className="flex flex-col items-center gap-3 py-8 text-zinc-300 text-sm">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00f0ff]" />
             Processando…
+          </div>
+        )}
+
+        {!isLoading && kind === 'magic-link' && !done && !error && (
+          <div className="space-y-4 text-center">
+            <p className="text-sm text-zinc-300">
+              Clique para entrar na sua conta. Este link é de uso único e expira em 15 minutos.
+            </p>
+            <button
+              type="button"
+              onClick={handleMagicLink}
+              className="w-full py-3 bg-[#00f0ff] text-black font-bold uppercase text-xs rounded-xl"
+            >
+              Entrar no SCOUT21
+            </button>
           </div>
         )}
 
@@ -189,7 +232,7 @@ export const AuthEmailAction: React.FC<AuthEmailActionProps> = ({
           </form>
         )}
 
-        {!isLoading && (done || kind !== 'reset-password') && (message || error) && (
+        {!isLoading && (done || (kind !== 'reset-password' && error) || (kind === 'verify-email' && (message || error))) && (
           <div className="space-y-4 text-center">
             {message && (
               <p className="text-[#00f0ff] text-sm bg-cyan-950/40 border border-cyan-900/50 rounded-xl p-3">

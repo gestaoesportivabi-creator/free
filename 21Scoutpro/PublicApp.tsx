@@ -46,8 +46,7 @@ function matchLegalPath(p: string): 'terms' | 'privacy' | null {
 function matchAuthEmailPath(p: string): { kind: 'reset-password' | 'magic-link' | 'verify-email'; token: string } | null {
   const m = p.match(/^\/login\/(reset-password|magic-link|verify-email)$/);
   if (!m) return null;
-  const token = new URLSearchParams(window.location.search).get('token');
-  if (!token) return null;
+  const token = new URLSearchParams(window.location.search).get('token') || '';
   return { kind: m[1] as 'reset-password' | 'magic-link' | 'verify-email', token };
 }
 

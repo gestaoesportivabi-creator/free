@@ -41,8 +41,10 @@ export const env = {
   /** Desenvolvimento local: long polling em vez de webhook */
   TELEGRAM_POLLING: process.env.TELEGRAM_POLLING === 'true',
 
-  /** URL pública da API (webhook Telegram), ex. https://seu-app.vercel.app */
-  PUBLIC_API_URL: process.env.PUBLIC_API_URL || '',
+  /** URL pública da API (webhook Telegram / links absolutos). */
+  PUBLIC_API_URL:
+    process.env.PUBLIC_API_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://scout21.com.br' : ''),
 
   /** Protege POST /api/telegram/cron/reminders (Vercel Cron) */
   CRON_SECRET: process.env.CRON_SECRET || '',

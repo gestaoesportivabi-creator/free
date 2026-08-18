@@ -51,7 +51,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome, onSwitchToR
         setError(result.error || 'Não foi possível enviar o e-mail.');
       }
     } catch {
-      setError('Erro de conexão. Verifique se o backend está rodando.');
+      setError('Não foi possível conectar. Tente novamente em instantes.');
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +129,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome, onSwitchToR
         }
     } catch (error) {
       console.error('Erro ao autenticar:', error);
-      setError('Erro de conexão. Verifique se o backend está rodando.');
+      setError('Não foi possível conectar. Tente novamente em instantes.');
       setIsLoading(false);
     }
   };

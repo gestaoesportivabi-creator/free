@@ -47,6 +47,7 @@ async function deliverEmail(
     to,
     subject,
     html,
+    text: htmlToText(html),
     ...(env.EMAIL_REPLY_TO ? { replyTo: env.EMAIL_REPLY_TO } : {}),
   });
 
@@ -55,7 +56,22 @@ async function deliverEmail(
     throw new Error(error.message || 'Falha ao enviar e-mail');
   }
 
+  console.info(`[email] enviado (${id}) → ${to} provider=${data?.id ?? 'n/a'}`);
   return { id, providerId: data?.id };
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>/gi, '$1 ')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export async function sendPasswordResetEmail(recipient: EmailRecipient): Promise<SendEmailResult> {

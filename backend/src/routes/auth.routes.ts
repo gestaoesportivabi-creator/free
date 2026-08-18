@@ -37,12 +37,22 @@ const signupEmailLimit = rateLimit({
 });
 
 /** Rotas que disparam e-mail: mais frouxas que o cadastro, mas não abertas. */
-const emailSendLimit = rateLimit({
-  scope: 'auth-email',
+const emailSendIpLimit = rateLimit({
+  scope: 'auth-email-ip',
   windowMs: HOUR,
-  max: 5,
+  max: 10,
   message: 'Muitas solicitações. Aguarde alguns minutos e tente novamente.',
 });
+
+const emailSendAddressLimit = rateLimit({
+  scope: 'auth-email-address',
+  windowMs: HOUR,
+  max: 5,
+  keyFrom: emailKey('auth-email'),
+  message: 'Muitas solicitações para este e-mail. Aguarde alguns minutos e tente novamente.',
+});
+
+const emailSendLimit = [emailSendIpLimit, emailSendAddressLimit] as const;
 
 /** Login: trava força-bruta sem punir quem só errou a senha uma vez. */
 const loginLimit = rateLimit({
@@ -55,12 +65,12 @@ const loginLimit = rateLimit({
 router.post('/login', loginLimit, authController.login);
 router.post('/register', signupIpLimit, signupEmailLimit, authController.register);
 router.post('/check-email', rateLimit({ scope: 'check-email', windowMs: HOUR, max: 30 }), authController.checkEmail);
-router.post('/forgot-password', emailSendLimit, authEmailController.forgotPassword);
+router.post('/forgot-password', ...emailSendLimit, authEmailController.forgotPassword);
 router.post('/reset-password', authEmailController.resetPassword);
-router.post('/magic-link', emailSendLimit, authEmailController.requestMagicLink);
+router.post('/magic-link', ...emailSendLimit, authEmailController.requestMagicLink);
 router.post('/magic-link/verify', authEmailController.verifyMagicLink);
 router.post('/verify-email', authEmailController.verifyEmail);
-router.post('/resend-verification', authMiddleware, emailSendLimit, authEmailController.resendVerification);
+router.post('/resend-verification', authMiddleware, ...emailSendLimit, authEmailController.resendVerification);
 router.get('/profile', authMiddleware, authController.profile);
 router.put('/profile', authMiddleware, authController.updateProfile);
 

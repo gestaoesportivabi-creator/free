@@ -420,7 +420,7 @@ export const authController = {
       }
 
       const existing = await prisma.user.findUnique({
-        where: { email: String(email).trim() },
+        where: { email: normalizeAccessEmail(String(email)) },
         select: { id: true },
       });
       if (existing) {
@@ -445,7 +445,7 @@ export const authController = {
 
       const user = await prisma.user.create({
         data: {
-          email: String(email).trim(),
+          email: normalizeAccessEmail(String(email)),
           passwordHash,
           name: displayName,
           roleId: role.id,
