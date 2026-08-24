@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Clock } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface TimeSelectionModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ export const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const [second, setSecond] = useState(initialSecond);
   const minuteScrollRef = useRef<HTMLDivElement>(null);
   const secondScrollRef = useRef<HTMLDivElement>(null);
+
+  useEscapeKey(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {

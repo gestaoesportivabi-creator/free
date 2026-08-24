@@ -3,6 +3,7 @@ import { BarChart, Bar, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tool
 import { Filter, Trophy, AlertCircle, ShieldAlert, Gauge, Activity, PieChart as PieChartIcon, BarChart3, Clock, Target, Goal, BookOpen, Flag, ChevronDown, ChevronUp, Lock, FileDown, Info } from 'lucide-react';
 import { SportConfig, MatchRecord, MatchStats, Player } from '../types';
 import { ExpandableCard } from './ExpandableCard';
+import { LockedFeatureBlock } from './EmBreve';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
@@ -1397,12 +1398,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             {/* Posse de Bola - bloqueado no plano free */}
             <ExpandableCard title="Posse de Bola" icon={PieChartIcon} headerColor="text-[#00f0ff]" titleBlackItalic>
                 {isFreePlan ? (
-                  <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center">
-                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
-                    <p className="text-zinc-400 text-sm max-w-md">
-                      Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                    </p>
-                  </div>
+                  <LockedFeatureBlock featureName="Posse de Bola" />
                 ) : (
                   <>
                     <p className="text-xs text-zinc-500 mb-4" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>Distribuição da posse nos jogos com coleta encerrada (tempo com bola vs adversário).</p>

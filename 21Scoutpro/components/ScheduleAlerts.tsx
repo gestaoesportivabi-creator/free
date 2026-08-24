@@ -44,7 +44,6 @@ export const ScheduleAlerts: React.FC<ScheduleAlertsProps> = ({ schedules }) => 
           return isActive && s.days && Array.isArray(s.days) && s.days.length > 0;
         });
         
-        console.log('📅 Schedules ativos encontrados:', activeSchedules.length, activeSchedules.map(s => ({ id: s.id, title: s.title, isActive: s.isActive })));
         const alertsList: AlertItem[] = [];
 
         activeSchedules.forEach(schedule => {

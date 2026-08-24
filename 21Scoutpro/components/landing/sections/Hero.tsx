@@ -19,7 +19,7 @@ export const Hero: React.FC<HeroProps> = ({ goToSignup }) => (
     />
 
     <div className="relative max-w-7xl mx-auto px-4 md:px-8 lg:px-12 flex flex-col lg:flex-row lg:items-center gap-12 lg:gap-16 min-h-[calc(100svh-7rem)]">
-      <div className="flex-1 max-w-xl space-y-7">
+      <div className="flex-1 max-w-xl min-w-0 space-y-7">
         <p className="text-2xl md:text-3xl font-black italic tracking-tight text-[#00f0ff]">
           SCOUT21
         </p>

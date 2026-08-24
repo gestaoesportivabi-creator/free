@@ -20,15 +20,10 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
         e.preventDefault();
         setIsLoading(true);
         setError('');
-        console.group('📝 [Register] Tentando registrar usuário');
-        console.log('Dados:', { name, email, passwordLength: password.length });
-
         try {
             const result = await registerCoach(name, email, password);
-            console.log('📦 Resultado API:', result);
 
             if (result.success && result.user) {
-                console.log('✅ Sucesso! Redirecionando...');
                 localStorage.setItem('user', JSON.stringify(result.user));
                 onRegisterSuccess(result.user);
             } else {
@@ -40,7 +35,6 @@ export function Register({ onRegisterSuccess, onSwitchToLogin }: RegisterProps) 
             setError('Erro de conexão. Tente novamente.');
         } finally {
             setIsLoading(false);
-            console.groupEnd();
         }
     };
 

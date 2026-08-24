@@ -22,6 +22,15 @@ function isAuthEmailPath(p: string): boolean {
   return /^\/login\/(reset-password|magic-link|verify-email)$/.test(p);
 }
 
+/** Rotas do App autenticado (nunca boot público). */
+function isAuthenticatedAppPath(p: string): boolean {
+  if (p === '/dashboard' || p.startsWith('/dashboard/')) return true;
+  if (p === '/bem-vindo') return true;
+  if (p === '/scout-realtime') return true;
+  if (p === '/guia-de-uso') return true;
+  return false;
+}
+
 const SIGNUP_PATHS = ['/criar-conta', '/cadastro', '/signup'];
 
 function isCalculatorPath(p: string): boolean {
@@ -31,12 +40,13 @@ function isCalculatorPath(p: string): boolean {
 /**
  * Paths que devem entrar pelo PublicApp (sem dashboard).
  * Sessão na home → App completo (restaura usuário).
+ * Rotas de app (/scout-realtime, /guia-de-uso, …) → App.
+ * Paths desconhecidos → PublicApp com 404.
  */
 export function shouldBootPublicApp(): boolean {
   if (typeof window === 'undefined') return false;
   const p = normalizePathname();
-  if (p === '/dashboard' || p.startsWith('/dashboard/')) return false;
-  if (p === '/bem-vindo') return false;
+  if (isAuthenticatedAppPath(p)) return false;
   if ((p === '/' || p === '') && localStorage.getItem('token')) return false;
   if (matchBlogPath(p)) return true;
   if (matchLegalPath(p)) return true;
@@ -45,5 +55,6 @@ export function shouldBootPublicApp(): boolean {
   if (p === '/login' || isAuthEmailPath(p)) return true;
   if (p === '/' || p === '') return true;
   if (p === '/newsletter') return true;
-  return false;
+  // Rotas desconhecidas → shell público com 404 (não cair no dashboard)
+  return true;
 }

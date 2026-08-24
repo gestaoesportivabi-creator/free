@@ -192,8 +192,8 @@ const NewsletterModal: React.FC<NewsletterModalProps> = ({ open, onClose, source
 };
 
 /**
- * Rotas onde nenhum popup automático deve aparecer: o utilizador já está a
- * converter e qualquer interrupção só compete com o formulário.
+ * Rotas onde nenhum popup automático deve aparecer: o usuário já está
+ * convertendo e qualquer interrupção só compete com o formulário.
  */
 const CONVERSION_PATHS = [
   '/criar-conta', '/cadastro', '/signup', '/registro', '/register',
@@ -207,17 +207,43 @@ function isConversionPath(): boolean {
   return CONVERSION_PATHS.includes(path) || path.startsWith('/dashboard');
 }
 
+/**
+ * Usuário logado já é cliente — pedir assinatura de newsletter de captação é
+ * inadequado (aparece no Blog, que clientes leem). Suprime só os gatilhos
+ * automáticos; o botão manual "Newsletter" no header continua funcionando.
+ */
+function hasSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return Boolean(localStorage.getItem('token'));
+  } catch {
+    return false;
+  }
+}
+
 /** Popup auto-ativado (scroll 55% ou 25s) + gatilho manual via botão "Newsletter" no header. */
 export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'newsletter_popup' }) => {
   const [open, setOpen] = useState(false);
   const [triggerReason, setTriggerReason] = useState<'manual' | 'auto'>('auto');
 
   useEffect(() => {
-    if (readStoredState()) return;
-    // Nunca sobrepor o cadastro, o onboarding ou as páginas legais: são o funil
-    // de conversão principal, e um segundo CTA por cima só rouba a atenção.
-    if (isConversionPath()) return;
     let done = false;
+
+    // O botão manual "Newsletter" (header) é ação explícita do usuário e
+    // funciona SEMPRE — inclusive logado. Só os gatilhos automáticos é que são
+    // restringidos abaixo.
+    const onOpenEvent: EventListener = () => {
+      done = true;
+      setTriggerReason('manual');
+      setOpen(true);
+    };
+    window.addEventListener('scout21:newsletter-open', onOpenEvent);
+
+    // Gatilhos automáticos: nunca para quem já assinou/dispensou, quem está
+    // logado (já é cliente) ou em rota de conversão/app.
+    if (readStoredState() || hasSession() || isConversionPath()) {
+      return () => window.removeEventListener('scout21:newsletter-open', onOpenEvent);
+    }
 
     const openAuto = () => {
       if (done) return;
@@ -242,18 +268,6 @@ export const NewsletterPopup: React.FC<NewsletterPopupProps> = ({ source = 'news
       if (e.clientY <= 0) openAuto();
     };
     document.addEventListener('mouseout', onMouseOut);
-
-    const onOpenEvent: EventListener = () => {
-      if (done) {
-        setTriggerReason('manual');
-        setOpen(true);
-        return;
-      }
-      done = true;
-      setTriggerReason('manual');
-      setOpen(true);
-    };
-    window.addEventListener('scout21:newsletter-open', onOpenEvent);
 
     return () => {
       window.clearTimeout(tm);

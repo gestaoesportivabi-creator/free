@@ -29,11 +29,9 @@ async function boot() {
     if (shouldBootPublicApp()) {
       const { PublicApp } = await import('./PublicApp');
       renderShell(<PublicApp />);
-      console.log('✅ Public shell rendered');
     } else {
       const { default: App } = await import('./App');
       renderShell(<App />);
-      console.log('✅ React app rendered successfully');
     }
 
     if (typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/newsletter') {

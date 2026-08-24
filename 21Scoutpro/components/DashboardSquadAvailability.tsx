@@ -10,7 +10,7 @@ interface DashboardSquadAvailabilityProps {
   players: Player[];
   nextMatch: ChampionshipMatch;
   championships: Championship[];
-  /** Na versão free: card Disponíveis = total cadastrados; outros dois = "Em breve" */
+  /** Na versão free: card Disponíveis = total cadastrados; outros dois indisponíveis no plano */
   isFreePlan?: boolean;
 }
 
@@ -77,7 +77,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             <span className="text-zinc-400 font-medium text-xs">Pendurados</span>
           </div>
           {isFreePlan ? (
-            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">Em breve</p>
+            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">—</p>
           ) : (
             <>
               <p className="text-base font-semibold text-white">{withRestriction.length}</p>
@@ -95,7 +95,7 @@ export const DashboardSquadAvailability: React.FC<DashboardSquadAvailabilityProp
             <span className="text-zinc-400 font-medium text-xs">Desfalques por lesão</span>
           </div>
           {isFreePlan ? (
-            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">Em breve</p>
+            <p className="text-base font-medium text-zinc-500 flex items-center justify-center min-h-[2rem]">—</p>
           ) : (
             <>
               <p className="text-base font-semibold text-white">{injuredOnly.length}</p>

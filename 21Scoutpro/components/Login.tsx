@@ -81,8 +81,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome, onSwitchToR
       // Login - chamar API do backend (aceita email ou nome)
         const identifier = email.trim();
         
-        console.log('🔐 Tentando login com:', identifier);
-        
         const response = await fetch(`${getApiUrl()}/auth/login`, {
           method: 'POST',
           headers: {
@@ -119,8 +117,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome, onSwitchToR
             equipeId: result.data.user.equipeId,
           };
           
-          console.log('👤 Usuário criado:', user);
-          console.log('🔄 Chamando onLogin...');
           onLogin(user);
           setIsLoading(false);
         } else {
@@ -257,7 +253,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin, onBackToHome, onSwitchToR
               </div>
             )}
             {successMsg && (
-              <div className="text-[#00f0ff] text-xs bg-cyan-950/60 p-3 rounded-xl border border-cyan-900/50 text-center font-light backdrop-blur-sm">
+              <div className="text-[#00f0ff] text-xs bg-cyan-950/60 p-3 rounded-xl border border-cyan-900/50 text-center font-light backdrop-blur-sm text-zinc-300">
                 {successMsg}
               </div>
             )}

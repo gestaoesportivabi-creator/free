@@ -12,6 +12,7 @@ const JacksonPollock7Page = React.lazy(() =>
   import('./components/calculator/JacksonPollock7Page').then((m) => ({ default: m.JacksonPollock7Page }))
 );
 import { TrialBanner } from './components/TrialBanner';
+import { AppInitSkeleton } from './components/AppInitSkeleton';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
 import { authApi } from './services/api';
 import { useSubscription } from './hooks/useSubscription';
@@ -42,7 +43,7 @@ import { DashboardNextGameCard } from './components/DashboardNextGameCard';
 import { DashboardConditionCard } from './components/DashboardConditionCard';
 import { FirstMatchOnboarding } from './components/FirstMatchOnboarding';
 import { SPORT_CONFIGS } from './constants';
-import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Lock, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
+import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi, meApi } from './services/api';
 import { AthleteHome, type AthleteTodayData } from './components/athlete/AthleteHome';
@@ -902,9 +903,6 @@ export default function App() {
             const created = s.createdAt || now; 
             return (now - created) < thirtyDaysInMs;
         });
-        if (validSchedules.length !== prev.length) {
-            console.log("Auto-deleted expired schedules");
-        }
         return validSchedules;
     });
   }, [loadedResources.schedules]);
@@ -965,13 +963,9 @@ export default function App() {
   };
 
   const handleLogin = (user: User) => {
-      console.log('🔐 handleLogin chamado com usuário:', user);
       clearAllUserData();
-      const token = localStorage.getItem('token');
-      console.log('🔑 Token no localStorage:', token ? 'PRESENTE' : 'AUSENTE');
       setCurrentUser(user);
       setActiveTab(user.role === 'Atleta' ? 'athlete-home' : 'dashboard');
-      console.log('✅ currentUser atualizado, useEffect deve ser disparado');
   };
 
   const handleTabChange = (tab: string) => {
@@ -1119,18 +1113,8 @@ export default function App() {
           return;
         }
 
-        console.log('💾 Iniciando salvamento da partida:', {
-          id: newMatch.id,
-          competition: newMatch.competition,
-          opponent: newMatch.opponent,
-          date: newMatch.date,
-          hasTeamStats: !!newMatch.teamStats,
-          playerStatsCount: Object.keys(newMatch.playerStats || {}).length
-        });
-
         const { saved, operation } = await upsertMatchRecord(newMatch);
         const isCreated = operation === 'created';
-        console.log('💾 Resposta do salvamento:', saved);
         
         if (saved) {
           // Devolver ao chamador (ex.: coleta) para fixar o mesmo id em memória — sem criar partidas novas a cada save
@@ -1163,7 +1147,6 @@ export default function App() {
               const valid = (refreshed as MatchRecord[]).filter(m => m && m.teamStats);
               if (valid.length > 0) {
                 setMatches(valid);
-                console.log('✅ Partida salva e lista recarregada do banco de dados');
               } else {
                 // GET retornou vazio (falha silenciosa da API) — não limpar a lista; incluir a partida salva
                 setMatches(prev => {
@@ -1708,14 +1691,7 @@ export default function App() {
 
   // Mostrar loading enquanto inicializa (ANTES das verificações de rota para evitar flash da landing page)
   if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00f0ff] mx-auto mb-4"></div>
-          <p className="text-zinc-400">Carregando...</p>
-        </div>
-      </div>
-    );
+    return <AppInitSkeleton />;
   }
 
   // Tempo real dedicado para a coleta autenticada.
@@ -1813,13 +1789,7 @@ export default function App() {
 
   if (currentRoute === 'calculator') {
     return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">
-            Carregando…
-          </div>
-        }
-      >
+      <Suspense fallback={<AppInitSkeleton message="Carregando calculadora…" />}>
         <JacksonPollock7Page />
       </Suspense>
     );
@@ -1828,13 +1798,7 @@ export default function App() {
   // Mostrar landing page
   if (currentRoute === 'landing') {
     return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 text-sm">
-            Carregando…
-          </div>
-        }
-      >
+      <Suspense fallback={<AppInitSkeleton message="Carregando página…" />}>
         <LandingPage
           onGetStarted={() => setCurrentRoute('signup')}
           onGoToLogin={() => setCurrentRoute('login')}
@@ -1985,7 +1949,7 @@ export default function App() {
       case 'quarteto':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
           </TabBackgroundWrapper>
         );
       case 'general':
@@ -1993,13 +1957,7 @@ export default function App() {
       case 'individual':
         return (
           <TabBackgroundWrapper>
-            <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
-              <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
-              <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Scout Individual</h2>
-              <p className="text-zinc-400 text-sm max-w-md">
-                Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-              </p>
-            </div>
+            <EmBreve featureName="Scout Individual" onGoDashboard={() => handleTabChange('dashboard')} />
           </TabBackgroundWrapper>
         );
       case 'physical':
@@ -2013,7 +1971,7 @@ export default function App() {
                 championshipMatches={championshipMatches}
               />
             ) : (
-              <EmBreve />
+              <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
             )}
           </TabBackgroundWrapper>
         );
@@ -2028,7 +1986,7 @@ export default function App() {
                 onDeleteAssessment={handleDeleteAssessment}
               />
             ) : (
-              <EmBreve />
+              <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
             )}
           </TabBackgroundWrapper>
         );
@@ -2124,10 +2082,8 @@ export default function App() {
             }}
             onRefresh={async () => {
               try {
-                console.log('🔄 Recarregando dados da planilha...');
                 const data = await championshipMatchesApi.getAll();
                 setChampionshipMatches(data);
-                console.log('✅ Dados recarregados da planilha:', data.length, 'partidas');
                 alert(`Dados recarregados! ${data.length} partida(s) encontrada(s).`);
               } catch (error) {
                 console.error('❌ Erro ao recarregar dados:', error);
@@ -2168,7 +2124,7 @@ export default function App() {
             {performanceTier ? (
               <PseTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
             ) : (
-              <EmBreve />
+              <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
             )}
           </TabBackgroundWrapper>
         );
@@ -2178,14 +2134,14 @@ export default function App() {
             {performanceTier ? (
               <PsrTab schedules={schedules} championshipMatches={championshipMatches} players={players} />
             ) : (
-              <EmBreve />
+              <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
             )}
           </TabBackgroundWrapper>
         );
       case 'athletes-physio':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
           </TabBackgroundWrapper>
         );
       case 'wellness':
@@ -2194,27 +2150,21 @@ export default function App() {
             {performanceTier ? (
               <WellnessTab players={players} schedules={schedules} championshipMatches={championshipMatches} />
             ) : (
-              <EmBreve />
+              <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
             )}
           </TabBackgroundWrapper>
         );
       case 'academia':
         return (
           <TabBackgroundWrapper>
-            <EmBreve />
+            <EmBreve onGoDashboard={() => handleTabChange('dashboard')} />
           </TabBackgroundWrapper>
         );
       case 'management-report':
         if (essentialRestricted) {
           return (
             <TabBackgroundWrapper>
-              <div className="flex flex-col items-center justify-center min-h-[60vh] rounded-lg border border-zinc-800 bg-zinc-950 p-8 text-center">
-                <Lock className="w-14 h-14 text-zinc-500 mb-4" strokeWidth={1.5} />
-                <h2 className="text-lg font-semibold text-white uppercase tracking-wide mb-2">Relatório gerencial</h2>
-                <p className="text-zinc-400 text-sm max-w-md">
-                  Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                </p>
-              </div>
+              <EmBreve featureName="Relatório gerencial" onGoDashboard={() => handleTabChange('dashboard')} />
             </TabBackgroundWrapper>
           );
         }
@@ -2263,7 +2213,7 @@ export default function App() {
                   className="mt-1 text-xl md:text-2xl text-white uppercase font-black italic"
                   style={{ fontFamily: "'Arial Black', Arial, sans-serif", letterSpacing: '1px', color: '#FFFFFF' }}
                 >
-                  CENTRAL DE INFOMAÇÕES
+                  CENTRAL DE INFORMAÇÕES
                 </h1>
                 <p className="text-zinc-500 text-sm mt-1">Indicadores e status operacional do clube.</p>
               </header>
@@ -2333,7 +2283,7 @@ export default function App() {
                 <StatCard label="Atletas" value={overviewStats.totalAthletes} helper={overviewStats.totalAthletes > 0 ? 'Cadastros' : '—'} />
                 <StatCard label="Jogos" value={overviewStats.totalGames} helper="" highlight={overviewStats.totalGames > 0} />
                 <StatCard label="Artilheiro" value={overviewStats.topScorerName} helper={overviewStats.topScorerGoals > 0 ? `${overviewStats.topScorerGoals} gols` : '—'} />
-                <StatCard label="Lesões no ano" value={essentialRestricted ? 'Em breve' : overviewStats.injuriesThisYear} helper={essentialRestricted ? '—' : String(overviewStats.currentYear)} />
+                <StatCard label="Lesões no ano" value={essentialRestricted ? '—' : overviewStats.injuriesThisYear} helper={essentialRestricted ? 'Plano Essencial' : String(overviewStats.currentYear)} />
               </section>
 
             </div>
@@ -2374,7 +2324,6 @@ export default function App() {
           onOpenAssistant={openAssistant}
           assistantActive={assistantOpen}
           onLogout={() => {
-              console.log('👋 Logout - Limpando dados e voltando para home');
               clearAllUserData(true);
             setCurrentUser(null);
             setCurrentRoute('landing');

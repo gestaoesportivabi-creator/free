@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Clock, Trophy } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 export type MatchType = 'normal' | 'extraTime' | 'penalties' | 'extraTimePenalties';
 
@@ -16,6 +17,8 @@ export const MatchTypeModal: React.FC<MatchTypeModalProps> = ({
 }) => {
   const [matchType, setMatchType] = useState<MatchType>('normal');
   const [extraTimeMinutes, setExtraTimeMinutes] = useState<number>(5);
+
+  useEscapeKey(isOpen, onClose);
 
   if (!isOpen) return null;
 

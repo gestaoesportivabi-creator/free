@@ -25,8 +25,11 @@ const AuthEmailAction = lazy(() =>
 const JacksonPollock7Page = lazy(() =>
   import('./components/calculator/JacksonPollock7Page').then((m) => ({ default: m.JacksonPollock7Page }))
 );
+const NotFoundPage = lazy(() =>
+  import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
+);
 
-type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal' | 'calculator';
+type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal' | 'calculator' | 'notfound';
 
 function normalizePathname(): string {
   return window.location.pathname.replace(/\/$/, '') || '/';
@@ -68,7 +71,8 @@ function getInitialRoute(): PublicRoute {
   if (SIGNUP_PATHS.includes(p)) return 'signup';
   if (isCalculatorPath(p)) return 'calculator';
   if (p === '/login' || matchAuthEmailPath(p)) return 'login';
-  return 'landing';
+  if (p === '/' || p === '' || p === '/newsletter') return 'landing';
+  return 'notfound';
 }
 
 function blogPathFor(lang: BlogLang, slug?: string | null): string {
@@ -148,6 +152,10 @@ export function PublicApp() {
       trackPageView('/login');
       return;
     }
+    if (route === 'notfound') {
+      trackPageView('/404');
+      return;
+    }
     window.history.replaceState({}, '', '/');
     trackPageView('/');
   }, [route, blogSlug, blogLang, legalDoc]);
@@ -201,6 +209,15 @@ export function PublicApp() {
       ) : null}
 
       {route === 'calculator' ? <JacksonPollock7Page /> : null}
+
+      {route === 'notfound' ? (
+        <NotFoundPage
+          onHome={() => {
+            setRoute('landing');
+            window.history.pushState({}, '', '/');
+          }}
+        />
+      ) : null}
 
       {route === 'signup' ? (
         <SignUp

@@ -192,7 +192,6 @@ export const TimeControl: React.FC<TimeControlProps> = ({ match, players, onSave
                 const saved = await timeControlsApi.saveForMatch(match.id, timeControlsWithTotals);
                 if (saved && saved.length > 0) {
                     savedCount = saved.length;
-                    console.log(`✅ Salvos ${savedCount} controles de tempo para o jogo`);
                 }
             } catch (error) {
                 console.error('Erro ao salvar controles de tempo:', error);

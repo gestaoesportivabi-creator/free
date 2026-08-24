@@ -130,6 +130,13 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
             </div>
 
             {/* Instagram Style "Stories" - Top Performers */}
+            {sortedPlayers.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500 bg-black/50 rounded-2xl border border-zinc-900">
+                    <Trophy size={48} className="mx-auto mb-3 opacity-50" />
+                    <p className="font-bold text-sm">Nenhuma estatística ainda</p>
+                    <p className="text-xs mt-1">Registre partidas no Scout para ver o ranking</p>
+                </div>
+            ) : (
             <div className="w-full overflow-x-auto pb-4 scrollbar-hide">
                 <div className="flex gap-6 min-w-max px-2">
                     {sortedPlayers.slice(0, 8).map((player, index) => (
@@ -158,6 +165,7 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                     ))}
                 </div>
             </div>
+            )}
 
             {/* Detailed Ranking Table */}
             <div className="bg-black rounded-3xl border border-zinc-900 overflow-hidden shadow-xl">
@@ -172,7 +180,13 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
-                        {sortedPlayers.map((player, index) => (
+                        {sortedPlayers.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="p-10 text-center text-zinc-500 text-sm">
+                                    Nenhum atleta com jogos no filtro selecionado.
+                                </td>
+                            </tr>
+                        ) : sortedPlayers.map((player, index) => (
                             <tr key={player.id} className="group hover:bg-zinc-900/40 transition-colors">
                                 <td className="p-4 text-center">
                                     {index < 3 ? (

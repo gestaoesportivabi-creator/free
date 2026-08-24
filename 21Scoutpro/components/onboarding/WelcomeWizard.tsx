@@ -8,7 +8,7 @@ import { ParsedPlayer, RosterPaste } from './RosterPaste';
  * Wizard de primeiro acesso.
  *
  * Existe porque o cadastro sozinho leva a um dashboard vazio: sem elenco e sem
- * jogos, todo gráfico do SCOUT21 é uma caixa vazia e o utilizador não consegue
+ * jogos, todo gráfico do SCOUT21 é uma caixa vazia e o usuário não consegue
  * avaliar nada. Ver docs/PLANO_MESTRE_TRIAL_30D.md (§4).
  *
  * Todos os passos são puláveis — nunca prender quem só quer olhar.
@@ -87,7 +87,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
     try {
       // Sequencial de propósito: a API de jogadores não tem endpoint em lote,
       // e disparar 30 requisições em paralelo no primeiro acesso é bom jeito
-      // de tomar rate-limit e assustar o utilizador com metade salva.
+      // de tomar rate-limit e assustar o usuário com metade salva.
       let saved = 0;
       for (const player of players) {
         await playersApi.create(player);

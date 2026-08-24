@@ -10,6 +10,7 @@ interface MenuItem {
   label: string;
   icon?: any;
   restricted: boolean;
+  href?: string;
 }
 
 interface Category {
@@ -88,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         { id: 'psr', label: 'PSR (Treinos e Jogos)', icon: RefreshCw, restricted: false },
         { id: 'wellness', label: 'Bem-Estar Diário', icon: Brain, restricted: false },
         { id: 'assessment', label: 'Avaliação Física', icon: Ruler, restricted: false },
+        { id: 'calculator-7d', label: 'Calculadora 7 dobras', icon: Calculator, restricted: false, href: '/calculadoras/jackson-pollock-7-dobras' },
         { id: 'academia', label: 'Musculação', icon: Dumbbell, restricted: false },
       ]
     }
@@ -205,19 +207,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       
       <nav className={`flex-1 overflow-y-auto custom-scrollbar pb-4 ${retracted ? 'px-2 pt-4 space-y-1' : 'px-4 pt-2 space-y-2'}`}>
           <a
-            href="/calculadoras/jackson-pollock-7-dobras"
-            title="Calculadora 7 dobras"
-            onClick={() => onNavigate?.()}
-            className={`w-full flex items-center rounded-xl transition-all duration-200 text-zinc-500 hover:bg-zinc-900 hover:text-[#00f0ff] border border-transparent ${
-              retracted ? 'justify-center p-2.5' : 'space-x-3 px-4 py-3'
-            }`}
-          >
-            <Calculator size={20} className="shrink-0 text-zinc-600" />
-            {!retracted && (
-              <span className="text-xs uppercase tracking-wider font-bold whitespace-nowrap">Calculadora 7 dobras</span>
-            )}
-          </a>
-          <a
             href="/blog"
             title="Blog"
             onClick={() => onNavigate?.()}
@@ -288,6 +277,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                 const showLock =
                   LOCKED_MENU_TAB_IDS.has(item.id) ||
                   (category.id === 'fisiologia' && !fisiologiaUnlocked);
+                if (item.href) {
+                  return (
+                    <a
+                      key={item.id}
+                      href={item.href}
+                      title={item.label}
+                      onClick={() => onNavigate?.()}
+                      className="w-full flex justify-center p-2.5 rounded-xl transition-all duration-200 group text-zinc-500 hover:bg-zinc-900 hover:text-white"
+                    >
+                      <ItemIcon size={20} className="shrink-0 text-zinc-600 group-hover:text-[#00f0ff]" />
+                    </a>
+                  );
+                }
                 return (
                 <button
                   key={item.id}
@@ -345,6 +347,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
                         const showLock =
                           LOCKED_MENU_TAB_IDS.has(item.id) ||
                           (category.id === 'fisiologia' && !fisiologiaUnlocked);
+                        if (item.href) {
+                          return (
+                            <a
+                              key={item.id}
+                              href={item.href}
+                              onClick={() => onNavigate?.()}
+                              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 group text-zinc-500 hover:bg-zinc-900 hover:text-white"
+                            >
+                              <ItemIcon size={18} className="shrink-0 text-zinc-600 group-hover:text-[#00f0ff]" />
+                              <span className="text-xs uppercase tracking-wider whitespace-nowrap text-ellipsis overflow-hidden font-medium">
+                                {item.label}
+                              </span>
+                            </a>
+                          );
+                        }
                         return (
                           <button
                             key={item.id}

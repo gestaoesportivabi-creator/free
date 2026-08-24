@@ -177,14 +177,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
   onDeleteChampionshipMatch,
   isFreePlan = false,
 }) => {
-    // Debug: log initialData quando recebido
-    useEffect(() => {
-        if (initialData) {
-            console.log('🔍 ScoutTable recebeu initialData:', initialData);
-            console.log('🔍 Competition no initialData:', initialData?.competition);
-        }
-    }, [initialData]);
-    
     // Estado para controlar quais partidas estão expandidas
     const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
     const [isCreatingNew, setIsCreatingNew] = useState(false); // Inicialmente calendário; form ao clicar em partida ou Nova Partida
@@ -327,12 +319,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         }
     ]);
 
-    // Carregar players quando a lista mudar (para incluir novos atletas)
-    useEffect(() => {
-        console.log('📋 Players atualizados no ScoutTable:', players.length, 'atletas');
-        console.log('📋 IDs dos players:', players.map(p => ({ id: String(p.id).trim(), name: p.name })));
-    }, [players]);
-
     // Auto-preenchimento: Trazer todos os atletas ativos quando não houver entries válidas (quando vem da gestão de equipe ou ao abrir a aba)
     useEffect(() => {
         // Só executar se não houver initialData (para não sobrescrever dados da tabela de campeonato)
@@ -387,7 +373,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         
         // Só atualizar se realmente criou entries novas (mais que a entrada vazia inicial)
         if (newEntries.length > 0) {
-            console.log('✅ Preenchendo automaticamente com', newEntries.length, 'atletas ativos da gestão de equipe');
             setEntries(newEntries);
         }
     }, [players, initialData]); // Dependências: players e initialData (não incluir entries para evitar loop)
@@ -531,7 +516,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         const nextMatch = getNextScheduledMatch();
         if (!nextMatch) return;
         
-        console.log('✅ Carregando automaticamente próximo jogo:', nextMatch);
         
         // Preencher dados do próximo jogo
         if (nextMatch.competition && nextMatch.competition.trim() !== '') {
@@ -622,12 +606,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     // Preencher automaticamente quando initialData for fornecido (vindo da Tabela de Campeonato)
     useEffect(() => {
         if (initialData) {
-            console.log('📋 initialData recebido:', initialData);
-            console.log('📋 Competition no initialData:', initialData.competition);
-            
             // Preencher dados do header - garantir que competition seja preenchida
             if (initialData.competition && initialData.competition.trim() !== '') {
-                console.log('✅ Preenchendo competition:', initialData.competition);
                 setCompetition(initialData.competition);
             } else {
                 console.warn('⚠️ Competition não encontrada ou vazia no initialData');
@@ -740,12 +720,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         });
         
         if (matchingMatch) {
-            console.log('✅ Partida da tabela de campeonato encontrada para a data atual:', matchingMatch);
-            console.log('📋 Competition da partida:', matchingMatch.competition);
-            
             // Preencher dados automaticamente (garantir que competition seja preenchida sempre que houver)
             if (matchingMatch.competition && matchingMatch.competition.trim() !== '') {
-                console.log('✅ Preenchendo competition automaticamente:', matchingMatch.competition);
                 setCompetition(matchingMatch.competition);
             } else {
                 console.warn('⚠️ Competition não encontrada ou vazia na partida:', matchingMatch);
@@ -795,12 +771,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                         card: 'Nenhum' as const,
                         rpe: 5,
                     }));
-                    console.log('✅ Preenchendo automaticamente com', newEntries.length, 'atletas ativos da tabela de campeonato');
                     setEntries(newEntries);
                 }
             }
-        } else {
-            console.log('ℹ️ Nenhuma partida encontrada na tabela de campeonato para a data:', normalizedCurrentDate);
         }
     }, [entries, championshipMatches, initialData, opponent, competition, location]);
 
@@ -811,11 +784,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     };
 
     const handlePlayerSelect = (index: number, playerId: string) => {
-        console.log('🔍 handlePlayerSelect chamado:', { index, playerId, totalPlayers: players.length });
-        
         if (!playerId || playerId === '' || playerId === 'Selecione...') {
             // Se seleção foi limpa, resetar campos
-            console.log('🔄 Limpando seleção do atleta');
             const newEntries = [...entries];
             newEntries[index] = {
                 ...newEntries[index],
@@ -831,28 +801,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         // Normalizar IDs para comparação (remover espaços e converter para string)
         const normalizedPlayerId = String(playerId).trim();
         
-        console.log('🔍 Buscando atleta com ID normalizado:', normalizedPlayerId);
-        console.log('📋 Lista de players disponíveis:', players.map(p => ({ 
-            id: p.id, 
-            idType: typeof p.id, 
-            idString: String(p.id).trim(),
-            name: p.name 
-        })));
-        
         // Tentar encontrar o player de várias formas
         let player = players.find(p => {
             const pId = String(p.id).trim();
             const normalized = normalizedPlayerId;
-            const match = pId === normalized;
-            if (match) {
-                console.log('✅ Match encontrado!', { playerId: p.id, normalized: pId, selected: normalized });
-            }
-            return match;
+            return pId === normalized;
         });
         
         // Se não encontrou por comparação exata, tentar comparação mais flexível
         if (!player) {
-            console.log('⚠️ Não encontrado por comparação exata, tentando comparação flexível...');
             player = players.find(p => {
                 const pId = String(p.id).trim();
                 const normalized = normalizedPlayerId;
@@ -867,27 +824,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         
         // Se ainda não encontrou, tentar por nome (caso o ID esteja errado mas o nome esteja correto)
         if (!player) {
-            console.log('⚠️ Não encontrado por ID, tentando por nome...');
             const selectElement = document.querySelector(`select[data-entry-index="${index}"]`) as HTMLSelectElement;
             if (selectElement) {
                 const selectedOption = selectElement.options[selectElement.selectedIndex];
                 const playerName = selectedOption.text;
-                console.log('🔍 Tentando encontrar por nome:', playerName);
                 player = players.find(p => p.name === playerName);
             }
         }
         
         const newEntries = [...entries];
-        
-        console.log('📊 Resultado da busca:', {
-            selectedId: normalizedPlayerId,
-            found: player ? {
-                id: player.id,
-                name: player.name,
-                jerseyNumber: player.jerseyNumber
-            } : null,
-            totalPlayers: players.length
-        });
         
         if (player) {
             const finalId = String(player.id).trim();
@@ -898,12 +843,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                 jerseyNumber: player.jerseyNumber,
                 position: player.position
             };
-            console.log('✅ Atleta selecionado com sucesso!', {
-                id: finalId,
-                name: player.name,
-                jerseyNumber: player.jerseyNumber,
-                position: player.position
-            });
         } else {
             console.error('❌ ERRO: Atleta não encontrado!', {
                 searchedId: normalizedPlayerId,
@@ -1676,23 +1615,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             playerStats: playerStats,
             status: 'encerrado',
         };
-
-        console.log('💾 Salvando partida:', {
-            id: newMatch.id,
-            competition: newMatch.competition,
-            opponent: newMatch.opponent,
-            teamStats: {
-                goals: teamStats.goals,
-                goalsConceded: teamStats.goalsConceded,
-                minutesPlayed: teamStats.minutesPlayed
-            },
-            hasPlayerStats: Object.keys(playerStats).length > 0,
-            playerStatsKeys: Object.keys(playerStats),
-            playerStatsCount: Object.keys(playerStats).length,
-            goalMethodsScored: teamStats.goalMethodsScored,
-            goalMethodsConceded: teamStats.goalMethodsConceded,
-            entriesWithAthleteId: entries.filter(e => e.athleteId && e.athleteId.trim() !== '').length
-        });
 
         try {
         onSave(newMatch);

@@ -48,9 +48,9 @@ export const UsageGuidePage: React.FC<UsageGuidePageProps> = ({
               Guia de Uso Scout21
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-300">
-              Um guia rapido para abrir partidas, usar o cronometro, registrar eventos,
+              Um guia rápido para abrir partidas, usar o cronômetro, registrar eventos,
               salvar como incompleta, retomar a coleta e finalizar o trabalho com
-              seguranca.
+              segurança.
             </p>
           </div>
           <button
@@ -67,9 +67,9 @@ export const UsageGuidePage: React.FC<UsageGuidePageProps> = ({
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="rounded-3xl border border-zinc-800 bg-black p-4 shadow-lg">
           <h2 className="px-2 text-xs font-bold uppercase tracking-[0.24em] text-zinc-500">
-            Topicos
+            Tópicos
           </h2>
-          <nav className="mt-4 space-y-2" aria-label="Topicos do guia de uso">
+          <nav className="mt-4 space-y-2" aria-label="Tópicos do guia de uso">
             {USAGE_GUIDE_SECTIONS.map((section) => {
               const isActive = selectedTopic === section.id;
               return (
@@ -114,8 +114,8 @@ export const UsageGuidePage: React.FC<UsageGuidePageProps> = ({
                   Como aproveitar melhor este guia
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-300">
-                  Leia a ordem completa na primeira vez. Depois, use os topicos como
-                  consulta rapida durante a operacao.
+                  Leia a ordem completa na primeira vez. Depois, use os tópicos como
+                  consulta rápida durante a operação.
                 </p>
               </div>
             </div>

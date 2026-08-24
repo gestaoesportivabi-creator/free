@@ -5,7 +5,7 @@ import { OnboardingSnapshot } from '../services/api';
 /**
  * Checklist de ativação no painel.
  *
- * É um mapa opcional do primeiro acesso: o utilizador pode explorar a
+ * É um mapa opcional do primeiro acesso: o usuário pode explorar a
  * plataforma livremente e voltar ao Guia de Uso quando precisar.
  */
 

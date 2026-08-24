@@ -3,6 +3,7 @@ import { Moon, Activity, Heart } from 'lucide-react';
 import { WeeklySchedule } from '../types';
 import { normalizeScheduleDays } from '../utils/scheduleUtils';
 import { fetchAllStaffWellnessFromApi } from '../utils/wellnessStaffData';
+import { PLAN_LOCKED_MESSAGE } from './EmBreve';
 
 type StoredSono = Record<string, Record<string, number>>;
 type StoredPse = Record<string, Record<string, number>>;
@@ -13,7 +14,7 @@ type ChampionshipMatchForAlert = { date: string };
 interface DashboardConditionCardProps {
   schedules: WeeklySchedule[];
   championshipMatches: ChampionshipMatchForAlert[];
-  /** Na versão free não exibir dados, apenas mensagem "Em breve" */
+  /** Na versão free não exibir dados de fisiologia */
   isFreePlan?: boolean;
 }
 
@@ -28,7 +29,7 @@ function teamAvg(values: number[]): number | null {
   return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
 }
 
-const MESSAGE_EM_BREVE = 'Em breve, estamos desenvolvendo. Entre em contato para mais informações.';
+const MESSAGE_PLAN_LOCKED = PLAN_LOCKED_MESSAGE;
 
 export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
   schedules = [],
@@ -42,7 +43,7 @@ export const DashboardConditionCard: React.FC<DashboardConditionCardProps> = ({
           Condição física da equipe
         </p>
         <div className="h-px bg-white/[0.06] mb-3" />
-        <p className="text-zinc-400 text-sm">{MESSAGE_EM_BREVE}</p>
+        <p className="text-zinc-400 text-sm">{MESSAGE_PLAN_LOCKED}</p>
       </div>
     );
   }

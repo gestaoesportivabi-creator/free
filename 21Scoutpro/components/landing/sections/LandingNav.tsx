@@ -40,10 +40,10 @@ export const LandingNav: React.FC<LandingNavProps> = ({
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 overflow-x-hidden">
       <div className="max-w-7xl mx-auto px-4 md:px-8 lg:px-12 py-3 md:py-4">
-        <div className="flex items-center justify-between gap-6">
-          <a href="/" className="flex items-center shrink-0" aria-label="SCOUT21 — início">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <a href="/" className="flex items-center shrink-0 min-w-0" aria-label="SCOUT21 — início">
             <img src="/public-logo.png.png" alt="SCOUT21" className="h-12 md:h-14 w-auto" />
           </a>
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
@@ -86,11 +86,11 @@ export const LandingNav: React.FC<LandingNavProps> = ({
               Login
             </button>
           </div>
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-1.5 shrink-0 md:hidden">
             <button
               type="button"
               onClick={() => setMobileMenuOpen((o) => !o)}
-              className="p-2 text-zinc-400 hover:text-white rounded-lg"
+              className="p-2 text-zinc-400 hover:text-white rounded-lg shrink-0"
               aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
             >
               {mobileMenuOpen ? (
@@ -106,21 +106,14 @@ export const LandingNav: React.FC<LandingNavProps> = ({
             <a
               href={JP7_PATH}
               onClick={goToCalculator('nav-mobile')}
-              className="text-[#00f0ff] text-sm font-medium"
+              className="text-[#00f0ff] text-xs font-medium whitespace-nowrap"
             >
               Calculadora
-            </a>
-            <a
-              href="/criar-conta"
-              onClick={goToSignup('nav-mobile')}
-              className="inline-flex items-center gap-2 text-zinc-400 hover:text-[#00f0ff] text-sm font-medium"
-            >
-              Teste grátis
             </a>
             <button
               type="button"
               onClick={() => trackLogin('nav-mobile')}
-              className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg"
+              className="px-3 py-2 bg-[#00f0ff] text-black font-semibold text-xs uppercase rounded-lg shrink-0"
             >
               Login
             </button>
@@ -146,6 +139,13 @@ export const LandingNav: React.FC<LandingNavProps> = ({
               className="text-[#00f0ff] text-sm font-medium py-2"
             >
               Blog
+            </a>
+            <a
+              href="/criar-conta"
+              onClick={goToSignup('nav-mobile-menu')}
+              className="text-zinc-400 hover:text-white text-sm font-medium py-2"
+            >
+              Teste grátis
             </a>
             <NewsletterTriggerButton
               source="nav-mobile-menu"

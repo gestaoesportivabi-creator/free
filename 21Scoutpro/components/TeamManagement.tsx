@@ -4,6 +4,7 @@ import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
 import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock, Eye, EyeOff } from 'lucide-react';
 import { INJURY_LOCATIONS_BY_TYPE } from '../utils/injuryLocations';
 import { playersApi } from '../services/api';
+import { LockedFeatureBlock } from './EmBreve';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
 const BIRTH_DATE_MIN_ISO = '1950-01-01';
@@ -1224,12 +1225,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                         {/* TAB: MEDICAL (Injury History) - bloqueada na versão free */}
                         {activeTab === 'medical' && (
                             isFreePlan ? (
-                                <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
-                                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
-                                    <p className="text-zinc-400 text-sm max-w-md">
-                                        Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                                    </p>
-                                </div>
+                                <LockedFeatureBlock featureName="Histórico médico" />
                             ) : (
                             <div className="space-y-6 animate-fade-in">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
@@ -1359,12 +1355,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                         {/* TAB: MAX LOAD - bloqueada na versão free */}
                         {activeTab === 'maxLoad' && (
                             isFreePlan ? (
-                                <div className="flex flex-col items-center justify-center py-12 px-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 text-center animate-fade-in">
-                                    <Lock className="w-12 h-12 text-zinc-500 mb-4" strokeWidth={1.5} />
-                                    <p className="text-zinc-400 text-sm max-w-md">
-                                        Em breve, estamos desenvolvendo. Entre em contato para mais informações.
-                                    </p>
-                                </div>
+                                <LockedFeatureBlock featureName="Carga máxima" />
                             ) : (
                             <div className="space-y-6 animate-fade-in">
                                 {/* Botão Adicionar Exercício */}

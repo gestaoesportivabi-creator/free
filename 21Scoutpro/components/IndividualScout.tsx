@@ -109,18 +109,6 @@ const PlayerCard: React.FC<{
   // Usar o número de partidas que têm timeControls registrados, ou o número total de partidas do jogador
   const gamesCount = playerTimeControls.length > 0 ? playerTimeControls.length : stats.games;
   const avgMinutesPlayed = gamesCount > 0 ? Math.round(totalMinutesPlayed / gamesCount) : 0;
-  
-  // Debug: log apenas se houver timeControls
-  if (timeControls.length > 0) {
-    console.log(`📊 Player ${player.name} (${player.id}):`, {
-      totalTimeControls: timeControls.length,
-      playerTimeControlsCount: playerTimeControls.length,
-      totalMinutes: totalMinutesPlayed,
-      gamesCount: gamesCount,
-      avgMinutes: avgMinutesPlayed,
-      matchIds: matchIds
-    });
-  } 
 
   // Averages for the Pentagonal Chart (garantir divisão por zero)
   const avgShotsOn = stats.games > 0 ? stats.shotsOn / stats.games : 0;

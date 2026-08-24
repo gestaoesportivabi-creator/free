@@ -264,10 +264,7 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
  */
 async function del(resource: string, id: string): Promise<boolean> {
   try {
-    console.log(`🗑️ Tentando deletar ${resource} com ID: ${id}`);
-    
     const url = `${getApiUrl()}/${resource}/${id}`;
-    console.log(`📡 URL da requisição DELETE: ${url}`);
     
     // Adicionar timeout de 10 segundos
     const controller = new AbortController();
@@ -285,7 +282,6 @@ async function del(resource: string, id: string): Promise<boolean> {
     clearTimeout(timeoutId);
 
     const result: ApiResponse<any> = await response.json();
-    console.log(`📥 Resposta DELETE:`, result);
 
     if (!result.success) {
       console.error('❌ API Error:', result.error);
@@ -293,7 +289,6 @@ async function del(resource: string, id: string): Promise<boolean> {
       return false;
     }
 
-    console.log(`✅ ${resource} deletado com sucesso!`);
     return true;
   } catch (error: any) {
     if (error.name === 'AbortError') {
@@ -438,14 +433,7 @@ export const timeControlsApi = {
  */
 export const championshipMatchesApi = {
   getAll: async () => {
-    console.log('🔍 championshipMatchesApi.getAll chamado');
     const result = await get<any>(API_RESOURCES.championshipMatches);
-    console.log('📥 championshipMatchesApi.getAll resultado:', result);
-    console.log('📊 Tipo do resultado:', typeof result, Array.isArray(result));
-    console.log('📊 Quantidade de itens:', result?.length || 0);
-    if (result && result.length > 0) {
-      console.log('📋 Primeiro item:', result[0]);
-    }
     return result;
   },
   getById: (id: string) => get<any>(API_RESOURCES.championshipMatches, id).then(arr => arr[0] || null),

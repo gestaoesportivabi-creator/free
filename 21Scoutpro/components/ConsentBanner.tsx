@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { grantAnalyticsConsent, denyAnalyticsConsent } from '../utils/analytics';
 
 const KEY = 'scout21_consent_v1';
+const BODY_PADDING = '120px';
 
 export const ConsentBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
+  const previousPaddingRef = useRef<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -18,6 +20,17 @@ export const ConsentBanner: React.FC = () => {
     if (gaLoaded && !saved) setVisible(true);
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !visible) return;
+
+    previousPaddingRef.current = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = BODY_PADDING;
+
+    return () => {
+      document.body.style.paddingBottom = previousPaddingRef.current;
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   return (
@@ -28,7 +41,7 @@ export const ConsentBanner: React.FC = () => {
     >
       <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-6">
         <p className="text-sm text-zinc-300 flex-1">
-          Usamos cookies apenas para medir desempenho do site (Google Analytics). Sem anúncios. Podes recusar.
+          Usamos cookies apenas para medir desempenho do site (Google Analytics). Sem anúncios. Você pode recusar.
         </p>
         <div className="flex gap-2 shrink-0">
           <button

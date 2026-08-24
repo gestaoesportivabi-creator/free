@@ -159,7 +159,7 @@ export const AthleteSelector: React.FC<AthleteSelectorProps> = ({
                         {!disabled && (
                             <div
                                 className="flex items-center gap-1 rounded-lg border border-zinc-600/50 bg-zinc-800/50 px-2 py-1 w-full justify-center"
-                                title="Em breve, estamos desenvolvendo. Entre em contato para mais informações."
+                                title="Disponível em planos superiores"
                             >
                                 <Lock className="w-3 h-3 text-zinc-500 shrink-0" strokeWidth={1.5} />
                                 <span className="text-[8px] uppercase font-bold text-zinc-400 leading-tight">Índices Físicos</span>

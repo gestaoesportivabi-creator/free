@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Player, PhysicalAssessment } from '../types';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import {
   Calculator,
   Ruler,
@@ -108,6 +109,7 @@ function bandToBfTextClass(band: BodyFatReferenceBand): string {
 const formulaBox = 'my-3 rounded-lg border border-dashed border-zinc-600 bg-zinc-900/80 px-4 py-3 text-center font-mono text-[13px] leading-relaxed text-emerald-200/95';
 
 function InterpretationModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEscapeKey(open, onClose);
   if (!open) return null;
   return (
     <div

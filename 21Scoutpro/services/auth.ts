@@ -47,13 +47,8 @@ const MOCK_COACHES: CoachData[] = [
  * Autentica um treinador via API Mestra
  */
 export async function authenticateCoach(email: string, password: string): Promise<User | null> {
-  console.group('🔐 [Auth Service] Authenticate');
-  console.log('Parameters:', { email, passwordLength: password.length });
-
   try {
-    // Login via Backend PostgreSQL
     const apiUrl = `${getApiUrl()}/auth/login`;
-    console.log('📡 Calling API:', apiUrl);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -61,20 +56,14 @@ export async function authenticateCoach(email: string, password: string): Promis
       body: JSON.stringify({ email, password })
     });
 
-    console.log('📡 Response Status:', response.status);
-
     const result = await response.json();
-    console.log('📦 Result Body:', result);
 
     if (!result.success || !result.data) {
       console.error('❌ Login failed:', result.error);
-      console.groupEnd();
       return null;
     }
 
     const userData = result.data.user;
-    console.log('✅ Login successful:', userData);
-    console.groupEnd();
     return {
       id: userData.id,
       name: userData.name,
@@ -84,7 +73,6 @@ export async function authenticateCoach(email: string, password: string): Promis
 
   } catch (error) {
     console.error('❌ Exception in authentication:', error);
-    console.groupEnd();
     return null;
   }
 }
@@ -93,9 +81,6 @@ export async function authenticateCoach(email: string, password: string): Promis
  * Registra um novo treinador (SaaS V2)
  */
 export async function registerCoach(name: string, email: string, password: string): Promise<{ success: boolean, error?: string, user?: User }> {
-  console.group('📝 [Auth Service] Register');
-  console.log('Parameters:', { name, email, passwordLength: password.length });
-
   try {
     const apiUrl = `${getApiUrl()}/auth/register`;
     const payload = {
@@ -105,19 +90,13 @@ export async function registerCoach(name: string, email: string, password: strin
       roleName: 'TECNICO'
     };
 
-    console.log('📡 Sending Registration Payload:', payload);
-
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
 
-    console.log('📡 Response Status:', response.status);
     const result = await response.json();
-    console.log('📦 Result Body:', result);
-
-    console.groupEnd();
 
     if (result.success && result.data) {
       return {
@@ -134,7 +113,6 @@ export async function registerCoach(name: string, email: string, password: strin
 
   } catch (e: any) {
     console.error('❌ Exception in registration:', e);
-    console.groupEnd();
     return { success: false, error: e.toString() };
   }
 }
@@ -150,7 +128,7 @@ export function isAuthenticated(user: User | null): boolean {
  * Logout (limpa sessão)
  */
 export function logout(): void {
-  console.log('👋 Logout realizado');
+  /* noop — sessão limpa pelo chamador */
 }
 
 /**

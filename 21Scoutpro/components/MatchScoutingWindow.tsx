@@ -4110,12 +4110,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         : pendingPassEventId && requirePassReceiver
                           ? 'PASSE — recebedor'
                           : selectedPlayer
-                            ? `ATLETA ${selectedPlayer.jerseyNumber ?? '?'}`
+                            ? `#${selectedPlayer.jerseyNumber ?? '?'} ${(selectedPlayer.nickname?.trim() || selectedPlayer.name || 'Atleta').trim()}`
                         : 'SELECIONAR ATLETA'}
             </h3>
             {selectedPlayer && !goalStep && !actionFlow && !pendingPassEventId && (
               <p data-testid="selected-athlete-summary" className="text-emerald-300 text-[11px] font-semibold text-center mb-2 shrink-0">
-                {(selectedPlayer.nickname?.trim() || selectedPlayer.name || '').trim()} selecionado
+                {(selectedPlayer.nickname?.trim() || selectedPlayer.name || '').trim()}
+                {selectedPlayer.jerseyNumber != null ? ` (#${selectedPlayer.jerseyNumber})` : ''} em ação
               </p>
             )}
             {shouldHighlightPlayerPanel && (
@@ -4273,7 +4274,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               }`}
               data-testid="pass-receiver-toggle"
             >
-              Exigir recebedor: {requirePassReceiver ? 'ON' : 'OFF'}
+              Pedir quem recebeu o passe: {requirePassReceiver ? 'Sim' : 'Não'}
             </button>
 
             <button

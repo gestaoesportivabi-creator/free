@@ -40,63 +40,63 @@ const WELCOME_STEP: ClockTourStepDefinition = {
   id: 'welcome',
   role: 'welcome',
   title: 'Bem-vindo ao tour',
-  body: 'Este tour acompanha a partida aberta, destaca o controle do momento e nao trava sua operacao.',
+  body: 'Este tour acompanha a partida aberta, destaca o controle do momento e não trava sua operação.',
   targetId: 'match-clock-panel',
-  hint: 'Relogio oficial da coleta',
+  hint: 'Relógio oficial da coleta',
 };
 
 const START_MATCH_STEP: ClockTourStepDefinition = {
   id: 'start-match',
   role: 'current',
   title: 'Comece por aqui',
-  body: 'A partida ainda esta em pre-jogo. Use o botao principal para iniciar o cronometro quando a coleta estiver pronta.',
+  body: 'A partida ainda está em pré-jogo. Use o botão principal para iniciar o cronômetro quando a coleta estiver pronta.',
   targetId: 'clock-primary',
-  hint: 'Botao principal do relogio',
+  hint: 'Botão principal do relógio',
 };
 
 const SYNC_CLOCK_STEP: ClockTourStepDefinition = {
   id: 'sync-clock',
   role: 'current',
   title: 'Sincronize antes de seguir',
-  body: 'Se o tempo da tela nao bate com a quadra, sincronize o relogio antes de registrar novos eventos.',
+  body: 'Se o tempo da tela não bate com a quadra, sincronize o relógio antes de registrar novos eventos.',
   targetId: 'clock-sync',
-  hint: 'Botao de sincronizacao',
+  hint: 'Botão de sincronização',
 };
 
 const PAUSE_MATCH_STEP: ClockTourStepDefinition = {
   id: 'pause-match',
   role: 'current',
   title: 'Quando precisar parar',
-  body: 'Com a partida em andamento, este botao pausa o relogio sem tirar voce da coleta.',
+  body: 'Com a partida em andamento, este botão pausa o relógio sem tirar você da coleta.',
   targetId: 'clock-primary',
-  hint: 'Botao principal do relogio',
+  hint: 'Botão principal do relógio',
 };
 
 const CONTINUE_MATCH_STEP: ClockTourStepDefinition = {
   id: 'continue-match',
   role: 'current',
   title: 'Retome do ponto salvo',
-  body: 'Quando o relogio estiver pausado, continue por aqui para voltar ao mesmo tempo da coleta.',
+  body: 'Quando o relógio estiver pausado, continue por aqui para voltar ao mesmo tempo da coleta.',
   targetId: 'clock-primary',
-  hint: 'Botao principal do relogio',
+  hint: 'Botão principal do relógio',
 };
 
 const START_SECOND_HALF_STEP: ClockTourStepDefinition = {
   id: 'start-second-half',
   role: 'current',
   title: 'Volta do intervalo',
-  body: 'No intervalo, o proximo passo operacional e abrir o segundo tempo pelo botao principal.',
+  body: 'No intervalo, o próximo passo operacional é abrir o segundo tempo pelo botão principal.',
   targetId: 'clock-primary',
-  hint: 'Botao principal do relogio',
+  hint: 'Botão principal do relógio',
 };
 
 const FINISH_COLLECTION_STEP: ClockTourStepDefinition = {
   id: 'finish-collection',
   role: 'current',
-  title: 'Feche a coleta com seguranca',
-  body: 'Depois de encerrar a partida no relogio, finalize a coleta por este atalho.',
+  title: 'Feche a coleta com segurança',
+  body: 'Depois de encerrar a partida no relógio, finalize a coleta por este atalho.',
   targetId: 'end-collection',
-  hint: 'Botao Finalizar coleta',
+  hint: 'Botão Finalizar coleta',
 };
 
 const SELECT_PLAYER_STEP: ClockTourStepDefinition = {
@@ -114,25 +114,25 @@ const REGISTER_PASS_STEP: ClockTourStepDefinition = {
   title: 'Depois registre um evento simples',
   body: 'Para um primeiro registro seguro, selecione um passe. O resto do fluxo segue a coleta real da partida.',
   targetId: 'event-selector-pass',
-  hint: 'Botao PASSE',
+  hint: 'Botão PASSE',
 };
 
 const SAVE_INCOMPLETE_STEP: ClockTourStepDefinition = {
   id: 'save-incomplete',
   role: 'flow',
   title: 'Precisa sair antes do fim?',
-  body: 'Salvar como incompleta preserva relogio, placar, periodo e eventos para a retomada depois.',
+  body: 'Salvar como incompleta preserva relógio, placar, período e eventos para a retomada depois.',
   targetId: 'save-match',
-  hint: 'Botao Salvar como incompleta',
+  hint: 'Botão Salvar como incompleta',
 };
 
 const DONE_STEP: ClockTourStepDefinition = {
   id: 'done',
   role: 'outro',
-  title: 'Tour concluido',
-  body: 'Voce pode seguir a coleta normalmente, rever este tour quando quiser ou abrir o guia completo como referencia.',
+  title: 'Tour concluído',
+  body: 'Você pode seguir a coleta normalmente, rever este tour quando quiser ou abrir o guia completo como referência.',
   targetId: 'match-clock-panel',
-  hint: 'Relogio oficial da coleta',
+  hint: 'Relógio oficial da coleta',
 };
 
 function dedupeSteps(steps: ClockTourStepDefinition[]): ClockTourStepDefinition[] {

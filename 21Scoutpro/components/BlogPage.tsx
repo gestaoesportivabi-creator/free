@@ -11,6 +11,7 @@ import {
 import { blocksOf, slugify, tocOf } from '../blog/types';
 import type { User } from '../types';
 import { applyRouteMeta, canonicalUrl, injectJsonLd, CANONICAL_ORIGIN } from '../utils/seo';
+import { formatDateSafe } from '../utils/dateUtils';
 import { onScrollPercent, track } from '../utils/analytics';
 import { NewsletterStickyBar, NewsletterTriggerButton, openNewsletter } from './NewsletterPopup';
 
@@ -32,7 +33,7 @@ const COPY = {
     backToBlog: 'Blog',
     backToHome: 'Início',
     blogTitle: 'Blog SCOUT21',
-    blogSubtitle: 'Artigos sobre gestão de equipa, dados e rotina competitiva.',
+    blogSubtitle: 'Artigos sobre gestão de equipe, dados e rotina competitiva.',
     readMin: 'min',
     readMinFull: 'min de leitura',
     notFound: 'Artigo não encontrado.',
@@ -405,7 +406,7 @@ export const BlogPage: React.FC<BlogPageProps> = ({
                 <p className="text-zinc-400 text-sm mb-4 line-clamp-3 leading-relaxed">{item.excerpt}</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-zinc-500">
                   <span className="inline-flex items-center gap-1">
-                    <Calendar size={12} /> {item.date}
+                    <Calendar size={12} /> {formatDateSafe(item.date)}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Clock size={12} /> {item.readMinutes} {t.readMinFull}
@@ -492,7 +493,7 @@ const PostView: React.FC<PostViewProps> = ({ post, lang, t, related, onOpenPost 
             {post.heroEmoji && <div className="text-5xl mb-6" aria-hidden>{post.heroEmoji}</div>}
             <p className="text-zinc-500 text-sm mb-4 flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1">
-                <Calendar size={14} /> {post.date}
+                <Calendar size={14} /> {formatDateSafe(post.date)}
               </span>
               <span className="inline-flex items-center gap-1">
                 <Clock size={14} /> {post.readMinutes} {t.readMinFull}
