@@ -5,8 +5,10 @@ Passo a passo para quem tem acesso à Vercel e ao Google. Não precisa de deploy
 ## Situação atual
 
 - O código do GA4 já está pronto no site (`index.html` + `utils/analytics.ts`), incluindo modo de consentimento (LGPD) e os eventos de cadastro (`signup_completed`, `signup_error`, cliques de CTA).
-- **Falta apenas a chave `VITE_GA4_ID`** — sem ela, o código não envia nada.
-- Não há confirmação de que o site está verificado no Search Console.
+- **Fluxo Web:** Scout 21 · `https://scout21.com.br` · ID de medição **`G-JDLX263HXT`**
+- `VITE_GA4_ID=G-JDLX263HXT` está em `21Scoutpro/.env.production` (e fallback no `index.html`).
+- Na Vercel, ainda vale setar a mesma env em Production para ficar explícito no painel.
+- Search Console: verificar se a propriedade `scout21.com.br` está confirmada.
 
 ---
 
