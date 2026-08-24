@@ -776,6 +776,8 @@ export interface OnboardingSnapshot {
   isComplete: boolean;
   /** Ativação real: pelo menos um jogo não-demo registado. */
   isActivated: boolean;
+  /** Confirmação é um requisito do teste, mas não uma etapa que bloqueia o primeiro uso. */
+  emailVerified: boolean;
   playerCount: number;
   matchCount: number;
   hasDemoData: boolean;

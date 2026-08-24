@@ -1,12 +1,12 @@
 import React from 'react';
-import { ArrowRight, Check, Trash2 } from 'lucide-react';
+import { ArrowRight, Check, Mail, Trash2, X } from 'lucide-react';
 import { OnboardingSnapshot } from '../services/api';
 
 /**
  * Checklist de ativação no painel.
  *
- * Não tem botão de fechar enquanto houver passo pendente — é o mapa do
- * utilizador no primeiro acesso, não propaganda. Some sozinho ao completar.
+ * É um mapa opcional do primeiro acesso: o utilizador pode explorar a
+ * plataforma livremente e voltar ao Guia de Uso quando precisar.
  */
 
 interface OnboardingChecklistProps {
@@ -14,6 +14,7 @@ interface OnboardingChecklistProps {
   onNavigate: (stepId: string) => void;
   onClearDemo?: () => void;
   isClearingDemo?: boolean;
+  onResendVerification?: () => Promise<boolean>;
 }
 
 export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
@@ -21,8 +22,15 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
   onNavigate,
   onClearDemo,
   isClearingDemo,
+  onResendVerification,
 }) => {
-  if (onboarding.isComplete) return null;
+  const [dismissed, setDismissed] = React.useState(() =>
+    localStorage.getItem('scout21-onboarding-checklist-dismissed') === 'true'
+  );
+  const [isResending, setIsResending] = React.useState(false);
+  const [verificationSent, setVerificationSent] = React.useState(false);
+
+  if (onboarding.isComplete || dismissed) return null;
 
   const progress = Math.round((onboarding.completed / onboarding.total) * 100);
 
@@ -40,7 +48,21 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
             {onboarding.completed} de {onboarding.total} concluídos
           </p>
         </div>
-        <span className="text-xl font-black font-mono text-[#00f0ff] shrink-0">{progress}%</span>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xl font-black font-mono text-[#00f0ff]">{progress}%</span>
+          <button
+            type="button"
+            onClick={() => {
+              localStorage.setItem('scout21-onboarding-checklist-dismissed', 'true');
+              setDismissed(true);
+            }}
+            className="text-zinc-500 hover:text-zinc-200 transition-colors"
+            aria-label="Explorar a plataforma sem o checklist"
+            title="Explorar depois"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="h-1 rounded-full bg-zinc-800 overflow-hidden mb-4">
@@ -78,6 +100,35 @@ export const OnboardingChecklist: React.FC<OnboardingChecklistProps> = ({
           </li>
         ))}
       </ul>
+
+      {!onboarding.emailVerified && (
+        <div className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-3">
+          <div className="flex items-start gap-2.5">
+            <Mail size={15} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-100">Confirme seu e-mail quando puder</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-amber-100/70">
+                Você pode explorar a plataforma normalmente. A confirmação mantém o registo de dados liberado durante o teste.
+              </p>
+              {onResendVerification && (
+                <button
+                  type="button"
+                  disabled={isResending || verificationSent}
+                  onClick={async () => {
+                    setIsResending(true);
+                    const sent = await onResendVerification();
+                    setVerificationSent(sent);
+                    setIsResending(false);
+                  }}
+                  className="mt-2 text-[11px] font-semibold text-amber-200 underline underline-offset-2 disabled:no-underline disabled:opacity-60"
+                >
+                  {verificationSent ? 'Link reenviado' : isResending ? 'Enviando…' : 'Reenviar link'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {onboarding.hasDemoData && onClearDemo && (
         <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-3">

@@ -13,6 +13,7 @@ const JacksonPollock7Page = React.lazy(() =>
 );
 import { TrialBanner } from './components/TrialBanner';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
+import { authApi } from './services/api';
 import { useSubscription } from './hooks/useSubscription';
 import { GeneralScout } from './components/GeneralScout';
 import { PhysicalScout } from './components/PhysicalScout';
@@ -2424,7 +2425,7 @@ export default function App() {
         {!isAthleteUser && trialSubscription && (
           <TrialBanner
             subscription={trialSubscription}
-            emailVerified={!trialSubscription.emailVerificationOverdue || Boolean(onboarding?.steps.find((s) => s.id === 'email')?.done)}
+            emailVerified={!trialSubscription.emailVerificationOverdue || Boolean(onboarding?.emailVerified)}
             onRefresh={refreshSubscription}
           />
         )}
@@ -2438,6 +2439,7 @@ export default function App() {
             }}
             onClearDemo={clearDemoData}
             isClearingDemo={isClearingDemo}
+            onResendVerification={authApi.resendVerification}
           />
         )}
         {isLoading ? <LoadingMessage activeTab={activeTab} /> : renderContent()}

@@ -71,12 +71,14 @@ export const accountController = {
           ])
         : [0, 0, 0];
 
+      // O checklist deve ensinar o primeiro uso do produto. A confirmação de
+      // e-mail é importante para o ciclo do teste, mas não pode manter a
+      // pessoa presa no último passo depois de já começar a usar a plataforma.
       const steps = [
         { id: 'account', label: 'Conta criada', done: true },
         { id: 'team', label: 'Equipa cadastrada', done: hasTeam },
         { id: 'roster', label: 'Adicionar atletas ao elenco', done: playerCount > 0, href: '/dashboard?tab=elenco' },
         { id: 'match', label: 'Registar o primeiro jogo', done: realMatchCount > 0, href: '/dashboard?tab=table' },
-        { id: 'email', label: 'Confirmar e-mail', done: Boolean(user.emailVerifiedAt) },
       ];
 
       const completed = steps.filter((step) => step.done).length;
@@ -90,6 +92,7 @@ export const accountController = {
           isComplete: completed === steps.length,
           /** Ativação de verdade: um jogo real coletado. */
           isActivated: realMatchCount > 0,
+          emailVerified: Boolean(user.emailVerifiedAt),
           playerCount,
           matchCount: realMatchCount,
           hasDemoData: demoMatchCount > 0,
