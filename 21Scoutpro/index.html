@@ -15,8 +15,17 @@
     <link rel="alternate" hreflang="es" href="https://scout21.com.br/blog/es" />
     <link rel="alternate" hreflang="x-default" href="https://scout21.com.br/" />
 
-    <!-- Google Search Console (injete VITE_GSC_VERIFICATION no Vercel) -->
-    <meta name="google-site-verification" content="%VITE_GSC_VERIFICATION%" />
+    <!-- Google Search Console: só emite a meta se VITE_GSC_VERIFICATION estiver no build -->
+    <script>
+      (function () {
+        var v = "%VITE_GSC_VERIFICATION%";
+        if (!v || v.indexOf("VITE_GSC_VERIFICATION") !== -1) return;
+        var m = document.createElement("meta");
+        m.name = "google-site-verification";
+        m.content = v;
+        document.head.appendChild(m);
+      })();
+    </script>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />

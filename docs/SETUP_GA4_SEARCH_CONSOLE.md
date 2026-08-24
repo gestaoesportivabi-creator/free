@@ -36,19 +36,27 @@ Passo a passo para quem tem acesso à Vercel e ao Google. Não precisa de deploy
 
 ## 4. Google Search Console
 
-1. Acesse [search.google.com/search-console](https://search.google.com/search-console)
-2. **Adicionar propriedade** → tipo "Domínio" → `scout21.com.br`
-3. Verificação: método **DNS (registro TXT)** — a Vercel/Hostinger só precisa adicionar o registro que o Google fornecer
-   - Alternativa mais rápida se o DNS demorar: verificação por **tag HTML** (o Google dá uma meta tag pra colar no `index.html` — me avisem se escolherem esse caminho, é 2 minutos de código)
-4. Depois de verificado: **Sitemaps → Adicionar sitemap** → `sitemap.xml`
-   (o arquivo já existe e está correto: `https://scout21.com.br/sitemap.xml`, 58 URLs)
+**Já pronto no site**
+- Sitemap: `https://scout21.com.br/sitemap.xml` (robots.txt já aponta para ele)
+- Meta de verificação: só aparece se `VITE_GSC_VERIFICATION` estiver no build (sem placeholder quebrado)
 
-## Critério de pronto
+**O que só o Google / você fazem (conta Google)**
 
-- [ ] `VITE_GA4_ID` setado na Vercel + redeploy feito
-- [ ] Tempo real do GA4 mostrando visitas
-- [ ] Evento `signup_completed` aparecendo ao testar um cadastro
-- [ ] Propriedade verificada no Search Console
-- [ ] Sitemap enviado no Search Console
+1. Abra [search.google.com/search-console](https://search.google.com/search-console) com a conta do Scout21 (`gestaoesportivabi@gmail.com` ou a que usa no Analytics)
+2. **Adicionar propriedade**
+   - Preferência rápida: tipo **Prefixo do URL** → `https://scout21.com.br`
+   - (Domínio `scout21.com.br` também serve, mas exige TXT no DNS da Hostinger)
+3. Método **Tag HTML** → copie o `content="..."` da meta (só o código, tipo `abc123...`)
+4. Me mande esse código **ou** cole em `21Scoutpro/.env.production`:
+   ```
+   VITE_GSC_VERIFICATION=cole_o_codigo_aqui
+   ```
+5. Após o deploy, volte no Search Console e clique **Verificar**
+6. **Sitemaps → Adicionar sitemap** → `sitemap.xml`
+7. Em **Configurações → Usuários**, confirme o mesmo e-mail do GA4 se quiser unificar relatórios
 
-Com isso fechado, dá pra responder a pergunta que hoje não dá: **quantos visitantes viram cadastro, e de onde vieram.**
+### Critério de pronto (Search Console)
+
+- [ ] Propriedade `https://scout21.com.br` (ou domínio) verificada
+- [ ] Sitemap `sitemap.xml` enviado (status “Recebido” / sem erro)
+- [ ] Meta `google-site-verification` visível no HTML da home (View Source)
