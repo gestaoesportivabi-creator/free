@@ -1105,6 +1105,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                             className="w-5 h-5 accent-[#10b981]"
                                         />
                                         <span className="text-white text-sm font-bold">Permitir login do atleta no app</span>
+                                        <span className="text-zinc-500 text-xs font-normal">opcional</span>
                                     </label>
 
                                     {editMode && hasAccess && (
