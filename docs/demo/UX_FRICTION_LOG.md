@@ -44,7 +44,7 @@ Severidade: **P0** bloqueia · **P1** o técnico erraria/desistiria · **P2** ru
 
 O que um técnico novo mais sente. Ordenar do mais grave ao menos.
 
-1. Digitei o elenco no wizard e o sistema fingiu que estava pronto — na hora do jogo não tinha ninguém.
+1. Digitei o elenco no wizard e o sistema fingiu que estava pronto — na hora do jogo não tinha ninguém. **Causa:** o App carregava o elenco vazio no signup e não recarregava depois do wizard (já corrigido nesta branch).
 2. Não consigo lançar a súmula porque CONTINUAR está cinza e ninguém explica o porquê.
 3. Depois de “tenho uma súmula”, não tem um botão óbvio de criar o jogo.
 4. Tive que achar Nova Partida na Tabela de Campeonato sozinho.

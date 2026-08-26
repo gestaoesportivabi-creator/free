@@ -1778,10 +1778,11 @@ export default function App() {
           setCurrentRoute('app');
         }}
         onFinish={(destination) => {
-          // A carga de dados é disparada pelo efeito que observa currentUser +
-          // activeTab; basta escolher a aba de destino e trocar de rota.
           setActiveTab(destination === 'dashboard' ? 'dashboard' : 'table');
-          setCurrentRoute('app');
+          // O efeito de currentUser já marcou players/matches como carregados
+          // (listas vazias) no signup. Sem refetch o Elenco e a súmula ignoram
+          // o que o wizard acabou de gravar.
+          void Promise.all([loadPlayers(), loadMatches()]).finally(() => setCurrentRoute('app'));
         }}
       />
     );

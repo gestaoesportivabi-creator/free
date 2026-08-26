@@ -217,7 +217,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     /** Nº de camisa já usado por outro atleta (lista atual) */
     const [jerseyDuplicateMessage, setJerseyDuplicateMessage] = useState<string | null>(null);
 
-    const [createAccess, setCreateAccess] = useState(true);
+    const [createAccess, setCreateAccess] = useState(false);
     const [accessEmail, setAccessEmail] = useState('');
     const [accessPassword, setAccessPassword] = useState('');
     const [showAccessPassword, setShowAccessPassword] = useState(false);
@@ -271,7 +271,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setActiveTab('profile');
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
-        setCreateAccess(true);
+        setCreateAccess(false);
         setAccessEmail('');
         setAccessPassword('');
         setShowAccessPassword(false);

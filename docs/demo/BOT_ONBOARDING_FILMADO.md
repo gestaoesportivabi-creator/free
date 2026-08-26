@@ -188,6 +188,23 @@ Não apresse. Meta: sessão filmável de ~40–60 min. Modelo: Grok 4.6 high, se
 
 ---
 
+## Take 2 — fluente (depois do fix do wizard)
+
+Objetivo: um take contínuo de ~40–50 min, **incluindo o jogo fictício até os eventos**. Sem voltar tela, sem apagar nome.
+
+Conta nova (não reutilizar takezero1515). E-mail: `gestaoesportivabi+fluenteYYYYMMDD@gmail.com`.
+
+Roteiro travado:
+
+1. Landing → Criar conta (Rafael Mendes / AFC Futsal Sub-20).
+2. Wizard passo 1 → Continuar.
+3. **Digitar agora** — 5 da ficha, `autocomplete` off. Salvar. Passo 3 deve ir para Dados do Jogo **com os 5 já no elenco**.
+4. Elenco: completar 6–14 um a um. **Não** ligar “Permitir login do atleta” (default agora desligado).
+5. Dados do Jogo → partida Minas 25/08/2026 → **Adicionar dados da Partida**.
+6. Quinteto: Hugo, Marquinhos, Thiago, Caio, Léo. Lançar os eventos 1–14 da ficha, um a um. Encerrar.
+
+Se o Elenco estiver vazio depois do wizard, **parar e anotar P0** — o fix de refetch falhou.
+
 ## Pacote de entrega
 
 1. Vídeo bruto (quem filma envia).
