@@ -57,7 +57,57 @@ Não cadastrar e-mail de acesso de atleta neste take. Foto e último clube: deix
 Quadra: **#1 Hugo**, **#3 Marquinhos**, **#4 Thiago**, **#8 Caio**, **#9 Léo**.  
 Banco imediato: Pedrão, Nando, Rafinha, Bruninho, Igor.
 
-## Jogo inventado
+## Jogo inventado (take definitivo — tempo real)
+
+| Campo | Valor |
+| --- | --- |
+| Adversário | Minas Tênis Clube Sub-20 |
+| Data | 2026-08-26 |
+| Horário | 20:00 |
+| Local | Ginásio AFC — Belo Horizonte |
+| Competição | Estadual Sub-20 — 1ª fase |
+| Tipo de coleta | **Abrir Scout em Tempo Real** (`/scout-realtime`) |
+| Posse inicial | Nossa equipe |
+| Quinteto | Hugo #1, Marquinhos #3, Thiago #4, Caio #8, Léo #9 |
+| Relógio | 2 × 20 min. Avançar com **Sincronizar cronômetro** |
+| Placar alvo | **4 × 4** (2-2 no intervalo) |
+
+Narrar: clássico local. 1T aberto, 2-2 no apito. 2T vai e volta até 4-4.
+
+## Eventos — cronômetro (ordem)
+
+Tempo = o que vai no **Sincronizar** naquele período (1T e 2T cada um 00:00–20:00).
+
+| # | Período | Sync | Evento | Quem | Placar |
+| ---: | --- | --- | --- | --- | --- |
+| 1 | 1T | 01:20 | Passe certo | Caio → Thiago | 0-0 |
+| 2 | 1T | 06:40 | Gol nosso | Léo, assistência Caio | **1-0** |
+| 3 | 1T | 11:20 | Gol deles | adversário | **1-1** |
+| 4 | 1T | 16:05 | Gol nosso | Caio | **2-1** |
+| 5 | 1T | 19:10 | Gol deles | adversário | **2-2** |
+| — | 1T | 20:00 | Encerrar 1º tempo | — | 2-2 |
+| 6 | 2T | 02:10 | Desarme com bola | Thiago | 2-2 |
+| 7 | 2T | 05:40 | Defesa | Hugo | 2-2 |
+| 8 | 2T | 08:05 | Gol nosso | Nando (se no elenco) ou Léo | **3-2** |
+| 9 | 2T | 11:00 | Gol deles | adversário | **3-3** |
+| 10 | 2T | 13:20 | Gol nosso | Léo | **4-3** |
+| 11 | 2T | 16:00 | Gol deles | adversário | **4-4** |
+| — | 2T | 20:00 | Encerrar partida | — | **4-4** |
+
+Se o gol “deles” pedir jogador fake / equipe adversária, usar isso. Não abrir súmula.
+
+## Checklist do take definitivo
+
+- [ ] Conta nova `+crono2608`
+- [ ] Wizard: 5 + **Vou coletar um jogo ao vivo**
+- [ ] Elenco: quinteto 5/5 (Léo incluso)
+- [ ] Partida Minas
+- [ ] **Tempo Real**, não planilha
+- [ ] INICIAR PARTIDA
+- [ ] 1T 2-2 + encerrar etapa
+- [ ] 2T 4-4 + encerrar partida
+- [ ] Log de atritos
+
 
 | Campo | Valor |
 | --- | --- |
