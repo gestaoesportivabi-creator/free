@@ -15,8 +15,8 @@
     <link rel="alternate" hreflang="es" href="https://scout21.com.br/blog/es" />
     <link rel="alternate" hreflang="x-default" href="https://scout21.com.br/" />
 
-    <!-- Google Search Console (injete VITE_GSC_VERIFICATION no Vercel) -->
-    <meta name="google-site-verification" content="%VITE_GSC_VERIFICATION%" />
+    <!-- Google Search Console -->
+    <meta name="google-site-verification" content="z8IHgAV4_gPh7ranZT5yl4R8G4FhyQGDiQWOXA3VM4A" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -81,11 +81,12 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;1,800&family=Oswald:ital,wght@1,700&display=swap" rel="stylesheet">
 
-    <!-- GA4 loader (ativa se VITE_GA4_ID vier do env do Vercel) -->
+    <!-- GA4: VITE_GA4_ID no build (Vercel/.env.production). Fallback = fluxo Scout 21. -->
     <script>
       (function () {
-        var gaId = "%VITE_GA4_ID%";
-        if (!gaId || gaId.indexOf("VITE_GA4_ID") !== -1) return;
+        var gaId = "G-JDLX263HXT";
+        if (!gaId || gaId.indexOf("VITE_GA4_ID") !== -1) gaId = "G-JDLX263HXT";
+        if (!gaId) return;
         window.dataLayer = window.dataLayer || [];
         function gtag(){window.dataLayer.push(arguments);}
         window.gtag = gtag;
@@ -141,9 +142,9 @@
         background: #3f3f46;
       }
     </style>
-  <script type="module" crossorigin src="/assets/index-Bd7JTm7y.js"></script>
+  <script type="module" crossorigin src="/assets/index-CnpA52RH.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/vendor-KfUPlHYY.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-Bn3v4ToY.css">
+  <link rel="stylesheet" crossorigin href="/assets/index-RA2fkJtQ.css">
 </head>
   <body>
     <div id="root"></div>

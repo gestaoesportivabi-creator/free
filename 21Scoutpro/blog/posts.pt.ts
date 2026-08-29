@@ -1,10 +1,13 @@
 import type { BlogPost } from './types';
+import { POSTS_DESTAQUE_AGOSTO_2026 } from './posts-destaque-agosto-2026';
 
 /**
  * Posts em português. Formato de blocos (h2/h3/p/list/quote/callout/cta-*) permite
  * renderização rica com TOC, typography profissional e CTAs inline.
+ * Ordem do array = ordem no /blog (destaques agosto/2026 no topo).
  */
 export const POSTS_PT: BlogPost[] = [
+  ...POSTS_DESTAQUE_AGOSTO_2026,
   {
     slug: 'jackson-pollock-7-dobras-no-futsal',
     lang: 'pt-BR',
