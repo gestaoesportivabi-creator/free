@@ -217,7 +217,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     /** Nº de camisa já usado por outro atleta (lista atual) */
     const [jerseyDuplicateMessage, setJerseyDuplicateMessage] = useState<string | null>(null);
 
-    const [createAccess, setCreateAccess] = useState(true);
+    const [createAccess, setCreateAccess] = useState(false);
     const [accessEmail, setAccessEmail] = useState('');
     const [accessPassword, setAccessPassword] = useState('');
     const [showAccessPassword, setShowAccessPassword] = useState(false);
@@ -271,7 +271,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setActiveTab('profile');
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
-        setCreateAccess(true);
+        setCreateAccess(false);
         setAccessEmail('');
         setAccessPassword('');
         setShowAccessPassword(false);
@@ -1105,6 +1105,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                             className="w-5 h-5 accent-[#10b981]"
                                         />
                                         <span className="text-white text-sm font-bold">Permitir login do atleta no app</span>
+                                        <span className="text-zinc-500 text-xs font-normal">opcional</span>
                                     </label>
 
                                     {editMode && hasAccess && (
