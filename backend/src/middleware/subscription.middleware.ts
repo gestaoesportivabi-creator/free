@@ -60,6 +60,7 @@ export function subscriptionContext() {
         roleName: record.role?.name ?? 'ESSENCIAL',
         emailVerifiedAt: record.emailVerifiedAt,
         createdAt: record.createdAt,
+        email: req.user.email, // já autenticado; multi-tenant intacto
       };
 
       const access = resolveEffectiveAccess(userInput, record.subscription);

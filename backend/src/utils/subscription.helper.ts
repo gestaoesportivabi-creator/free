@@ -29,6 +29,8 @@ export interface AccessUserInput {
   roleName: string;
   emailVerifiedAt?: Date | null;
   createdAt?: Date;
+  /** Opcional: usado só para bypass QA seguro. */
+  email?: string | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -161,6 +163,15 @@ export function getEmailVerificationGraceDays(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 7;
 }
 
+function isQaEmailBypass(email?: string | null): boolean {
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  // Contas de seed local + aliases Gmail do persona QA (jose, etc.)
+  if (e.endsWith('@qa.scout21.local')) return true;
+  if (e.startsWith('qa.scout21+') && e.endsWith('@gmail.com')) return true;
+  return false;
+}
+
 export function isEmailVerificationOverdue(
   user: AccessUserInput,
   subscription: Subscription | null | undefined,
@@ -168,6 +179,13 @@ export function isEmailVerificationOverdue(
 ): boolean {
   if (user.emailVerifiedAt) return false;
   if (user.roleName === 'ADMINISTRADOR') return false;
+
+  // Bypass só com flag explícita (prod) OU development.
+  // Nunca isenta e-mails reais de clientes.
+  const bypassOn =
+    process.env.EMAIL_VERIFICATION_QA_BYPASS === 'true' ||
+    process.env.NODE_ENV === 'development';
+  if (bypassOn && isQaEmailBypass(user.email)) return false;
 
   // Só se aplica a contas de auto-cadastro; contas legadas não têm assinatura.
   const startedAt = subscription?.trialStartedAt ?? subscription?.createdAt;
