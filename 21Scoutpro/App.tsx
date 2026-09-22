@@ -434,6 +434,17 @@ export default function App() {
       return acc;
     }, 0);
 
+    const finalizedKeys = new Set(
+      matches
+        .filter(isMatchFinalizedForScout)
+        .map((m) => {
+          const d = String(m.date || '').trim();
+          const o = String(m.opponent || '').trim().toLowerCase();
+          return d && o ? `${d}|${o}` : '';
+        })
+        .filter(Boolean)
+    );
+
     const upcomingMatches = championshipMatches
       .map(match => {
         if (!match.date) return null;
@@ -451,7 +462,13 @@ export default function App() {
         if (Number.isNaN(dateTime.getTime())) return null;
         return { ...match, dateTime };
       })
-      .filter((match): match is NonNullable<typeof match> & { dateTime: Date } => !!match && match.dateTime.getTime() > now.getTime())
+      .filter((match): match is NonNullable<typeof match> & { dateTime: Date } => {
+        if (!match || match.dateTime.getTime() <= now.getTime()) return false;
+        const key = `${String(match.date).trim()}|${String(match.opponent || '').trim().toLowerCase()}`;
+        // QA José: não mostrar como "próximo" rival já FINALIZADO na coleta
+        if (key !== '|' && finalizedKeys.has(key)) return false;
+        return true;
+      })
       .sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
 
     const nextMatch = upcomingMatches[0] ?? null;
