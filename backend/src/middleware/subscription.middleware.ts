@@ -45,6 +45,7 @@ export function subscriptionContext() {
       const record = await prisma.user.findUnique({
         where: { id: req.user.id },
         select: {
+          email: true,
           createdAt: true,
           emailVerifiedAt: true,
           role: { select: { name: true } },
@@ -58,6 +59,7 @@ export function subscriptionContext() {
 
       const userInput = {
         roleName: record.role?.name ?? 'ESSENCIAL',
+        email: record.email,
         emailVerifiedAt: record.emailVerifiedAt,
         createdAt: record.createdAt,
       };

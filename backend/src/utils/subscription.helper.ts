@@ -10,6 +10,9 @@
  */
 
 import type { Subscription, SubscriptionStatus } from '@prisma/client';
+import { isQaTestEmail } from './qaEmail';
+
+export { isQaTestEmail } from './qaEmail';
 
 export type PlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'ADMINISTRADOR';
 
@@ -29,6 +32,8 @@ export interface AccessUserInput {
   roleName: string;
   emailVerifiedAt?: Date | null;
   createdAt?: Date;
+  /** E-mail da conta — usado só para bypass de QA. */
+  email?: string | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -168,6 +173,7 @@ export function isEmailVerificationOverdue(
 ): boolean {
   if (user.emailVerifiedAt) return false;
   if (user.roleName === 'ADMINISTRADOR') return false;
+  if (isQaTestEmail(user.email)) return false;
 
   // Só se aplica a contas de auto-cadastro; contas legadas não têm assinatura.
   const startedAt = subscription?.trialStartedAt ?? subscription?.createdAt;
