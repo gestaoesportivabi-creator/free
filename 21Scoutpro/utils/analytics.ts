@@ -103,9 +103,10 @@ export function track(event: string, params: AnalyticsParams = {}): void {
  */
 export function trackSignupCompleted(params: { plan?: string | null } = {}): void {
   const plan = params.plan || undefined;
-  track('signup_completed', { plan, method: 'email' });
+  // beacon: SignUp redireciona com location.assign logo em seguida — sem beacon o hit some.
+  track('signup_completed', { plan, method: 'email', transport_type: 'beacon' });
   // Evento recomendado GA4 — facilita importação automática no Google Ads
-  track('sign_up', { method: 'email', plan });
+  track('sign_up', { method: 'email', plan, transport_type: 'beacon' });
 
   const conversionId = envString('VITE_GOOGLE_ADS_CONVERSION_ID');
   if (!conversionId || typeof window === 'undefined') return;
@@ -113,6 +114,7 @@ export function trackSignupCompleted(params: { plan?: string | null } = {}): voi
     window.gtag?.('event', 'conversion', {
       send_to: conversionId,
       plan,
+      transport_type: 'beacon',
     });
   } catch {
     /* ignore */

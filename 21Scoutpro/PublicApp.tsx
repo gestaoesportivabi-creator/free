@@ -103,7 +103,10 @@ export function PublicApp() {
   }, []);
 
   const goWelcome = useCallback(() => {
-    window.location.assign('/bem-vindo');
+    // Pequeno atraso para o gtag (signup_completed / sign_up) sair antes do unload.
+    window.setTimeout(() => {
+      window.location.assign('/bem-vindo');
+    }, 150);
   }, []);
 
   useEffect(() => {
