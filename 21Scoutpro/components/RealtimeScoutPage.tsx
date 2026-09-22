@@ -4,6 +4,7 @@ import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
+import { stashOpenMatchAnalysis, OPEN_MATCH_ANALYSIS_KEY } from '../utils/openMatchAnalysis';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -13,6 +14,8 @@ interface RealtimeScoutData {
   date: string;
   opponent: string;
   competition?: string;
+  /** Mandante / Visitante — propagado da tabela de campeonato / partida salva */
+  location?: string;
   players: Player[];
   teams: Team[];
   matchType: MatchType;
@@ -39,12 +42,16 @@ export const RealtimeScoutPage: React.FC = () => {
         const data: RealtimeScoutData = JSON.parse(storedData);
         setScoutData(data);
 
+        const locationFromPrep =
+          typeof data.location === 'string' && data.location.trim() ? data.location.trim() : undefined;
+
         // Base local (fallback)
         let matchRecord: MatchRecord = {
           id: data.matchId || `temp-${Date.now()}`,
           date: data.date,
           opponent: data.opponent,
           competition: data.competition,
+          location: locationFromPrep,
           status: 'disponivel',
           result: 'E',
           goalsFor: 0,
@@ -74,7 +81,10 @@ export const RealtimeScoutPage: React.FC = () => {
                 dbMatch.status === 'nao_executado' ||
                 (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
             ) {
-              matchRecord = dbMatch;
+              matchRecord = {
+                ...dbMatch,
+                location: dbMatch.location?.trim() || locationFromPrep,
+              };
             }
           } catch (fetchErr) {
             console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
@@ -132,6 +142,23 @@ export const RealtimeScoutPage: React.FC = () => {
         setMatch((prev) => (prev ? { ...prev, ...saved, id: saved.id } : saved));
       }
       if (saved && !isAutosave) {
+        // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
+        if (savedMatch.status === 'encerrado') {
+          const finalizedId = String(saved.id || savedMatch.id || '').trim();
+          if (finalizedId) stashOpenMatchAnalysis(finalizedId);
+          localStorage.removeItem('realtimeScoutData');
+          if (window.opener && !window.opener.closed) {
+            try {
+              if (finalizedId) window.opener.localStorage.setItem(OPEN_MATCH_ANALYSIS_KEY, finalizedId);
+              window.close();
+              return saved;
+            } catch {
+              /* fall through to same-tab dashboard */
+            }
+          }
+          window.location.assign('/dashboard');
+          return saved;
+        }
         alert(
           saveAsIncomplete
             ? 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.'

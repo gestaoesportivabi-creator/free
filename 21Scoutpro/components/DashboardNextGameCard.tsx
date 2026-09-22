@@ -38,7 +38,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
           Próximo jogo
         </h3>
         <div className="flex items-center justify-center py-4">
-          <p className="text-zinc-500 text-sm text-center">Nenhum jogo agendado.</p>
+          <p className="text-zinc-500 text-sm text-center">Sem próximo jogo</p>
         </div>
       </div>
     );

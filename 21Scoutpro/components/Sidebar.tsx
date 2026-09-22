@@ -61,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
       icon: Shirt,
       items: [
         { id: 'team', label: 'Elenco', icon: Shirt, restricted: isAthlete },
-        { id: 'schedule', label: 'Programação', icon: CalendarClock, restricted: isAthlete },
+        { id: 'schedule', label: 'Agenda de treinos', icon: CalendarClock, restricted: isAthlete },
         { id: 'championship', label: 'Tabela de Campeonato', icon: Trophy, restricted: isAthlete },
         { id: 'management-report', label: 'Relatório gerencial', icon: FileText, restricted: isAthlete },
       ]

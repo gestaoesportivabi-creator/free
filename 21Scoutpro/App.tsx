@@ -52,6 +52,7 @@ import { AthletePsrForm } from './components/athlete/AthletePsrForm';
 import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
+import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY } from './utils/openMatchAnalysis';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -111,7 +112,7 @@ const SLIDES = [
 const TAB_LABELS: Record<string, string> = {
   dashboard: 'Visão Geral',
   team: 'Elenco',
-  schedule: 'Programação',
+  schedule: 'Agenda de treinos',
   championship: 'Tabela de Campeonato',
   'management-report': 'Relatório gerencial',
   table: 'Dados do Jogo',
@@ -434,14 +435,26 @@ export default function App() {
     }, 0);
 
     const upcomingMatches = championshipMatches
-      .map(match => ({
-        ...match,
-        dateTime: new Date(`${match.date}T${match.time || '00:00'}`)
-      }))
-      .filter(match => !Number.isNaN(match.dateTime.getTime()) && match.dateTime >= now)
+      .map(match => {
+        if (!match.date) return null;
+        const [year, month, day] = String(match.date).split('-').map(Number);
+        if (!year || !month || !day) return null;
+        let hours = 0;
+        let minutes = 0;
+        const timeStr = (match.time || '00:00').slice(0, 5);
+        if (timeStr.includes(':')) {
+          const [h, m] = timeStr.split(':').map(Number);
+          hours = Number.isFinite(h) ? h : 0;
+          minutes = Number.isFinite(m) ? m : 0;
+        }
+        const dateTime = new Date(year, month - 1, day, hours, minutes);
+        if (Number.isNaN(dateTime.getTime())) return null;
+        return { ...match, dateTime };
+      })
+      .filter((match): match is NonNullable<typeof match> & { dateTime: Date } => !!match && match.dateTime.getTime() > now.getTime())
       .sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
 
-    const nextMatch = upcomingMatches[0];
+    const nextMatch = upcomingMatches[0] ?? null;
 
     return {
       totalAthletes: players.length,
@@ -893,6 +906,19 @@ export default function App() {
     loadDashboard();
   }, [currentUser]);
 
+  // Após Finalizar coleta (realtime): abrir Dados do Jogo para a Análise
+  useEffect(() => {
+    if (isInitializing || !currentUser || currentUser.role === 'Atleta') return;
+    if (!peekOpenMatchAnalysisId()) return;
+    if (activeTab === 'table') return;
+    setActiveTab('table');
+    const resources = TAB_REQUIRED_RESOURCES.table ?? [];
+    const missing = resources.filter((r) => !loadedResources[r]);
+    if (missing.length === 0) return;
+    setIsLoading(true);
+    Promise.all(missing.map((r) => Promise.resolve(loadResource(r)))).then(() => setIsLoading(false));
+  }, [isInitializing, currentUser]);
+
   // Clean up old schedules (older than 30 days) when schedules have been loaded
   useEffect(() => {
     if (!loadedResources.schedules) return;
@@ -939,6 +965,7 @@ export default function App() {
     'scout21_settings_current_team',
     'substitutionFrequency',
     'realtimeScoutData',
+    OPEN_MATCH_ANALYSIS_KEY,
   ];
 
   const clearAllUserData = (includeToken = false) => {
@@ -1167,6 +1194,8 @@ export default function App() {
             if (!isAutosave) {
               if (saveAsIncomplete) {
                 alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');
+              } else if (newMatch.status === 'encerrado') {
+                // Finalizar coleta: permanece em Dados do Jogo / análise (não vai para Scout Coletivo)
               } else {
                 alert("Partida salva com sucesso! Os dados foram gravados no banco de dados.");
                 if (isCreated) setActiveTab('general');
@@ -2004,6 +2033,7 @@ export default function App() {
               onSaveSchedule={handleSaveSchedule} 
               onDeleteSchedule={handleDeleteSchedule}
               onToggleActive={handleToggleScheduleActive}
+              onCreateScoutMatch={() => handleTabChange('championship')}
             />
           </TabBackgroundWrapper>
         );

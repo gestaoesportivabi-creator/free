@@ -12,6 +12,7 @@ import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
+import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
 const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
@@ -209,6 +210,22 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             window.removeEventListener('wellness-updated', onRefresh);
         };
     }, [schedules]);
+
+    // Após Finalizar coleta em /scout-realtime → abre Análise da Partida
+    useEffect(() => {
+        if (!matches?.length) return;
+        const pendingId = peekOpenMatchAnalysisId();
+        if (!pendingId) return;
+        const found = matches.find((m) => String(m.id) === String(pendingId));
+        if (!found) return;
+        consumeOpenMatchAnalysisId();
+        setSelectedMatch(found);
+        setSelectedScheduledMatch(null);
+        setViewMode('analysis');
+        setShowPostMatchSheet(false);
+        setIsCreatingNew(false);
+        setShowRealtimePrepForSavedMatch(false);
+    }, [matches]);
     const [preparationExtraTimeMinutes, setPreparationExtraTimeMinutes] = useState<number>(5); // Minutos de acréscimo
     const [showStartScoutConfirmation, setShowStartScoutConfirmation] = useState<boolean>(false); // Modal de confirmação
     const [collectionType, setCollectionType] = useState<'realtime' | 'postmatch' | null>(null); // Tipo de coleta (null = seletor)
@@ -1893,6 +1910,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         date: string;
         opponent: string;
         competition?: string;
+        location?: string;
         players: Player[];
         teams: Team[];
         matchType: MatchType;
@@ -2420,11 +2438,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     onClick={() => {
                                         if (selectedPlayersForMatch.size === 0) return;
                                         if (!validateFutsalLineupSelection()) return;
+                                        const locationFromChampionship = championshipMatches.find(
+                                            (cm) =>
+                                                cm.date === selectedMatch.date &&
+                                                (cm.opponent || '').trim().toLowerCase() ===
+                                                    (selectedMatch.opponent || '').trim().toLowerCase()
+                                        )?.location;
                                         const realtimeScoutData = {
                                             matchId: selectedMatch.id,
                                             date: selectedMatch.date,
                                             opponent: selectedMatch.opponent || '',
                                             competition: selectedMatch.competition,
+                                            location:
+                                                selectedMatch.location?.trim() ||
+                                                locationFromChampionship?.trim() ||
+                                                undefined,
                                             players: players || [],
                                             teams: teams || [],
                                             matchType: selectedMatchType,
@@ -2835,11 +2863,21 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         handleBackToCalendar();
                                         return result;
                                     }
+                                    // Finalizar: fecha sheet e mantém análise da partida
                                     setShowPostMatchSheet(false);
-                                    const isExistingMatch =
-                                        result?.id && isPersistedServerMatchId(String(result.id));
-                                    if (!isExistingMatch) handleBackToCalendar();
                                     return result;
+                                }}
+                                onCollectionFinalized={(matchId) => {
+                                    setShowPostMatchSheet(false);
+                                    setIsCreatingNew(false);
+                                    // selectedMatch já atualizado no onSave — garante foco na análise
+                                    if (matchId) {
+                                        setSelectedMatch((prev) =>
+                                            prev && String(prev.id) === String(matchId)
+                                                ? { ...prev, status: 'encerrado' }
+                                                : prev
+                                        );
+                                    }
                                 }}
                                 recordedByUser={undefined}
                                 takeFullWidth={false}
@@ -2874,6 +2912,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     date: m.date,
                                                     opponent: m.opponent || '',
                                                     competition: m.competition,
+                                                    location:
+                                                        m.location?.trim() ||
+                                                        championshipMatches.find(
+                                                            (cm) =>
+                                                                cm.date === m.date &&
+                                                                (cm.opponent || '').trim().toLowerCase() ===
+                                                                    (m.opponent || '').trim().toLowerCase()
+                                                        )?.location?.trim() ||
+                                                        undefined,
                                                     players: players || [],
                                                     teams: teams || [],
                                                     matchType: selectedMatchType,
@@ -2946,7 +2993,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                             <div>
                                 <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-1">Local</span>
-                                <p className="text-white text-sm font-bold">{(selectedMatch as any).location || '-'}</p>
+                                <p className="text-white text-sm font-bold">
+                                  {selectedMatch.location ||
+                                    championshipMatches.find(
+                                      (cm) =>
+                                        cm.date === selectedMatch.date &&
+                                        (cm.opponent || '').trim().toLowerCase() ===
+                                          (selectedMatch.opponent || '').trim().toLowerCase()
+                                    )?.location ||
+                                    '—'}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -3049,6 +3105,42 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-2">Erros Transição</span>
                                     <p className="text-white text-2xl font-black">{selectedMatch.teamStats.transitionErrors}</p>
                                 </div>
+                                {(() => {
+                                  const log = selectedMatch.postMatchEventLog || [];
+                                  const count = (pred: (e: (typeof log)[number]) => boolean) =>
+                                    log.filter(pred).length;
+                                  const tapeStats: { label: string; value: number }[] = [
+                                    { label: 'Faltas (fita)', value: count((e) => e.action === 'falta') },
+                                    { label: 'Cartões (fita)', value: count((e) => e.action === 'card') },
+                                    { label: 'Escanteios (fita)', value: count((e) => e.action === 'corner') },
+                                    { label: 'Laterais (fita)', value: count((e) => e.action === 'lateral') },
+                                    { label: 'Bloqueios (fita)', value: count((e) => e.action === 'block') },
+                                    { label: 'Defesas (fita)', value: count((e) => e.action === 'save') },
+                                    { label: 'Pênaltis (fita)', value: count((e) => e.action === 'penalty') },
+                                    { label: 'Tiros livres (fita)', value: count((e) => e.action === 'freeKick') },
+                                    {
+                                      label: 'Finalizações (fita)',
+                                      value: count(
+                                        (e) =>
+                                          e.action === 'shotOn' ||
+                                          e.action === 'shotOff' ||
+                                          e.action === 'shotZonaChute'
+                                      ),
+                                    },
+                                  ];
+                                  return tapeStats.map((s) => (
+                                    <div
+                                      key={s.label}
+                                      className="bg-zinc-950 rounded-xl p-4 border border-zinc-800"
+                                      data-testid={`tape-stat-${s.label}`}
+                                    >
+                                      <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-2">
+                                        {s.label}
+                                      </span>
+                                      <p className="text-white text-2xl font-black">{s.value}</p>
+                                    </div>
+                                  ));
+                                })()}
                             </div>
                         )}
                     </div>
@@ -3143,6 +3235,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     date: selectedScheduledMatch.date,
                                                     opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,
+                                                    location:
+                                                        selectedScheduledMatch.location?.trim() ||
+                                                        undefined,
                                                     players: players || [],
                                                     teams: teams || [],
                                                     matchType: preparationMatchType,
@@ -3832,15 +3927,29 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 prev ? { ...prev, ...result, id: result.id } : result
                             );
                         }
-                        if (options?.source === 'autosave') return;
+                        if (options?.source === 'autosave') return result;
                         if (options?.saveAsIncomplete) {
                             handleBackToCalendar();
-                            return;
+                            return result;
                         }
                         setShowScoutingWindow(false);
                         setSelectedMatchType('normal');
                         setSelectedExtraTimeMinutes(5);
                         setSelectedPlayersForMatch(new Set());
+                        return result;
+                    }}
+                    onCollectionFinalized={(matchId) => {
+                        setShowScoutingWindow(false);
+                        setShowRealtimePrepForSavedMatch(false);
+                        setIsCreatingNew(false);
+                        setSelectedPlayersForMatch(new Set());
+                        if (matchId) {
+                            setSelectedMatch((prev) =>
+                                prev
+                                    ? { ...prev, id: matchId, status: 'encerrado' }
+                                    : prev
+                            );
+                        }
                     }}
                 />
             )}

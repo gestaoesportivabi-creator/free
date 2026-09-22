@@ -515,11 +515,16 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     });
                                     setIsCreating(true);
                                 }}
-                                className="flex items-center justify-center w-10 h-10 md:w-[176px] md:h-auto md:gap-2 bg-[#10b981] hover:bg-[#34d399] text-white md:px-4 md:py-2 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                                title="Nova Partida"
+                                className="flex flex-col items-center justify-center min-w-[10rem] gap-0.5 bg-[#10b981] hover:bg-[#34d399] text-white px-4 py-2.5 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                title="Nova Partida — partida scoutável (amistoso ou campeonato)"
                             >
-                                <Plus size={18} />
-                                <span className="hidden md:inline">Nova Partida</span>
+                                <span className="flex items-center gap-2">
+                                    <Plus size={18} />
+                                    <span>Nova Partida</span>
+                                </span>
+                                <span className="normal-case font-semibold tracking-normal text-[9px] text-emerald-100/90 leading-tight">
+                                    Partida scoutável (amistoso ou campeonato)
+                                </span>
                             </button>
                         </div>
                     )}
@@ -563,9 +568,12 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                 {/* Formulário de criação/edição */}
                 {isCreating && (
                     <div className="mb-6 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
-                        <h3 className="text-white font-bold text-sm mb-4 uppercase">
+                        <h3 className="text-white font-bold text-sm mb-1 uppercase">
                             {editingId ? 'Editar Partida' : 'Nova Partida'}
                         </h3>
+                        <p className="text-zinc-500 text-[10px] font-semibold mb-4">
+                            Partida scoutável (amistoso ou campeonato)
+                        </p>
                         
                         {/* Toggle Amistoso */}
                         <div className="mb-4 flex items-center gap-3 p-3 bg-black rounded-lg border border-zinc-800">

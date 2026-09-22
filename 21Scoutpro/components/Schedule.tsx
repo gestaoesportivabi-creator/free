@@ -8,9 +8,11 @@ interface ScheduleProps {
     onSaveSchedule: (schedule: WeeklySchedule) => void;
     onDeleteSchedule: (id: string) => void;
     onToggleActive?: (id: string) => void; // New prop for flagging
+    /** Abre a criação de partida scoutável (Tabela de Campeonato / Dados do Jogo) */
+    onCreateScoutMatch?: () => void;
 }
 
-export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, onDeleteSchedule, onToggleActive }) => {
+export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, onDeleteSchedule, onToggleActive, onCreateScoutMatch }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -153,18 +155,30 @@ export const Schedule: React.FC<ScheduleProps> = ({ schedules, onSaveSchedule, o
             <div className="bg-black p-6 rounded-3xl border border-zinc-800 shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
                 <div>
                     <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
-                        <CalendarClock className="text-[#10b981]" /> Programação Semanal
+                        <CalendarClock className="text-[#10b981]" /> Agenda de treinos
                     </h2>
-                    <p className="text-zinc-500 text-xs font-bold mt-1">Cronograma de treinos, jogos e viagens.</p>
+                    <p className="text-zinc-500 text-xs font-bold mt-1">
+                        Programação semanal de treinos e viagens — não cria partida para scout.
+                    </p>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 justify-end">
+                    {onCreateScoutMatch && (
+                        <button
+                            type="button"
+                            onClick={onCreateScoutMatch}
+                            className="flex items-center gap-2 bg-[#00f0ff] hover:bg-[#00d9e6] text-black px-5 py-3 font-bold uppercase text-xs rounded-xl transition-colors"
+                            title="Ir para Tabela de Campeonato e criar partida scoutável"
+                        >
+                            <Plus size={16} /> Criar partida para scout
+                        </button>
+                    )}
                     {!currentSchedule && !isCreating && (
                         <button 
                             onClick={() => setIsCreating(true)}
                             className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-6 py-3 font-bold uppercase text-xs rounded-xl transition-colors"
                         >
-                            <Plus size={16} /> Nova Programação
+                            <Plus size={16} /> Nova agenda
                         </button>
                     )}
                     

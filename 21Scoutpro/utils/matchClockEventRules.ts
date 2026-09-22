@@ -24,6 +24,10 @@ export interface MatchClockEventRule {
   observacao?: string;
 }
 
+/**
+ * Pausas na coleta densa (QA José): pausar só o que precisa de fluxo
+ * (gol / pênalti / tiro livre multi-step). Demais eventos não travam o pad.
+ */
 const RULES: Record<string, MatchClockEventRule> = {
   pass: {
     pauseBeforeFlow: 'none',
@@ -39,7 +43,7 @@ const RULES: Record<string, MatchClockEventRule> = {
   },
   'shot:outside': {
     pauseBeforeFlow: 'none',
-    pauseAfterRegister: 'event',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: false,
     validada: true,
   },
@@ -56,11 +60,10 @@ const RULES: Record<string, MatchClockEventRule> = {
     validada: true,
   },
   foul: {
-    pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'event',
+    pauseBeforeFlow: 'none',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: true,
     validada: true,
-    observacao: 'A pausa esta validada; a observacao pendente da matriz refere-se ao detalhamento funcional da falta.',
   },
   goal: {
     pauseBeforeFlow: 'manual',
@@ -87,39 +90,35 @@ const RULES: Record<string, MatchClockEventRule> = {
     validada: true,
   },
   block: {
-    pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'preserve-current',
+    pauseBeforeFlow: 'none',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: false,
-    validada: false,
-    observacao: 'Pendente de validacao com a comissao tecnica.',
+    validada: true,
   },
   corner: {
-    pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'preserve-current',
+    pauseBeforeFlow: 'none',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: false,
-    validada: false,
-    observacao: 'Pendente de validacao com a comissao tecnica.',
+    validada: true,
   },
   freeKick: {
     pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'preserve-current',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: true,
-    validada: false,
-    observacao: 'Pendente de validacao com a comissao tecnica.',
+    validada: true,
+    observacao: 'Pausa só durante o fluxo multi-step; relógio não fica travado após gravar.',
   },
   penalty: {
     pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'preserve-current',
+    pauseAfterRegister: 'event',
     exigeConfirmacao: true,
-    validada: false,
-    observacao: 'Pendente de validacao com a comissao tecnica.',
+    validada: true,
   },
   lateral: {
-    pauseBeforeFlow: 'manual',
-    pauseAfterRegister: 'preserve-current',
+    pauseBeforeFlow: 'none',
+    pauseAfterRegister: 'none',
     exigeConfirmacao: false,
-    validada: false,
-    observacao: 'Pendente de validacao com a comissao tecnica.',
+    validada: true,
   },
 };
 

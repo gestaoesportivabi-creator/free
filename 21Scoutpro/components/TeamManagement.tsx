@@ -217,7 +217,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     /** Nº de camisa já usado por outro atleta (lista atual) */
     const [jerseyDuplicateMessage, setJerseyDuplicateMessage] = useState<string | null>(null);
 
-    const [createAccess, setCreateAccess] = useState(true);
+    const [createAccess, setCreateAccess] = useState(false);
     const [accessEmail, setAccessEmail] = useState('');
     const [accessPassword, setAccessPassword] = useState('');
     const [showAccessPassword, setShowAccessPassword] = useState(false);
@@ -271,7 +271,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         setActiveTab('profile');
         setProfileFieldErrors({});
         setJerseyDuplicateMessage(null);
-        setCreateAccess(true);
+        setCreateAccess(false);
         setAccessEmail('');
         setAccessPassword('');
         setShowAccessPassword(false);
@@ -1009,6 +1009,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                     </label>
                                     <input
                                         type="date"
+                                        lang="pt-BR"
                                         value={birthDate}
                                         onChange={(e) => {
                                             setBirthDate(e.target.value);
@@ -1018,7 +1019,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                                         max={birthDateMaxIso}
                                         className={`w-full bg-black border rounded-xl p-3 text-white outline-none focus:border-[#10b981] ${profileFieldErrors.birthDate ? 'border-red-500 ring-1 ring-red-500/30' : 'border-zinc-800'}`}
                                     />
-                                    <p className="text-[10px] text-zinc-600 mt-1">Entre 1950 e o ano atual (somente neste formulário).</p>
+                                    <p className="text-[10px] text-zinc-600 mt-1">
+                                        {birthDate
+                                            ? `Exibição: ${new Date(`${birthDate}T12:00:00`).toLocaleDateString('pt-BR')}`
+                                            : 'Formato dd/mm/aaaa (pt-BR). Entre 1950 e o ano atual.'}
+                                    </p>
                                 </div>
 
                                 <div>

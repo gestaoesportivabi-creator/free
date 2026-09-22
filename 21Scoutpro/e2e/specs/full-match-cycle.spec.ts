@@ -22,6 +22,13 @@ import {
   sincronizarClock,
 } from '../helpers/scout-flow';
 
+async function confirmarFinalizarColeta(page: Page): Promise<void> {
+  await page.getByTestId('end-collection').click();
+  await expect(page.getByTestId('finalize-collection-dialog')).toBeVisible();
+  await page.getByTestId('finalize-collection-confirm').click();
+  await expect(page.getByTestId('finalize-collection-dialog')).toBeHidden({ timeout: 20_000 });
+}
+
 async function aceitarProximoDialogo(page: Page): Promise<void> {
   page.once('dialog', (dialog) => dialog.accept());
 }
@@ -134,11 +141,11 @@ test.describe.serial('QA ciclo completo da partida', () => {
     const latestGoal = await obterUltimoEvento(page);
     expect(latestGoal.type).toBe('goal');
     expect(latestGoal.period).toBe('2T');
-    expect(latestGoal.time).toBe('22:40');
+    expect(latestGoal.time).toBe('02:40');
     await fecharLogs(page);
 
     const recentGoal = await obterEventoRecente(page);
-    expect(recentGoal.time).toBe('22:40');
+    expect(recentGoal.time).toBe('02:40');
     expect(recentGoal.action).toBe('Gol');
     expect(recentGoal.text).not.toContain('Gol Gol');
 
@@ -146,9 +153,8 @@ test.describe.serial('QA ciclo completo da partida', () => {
     await expect(page.getByTestId('collection-status')).toContainText('Partida encerrada');
     await expect(page.getByTestId('end-collection')).toBeEnabled();
 
-    await aceitarProximoDialogo(page);
-    await page.getByTestId('end-collection').click();
-    await page.waitForURL(/\/dashboard$/, { timeout: 20_000 });
+    await confirmarFinalizarColeta(page);
+    await expect(page.getByText(/Análise da Partida/i)).toBeVisible({ timeout: 20_000 });
 
     await reabrirPartida(page);
     await expect(page.getByTestId('collection-status')).toContainText('POS-JOGO');
@@ -158,10 +164,10 @@ test.describe.serial('QA ciclo completo da partida', () => {
     const reopenedLatest = await obterUltimoEvento(page);
     expect(reopenedLatest.type).toBe('goal');
     expect(reopenedLatest.period).toBe('2T');
-    expect(reopenedLatest.time).toBe('22:40');
+    expect(reopenedLatest.time).toBe('02:40');
 
     const reopenedRecentGoal = await obterEventoRecente(page);
-    expect(reopenedRecentGoal.time).toBe('22:40');
+    expect(reopenedRecentGoal.time).toBe('02:40');
     expect(reopenedRecentGoal.action).toBe('Gol');
   });
 });

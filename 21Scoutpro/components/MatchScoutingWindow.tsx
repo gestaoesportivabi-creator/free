@@ -15,7 +15,6 @@ import {
   goalDigitsToRelativeSeconds,
   parseGoalTimeDigits,
   secondHalfRelativeToGoalDigits,
-  storedToAbsoluteSeconds,
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
@@ -147,6 +146,8 @@ interface MatchScoutingWindowProps {
   takeFullWidth?: boolean;
   /** Quando true, alinha à esquerda com sidebar retraída (64px); quando false, com sidebar expandida (256px) */
   sidebarRetracted?: boolean;
+  /** Após finalizar coleta com sucesso — abre análise / Dados do Jogo no match salvo */
+  onCollectionFinalized?: (matchId: string) => void;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -439,6 +440,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   recordedByUser,
   takeFullWidth,
   sidebarRetracted = false,
+  onCollectionFinalized,
 }) => {
   const isPostmatch = mode === 'postmatch';
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
@@ -571,6 +573,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ time: number; period: '1T' | '2T'; type: MatchEvent['type']; result?: MatchEvent['result']; cardType?: MatchEvent['cardType']; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; isOpponentGoal?: boolean; playerId?: string | null; playerName?: string | null; assistPlayerId?: string | null; assistPlayerName?: string | null } | null>(null);
   const [editTimeInput, setEditTimeInput] = useState<string>('');
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   
   // Estados para tiro livre e pênalti (fluxo inline)
   const [showFreeKickTeamSelection, setShowFreeKickTeamSelection] = useState<boolean>(false);
@@ -2262,33 +2267,93 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   }, []);
 
   // Finalizar coleta (status = encerrado, mas editável depois)
-  const handleEndCollection = async () => {
+  const clearEphemeralCollectionUi = useCallback(() => {
+    setShowLogsView(false);
+    setEditingEventId(null);
+    setEditDraft(null);
+    setEditTimeInput('');
+    setSelectedAction(null);
+    setSelectedPlayerId(null);
+    setFreeKickStep(null);
+    setPenaltyStep(null);
+    setPendingFreeKickTeam(null);
+    setPendingFreeKickKickerId(null);
+    setPendingFreeKickResultToRegister(null);
+    setShowFinalizeConfirm(false);
+    setFinalizeError(null);
+    setIsFinalizing(false);
+  }, []);
+
+  const performEndCollection = async () => {
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
-    if (!canEnd) return;
-    if (!window.confirm('Tem certeza que deseja finalizar a coleta?')) return;
+    if (!canEnd || isFinalizing) return;
+
+    setIsFinalizing(true);
+    setFinalizeError(null);
 
     suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
     stopAutosaveSchedulers();
     await waitForAutosaveIdle();
 
-    if (isPostmatch && onSave) {
-      const savedMatch = buildMatchSnapshot('encerrado');
-      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
-      commitPersistedSignature(JSON.stringify(savedMatch));
-      onClose();
-      return;
-    }
+    try {
+      if (!onSave) {
+        setFinalizeError('Salvamento indisponível. Tente novamente.');
+        setIsFinalizing(false);
+        return;
+      }
 
-    if (substitutionHistory.length > 0) {
-      updateSubstitutionFrequency(substitutionHistory);
-    }
-    if (onSave) {
+      if (substitutionHistory.length > 0) {
+        updateSubstitutionFrequency(substitutionHistory);
+      }
+
       const savedMatch = buildMatchSnapshot('encerrado');
-      applySaveResult(await onSave(savedMatch, { source: 'manual' }));
+      const expectedLogLen = savedMatch.postMatchEventLog?.length ?? 0;
+      const saveResult = await onSave(savedMatch, { source: 'manual' });
+      applySaveResult(saveResult);
+
+      if (!saveResult || typeof saveResult !== 'object' || !saveResult.id) {
+        setFinalizeError('Falha ao salvar a coleta. Verifique a conexão e tente novamente.');
+        setIsFinalizing(false);
+        autosaveSkipRef.current = false;
+        return;
+      }
+
+      const returnedLogLen = saveResult.postMatchEventLog?.length;
+      if (
+        typeof returnedLogLen === 'number' &&
+        expectedLogLen > 0 &&
+        returnedLogLen !== expectedLogLen
+      ) {
+        setFinalizeError(
+          `Divergência ao salvar: enviamos ${expectedLogLen} evento(s) e o servidor retornou ${returnedLogLen}. Tente novamente.`
+        );
+        setIsFinalizing(false);
+        autosaveSkipRef.current = false;
+        return;
+      }
+
       commitPersistedSignature(JSON.stringify(savedMatch));
+      const finalizedId = String(saveResult.id).trim();
+      clearEphemeralCollectionUi();
+      if (onCollectionFinalized) {
+        onCollectionFinalized(finalizedId);
+      } else {
+        onClose();
+      }
+    } catch (err) {
+      console.error('Erro ao finalizar coleta:', err);
+      setFinalizeError('Erro ao finalizar. Tente novamente.');
+      setIsFinalizing(false);
+      autosaveSkipRef.current = false;
     }
-    onClose();
+  };
+
+  const handleEndCollection = () => {
+    const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
+    if (!canEnd) return;
+    setFinalizeError(null);
+    setShowFinalizeConfirm(true);
   };
 
   // Guardar como incompleto (status = em_andamento)
@@ -2325,10 +2390,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
+    // Sob carga (QA José / loops densos): espaçar autosave para reduzir JSON.stringify + GC
+    const debounceMs = matchEvents.length >= 80 ? 2500 : 800;
+
     if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
     autosaveDebounceRef.current = setTimeout(() => {
       void saveSilently();
-    }, 800);
+    }, debounceMs);
 
     return () => {
       if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
@@ -3301,29 +3369,35 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     defesaDireita: 'DF DIR',
   };
 
-  // Últimos 3 comandos para log
-  const lastThreeEvents = useMemo(() => {
-    return [...matchEvents].reverse().slice(0, 3).reverse();
+  // Últimos comandos para log (cap de memória na fita recente)
+  const RECENT_EVENTS_UI_CAP = 40;
+  const EVENT_LOG_TABLE_CAP = 100;
+
+  const lastRecentEvents = useMemo(() => {
+    return [...matchEvents].slice(-RECENT_EVENTS_UI_CAP);
   }, [matchEvents]);
 
   // Linhas de exibição para "Últimos comandos": passes viram duas linhas (quem deu / quem recebeu)
+  // Tempo PERIOD-RELATIVE (mm:ss da metade) + badge 1T/2T — storage permanece inalterado
   const lastCommandDisplayLines = useMemo(() => {
-    const lines: Array<{ key: string; absoluteTime: number; playerName: string; actionText: string; zone?: string }> = [];
-    for (const event of lastThreeEvents) {
+    const lines: Array<{ key: string; relativeTime: number; period: '1T' | '2T'; playerName: string; actionText: string; zone?: string }> = [];
+    for (const event of lastRecentEvents) {
       const zone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
       const isPassWithReceiver = event.type === 'pass' && event.passToPlayerId && event.passToPlayerName;
-      const absoluteTime = storedToAbsoluteSeconds(event.period, event.time);
+      const relativeTime = Math.max(0, event.time);
       if (isPassWithReceiver) {
         lines.push({
           key: `${event.id}-passer`,
-          absoluteTime,
+          relativeTime,
+          period: event.period,
           playerName: event.playerName || 'N/A',
           actionText: formatRecentEventAction(event),
           zone,
         });
         lines.push({
           key: `${event.id}-receiver`,
-          absoluteTime,
+          relativeTime,
+          period: event.period,
           playerName: event.passToPlayerName || 'N/A',
           actionText: 'Recebeu passe',
           zone,
@@ -3331,7 +3405,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else {
         lines.push({
           key: event.id,
-          absoluteTime,
+          relativeTime,
+          period: event.period,
           playerName: event.playerName || 'N/A',
           actionText: formatRecentEventAction(event),
           zone,
@@ -3339,7 +3414,45 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     }
     return lines;
-  }, [formatRecentEventAction, lastThreeEvents]);
+  }, [formatRecentEventAction, lastRecentEvents]);
+
+  const eventLogRowsForTable = useMemo(() => {
+    const reversed = [...matchEvents].reverse();
+    return {
+      total: matchEvents.length,
+      rows: reversed.slice(0, EVENT_LOG_TABLE_CAP),
+    };
+  }, [matchEvents]);
+
+  const handleSelectDefaultLineup = useCallback(() => {
+    const poolIds = [
+      ...new Set(
+        [...lineupPlayers, ...benchPlayers, ...(selectedPlayerIds || []).map((id) => String(id).trim())].filter(Boolean)
+      ),
+    ];
+    const pool = poolIds
+      .map((id) => players.find((p) => String(p.id).trim() === id))
+      .filter((p): p is Player => !!p);
+    const byJerseyThenName = (a: Player, b: Player) => {
+      const ja = Number(a.jerseyNumber) || 999;
+      const jb = Number(b.jerseyNumber) || 999;
+      if (ja !== jb) return ja - jb;
+      return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+    };
+    const gk = pool.filter((p) => p.position === 'Goleiro').sort(byJerseyThenName)[0];
+    const outfield = pool
+      .filter((p) => p.position !== 'Goleiro' && (!gk || String(p.id).trim() !== String(gk.id).trim()))
+      .sort(byJerseyThenName)
+      .slice(0, 4);
+    if (!gk || outfield.length < 4) {
+      alert('É preciso ter pelo menos 1 goleiro e 4 atletas de linha disponíveis para o padrão (1+4).');
+      return;
+    }
+    const nextLineup = [String(gk.id).trim(), ...outfield.map((p) => String(p.id).trim())];
+    const nextBench = poolIds.filter((id) => !nextLineup.includes(id));
+    setLineupPlayers(nextLineup);
+    setBenchPlayers(nextBench);
+  }, [benchPlayers, lineupPlayers, players, selectedPlayerIds]);
 
   const isBlockedByPenalty = !!penaltyStep;
 
@@ -3674,17 +3787,26 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <p className="text-zinc-300 text-xs font-normal uppercase truncate text-left">{(match.opponent || 'Adversário').toUpperCase()}</p>
               </div>
               {/* Linha 2: faltas do período selecionado (1T ou 2T) - controlado pelo botão central de tempo */}
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full max-w-md">
-                <div className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
-                  foulsForCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
-                }`}>
-                  {foulsForCurrentPeriod} F
-                </div>
-                <div />
-                <div className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
-                  foulsAgainstCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
-                }`}>
-                  {foulsAgainstCurrentPeriod} F
+              <div className="flex flex-col items-center gap-0.5 w-full max-w-md">
+                <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Faltas do tempo</p>
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full">
+                  <div
+                    className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
+                      foulsForCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
+                    }`}
+                    title="Faltas do tempo (reinicia no intervalo)"
+                  >
+                    {foulsForCurrentPeriod} F
+                  </div>
+                  <div />
+                  <div
+                    className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
+                      foulsAgainstCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
+                    }`}
+                    title="Faltas do tempo (reinicia no intervalo)"
+                  >
+                    {foulsAgainstCurrentPeriod} F
+                  </div>
                 </div>
               </div>
             </div>
@@ -3794,6 +3916,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               </button>
             </div>
             <div data-testid="event-logs-table" className="flex-1 min-h-0 overflow-auto rounded-xl border-2 border-zinc-800 bg-zinc-950">
+              {eventLogRowsForTable.total > EVENT_LOG_TABLE_CAP && (
+                <p className="px-3 py-2 text-[10px] text-zinc-500 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-20">
+                  Mostrando últimos {EVENT_LOG_TABLE_CAP} de {eventLogRowsForTable.total}
+                </p>
+              )}
               <table className="w-full text-left border-collapse">
                 <thead className="sticky top-0 bg-zinc-900 border-b-2 border-zinc-700 z-10">
                   <tr>
@@ -3806,8 +3933,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {[...matchEvents]
-                    .reverse()
+                  {eventLogRowsForTable.rows
                     .map((event) => {
                       const isEditing = editingEventId === event.id;
                       const draft = isEditing ? editDraft : null;
@@ -3819,8 +3945,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           data-event-id={event.id}
                           data-event-period={event.period}
                           data-event-type={event.type}
-                          data-event-time={formatTime(storedToAbsoluteSeconds(event.period, event.time))}
+                          data-event-time={formatTime(event.time)}
                           className="border-b border-zinc-800 hover:bg-zinc-900/50"
+                          style={{ contentVisibility: 'auto', containIntrinsicSize: '0 48px' }}
                         >
                           <td className="p-2">
                             {isEditing && draft ? (
@@ -3833,7 +3960,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 className="w-16 px-2 py-1 rounded bg-zinc-800 border border-zinc-600 text-white text-sm font-mono"
                               />
                             ) : (
-                              <span className="text-zinc-300 font-mono text-sm">{formatTime(storedToAbsoluteSeconds(event.period, event.time))}</span>
+                              <span className="text-zinc-300 font-mono text-sm inline-flex items-center gap-1.5">
+                                <span>{formatTime(event.time)}</span>
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase">{event.period}</span>
+                              </span>
                             )}
                           </td>
                           <td className="p-2">
@@ -4031,7 +4161,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                       assistPlayerId: event.type === 'goal' ? (event.assistPlayerId ?? null) : undefined,
                                       assistPlayerName: event.type === 'goal' ? (event.assistPlayerName ?? null) : undefined,
                                     });
-                                    setEditTimeInput(formatTime(storedToAbsoluteSeconds(event.period, event.time)));
+                                    setEditTimeInput(formatTime(event.time));
                                   }}
                                   data-testid="event-edit"
                                   className="px-2 py-1 rounded bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] hover:bg-[#00f0ff]/30 text-xs font-bold"
@@ -5505,6 +5635,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         }}
                         data-testid="event-selector-freekick"
                         disabled={shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)}
+                        title={
+                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
+                            ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
+                            : undefined
+                        }
                         className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
                           shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
                             ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
@@ -5594,13 +5729,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             <p className="text-zinc-500 font-bold uppercase shrink-0">Eventos recentes:</p>
             <div data-testid="recent-events" className="flex-1 flex gap-2 overflow-x-auto overflow-y-hidden min-w-0 pb-1">
               {lastCommandDisplayLines.length > 0 ? (
-                lastCommandDisplayLines.slice(-5).map((line) => (
+                lastCommandDisplayLines.slice(-RECENT_EVENTS_UI_CAP).map((line) => (
                   <div
                     key={line.key}
                     data-testid="recent-event-item"
                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded shrink-0 min-w-0 max-w-full"
                   >
-                    <span data-testid="recent-event-time" className="text-zinc-400 font-mono shrink-0">{formatTime(line.absoluteTime)}</span>
+                    <span data-testid="recent-event-time" className="text-zinc-400 font-mono shrink-0">
+                      {formatTime(line.relativeTime)}
+                    </span>
+                    <span className="text-[9px] font-bold text-zinc-500 shrink-0">{line.period}</span>
                     <span className="text-zinc-600 shrink-0">·</span>
                     <span data-testid="recent-event-player" className="text-white font-semibold truncate">{line.playerName}</span>
                     <span className="text-zinc-600 shrink-0">·</span>
@@ -5647,6 +5785,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     Selecione 5 atletas: 1 goleiro (slot abaixo) e 4 atletas de linha. Durante o jogo, um atleta de
                     linha pode assumir a função de goleiro (goleiro linha).
                   </p>
+                  <button
+                    type="button"
+                    onClick={handleSelectDefaultLineup}
+                    data-testid="lineup-select-default"
+                    className="mb-4 px-4 py-2 rounded-xl border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-xs font-bold uppercase transition-colors"
+                  >
+                    Selecionar padrão (1 GK + 4)
+                  </button>
                   
                   {/* Escalação (5 jogadores) */}
                   <div className="mb-6">
@@ -6086,6 +6232,62 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   className="px-4 py-2 rounded-lg border border-red-400 bg-red-500/15 text-red-100 text-xs font-black uppercase hover:bg-red-500/25 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isEndingMatch ? 'Encerrando...' : 'Encerrar partida'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showFinalizeConfirm && (
+          <div
+            data-testid="finalize-collection-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="finalize-collection-title"
+            className="fixed inset-0 z-[121] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4"
+          >
+            <div className="w-full max-w-md rounded-2xl border-2 border-emerald-500/50 bg-zinc-950 shadow-2xl overflow-hidden">
+              <div className="border-b border-zinc-800 px-5 py-4">
+                <p id="finalize-collection-title" className="text-white text-sm font-black uppercase">
+                  Finalizar coleta
+                </p>
+                <p className="text-zinc-300 text-xs mt-1 leading-relaxed">
+                  Confirma o encerramento da coleta desta partida?
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase text-zinc-500">Eventos registrados</p>
+                  <p className="text-sm font-semibold text-zinc-100">{matchEvents.length}</p>
+                </div>
+                {finalizeError && (
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
+                    <p className="text-xs text-red-300 font-medium">{finalizeError}</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-zinc-800 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isFinalizing) return;
+                    setShowFinalizeConfirm(false);
+                    setFinalizeError(null);
+                  }}
+                  disabled={isFinalizing}
+                  data-testid="finalize-collection-cancel"
+                  className="px-4 py-2 rounded-lg border border-zinc-600 bg-zinc-800 text-zinc-200 text-xs font-bold uppercase hover:bg-zinc-700 transition-colors disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void performEndCollection()}
+                  disabled={isFinalizing}
+                  data-testid="finalize-collection-confirm"
+                  className="px-4 py-2 rounded-lg border border-emerald-400 bg-emerald-500/20 text-emerald-100 text-xs font-black uppercase hover:bg-emerald-500/30 transition-colors disabled:opacity-60"
+                >
+                  {isFinalizing ? 'Salvando...' : finalizeError ? 'Tentar novamente' : 'Finalizar'}
                 </button>
               </div>
             </div>
