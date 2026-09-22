@@ -1,11 +1,9 @@
 /**
- * Analytics helpers para GA4 + eventos de produto.
+ * Analytics helpers para GA4 + Google Ads (gtag.js).
  *
- * Contrato:
- * - GA4 é carregado em index.html apenas se `import.meta.env.VITE_GA4_ID` existir
- *   (ver snippet em index.html). Quando não existir, estes helpers viram no-op.
- * - Uso centralizado de `track(event, params)` permite que o OnPageSEO ajuste
- *   eventos sem caçar chamadas pelo código.
+ * - Snippet gtag em `index.html` (Measurement ID G-JDLX263HXT / VITE_GA4_ID).
+ * - Consent Mode v2: default denied; ao Aceitar libera analytics + ads (atribuição).
+ * - Conversão Ads opcional via `VITE_GOOGLE_ADS_CONVERSION_ID` (formato AW-XXXX/YYYY).
  */
 
 type AnalyticsParams = Record<string, string | number | boolean | null | undefined>;
@@ -19,6 +17,31 @@ declare global {
 }
 
 const CONSENT_KEY = 'scout21_consent_v1';
+
+const CONSENT_GRANTED = {
+  ad_storage: 'granted',
+  ad_user_data: 'granted',
+  ad_personalization: 'granted',
+  analytics_storage: 'granted',
+} as const;
+
+const CONSENT_DENIED = {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+} as const;
+
+function envString(key: string): string | undefined {
+  try {
+    const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+    const value = env?.[key]?.trim();
+    if (!value || value.includes(key)) return undefined;
+    return value;
+  } catch {
+    return undefined;
+  }
+}
 
 export function hasAnalyticsConsent(): boolean {
   if (typeof window === 'undefined') return false;
@@ -37,10 +60,7 @@ export function grantAnalyticsConsent(): void {
     /* ignore */
   }
   try {
-    window.gtag?.('consent', 'update', {
-      ad_storage: 'denied',
-      analytics_storage: 'granted',
-    });
+    window.gtag?.('consent', 'update', { ...CONSENT_GRANTED });
   } catch {
     /* ignore */
   }
@@ -54,10 +74,7 @@ export function denyAnalyticsConsent(): void {
     /* ignore */
   }
   try {
-    window.gtag?.('consent', 'update', {
-      ad_storage: 'denied',
-      analytics_storage: 'denied',
-    });
+    window.gtag?.('consent', 'update', { ...CONSENT_DENIED });
   } catch {
     /* ignore */
   }
@@ -77,6 +94,28 @@ export function track(event: string, params: AnalyticsParams = {}): void {
   const meta = (import.meta as unknown as { env?: { DEV?: boolean } }).env;
   if (!window.gtag && meta?.DEV) {
     console.debug('[analytics]', event, payload);
+  }
+}
+
+/**
+ * Cadastro concluído: evento custom (histórico) + `sign_up` recomendado GA4
+ * + conversão Google Ads se `VITE_GOOGLE_ADS_CONVERSION_ID` estiver definido.
+ */
+export function trackSignupCompleted(params: { plan?: string | null } = {}): void {
+  const plan = params.plan || undefined;
+  track('signup_completed', { plan, method: 'email' });
+  // Evento recomendado GA4 — facilita importação automática no Google Ads
+  track('sign_up', { method: 'email', plan });
+
+  const conversionId = envString('VITE_GOOGLE_ADS_CONVERSION_ID');
+  if (!conversionId || typeof window === 'undefined') return;
+  try {
+    window.gtag?.('event', 'conversion', {
+      send_to: conversionId,
+      plan,
+    });
+  } catch {
+    /* ignore */
   }
 }
 

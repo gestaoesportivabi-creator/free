@@ -1,8 +1,22 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
-  plugins: [react()],
+/** Substitui %VITE_*% no index.html pelo valor do env (fallback string vazia). */
+function htmlEnvPlaceholders(mode: string): Plugin {
+  return {
+    name: 'html-env-placeholders',
+    transformIndexHtml(html) {
+      const env = loadEnv(mode, process.cwd(), 'VITE_');
+      return html.replace(/%VITE_([A-Z0-9_]+)%/g, (_match, key: string) => {
+        const full = `VITE_${key}`;
+        return env[full] ?? '';
+      });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), htmlEnvPlaceholders(mode)],
   server: {
     proxy: {
       '/api': {
@@ -17,12 +31,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor': ['react', 'react-dom'],
-          'charts': ['recharts'],
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
         },
       },
     },
     chunkSizeWarningLimit: 1000,
-    minify: 'esbuild', // Usar esbuild ao invés de terser (mais rápido e já incluído)
+    minify: 'esbuild',
   },
-});
+}));

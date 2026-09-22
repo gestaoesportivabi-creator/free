@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { User } from '../types';
 import { getApiUrl } from '../config';
-import { track } from '../utils/analytics';
+import { track, trackSignupCompleted } from '../utils/analytics';
 
 const LOGO_IMAGE = '/public-logo.png.png';
 
@@ -122,8 +122,8 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignedUp, onGoToLogin, onBackT
 
       const data = result.data;
       localStorage.setItem('token', data.token);
-      // Conversão real do trial: até agora só media o clique no CTA, não o cadastro concluído.
-      track('signup_completed', { plan: data.user?.planName });
+      // GA4 signup_completed + sign_up + conversão Ads (se VITE_GOOGLE_ADS_CONVERSION_ID).
+      trackSignupCompleted({ plan: data.user?.planName });
 
       onSignedUp({
         id: data.user.id,

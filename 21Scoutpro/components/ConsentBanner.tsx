@@ -41,7 +41,7 @@ export const ConsentBanner: React.FC = () => {
     >
       <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-6">
         <p className="text-sm text-zinc-300 flex-1">
-          Usamos cookies apenas para medir desempenho do site (Google Analytics). Sem anúncios. Você pode recusar.
+          Usamos cookies para medir o site (Google Analytics) e atribuir conversões de anúncios (Google Ads). Você pode recusar.
         </p>
         <div className="flex gap-2 shrink-0">
           <button
