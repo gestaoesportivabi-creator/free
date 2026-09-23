@@ -4,7 +4,11 @@ import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
-import { stashOpenMatchAnalysis, OPEN_MATCH_ANALYSIS_KEY } from '../utils/openMatchAnalysis';
+import {
+  stashOpenMatchAnalysis,
+  OPEN_MATCH_ANALYSIS_KEY,
+  markKeepSessionAfterFinalize,
+} from '../utils/openMatchAnalysis';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -128,10 +132,20 @@ export const RealtimeScoutPage: React.FC = () => {
 
   const handoffToDashboardAnalysis = (finalizedId: string) => {
     stashOpenMatchAnalysis(finalizedId);
+    markKeepSessionAfterFinalize();
+    // Only clear scout bootstrap payload — never touch `token` / `user`.
     localStorage.removeItem('realtimeScoutData');
     if (window.opener && !window.opener.closed) {
       try {
         window.opener.localStorage.setItem(OPEN_MATCH_ANALYSIS_KEY, finalizedId);
+        try {
+          window.opener.sessionStorage.setItem(
+            'scout21_keep_session_until',
+            String(Date.now() + 25_000)
+          );
+        } catch {
+          /* ignore */
+        }
         window.close();
         return;
       } catch {

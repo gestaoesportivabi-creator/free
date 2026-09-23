@@ -1600,8 +1600,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
           setSquadActiveIds(tit);
         } else if (hasLog) {
+          // Reingresso com fita: partida já começou, mas CTA padrão precisa
+          // permanecer se a escalação estiver incompleta (BUG-CTA-PADRAO-REINGRESSO).
           setIsMatchStarted(true);
-          setShowLineupModal(false);
+          setShowLineupModal(tit.length < 5);
           setSquadActiveIds(tit.length > 0 && tit.length <= 5 ? tit : []);
           if (tit[0]) setCurrentGoalkeeperId(tit[0]);
         } else {
@@ -1617,8 +1619,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
         }
         setIsMatchStarted(true);
-        setShowLineupModal(false);
         const titFb = (L.players ?? []).filter(Boolean);
+        setShowLineupModal(titFb.length < 5);
         setSquadActiveIds(titFb.length > 0 && titFb.length <= 5 ? titFb : []);
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
@@ -1684,19 +1686,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     }, 0);
   }, [hydrateClock, isOpen, isPostmatch, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
-
-  // Commit baseline signature only after hydrated clock/lineup are in React state (not the pre-hydrate closure).
-  useEffect(() => {
-    if (!isOpen || isPostmatch || !realtimeHydrationReady) return;
-    const mid = String(match?.id ?? '').trim();
-    if (!mid || pendingHydrationSignatureRef.current !== mid) return;
-    pendingHydrationSignatureRef.current = null;
-    try {
-      commitPersistedSignature(JSON.stringify(buildMatchSnapshot('em_andamento')));
-    } catch {
-      /* noop */
-    }
-  }, [commitPersistedSignature, isOpen, isPostmatch, match?.id, realtimeHydrationReady, clockSnapshot, lineupPlayers, benchPlayers, matchEvents, ballPossessionStart]);
 
   // Toggle cronômetro
   // Encerrar tempo (primeira metade → modal de intervalo; segunda metade → fim de jogo)
@@ -2256,16 +2245,32 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     ),
   ];
   const hasPostmatchSquad = isPostmatch && squadIdsForDraft.length > 0;
+  /** Assinatura leve — evita JSON.stringify da fita inteira a cada render (OOM / GC sob carga). */
   const persistableDraftSignature = useMemo(() => {
     if (!isOpen || !onSave) return null;
     if (!isPostmatch && !realtimeHydrationReady) return null;
     if (!isPostmatch && !isMatchStarted) return null;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return null;
-    try {
-      return JSON.stringify(buildMatchSnapshot('em_andamento'));
-    } catch {
-      return null;
-    }
+    const last = matchEvents[matchEvents.length - 1];
+    return [
+      'v2',
+      matchEvents.length,
+      last?.id ?? '',
+      last?.type ?? '',
+      last?.time ?? '',
+      last?.period ?? '',
+      clockSnapshot.currentTimeSeconds,
+      clockSnapshot.state,
+      clockSnapshot.firstHalfLocked ? 1 : 0,
+      currentPeriod,
+      lineupPlayers.join(','),
+      benchPlayers.join(','),
+      ballPossessionStart ?? '',
+      possessionSecondsWith,
+      possessionSecondsWithout,
+      substitutionHistory.length,
+      (selectedPlayerIds || []).join(','),
+    ].join('|');
   }, [
     ballPossessionStart,
     benchPlayers,
@@ -2280,14 +2285,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     isOpen,
     isPostmatch,
     lineupPlayers,
-    match.lineup?.selectedPlayerIds,
     matchEvents,
     onSave,
     possessionSecondsWith,
     possessionSecondsWithout,
     realtimeHydrationReady,
     selectedPlayerIds,
-    substitutionHistory,
+    substitutionHistory.length,
   ]);
   const hasPendingSnapshotChanges =
     persistableDraftSignature !== null &&
@@ -2300,15 +2304,32 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       hasPendingSnapshotChanges
   );
 
+  // Commit baseline signature only after hydrated clock/lineup are in React state (not the pre-hydrate closure).
+  useEffect(() => {
+    if (!isOpen || isPostmatch || !realtimeHydrationReady) return;
+    const mid = String(match?.id ?? '').trim();
+    if (!mid || pendingHydrationSignatureRef.current !== mid) return;
+    pendingHydrationSignatureRef.current = null;
+    if (persistableDraftSignature) {
+      commitPersistedSignature(persistableDraftSignature);
+    }
+  }, [
+    commitPersistedSignature,
+    isOpen,
+    isPostmatch,
+    match?.id,
+    persistableDraftSignature,
+    realtimeHydrationReady,
+  ]);
+
   const saveSilently = async () => {
     if (suppressBeforeUnloadRef.current) return;
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
-    const snapshot = buildMatchSnapshot('em_andamento');
-    const signature = JSON.stringify(snapshot);
-    if (signature === lastAutosaveSignatureRef.current) return;
+    const signature = persistableDraftSignature;
+    if (!signature || signature === lastAutosaveSignatureRef.current) return;
 
     if (autosaveInFlightRef.current) {
       autosaveQueuedRef.current = true;
@@ -2317,6 +2338,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     autosaveInFlightRef.current = true;
     try {
+      const snapshot = buildMatchSnapshot('em_andamento');
       const saveResult = await onSave(snapshot, { source: 'autosave' });
       applySaveResult(saveResult);
       commitPersistedSignature(signature);
@@ -2476,8 +2498,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
 
-    // Sob carga (QA José / loops densos): espaçar autosave para reduzir JSON.stringify + GC
-    const debounceMs = matchEvents.length >= 80 ? 2500 : 800;
+    // Sob carga (QA José / loops densos): espaçar autosave para reduzir buildMatchSnapshot + GC
+    const n = matchEvents.length;
+    const debounceMs = n >= 500 ? 8000 : n >= 200 ? 5000 : n >= 80 ? 2500 : 800;
 
     if (autosaveDebounceRef.current) clearTimeout(autosaveDebounceRef.current);
     autosaveDebounceRef.current = setTimeout(() => {
@@ -2512,9 +2535,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!isOpen) return;
     if (autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
+    const intervalMs = matchEvents.length >= 200 ? 45000 : 30000;
     autosaveIntervalRef.current = setInterval(() => {
       void saveSilently();
-    }, 30000);
+    }, intervalMs);
     return () => {
       if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
     };
@@ -5712,13 +5736,29 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         PÊNALTI
                       </button>
                       <span
-                        className="block w-full"
+                        className="relative block w-full"
+                        data-testid="event-selector-freekick-wrap"
+                        role="group"
+                        aria-describedby={
+                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
+                            ? 'tiro-livre-hint'
+                            : undefined
+                        }
                         title={
                           foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
                             ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
                             : undefined
                         }
                       >
+                        {/* Overlay receives hover/touch when button is disabled (Chromium swallows title on disabled). */}
+                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
+                          <span
+                            className="absolute inset-0 z-10 cursor-not-allowed rounded-lg"
+                            title="Disponível após 5 faltas (nossas ou do adversário) neste tempo"
+                            aria-hidden
+                            data-testid="tiro-livre-disabled-overlay"
+                          />
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => {
@@ -5741,12 +5781,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             shouldDisableRealtimeEventButtons ||
                             (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
                           }
+                          aria-disabled={
+                            shouldDisableRealtimeEventButtons ||
+                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                          }
                           title={
                             foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
                               ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
                               : undefined
                           }
                           className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
+                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
+                              ? 'pointer-events-none '
+                              : ''
+                          }${
                             shouldDisableRealtimeEventButtons ||
                             (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
                               ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
@@ -5757,6 +5805,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         >
                           TIRO LIVRE
                         </button>
+                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
+                          <span
+                            id="tiro-livre-hint"
+                            data-testid="tiro-livre-rule-hint"
+                            className="mt-1 block text-center text-[9px] leading-tight text-zinc-500 uppercase tracking-wide"
+                          >
+                            Após 5 faltas neste tempo
+                          </span>
+                        ) : null}
                       </span>
                       <button
                         onClick={() => {
@@ -5894,7 +5951,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     Selecione 5 atletas: 1 goleiro (slot abaixo) e 4 atletas de linha. Durante o jogo, um atleta de
                     linha pode assumir a função de goleiro (goleiro linha).
                   </p>
-                  {/* Always show in prep / incomplete lineup — including reopen with partial selection */}
+                  {/* Prep + reingresso com escalação incompleta — CTA padrão sempre disponível */}
                   {showLineupModal && (!isMatchStarted || lineupPlayers.length < 5) && (
                     <button
                       type="button"
@@ -5902,7 +5959,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       data-testid="lineup-select-default"
                       className="mb-4 px-4 py-2 rounded-xl border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-xs font-bold uppercase transition-colors"
                     >
-                      Selecionar padrão (1 GK + 4)
+                      {lineupPlayers.length > 0
+                        ? 'Reaplicar padrão (1 GK + 4)'
+                        : 'Selecionar padrão (1 GK + 4)'}
                     </button>
                   )}
                   

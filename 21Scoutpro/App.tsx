@@ -52,7 +52,7 @@ import { AthletePsrForm } from './components/athlete/AthletePsrForm';
 import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
-import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY } from './utils/openMatchAnalysis';
+import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfterFinalize } from './utils/openMatchAnalysis';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -1009,6 +1009,11 @@ export default function App() {
   const handleLogin = (user: User) => {
       clearAllUserData();
       setCurrentUser(user);
+      try {
+        localStorage.setItem('user', JSON.stringify(user));
+      } catch {
+        /* ignore */
+      }
       setActiveTab(user.role === 'Atleta' ? 'athlete-home' : 'dashboard');
   };
 
@@ -1493,13 +1498,47 @@ export default function App() {
       dashboardDataLoadStarted.current = true;
       try {
         const { getApiUrl } = await import('./config');
-        const response = await fetch(`${getApiUrl()}/auth/profile`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        const result = await response.json();
+        const profileUrl = `${getApiUrl()}/auth/profile`;
+        const fetchProfile = () =>
+          fetch(profileUrl, { headers: { Authorization: `Bearer ${token}` } });
+
+        // Pós-Finalizar: /dashboard remonta e bate /auth/profile — retry evita logout flaky (Verify 5).
+        const pendingAnalysis = Boolean(peekOpenMatchAnalysisId());
+        const keepSession = shouldKeepSessionAfterFinalize() || pendingAnalysis;
+        let response = await fetchProfile();
+        if ((response.status === 401 || response.status === 403) && keepSession) {
+          await new Promise((r) => setTimeout(r, 600));
+          if (cancelled) return;
+          response = await fetchProfile();
+          if (response.status === 401 || response.status === 403) {
+            await new Promise((r) => setTimeout(r, 1200));
+            if (cancelled) return;
+            response = await fetchProfile();
+          }
+        }
+
+        let result: { success?: boolean; data?: Record<string, unknown> } = {};
+        try {
+          result = await response.json();
+        } catch {
+          result = {};
+        }
         if (cancelled) return;
         if (result.success && result.data) {
-          const u = result.data;
+          const u = result.data as {
+            id: string;
+            name: string;
+            email: string;
+            role: string;
+            planName?: string;
+            isPlatformAdmin?: boolean;
+            photoUrl?: string;
+            teamDisplayName?: string;
+            teamShieldUrl?: string;
+            linkedPlayerId?: string;
+            jogadorId?: string;
+            equipeId?: string;
+          };
           const nextUser: User = {
             id: u.id,
             name: u.name,
@@ -1509,7 +1548,7 @@ export default function App() {
                 ? 'Treinador'
                 : u.role === 'ATLETA'
                   ? 'Atleta'
-                  : u.role,
+                  : (u.role as User['role']),
             planName: u.planName as SubscriptionPlanName | undefined,
             isPlatformAdmin: u.isPlatformAdmin ?? (u.planName === 'ADMINISTRADOR'),
             photoUrl: u.photoUrl,
@@ -1519,6 +1558,11 @@ export default function App() {
             jogadorId: u.jogadorId ?? u.linkedPlayerId,
             equipeId: u.equipeId,
           };
+          try {
+            localStorage.setItem('user', JSON.stringify(nextUser));
+          } catch {
+            /* ignore */
+          }
           const isAthleteRestore = nextUser.role === 'Atleta';
           if (isBlogPath) {
             setCurrentUser(nextUser);
@@ -1575,7 +1619,28 @@ export default function App() {
           setIsInitializing(false);
           restored = true;
         } else if (response.status === 401 || response.status === 403) {
-          // Only clear the session on auth rejection — not on 5xx / malformed payloads.
+          // Grace pós-Finalizar: não limpar sessão; tentar user em cache para abrir a Análise.
+          if (keepSession) {
+            try {
+              const raw = localStorage.getItem('user');
+              if (raw) {
+                const cached = JSON.parse(raw) as User;
+                if (cached?.id) {
+                  setCurrentUser(cached);
+                  setCurrentRoute('app');
+                  setIsInitializing(false);
+                  restored = true;
+                  return;
+                }
+              }
+            } catch {
+              /* fall through */
+            }
+            // Mantém token; rota login só se não houver cache — usuário pode refresh.
+            setRouteFromPath();
+            return;
+          }
+          // Only clear the session on hard auth rejection outside finalize grace.
           clearAllUserData(true);
           setRouteFromPath();
         } else {

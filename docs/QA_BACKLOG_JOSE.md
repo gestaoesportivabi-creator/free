@@ -12,9 +12,9 @@ Agenda/CTA, padrão 1GK+4 (1ª abertura), 2T relativo, faltas do tempo, menos pa
 | Item | Status |
 |------|--------|
 | Reabrir → PAUSADO 00:00 / sem snapshot | **FIX** — sempre persiste `lineup.clockSnapshot`; se ausente, infere da fita; assinatura pós-hydrate |
-| Tooltip TIRO LIVRE | **FIX** — `title` no botão + wrapper (disabled) |
-| Selecionar padrão no reingresso | **FIX** — CTA sempre no prep; pool com roster completo |
-| Logout pós-Finalizar | **FIX** — limpa token só em 401/403; handoff sem race `onClose` |
-| OOM / IndexedDB | Residual — não quebrou em ~820; load test profundo ainda não feito |
+| Tooltip TIRO LIVRE | **FIX** — overlay + title + hint visível (`tiro-livre-rule-hint`) |
+| Selecionar padrão no reingresso | **FIX** — modal se escalação incompleta mesmo com fita; “Reaplicar padrão” |
+| Logout pós-Finalizar | **FIX** — grace `KEEP_SESSION_AFTER_FINALIZE` + retry profile + cache `user` |
+| OOM / IndexedDB | **Hardening** — assinatura leve + debounce escalonado; load test profundo ainda recomendado |
 
-Ver também `docs/QA_EMAIL_BYPASS.md`.
+Ver também `docs/QA_EMAIL_BYPASS.md` e `docs/QA_RESIDUAL_BUGS_2026-09-23.md`.
