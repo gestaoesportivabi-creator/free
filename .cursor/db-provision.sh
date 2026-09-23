@@ -53,6 +53,12 @@ EMAIL_REPLY_TO=gestaoesportivabi@gmail.com
 EOF
 fi
 
+# Os scripts de seed usam o Prisma Client (src/config/database.ts), que NÃO carrega
+# .env automaticamente (só o server via src/config/env.ts). Exportamos aqui para que
+# push e seeds funcionem de forma determinística, independente de dotenv.
+export DATABASE_URL="$DB_URL"
+export DIRECT_URL="$DB_URL"
+
 echo "--> Garantindo schema (prisma db push) se a tabela users não existir"
 HAS_USERS="$(sudo -u postgres psql -d "$DB_NAME" -tAc "SELECT to_regclass('public.users') IS NOT NULL;" | tr -d '[:space:]')"
 if [ "$HAS_USERS" != "t" ]; then
@@ -62,8 +68,7 @@ if [ "$HAS_USERS" != "t" ]; then
   # Client gerado do schema real continua funcionando igual.
   cp "$ROOT/backend/prisma/schema.prisma" /tmp/scout21.schema.local.prisma
   sed -i 's/ @db.Uuid//g' /tmp/scout21.schema.local.prisma
-  ( cd "$ROOT/backend" && DATABASE_URL="$DB_URL" DIRECT_URL="$DB_URL" \
-      npx prisma db push --schema /tmp/scout21.schema.local.prisma --skip-generate )
+  ( cd "$ROOT/backend" && npx prisma db push --schema /tmp/scout21.schema.local.prisma --skip-generate )
 fi
 
 if [ "$DO_SEED" = "--seed" ]; then
