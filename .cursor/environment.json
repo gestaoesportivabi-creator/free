@@ -1,0 +1,21 @@
+{
+  "$schema": "https://www.cursor.com/schemas/environment.schema.json",
+  "name": "scout21",
+  "install": "npm run install:all && npm run prisma:generate",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "npm run dev:backend",
+      "description": "Express API (backend/) on PORT 3000 — precisa DATABASE_URL e secrets no dashboard Cloud"
+    },
+    {
+      "name": "frontend",
+      "command": "npm run dev:frontend",
+      "description": "Vite React (21Scoutpro/) on http://localhost:5173"
+    }
+  ],
+  "ports": [
+    { "name": "api", "port": 3000 },
+    { "name": "web", "port": 5173 }
+  ]
+}
