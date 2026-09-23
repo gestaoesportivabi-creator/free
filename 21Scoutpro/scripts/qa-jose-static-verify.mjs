@@ -17,11 +17,11 @@ const checks = [
   ['Finalize modal', '21Scoutpro/components/MatchScoutingWindow.tsx', 'finalize-collection-confirm'],
   ['Selecionar padrão', '21Scoutpro/components/MatchScoutingWindow.tsx', 'lineup-select-default'],
   ['Handoff análise', '21Scoutpro/utils/openMatchAnalysis.ts', 'OPEN_MATCH_ANALYSIS_KEY'],
-  ['Pause rules foul none', '21Scoutpro/utils/matchClockEventRules.ts', "foul: {\n    pauseBeforeFlow: 'none'"],
-  ['E2E 02:40', '21Scoutpro/e2e/specs/full-match-cycle.spec.ts', "toBe('02:40')"],
-  ['E2E finalize modal', '21Scoutpro/e2e/specs/full-match-cycle.spec.ts', 'finalize-collection-confirm'],
-  ['Sem próximo jogo', '21Scoutpro/components/DashboardNextGameCard.tsx', 'Sem próximo jogo'],
-  ['Tape stats', '21Scoutpro/components/ScoutTable.tsx', 'Faltas (fita)'],
+  ['Infer clock from tape', '21Scoutpro/components/MatchScoutingWindow.tsx', 'inferClockFromMatchEvents'],
+  ['Persist clock always', '21Scoutpro/components/MatchScoutingWindow.tsx', 'Always persist clock into lineup'],
+  ['Lineup padrão reopen', '21Scoutpro/components/MatchScoutingWindow.tsx', 'Full roster fallback'],
+  ['Free kick tooltip wrap', '21Scoutpro/components/MatchScoutingWindow.tsx', 'Disponível após 5 faltas'],
+  ['Auth keep token', '21Scoutpro/App.tsx', 'Only clear the session on auth rejection'],
 ];
 
 let failed = 0;

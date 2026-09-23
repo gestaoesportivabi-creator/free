@@ -126,6 +126,30 @@ function buildPersistedClockSnapshot(snapshot: ClockSnapshot): MatchClockSnapsho
   };
 }
 
+/** Best-effort clock when lineup.clockSnapshot is missing but the event tape has times. */
+function inferClockFromMatchEvents(
+  events: MatchEvent[],
+  collectionPhase: number | undefined
+): MatchClockSnapshot | null {
+  if (!events.length) return null;
+  const has2T = events.some((e) => e.period === '2T');
+  const period: '1T' | '2T' = collectionPhase === 2 || has2T ? '2T' : '1T';
+  const inPeriod = events.filter((e) => e.period === period);
+  const source = inPeriod.length > 0 ? inPeriod : events;
+  let maxTime = 0;
+  for (const e of source) {
+    const t = Number(e.time);
+    if (Number.isFinite(t) && t > maxTime) maxTime = t;
+  }
+  return {
+    currentTimeSeconds: Math.max(0, Math.floor(maxTime)),
+    period,
+    state: 'PAUSADO',
+    isRunning: false,
+    firstHalfLocked: period === '2T',
+  };
+}
+
 interface MatchScoutingWindowProps {
   isOpen: boolean;
   onClose: () => void;
@@ -560,6 +584,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   /** Só hidrata do `match` uma vez por id enquanto a janela está aberta (evita refresh do pai sobrescrever lances locais). */
   const hydrationAppliedForMatchIdRef = useRef<string | null>(null);
   const lastSeenMatchIdForHydrationRef = useRef<string | null>(null);
+  /** After reopen hydrate, commit signature on the next render (avoids stale PRE_JOGO clock closure). */
+  const pendingHydrationSignatureRef = useRef<string | null>(null);
   /** Evita que efeitos de `match`/`init` repõem 1T após «Encerrar coleta do 1º tempo» antes do servidor gravar `collectionPhase: 2`. */
   const userEndedFirstHalfCollectionRef = useRef(false);
   
@@ -738,8 +764,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setSyncValidationError(null);
         setShowClockSyncModal(true);
       }
-      setTopRightNotice('NecessÃ¡rio sincronizar relÃ³gio antes de retomar a partida.');
-      return { ok: false, error: 'NecessÃ¡rio sincronizar relÃ³gio antes de retomar a partida.' };
+      setTopRightNotice('Necessário sincronizar o relógio antes de retomar a partida.');
+      return { ok: false, error: 'Necessário sincronizar o relógio antes de retomar a partida.' };
     }
     const result = continuarPartida();
     if (!options?.silent && !result.ok && result.error) setTopRightNotice(result.error);
@@ -784,7 +810,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const getRealtimeBlockMessage = useCallback((): string => {
     if (needsClockSyncFallback) {
-      return 'NecessÃ¡rio sincronizar relÃ³gio. Esta partida nÃ£o possui snapshot temporal salvo.';
+      return 'Necessário sincronizar o relógio. Esta partida não possui snapshot temporal salvo.';
     }
     switch (clockSnapshot.state) {
       case 'PRE_JOGO':
@@ -833,7 +859,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const blockRealtimeEventWhenNeeded = useCallback(() => {
     if (isPostmatch) return false;
     if (needsClockSyncFallback) {
-      setTopRightNotice('Necessario sincronizar relogio. Esta partida nao possui snapshot temporal salvo.');
+      setTopRightNotice('Necessário sincronizar o relógio. Esta partida não possui snapshot temporal salvo.');
       return true;
     }
     if (canRegisterRealtimeEvent) return false;
@@ -1490,6 +1516,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setRealtimeHydrationReady(isPostmatch);
       hydrationAppliedForMatchIdRef.current = null;
       lastSeenMatchIdForHydrationRef.current = null;
+      pendingHydrationSignatureRef.current = null;
       return;
     }
     if (!isPostmatch) {
@@ -1551,11 +1578,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     if (!isPostmatch) {
       if (hasLineupData && L) {
         setLineupPlayers(L.players ?? []);
-        setBenchPlayers(L.bench ?? []);
+        const benchFromL = L.bench ?? [];
+        const selectedFromL = (L.selectedPlayerIds ?? []).map((id) => String(id).trim()).filter(Boolean);
+        const tit = (L.players ?? []).filter(Boolean);
+        // On prep reopen, ensure bank/pool is visible even if only selectedPlayerIds were saved.
+        if (benchFromL.length > 0) {
+          setBenchPlayers(benchFromL);
+        } else if (selectedFromL.length > 0) {
+          const titSet = new Set(tit);
+          setBenchPlayers(selectedFromL.filter((id) => !titSet.has(id)));
+        } else {
+          setBenchPlayers([]);
+        }
         if (L.ballPossessionStart) {
           setBallPossessionStart(L.ballPossessionStart);
         }
-        const tit = (L.players ?? []).filter(Boolean);
         if (tit.length === 5 && L.ballPossessionStart) {
           setIsMatchStarted(true);
           setShowLineupModal(false);
@@ -1586,21 +1623,27 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
-      if (persistedClockSnapshot) {
+      // Prefer saved clockSnapshot; if missing, infer from event tape before falling back to sync wall.
+      const inferredClock =
+        !persistedClockSnapshot && hasLog
+          ? inferClockFromMatchEvents(converted, phase)
+          : null;
+      const clockToRestore = persistedClockSnapshot ?? inferredClock;
+      if (clockToRestore) {
         setNeedsClockSyncFallback(false);
+        const restoredState =
+          clockToRestore.state === 'PRIMEIRO_TEMPO' ||
+          clockToRestore.state === 'SEGUNDO_TEMPO' ||
+          clockToRestore.state === 'SINCRONIZANDO'
+            ? 'PAUSADO'
+            : clockToRestore.state;
         hydrateClock({
-          seconds: persistedClockSnapshot.currentTimeSeconds,
-          period: persistedClockSnapshot.period,
-          firstHalfLocked: persistedClockSnapshot.firstHalfLocked,
-          state: persistedClockSnapshot.state,
+          seconds: clockToRestore.currentTimeSeconds,
+          period: clockToRestore.period,
+          firstHalfLocked: clockToRestore.firstHalfLocked,
+          state: restoredState,
           isRunning: false,
         });
-      } else if (hasLog && inSecondHalf) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
-      } else if (hasLog && !inSecondHalf) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PAUSADO', isRunning: false });
       } else if (!hasLog && inSecondHalf) {
         setNeedsClockSyncFallback(true);
         hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
@@ -1610,6 +1653,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else if (!hasLog && !inSecondHalf) {
         setNeedsClockSyncFallback(false);
         hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRE_JOGO', isRunning: false });
+      } else {
+        // Has log/lineup progress but no temporal source — require manual sync.
+        setNeedsClockSyncFallback(true);
+        hydrateClock({
+          seconds: 0,
+          period: inSecondHalf ? '2T' : '1T',
+          firstHalfLocked: inSecondHalf,
+          state: 'PAUSADO',
+          isRunning: false,
+        });
       }
     } else if (inSecondHalf) {
       setNeedsClockSyncFallback(false);
@@ -1620,18 +1673,30 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     } else {
       setNeedsClockSyncFallback(false);
     }
+    // Mark ready on next tick so lineup/clock state from this effect have flushed;
+    // signature is committed in a separate effect that sees the hydrated render.
     autosaveSkipRef.current = true;
+    pendingHydrationSignatureRef.current = mid;
     setTimeout(() => {
       autosaveSkipRef.current = false;
-      try {
-        const initialSnapshot = JSON.stringify(buildMatchSnapshot('em_andamento'));
-        commitPersistedSignature(initialSnapshot);
-      } catch (_) {}
       if (!isPostmatch) {
         setRealtimeHydrationReady(true);
       }
     }, 0);
-  }, [commitPersistedSignature, hydrateClock, isOpen, isPostmatch, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
+  }, [hydrateClock, isOpen, isPostmatch, match?.id, match?.postMatchEventLog, match?.lineup, match?.substitutionHistory, match?.collectionPhase, players]);
+
+  // Commit baseline signature only after hydrated clock/lineup are in React state (not the pre-hydrate closure).
+  useEffect(() => {
+    if (!isOpen || isPostmatch || !realtimeHydrationReady) return;
+    const mid = String(match?.id ?? '').trim();
+    if (!mid || pendingHydrationSignatureRef.current !== mid) return;
+    pendingHydrationSignatureRef.current = null;
+    try {
+      commitPersistedSignature(JSON.stringify(buildMatchSnapshot('em_andamento')));
+    } catch {
+      /* noop */
+    }
+  }, [commitPersistedSignature, isOpen, isPostmatch, match?.id, realtimeHydrationReady, clockSnapshot, lineupPlayers, benchPlayers, matchEvents, ballPossessionStart]);
 
   // Toggle cronômetro
   // Encerrar tempo (primeira metade → modal de intervalo; segunda metade → fim de jogo)
@@ -1673,7 +1738,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setSyncValidationError(null);
         setShowClockSyncModal(true);
       }
-      setTopRightNotice('Necessario sincronizar relogio antes de continuar a partida.');
+      setTopRightNotice('Necessário sincronizar o relógio antes de continuar a partida.');
       return;
     }
     applySecondHalfRealtime();
@@ -2123,22 +2188,37 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       ),
     ];
 
+    const prevLineup = match.lineup;
+    const mergedPlayers =
+      lineupPlayers.length > 0 ? lineupPlayers : Array.isArray(prevLineup?.players) ? prevLineup.players : [];
+    const mergedBench =
+      benchPlayers.length > 0 ? benchPlayers : Array.isArray(prevLineup?.bench) ? prevLineup.bench : [];
+    const mergedPossession =
+      ballPossessionStart ?? prevLineup?.ballPossessionStart ?? ('us' as const);
+
     if (!isPostmatch) {
-      if (lineupPlayers.length > 0 && ballPossessionStart) {
+      // Always persist clock into lineup JSON on autosave/finalize whenever we have any collection progress.
+      const shouldWriteLineup =
+        Boolean(persistedClockSnapshot) ||
+        mergedPlayers.length > 0 ||
+        squadIds.length > 0 ||
+        matchEvents.length > 0 ||
+        savedMatch.collectionPhase !== 0;
+
+      if (shouldWriteLineup) {
         savedMatch.lineup = {
-          players: lineupPlayers,
-          bench: benchPlayers,
-          ballPossessionStart,
+          players: mergedPlayers,
+          bench: mergedBench,
+          ballPossessionStart: mergedPossession,
+          ...(squadIds.length > 0
+            ? { selectedPlayerIds: squadIds }
+            : prevLineup?.selectedPlayerIds?.length
+              ? { selectedPlayerIds: prevLineup.selectedPlayerIds }
+              : {}),
+          ...(prevLineup?.technicalAnalysis
+            ? { technicalAnalysis: prevLineup.technicalAnalysis }
+            : {}),
           ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
-          ...(squadIds.length > 0 ? { selectedPlayerIds: squadIds } : {}),
-        };
-      } else if (squadIds.length > 0) {
-        savedMatch.lineup = {
-          players: [],
-          bench: [],
-          ballPossessionStart: 'us',
-          ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
-          selectedPlayerIds: squadIds,
         };
       }
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
@@ -2150,6 +2230,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         bench: benchPlayers,
         ballPossessionStart: ballPossessionStart ?? 'us',
         selectedPlayerIds: squadIds,
+        ...(prevLineup?.technicalAnalysis
+          ? { technicalAnalysis: prevLineup.technicalAnalysis }
+          : {}),
       };
     }
 
@@ -2186,6 +2269,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   }, [
     ballPossessionStart,
     benchPlayers,
+    clockSnapshot.currentTimeSeconds,
+    clockSnapshot.firstHalfLocked,
+    clockSnapshot.state,
     currentPeriod,
     hasEvents,
     hasPostmatchSquad,
@@ -2415,6 +2501,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     possessionSecondsWith,
     possessionSecondsWithout,
     currentPeriod,
+    clockSnapshot.currentTimeSeconds,
+    clockSnapshot.state,
     ballPossessionStart,
     selectedPlayerIds,
     match?.lineup?.selectedPlayerIds,
@@ -3427,7 +3515,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const handleSelectDefaultLineup = useCallback(() => {
     const poolIds = [
       ...new Set(
-        [...lineupPlayers, ...benchPlayers, ...(selectedPlayerIds || []).map((id) => String(id).trim())].filter(Boolean)
+        [
+          ...lineupPlayers,
+          ...benchPlayers,
+          ...(selectedPlayerIds || []).map((id) => String(id).trim()),
+          // Full roster fallback so the CTA still works on reopen with a partial selection.
+          ...players.map((p) => String(p.id).trim()),
+        ].filter(Boolean)
       ),
     ];
     const pool = poolIds
@@ -3862,7 +3956,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       : 'text-amber-200'
                   }`}
                 >
-                  Estado: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {needsClockSyncFallback ? 'Necessario sincronizar relogio. Esta partida nao possui snapshot temporal salvo.' : getCollectionStatusMessage()}
+                  Estado: {isPostmatch ? 'POS-JOGO' : getClockStateLabel(clockSnapshot.state)}. {needsClockSyncFallback ? 'Necessário sincronizar o relógio. Esta partida não possui snapshot temporal salvo.' : getCollectionStatusMessage()}
                 </p>
                 <button
                   type="button"
@@ -5617,38 +5711,53 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       >
                         PÊNALTI
                       </button>
-                      <button
-                        onClick={() => {
-                          if (shouldDisableRealtimeEventButtons) return;
-                          if (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5) {
-                            return; // Habilitado quando pelo menos um lado tem 5 faltas no período atual
-                          }
-                          if (isPostmatch && getTimeForEvent() === null) {
-                            alert('Informe o tempo (ex.: 0100 para 01:00).');
-                            return;
-                          }
-                          applyPreActionClockBehavior('freeKick');
-                          setFreeKickStep('team');
-                          setPendingFreeKickTeam(null);
-                          setPendingFreeKickKickerId(null);
-                          setSelectedAction(null);
-                        }}
-                        data-testid="event-selector-freekick"
-                        disabled={shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)}
+                      <span
+                        className="block w-full"
                         title={
                           foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
                             ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
                             : undefined
                         }
-                        className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
-                          shouldDisableRealtimeEventButtons || (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
-                            ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                            : freeKickStep ? 'bg-red-500/40 border-red-500 text-white'
-                            : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
-                        }`}
                       >
-                        TIRO LIVRE
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (shouldDisableRealtimeEventButtons) return;
+                            if (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5) {
+                              return; // Habilitado quando pelo menos um lado tem 5 faltas no período atual
+                            }
+                            if (isPostmatch && getTimeForEvent() === null) {
+                              alert('Informe o tempo (ex.: 0100 para 01:00).');
+                              return;
+                            }
+                            applyPreActionClockBehavior('freeKick');
+                            setFreeKickStep('team');
+                            setPendingFreeKickTeam(null);
+                            setPendingFreeKickKickerId(null);
+                            setSelectedAction(null);
+                          }}
+                          data-testid="event-selector-freekick"
+                          disabled={
+                            shouldDisableRealtimeEventButtons ||
+                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                          }
+                          title={
+                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
+                              ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
+                              : undefined
+                          }
+                          className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
+                            shouldDisableRealtimeEventButtons ||
+                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                              ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                              : freeKickStep
+                                ? 'bg-red-500/40 border-red-500 text-white'
+                                : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
+                          }`}
+                        >
+                          TIRO LIVRE
+                        </button>
+                      </span>
                       <button
                         onClick={() => {
                           if (!isMatchStarted) return;
@@ -5785,14 +5894,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     Selecione 5 atletas: 1 goleiro (slot abaixo) e 4 atletas de linha. Durante o jogo, um atleta de
                     linha pode assumir a função de goleiro (goleiro linha).
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleSelectDefaultLineup}
-                    data-testid="lineup-select-default"
-                    className="mb-4 px-4 py-2 rounded-xl border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-xs font-bold uppercase transition-colors"
-                  >
-                    Selecionar padrão (1 GK + 4)
-                  </button>
+                  {/* Always show in prep / incomplete lineup — including reopen with partial selection */}
+                  {showLineupModal && (!isMatchStarted || lineupPlayers.length < 5) && (
+                    <button
+                      type="button"
+                      onClick={handleSelectDefaultLineup}
+                      data-testid="lineup-select-default"
+                      className="mb-4 px-4 py-2 rounded-xl border border-[#00f0ff]/50 bg-[#00f0ff]/10 text-[#00f0ff] hover:bg-[#00f0ff]/20 text-xs font-bold uppercase transition-colors"
+                    >
+                      Selecionar padrão (1 GK + 4)
+                    </button>
+                  )}
                   
                   {/* Escalação (5 jogadores) */}
                   <div className="mb-6">

@@ -1574,13 +1574,18 @@ export default function App() {
           if (p === '/dashboard/assistente') setAssistantOpen(true);
           setIsInitializing(false);
           restored = true;
-        } else {
+        } else if (response.status === 401 || response.status === 403) {
+          // Only clear the session on auth rejection — not on 5xx / malformed payloads.
           clearAllUserData(true);
+          setRouteFromPath();
+        } else {
+          // Transient profile failure (e.g. right after Finalizar → /dashboard): keep token.
           setRouteFromPath();
         }
       } catch {
         if (cancelled) return;
-        clearAllUserData(true);
+        // Network/abort blips must not log the user out (Verify 5 intermittent logout).
+        // Keep token; route from path so a refresh can restore the session.
         setRouteFromPath();
       } finally {
         if (!cancelled && !restored) setIsInitializing(false);

@@ -126,6 +126,22 @@ export const RealtimeScoutPage: React.FC = () => {
     window.location.assign('/dashboard');
   };
 
+  const handoffToDashboardAnalysis = (finalizedId: string) => {
+    stashOpenMatchAnalysis(finalizedId);
+    localStorage.removeItem('realtimeScoutData');
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.localStorage.setItem(OPEN_MATCH_ANALYSIS_KEY, finalizedId);
+        window.close();
+        return;
+      } catch {
+        /* fall through to same-tab dashboard */
+      }
+    }
+    // Full navigation — do not clear auth token; App session restore must keep it.
+    window.location.assign('/dashboard');
+  };
+
   const handleSave = async (
     savedMatch: MatchRecord,
     options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
@@ -145,18 +161,7 @@ export const RealtimeScoutPage: React.FC = () => {
         // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
         if (savedMatch.status === 'encerrado') {
           const finalizedId = String(saved.id || savedMatch.id || '').trim();
-          if (finalizedId) stashOpenMatchAnalysis(finalizedId);
-          localStorage.removeItem('realtimeScoutData');
-          if (window.opener && !window.opener.closed) {
-            try {
-              if (finalizedId) window.opener.localStorage.setItem(OPEN_MATCH_ANALYSIS_KEY, finalizedId);
-              window.close();
-              return saved;
-            } catch {
-              /* fall through to same-tab dashboard */
-            }
-          }
-          window.location.assign('/dashboard');
+          if (finalizedId) handoffToDashboardAnalysis(finalizedId);
           return saved;
         }
         alert(
@@ -180,6 +185,11 @@ export const RealtimeScoutPage: React.FC = () => {
 
   const handleClose = () => {
     exitRealtimeScout();
+  };
+
+  const handleCollectionFinalized = (_matchId: string) => {
+    // Handoff (stash + /dashboard) already ran inside handleSave for status=encerrado.
+    // Do not call onClose/exitRealtimeScout here — that raced with navigation and beforeunload.
   };
 
   if (isLoading) {
@@ -216,6 +226,7 @@ export const RealtimeScoutPage: React.FC = () => {
         isOpen={true}
         onClose={handleClose}
         onSave={handleSave}
+        onCollectionFinalized={handleCollectionFinalized}
         match={match}
         players={scoutData.players}
         teams={scoutData.teams}
