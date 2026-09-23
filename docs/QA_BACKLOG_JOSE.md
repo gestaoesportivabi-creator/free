@@ -15,6 +15,6 @@ Agenda/CTA, padrão 1GK+4 (1ª abertura), 2T relativo, faltas do tempo, menos pa
 | Tooltip TIRO LIVRE | **FIX** — overlay + title + hint visível (`tiro-livre-rule-hint`) |
 | Selecionar padrão no reingresso | **FIX** — modal se escalação incompleta mesmo com fita; “Reaplicar padrão” |
 | Logout pós-Finalizar | **FIX** — grace `KEEP_SESSION_AFTER_FINALIZE` + retry profile + cache `user` |
-| OOM / IndexedDB | **Hardening** — assinatura leve + debounce escalonado; load test profundo ainda recomendado |
+| OOM / IndexedDB | **PASS observado PASS10** — 507 evt Rival QA 15; sem crash; ver `docs/PASS10_FINAL_BUGS_1_5.md` |
 
-Ver também `docs/QA_EMAIL_BYPASS.md` e `docs/QA_RESIDUAL_BUGS_2026-09-23.md`.
+Ver também `docs/QA_EMAIL_BYPASS.md`, `docs/QA_RESIDUAL_BUGS_2026-09-23.md` e **`docs/PASS10_FINAL_BUGS_1_5.md`**.

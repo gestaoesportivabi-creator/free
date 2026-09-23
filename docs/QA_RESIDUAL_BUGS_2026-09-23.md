@@ -8,11 +8,13 @@
 
 | ID | Bug | Ação |
 |----|-----|------|
-| BUG-REOPEN-SNAPSHOT-00 | Reopen 00:00 | **Preservado** (`f588b01`) — regressão obrigatória |
-| BUG-TIRO-LIVRE-TOOLTIP | Tooltip flaky | **Fix** — overlay + `title` + hint visível `tiro-livre-rule-hint` |
-| BUG-CTA-PADRAO-REINGRESSO | CTA some no reopen | **Fix** — modal abre se `tit.length < 5` mesmo com fita; label “Reaplicar padrão” |
-| BUG-LOGOUT-POS-FINALIZAR | Logout intermitente | **Fix** — `markKeepSessionAfterFinalize` + retry profile + cache `user` |
-| BUG-OOM-INDEXEDDB-RESIDUAL | Memória / autosave | **Hardening** — assinatura leve (sem stringify fita a cada render); debounce 0.8→8s por volume; intervalo 30→45s ≥200 evt. Sem IndexedDB no produto (fita = API). |
+| BUG-REOPEN-SNAPSHOT-00 | Reopen 00:00 | **PASS PASS10** (base `f588b01`) |
+| BUG-TIRO-LIVRE-TOOLTIP | Tooltip flaky | **PASS PASS10** |
+| BUG-CTA-PADRAO-REINGRESSO | CTA some no reopen | **PASS PASS10** |
+| BUG-LOGOUT-POS-FINALIZAR | Logout intermitente | **PASS PASS10 (5/5)** |
+| BUG-OOM-INDEXEDDB-RESIDUAL | Memória / autosave | **PASS observado PASS10** — 507 evt sem crash |
+
+**Fechamento:** `docs/PASS10_FINAL_BUGS_1_5.md` (23/09/2026).
 
 ## Validação
 
