@@ -49,6 +49,7 @@ function toPlayer(entry: { name: string; jersey: number | null; position: Positi
     dominantFoot: 'Destro',
     age: 0,
     height: 0,
+    createAccess: false,
   };
 }
 
@@ -84,21 +85,24 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
     setIsSaving(true);
     setError('');
 
+    let saved = 0;
     try {
       // Sequencial de propósito: a API de jogadores não tem endpoint em lote,
       // e disparar 30 requisições em paralelo no primeiro acesso é bom jeito
       // de tomar rate-limit e assustar o usuário com metade salva.
-      let saved = 0;
       for (const player of players) {
-        await playersApi.create(player);
+        const created = await playersApi.create(player);
+        if (!created) {
+          throw new Error('empty_create');
+        }
         saved += 1;
         setSavedCount(saved);
       }
       goToStep(3);
     } catch {
       setError(
-        savedCount > 0
-          ? `Salvámos ${savedCount} atleta(s), mas houve falha no resto. Você pode completar o elenco depois.`
+        saved > 0
+          ? `Salvámos ${saved} atleta(s), mas houve falha no resto. Você pode completar o elenco depois.`
           : 'Não foi possível salvar o elenco. Você pode adicionar os atletas depois, pelo menu Elenco.'
       );
     } finally {
@@ -291,10 +295,12 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
                         <input
                           type="text"
                           inputMode="numeric"
+                          autoComplete="off"
+                          name={`wizard-jersey-${index}`}
                           value={row.jersey}
                           onChange={(e) => {
                             const next = [...quickRows];
-                            next[index] = { ...row, jersey: e.target.value.replace(/\D/g, '').slice(0, 3) };
+                            next[index] = { ...row, jersey: e.currentTarget.value.replace(/\D/g, '').slice(0, 3) };
                             setQuickRows(next);
                           }}
                           placeholder="#"
@@ -303,10 +309,14 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
                         />
                         <input
                           type="text"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          name={`wizard-player-${index}`}
                           value={row.name}
                           onChange={(e) => {
                             const next = [...quickRows];
-                            next[index] = { ...row, name: e.target.value };
+                            next[index] = { ...row, name: e.currentTarget.value };
                             setQuickRows(next);
                           }}
                           placeholder={`Atleta ${index + 1}`}
