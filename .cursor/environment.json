@@ -1,12 +1,13 @@
 {
   "$schema": "https://www.cursor.com/schemas/environment.schema.json",
   "name": "scout21",
-  "install": "npm run install:all && npm run prisma:generate",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
   "terminals": [
     {
       "name": "backend",
       "command": "npm run dev:backend",
-      "description": "Express API (backend/) on PORT 3000 — precisa DATABASE_URL e secrets no dashboard Cloud"
+      "description": "Express API (backend/) on PORT 3000 — usa Postgres local (localhost:5432) por padrão; se DATABASE_URL vier de Secret, usa o banco externo"
     },
     {
       "name": "frontend",
