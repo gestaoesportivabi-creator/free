@@ -525,6 +525,35 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const pendingHydrationSignatureRef = useRef<string | null>(null);
   /** Evita que efeitos de `match`/`init` repõem 1T após «Encerrar coleta do 1º tempo» antes do servidor gravar `collectionPhase: 2`. */
   const userEndedFirstHalfCollectionRef = useRef(false);
+  /** Sempre a closure mais recente de saveSilently — o follow-up da fila não pode regravar o snapshot velho. */
+  const saveSilentlyRef = useRef<() => Promise<void>>(async () => {});
+  const autosaveForceRef = useRef(false);
+  /** setTimeout ainda não entrou em saveSilently; o save manual espera este flag também. */
+  const autosaveScheduledRef = useRef(false);
+  const autosaveScheduleTicketRef = useRef(0);
+  /** Exclusões explícitas. Omitir o lance do array não apaga no servidor (o PUT une por id). */
+  const deletedEventIdsRef = useRef<Set<string>>(new Set());
+
+  const rememberDeletedEventId = (id: string | null | undefined) => {
+    const trimmed = String(id ?? '').trim();
+    if (trimmed) deletedEventIdsRef.current.add(trimmed);
+  };
+
+  const requestSerializedAutosave = useCallback((force = false) => {
+    if (force) autosaveForceRef.current = true;
+    if (autosaveInFlightRef.current || autosaveScheduledRef.current) {
+      autosaveQueuedRef.current = true;
+      return;
+    }
+    const ticket = ++autosaveScheduleTicketRef.current;
+    autosaveScheduledRef.current = true;
+    window.setTimeout(() => {
+      if (autosaveScheduleTicketRef.current !== ticket) return;
+      autosaveScheduledRef.current = false;
+      autosaveSkipRef.current = false;
+      void saveSilentlyRef.current();
+    }, 0);
+  }, []);
   
   // Estados para confirmação de falta com zona
   const [showFoulConfirmation, setShowFoulConfirmation] = useState<boolean>(false);
@@ -1455,6 +1484,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       hydrationAppliedForMatchIdRef.current = null;
       lastSeenMatchIdForHydrationRef.current = null;
       pendingHydrationSignatureRef.current = null;
+      deletedEventIdsRef.current.clear();
       return;
     }
     if (!isPostmatch) {
@@ -1463,6 +1493,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const mid = String(match?.id ?? '').trim();
     if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
       hydrationAppliedForMatchIdRef.current = null;
+      deletedEventIdsRef.current.clear();
     }
     lastSeenMatchIdForHydrationRef.current = mid;
 
@@ -1685,18 +1716,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       });
     }
     if (onSave && isOpen) {
-      setTimeout(() => {
-        try {
-          autosaveSkipRef.current = false;
-          const snap = buildMatchSnapshot('em_andamento');
-          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-            applySaveResult(r);
-            commitPersistedSignature(JSON.stringify(snap));
-          });
-        } catch (_) {
-          /* noop */
-        }
-      }, 0);
+      requestSerializedAutosave(true);
     }
   };
 
@@ -1727,18 +1747,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setShowIntervalAnalysis(false);
     }
     if (onSave && isOpen) {
-      setTimeout(() => {
-        try {
-          autosaveSkipRef.current = false;
-          const snap = buildMatchSnapshot('em_andamento');
-          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-            applySaveResult(r);
-            commitPersistedSignature(JSON.stringify(snap));
-          });
-        } catch (_) {
-          /* noop */
-        }
-      }, 0);
+      requestSerializedAutosave(true);
     }
   };
 
@@ -2137,6 +2146,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       );
     }
 
+    savedMatch.eventLogWriteMode = 'union';
+    if (deletedEventIdsRef.current.size > 0) {
+      savedMatch.deletedEventIds = Array.from(deletedEventIdsRef.current);
+    }
+
     return savedMatch;
   };
 
@@ -2235,40 +2249,47 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   ]);
 
   const saveSilently = async () => {
-    if (suppressBeforeUnloadRef.current) return;
+    if (suppressBeforeUnloadRef.current) {
+      autosaveForceRef.current = false;
+      return;
+    }
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
-
-    const signature = persistableDraftSignature;
-    if (!signature || signature === lastAutosaveSignatureRef.current) return;
 
     if (autosaveInFlightRef.current) {
       autosaveQueuedRef.current = true;
       return;
     }
 
+    const force = autosaveForceRef.current;
+    const signature = persistableDraftSignature;
+    if (!force && (!signature || signature === lastAutosaveSignatureRef.current)) return;
+
+    autosaveForceRef.current = false;
     autosaveInFlightRef.current = true;
     try {
       const snapshot = buildMatchSnapshot('em_andamento');
       const saveResult = await onSave(snapshot, { source: 'autosave' });
       applySaveResult(saveResult);
-      commitPersistedSignature(signature);
+      commitPersistedSignature(signature ?? JSON.stringify(snapshot));
     } catch (error) {
       console.warn('[autosave] falhou ao salvar partida em andamento:', error);
     } finally {
       autosaveInFlightRef.current = false;
       if (autosaveQueuedRef.current) {
         autosaveQueuedRef.current = false;
-        void saveSilently();
+        void saveSilentlyRef.current();
       }
     }
   };
 
+  saveSilentlyRef.current = saveSilently;
+
   /** Espera o autosave em curso terminar para evitar corrida com save manual (duplicata / last-write). */
   const waitForAutosaveIdle = useCallback(async (maxMs = 8000) => {
     const t0 = Date.now();
-    while (autosaveInFlightRef.current) {
+    while (autosaveInFlightRef.current || autosaveScheduledRef.current) {
       if (Date.now() - t0 > maxMs) break;
       await new Promise<void>((r) => setTimeout(r, 50));
     }
@@ -2284,6 +2305,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       autosaveIntervalRef.current = null;
     }
     autosaveQueuedRef.current = false;
+    autosaveScheduleTicketRef.current += 1;
+    autosaveScheduledRef.current = false;
+    autosaveForceRef.current = false;
   }, []);
 
   // Finalizar coleta (status = encerrado, mas editável depois)
@@ -2345,7 +2369,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (
         typeof returnedLogLen === 'number' &&
         expectedLogLen > 0 &&
-        returnedLogLen !== expectedLogLen
+        returnedLogLen < expectedLogLen
       ) {
         setFinalizeError(
           `Divergência ao salvar: enviamos ${expectedLogLen} evento(s) e o servidor retornou ${returnedLogLen}. Tente novamente.`
@@ -2535,16 +2559,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
     });
     if (onSave) {
-      try {
-        autosaveSkipRef.current = false;
-        const snap = buildMatchSnapshot('em_andamento');
-        void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-          applySaveResult(r);
-          commitPersistedSignature(JSON.stringify(snap));
-        });
-      } catch {
-        /* noop */
-      }
+      requestSerializedAutosave(true);
     }
   };
 
@@ -2598,6 +2613,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     */
     // Se já há passe pendente e clicou em Passe novamente, cancelar
     if (action === 'pass' && pendingPassEventId) {
+      rememberDeletedEventId(pendingPassEventId);
       setMatchEvents(prev => prev.filter(e => e.id !== pendingPassEventId));
       setPendingPassEventId(null);
       setPendingPassSenderId(null);
@@ -3299,6 +3315,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     setSelectedPlayerId(clickedPlayerId);
     if (pendingPassEventId) {
+      rememberDeletedEventId(pendingPassEventId);
       setMatchEvents((prev) => prev.filter((e) => e.id !== pendingPassEventId));
       setPendingPassEventId(null);
       setPendingPassSenderId(null);
@@ -4219,6 +4236,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    rememberDeletedEventId(event.id);
                                     const updated = matchEvents.filter(e => e.id !== event.id);
                                     setMatchEvents(updated);
                                     recalcGoalsAndFoulsFromEvents(updated);
