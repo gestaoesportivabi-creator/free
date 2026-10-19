@@ -13,9 +13,11 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
+import { EMPTY_UNION_EVENT_LOG_MESSAGE, isEmptyUnionEventLogError } from '../utils/eventLogConflict';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
 const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
@@ -1690,6 +1692,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                 notifyTrialExpiredMatchSave(true);
                 return;
             }
+            if (isEmptyUnionEventLogError(error)) {
+                alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
+                return;
+            }
             alert('Erro ao salvar partida. Verifique o console para mais detalhes.');
         }
     };
@@ -2082,6 +2088,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             console.error('Erro ao salvar análise técnica:', error);
             if (isTrialExpiredSaveError(error)) {
                 notifyTrialExpiredMatchSave(true);
+            } else if (isEmptyUnionEventLogError(error)) {
+                alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
             } else {
                 alert('Não foi possível salvar a análise técnica.');
             }
@@ -2861,7 +2869,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                     {showPostMatchSheet && (isScheduledMatch() ? selectedScheduledMatch : selectedMatch) && (() => {
                         const postmatchMatch: MatchRecord = isScheduledMatch() && selectedScheduledMatch
                             ? {
-                                  id: `sched-${selectedScheduledMatch.id}`,
+                                  id: draftIdForChampionshipMatch(selectedScheduledMatch.id),
                                   opponent: selectedScheduledMatch.opponent || '',
                                   date: selectedScheduledMatch.date,
                                   result: 'E',
@@ -2911,6 +2919,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         );
                                     }
                                     if (options?.source === 'autosave') return result;
+                                    if (!result?.id) return result;
                                     if (options?.saveAsIncomplete) {
                                         handleBackToCalendar();
                                         return result;
@@ -3312,7 +3321,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             onClick={() => {
                                                 if (selectedPlayersForMatch.size === 0) return;
                                                 const realtimeScoutData = {
-                                                    matchId: selectedScheduledMatch.id,
+                                                    matchId: draftIdForChampionshipMatch(selectedScheduledMatch.id),
                                                     date: selectedScheduledMatch.date,
                                                     opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,
@@ -4009,6 +4018,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             );
                         }
                         if (options?.source === 'autosave') return result;
+                        if (!result?.id) return result;
                         if (options?.saveAsIncomplete) {
                             handleBackToCalendar();
                             return result;

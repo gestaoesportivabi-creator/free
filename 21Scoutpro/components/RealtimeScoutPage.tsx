@@ -5,12 +5,20 @@ import { MatchType } from './MatchTypeModal';
 import { matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
 import {
+  SAVE_UNCONFIRMED_MESSAGE,
+  isUnconfirmedSaveError,
+  verifyPostMatchEventLog,
+} from '../utils/verifyPostMatchEventLog';
+import { isEmptyUnionEventLogError } from '../utils/eventLogConflict';
+import {
   stashOpenMatchAnalysis,
   OPEN_MATCH_ANALYSIS_KEY,
   markKeepSessionAfterFinalize,
 } from '../utils/openMatchAnalysis';
 import { performFinalizeNavigation } from '../utils/sessionRestore';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
+import { isPersistedServerMatchId } from '../utils/matchIds';
+import { adoptServerMatch } from '../utils/realtimeMatchHydration';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -37,6 +45,7 @@ export const RealtimeScoutPage: React.FC<{
   const [match, setMatch] = useState<MatchRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eventLogHydrationFailed, setEventLogHydrationFailed] = useState(false);
 
   useEffect(() => {
     const loadRealtimeMatch = async () => {
@@ -80,23 +89,18 @@ export const RealtimeScoutPage: React.FC<{
           playerStats: {},
         };
 
-        if (data.matchId) {
+        if (data.matchId && isPersistedServerMatchId(data.matchId)) {
           try {
             const dbMatch = await matchesApi.getById(data.matchId);
-            if (
-              dbMatch?.id &&
-              (dbMatch.status === 'em_andamento' ||
-                dbMatch.status === 'disponivel' ||
-                dbMatch.status === 'nao_executado' ||
-                (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
-            ) {
-              matchRecord = {
-                ...dbMatch,
-                location: dbMatch.location?.trim() || locationFromPrep,
-              };
+            if (dbMatch?.id) {
+              matchRecord = adoptServerMatch(dbMatch, locationFromPrep);
             }
           } catch (fetchErr) {
-            console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
+            setEventLogHydrationFailed(true);
+            console.error(
+              'Falha ao buscar a partida no servidor. A finalização não envia um log vazio.',
+              fetchErr
+            );
           }
         }
 
@@ -179,15 +183,33 @@ export const RealtimeScoutPage: React.FC<{
         return;
       }
       const { saved } = await upsertMatchRecord(savedMatch);
-      if (saved?.id) {
-        setMatch((prev) => (prev ? { ...prev, ...saved, id: saved.id } : saved));
+      if (!saved) {
+        if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
+        return undefined;
       }
-      if (saved && !isAutosave) {
+      const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;
+      const verified = await verifyPostMatchEventLog(saved, expectedLogLength);
+      const kept = verified.match;
+      if (verified.status === 'unavailable') {
+        console.warn('GET de verificação da fita falhou; a coleta do PUT foi mantida.', kept.id);
+      } else if (verified.status === 'shorter') {
+        console.warn(
+          `Fita confirmada com ${verified.serverLogLength ?? 0} lance(s); a coleta local tem ${expectedLogLength} e foi mantida.`,
+          kept.id
+        );
+        setMatch((prev) => (prev ? { ...prev, ...kept, id: kept.id, postMatchEventLog: savedMatch.postMatchEventLog } : kept));
+        if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
+        return undefined;
+      }
+      if (kept?.id) {
+        setMatch((prev) => (prev ? { ...prev, ...kept, id: kept.id } : kept));
+      }
+      if (kept && !isAutosave) {
         // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
         if (savedMatch.status === 'encerrado') {
-          const finalizedId = String(saved.id || savedMatch.id || '').trim();
+          const finalizedId = String(kept.id || savedMatch.id || '').trim();
           if (finalizedId) handoffToDashboardAnalysis(finalizedId);
-          return saved;
+          return kept;
         }
         alert(
           saveAsIncomplete
@@ -195,10 +217,8 @@ export const RealtimeScoutPage: React.FC<{
             : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
         );
         exitRealtimeScout();
-      } else if (!saved && !isAutosave) {
-        alert('Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.');
       }
-      return saved;
+      return kept;
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
       if (isTrialExpiredSaveError(err)) {
@@ -206,9 +226,21 @@ export const RealtimeScoutPage: React.FC<{
         if (!isAutosave) throw err;
         return undefined;
       }
-      if (!isAutosave) {
-        alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
+      if (isEmptyUnionEventLogError(err)) {
+        throw err;
       }
+      if (isUnconfirmedSaveError(err)) {
+        const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;
+        const id = savedMatch.id != null ? String(savedMatch.id).trim() : '';
+        if (id && expectedLogLength > 0) {
+          const verified = await verifyPostMatchEventLog({ ...savedMatch, id }, expectedLogLength);
+          if (verified.status === 'confirmed') {
+            setMatch((prev) => (prev ? { ...prev, ...verified.match, id: verified.match.id } : verified.match));
+            return verified.match;
+          }
+        }
+      }
+      if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
     }
     return undefined;
   };
@@ -263,6 +295,7 @@ export const RealtimeScoutPage: React.FC<{
         matchType={scoutData.matchType}
         extraTimeMinutes={scoutData.extraTimeMinutes}
         selectedPlayerIds={scoutData.selectedPlayerIds}
+        eventLogHydrationFailed={eventLogHydrationFailed}
       />
     </div>
   );

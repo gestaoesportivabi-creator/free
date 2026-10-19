@@ -9,9 +9,19 @@
  * todos os lances com id manda [] + a lista de ids e não pode virar 409.
  * Eventos sem id: replace do que sobrou só se o recebido não for menor;
  * se for menor, 409 (não apaga lances).
+ * Array vazio com lances ainda armazenados: 409 EMPTY_UNION_EVENT_LOG.
+ * Ids já excluídos entram em deletedEventIds (o service também manda os
+ * tombstones gravados no lineup) e não voltam se um PUT atrasado os reenviar.
  */
 
 export const EVENT_LOG_WRITE_MODE_UNION = 'union';
+
+/** PUT union com postMatchEventLog [] enquanto ainda há lances gravados. */
+export const EMPTY_UNION_EVENT_LOG_CODE = 'EMPTY_UNION_EVENT_LOG';
+
+export function emptyUnionEventLogMessage(storedCount: number): string {
+  return `A fita chegou vazia no modo união e já existem ${storedCount} lance(s) gravados. O salvamento foi recusado para não apagar a coleta.`;
+}
 
 export function isUnionEventLogWrite(mode: unknown): boolean {
   return mode === EVENT_LOG_WRITE_MODE_UNION;
@@ -33,15 +43,22 @@ function eventId(value: unknown): string | null {
   return id.length > 0 ? id : null;
 }
 
-function normalizeDeletedIds(raw: unknown): Set<string> {
-  if (!Array.isArray(raw)) return new Set();
-  const ids = new Set<string>();
+export function normalizeDeletedEventIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
   for (const item of raw) {
     if (typeof item !== 'string' && typeof item !== 'number') continue;
     const id = String(item).trim();
-    if (id) ids.add(id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
   }
   return ids;
+}
+
+function normalizeDeletedIds(raw: unknown): Set<string> {
+  return new Set(normalizeDeletedEventIds(raw));
 }
 
 function periodRank(period: unknown): number {
@@ -135,6 +152,13 @@ export function mergePostMatchEventLogs(
         });
   const storedParts = partition(storedAfterDeletes);
   const receivedParts = partition(received);
+
+  if (received.length === 0 && storedAfterDeletes.length > 0) {
+    throw new ConflictError(
+      emptyUnionEventLogMessage(storedAfterDeletes.length),
+      EMPTY_UNION_EVENT_LOG_CODE
+    );
+  }
 
   if (receivedParts.withId.length === 0) {
     if (received.length < storedAfterDeletes.length) {

@@ -3,6 +3,9 @@
  * O JSON de lineup é substituído por inteiro; um payload sem snapshot novo
  * (save pós-jogo, análise técnica parcial) não pode apagar o relógio do ao vivo.
  * A mescla usa só o lineup da partida já autorizada para o tenant — não consulta outro clube.
+ * deletedEventIds (tombstones) sobrevivem a qualquer update: objeto sem a chave,
+ * objeto que manda outros ids (união) e lineup null. Null sem tombstone continua
+ * limpeza explícita do restante do JSON. undefined não inventa lineup.
  */
 
 const PERSISTED_CLOCK_STATES = new Set([
@@ -46,12 +49,48 @@ export function normalizePersistedClockSnapshot(snapshot: unknown): MatchClockSn
   };
 }
 
+function deletedEventIdsOf(lineup: unknown): string[] {
+  if (!lineup || typeof lineup !== 'object' || Array.isArray(lineup)) return [];
+  const raw = (lineup as { deletedEventIds?: unknown }).deletedEventIds;
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string' && typeof item !== 'number') continue;
+    const id = String(item).trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function attachDeletedEventIds(existingLineup: unknown, incoming: Record<string, unknown>): Record<string, unknown> {
+  const ids = deletedEventIdsOf(existingLineup);
+  const seen = new Set(ids);
+  for (const id of deletedEventIdsOf(incoming)) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  if (ids.length === 0) {
+    delete incoming.deletedEventIds;
+    return incoming;
+  }
+  incoming.deletedEventIds = ids;
+  return incoming;
+}
+
 export function mergeLineupPreservingClockSnapshot(
   existingLineup: unknown,
   incomingLineup: unknown
 ): unknown {
   if (incomingLineup === undefined) return undefined;
-  if (incomingLineup === null) return null;
+  if (incomingLineup === null) {
+    const ids = deletedEventIdsOf(existingLineup);
+    if (ids.length === 0) return null;
+    return { deletedEventIds: ids };
+  }
   if (typeof incomingLineup !== 'object' || Array.isArray(incomingLineup)) {
     return incomingLineup;
   }
@@ -60,7 +99,7 @@ export function mergeLineupPreservingClockSnapshot(
   const incomingClock = normalizePersistedClockSnapshot(incoming.clockSnapshot);
   if (incomingClock) {
     incoming.clockSnapshot = incomingClock;
-    return incoming;
+    return attachDeletedEventIds(existingLineup, incoming);
   }
 
   const existingClock =
@@ -70,11 +109,11 @@ export function mergeLineupPreservingClockSnapshot(
 
   if (existingClock) {
     incoming.clockSnapshot = existingClock;
-    return incoming;
+    return attachDeletedEventIds(existingLineup, incoming);
   }
 
   if ('clockSnapshot' in incoming) {
     delete incoming.clockSnapshot;
   }
-  return incoming;
+  return attachDeletedEventIds(existingLineup, incoming);
 }
