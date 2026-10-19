@@ -6,6 +6,7 @@
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
 import type { TransactionClient } from '../utils/transactionWithTenant';
+import { activeJerseyLookup } from '../validators/jerseyNumber';
 
 // Tipos do banco (Prisma gera automaticamente, mas definimos aqui para referência)
 type JogadorDB = {
@@ -101,6 +102,49 @@ export const playersRepository = {
    */
   async update(id: string, data: Partial<JogadorDB>, tx?: TransactionClient): Promise<JogadorDB> {
     return db(tx).jogador.update({ where: { id }, data: data as any }) as Promise<JogadorDB>;
+  },
+
+  /**
+   * Equipes do tenant em que o jogador está ativo (vínculo sem data fim).
+   */
+  async findActiveEquipeIds(jogadorId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<string[]> {
+    const equipeIds = tenantInfo.equipe_ids || [];
+    if (equipeIds.length === 0) return [];
+    const links = await db(tx).equipesJogadores.findMany({
+      where: {
+        jogadorId,
+        equipeId: { in: equipeIds },
+        dataFim: null,
+      },
+      select: { equipeId: true },
+    });
+    return links.map((link) => link.equipeId);
+  },
+
+  /**
+   * Outro atleta ativo com a mesma camisa, só na equipe informada se ela for do tenant.
+   * Equipe de fora do tenant não gera consulta.
+   */
+  async findActiveJerseyHolder(
+    equipeId: string,
+    numeroCamisa: number,
+    tenantInfo: TenantInfo,
+    excludePlayerId?: string,
+    tx?: TransactionClient,
+  ): Promise<{ id: string; nome: string } | null> {
+    const lookup = activeJerseyLookup({
+      equipeId,
+      numeroCamisa,
+      tenantEquipeIds: tenantInfo.equipe_ids || [],
+      excludePlayerId,
+    });
+    if (lookup.refused) return null;
+
+    const row = await db(tx).jogador.findFirst({
+      where: lookup.where,
+      select: { id: true, nome: true },
+    });
+    return row ? { id: row.id, nome: row.nome } : null;
   },
 
   /**

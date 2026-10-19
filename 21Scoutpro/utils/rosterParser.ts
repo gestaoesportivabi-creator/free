@@ -530,3 +530,66 @@ export function rosterSaveFailureMessage(saved: number, total: number): string {
   }
   return `Salvamos ${saved} de ${total} atletas. Quem já entrou fica salvo — tentar de novo não duplica esses.`;
 }
+
+export interface RosterSaveItem {
+  name: string;
+  number: number | null;
+  lineNumber?: number;
+}
+
+export type RosterSaveResult =
+  | { ok: true; saved: number; total: number }
+  | {
+      ok: false;
+      saved: number;
+      total: number;
+      message: string;
+      cause: string;
+      failedLineNumber?: number;
+    };
+
+/**
+ * Grava em sequência. A chave nome+número fica no set só depois do create resolver,
+ * então um retry não repete quem já entrou nesta sessão.
+ */
+export async function runRosterSave<T extends RosterSaveItem>(options: {
+  items: T[];
+  savedKeys: Set<string>;
+  create: (item: T) => Promise<void>;
+  onProgress?: (saved: number, total: number) => void;
+}): Promise<RosterSaveResult> {
+  const total = options.items.length;
+  if (total === 0) return { ok: true, saved: 0, total: 0 };
+
+  const plan = planRosterSave(options.items, options.savedKeys);
+  if (plan.pending.length === 0) return { ok: true, saved: total, total };
+
+  let saved = plan.alreadySaved;
+  options.onProgress?.(saved, total);
+
+  try {
+    for (let index = 0; index < options.items.length; index += 1) {
+      const key = plan.keys[index];
+      if (options.savedKeys.has(key)) continue;
+      await options.create(options.items[index]);
+      options.savedKeys.add(key);
+      saved += 1;
+      options.onProgress?.(saved, total);
+    }
+    return { ok: true, saved, total };
+  } catch (error) {
+    const cause = error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : 'Não foi possível salvar o atleta.';
+    const failedIndex = options.items.findIndex((_, index) => !options.savedKeys.has(plan.keys[index]));
+    const failedLineNumber = failedIndex >= 0 ? options.items[failedIndex].lineNumber : undefined;
+    return {
+      ok: false,
+      saved,
+      total,
+      message: rosterSaveFailureMessage(saved, total),
+      cause,
+      failedLineNumber,
+    };
+  }
+}
