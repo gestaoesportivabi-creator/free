@@ -86,8 +86,11 @@ CORS_ORIGIN=http://localhost:5173
 FRONTEND_URL=http://localhost:5173
 
 # === Telegram (opcional — só se for testar bot local) ===
+# TELEGRAM_WEBHOOK_SECRET: se preenchido, o webhook exige o header
+# X-Telegram-Bot-Api-Secret-Token com o mesmo valor (401 caso contrário).
+# Deixe vazio para não inventar um segredo neste arquivo.
 TELEGRAM_BOT_TOKEN=COLE_AQUI_OU_DEIXE_VAZIO
-TELEGRAM_WEBHOOK_SECRET=COLE_AQUI_OU_DEIXE_VAZIO
+TELEGRAM_WEBHOOK_SECRET=
 PUBLIC_API_URL=http://localhost:3000
 CRON_SECRET=COLE_AQUI_OU_DEIXE_VAZIO
 TELEGRAM_POLLING=false
@@ -216,7 +219,8 @@ Login OAuth em **Settings → MCP**.
 ### API rápida (produção)
 
 ```bash
-curl -s https://gestaoesportiva-free.vercel.app/api/telegram/diagnose | head
+# 401 sem JWT de administrador — esperado
+curl -s -o /dev/null -w "%{http_code}\n" "$PUBLIC_API_URL/api/telegram/diagnose"
 ```
 
 ---

@@ -36,7 +36,11 @@ export const env = {
 
   // Telegram (@scout21bot)
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-  /** Token secreto no header X-Telegram-Bot-Api-Secret-Token (setWebhook) */
+  /**
+   * Segredo do webhook (header X-Telegram-Bot-Api-Secret-Token).
+   * Com valor, POST /api/telegram/webhook responde 401 se o header faltar ou divergir.
+   * Vazio: o webhook não valida esse header. Não commitar o valor.
+   */
   TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || '',
   /** Desenvolvimento local: long polling em vez de webhook */
   TELEGRAM_POLLING: process.env.TELEGRAM_POLLING === 'true',

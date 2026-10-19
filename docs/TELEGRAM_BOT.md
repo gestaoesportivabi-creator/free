@@ -2,14 +2,17 @@
 
 ## Segurança
 
-- **Nunca** commite `TELEGRAM_BOT_TOKEN` nem `CRON_SECRET` no Git.
+- **Nunca** commite `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` nem `CRON_SECRET` no Git. Os valores ficam no painel (Vercel / secrets).
 - Token vazado → [@BotFather](https://t.me/BotFather) `/revoke` e token novo.
+- `GET /status`, `GET /diagnose`, `POST /register-webhook` e `POST /delete-webhook` exigem JWT de usuário com papel `ADMINISTRADOR` (`Authorization: Bearer`). Sem token: 401. Com token de outro papel: 403.
+- `POST /webhook` é público para o Telegram. Se `TELEGRAM_WEBHOOK_SECRET` estiver definido, o header `X-Telegram-Bot-Api-Secret-Token` tem de ser igual ao valor da variável; ausente ou diferente → 401. Sem a variável, essa checagem não roda — em produção defina o secret e registre o webhook de novo.
+- `GET|POST /cron/reminders` continua só com `Authorization: Bearer` igual a `CRON_SECRET` (cron da Vercel), não com o JWT de admin.
 
 ## Variáveis (Vercel / `backend/.env`)
 
 ```env
 TELEGRAM_BOT_TOKEN=
-TELEGRAM_WEBHOOK_SECRET=     # openssl rand -hex 32
+TELEGRAM_WEBHOOK_SECRET=     # gere fora do git; vazio = webhook sem essa checagem
 PUBLIC_API_URL=https://gestaoesportiva-free.vercel.app
 CRON_SECRET=                 # openssl rand -hex 32 (lembretes 7h BRT)
 TELEGRAM_POLLING=false       # true só em dev local
@@ -40,8 +43,8 @@ Dados gravados no **mesmo Supabase** do app; cada dia renova tarefas; dias anter
 ## Bot não responde?
 
 1. Vercel → `TELEGRAM_BOT_TOKEN` (token novo do BotFather) + redeploy.
-2. Abra no navegador: `https://gestaoesportiva-free.vercel.app/api/telegram/diagnose`
-3. Se `webhookMatches: false`, rode register-webhook (abaixo).
+2. `GET /api/telegram/diagnose` com JWT de administrador (sem o header a rota responde 401).
+3. Se `webhookMatches: false`, rode register-webhook (abaixo), também com JWT de administrador.
 4. Se `last_error_message` aparecer, copie e corrija (geralmente token ou URL errada).
 
 ## Produção
@@ -52,10 +55,13 @@ Dados gravados no **mesmo Supabase** do app; cada dia renova tarefas; dias anter
 4. Registrar webhook:
 
 ```bash
-curl -X POST "https://gestaoesportiva-free.vercel.app/api/telegram/register-webhook" \
+curl -X POST "$PUBLIC_API_URL/api/telegram/register-webhook" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://gestaoesportiva-free.vercel.app"}'
+  -d "{\"url\":\"$PUBLIC_API_URL\"}"
 ```
+
+`$ADMIN_JWT` é o token de um usuário `ADMINISTRADOR`. `$PUBLIC_API_URL` é a mesma variável da API, sem barra no final.
 
 5. Testar [@scout21bot](https://t.me/scout21bot).
 
