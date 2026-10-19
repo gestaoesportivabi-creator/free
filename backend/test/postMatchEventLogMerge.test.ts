@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { mergePostMatchEventLogs } from '../src/services/postMatchEventLogMerge';
+import { EMPTY_UNION_EVENT_LOG_CODE, mergePostMatchEventLogs } from '../src/services/postMatchEventLogMerge';
 import { ConflictError } from '../src/utils/errors';
 
 function ev(partial: Record<string, unknown>) {
@@ -180,7 +180,10 @@ describe('mergePostMatchEventLogs', () => {
   it('recusa 409 para array vazio sem ids quando já há lances', () => {
     assert.throws(
       () => mergePostMatchEventLogs([ev({ id: 'a', time: '01:00', period: '1T' })], []),
-      (error: unknown) => error instanceof ConflictError && error.statusCode === 409
+      (error: unknown) =>
+        error instanceof ConflictError &&
+        error.statusCode === 409 &&
+        error.code === EMPTY_UNION_EVENT_LOG_CODE
     );
   });
 
@@ -243,7 +246,9 @@ describe('mergePostMatchEventLogs', () => {
       (error: unknown) => {
         assert.ok(error instanceof ConflictError);
         assert.equal(error.statusCode, 409);
-        assert.match(error.message, /já havia 1 armazenado/);
+        assert.equal(error.code, EMPTY_UNION_EVENT_LOG_CODE);
+        assert.match(error.message, /fita chegou vazia/);
+        assert.match(error.message, /1 lance/);
         return true;
       }
     );

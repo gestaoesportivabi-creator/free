@@ -9,7 +9,12 @@ import { runWithTenant } from '../utils/transactionWithTenant';
 
 function handleError(error: unknown, res: Response, fallback: string) {
   if (error instanceof AppError) {
-    return res.status(error.statusCode).json({ success: false, error: error.message });
+    return res.status(error.statusCode).json({
+      success: false,
+      error: error.message,
+      message: error.message,
+      ...(error.code ? { code: error.code } : {}),
+    });
   }
   return res.status(500).json({
     success: false,

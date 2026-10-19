@@ -9,6 +9,7 @@ import {
   isUnconfirmedSaveError,
   verifyPostMatchEventLog,
 } from '../utils/verifyPostMatchEventLog';
+import { isEmptyUnionEventLogError } from '../utils/eventLogConflict';
 import {
   stashOpenMatchAnalysis,
   OPEN_MATCH_ANALYSIS_KEY,
@@ -224,6 +225,9 @@ export const RealtimeScoutPage: React.FC<{
         // A coleta permanece na tela; só o autosave engole o 402 para não interromper o relógio.
         if (!isAutosave) throw err;
         return undefined;
+      }
+      if (isEmptyUnionEventLogError(err)) {
+        throw err;
       }
       if (isUnconfirmedSaveError(err)) {
         const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;

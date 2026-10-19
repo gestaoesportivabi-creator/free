@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Save, ArrowLeft, Calendar, Plus, Trash2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PostMatchAction, PostMatchEvent } from '../types';
 import { absoluteSecondsToStored, postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
+import { readLineupDeletedEventIds } from '../utils/eventLogConflict';
 
 export interface PostMatchMatchContext {
   id: string;
@@ -12,6 +13,7 @@ export interface PostMatchMatchContext {
   goalsFor?: number;
   /** Gols do adversário (evita zerar ao salvar pela planilha pós-jogo) */
   goalsAgainst?: number;
+  lineup?: { deletedEventIds?: string[] };
 }
 
 interface FormData {
@@ -203,6 +205,12 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [events, setEvents] = useState<PostMatchEvent[]>([]);
   const deletedEventIdsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    for (const id of readLineupDeletedEventIds(match.lineup)) {
+      if (!deletedEventIdsRef.current.includes(id)) deletedEventIdsRef.current.push(id);
+    }
+  }, [match.lineup]);
 
   const updateForm = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

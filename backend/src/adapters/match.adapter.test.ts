@@ -35,6 +35,7 @@ const equipe = {
   desarmesSemBola: 0,
   chutesNoGol: 1,
   chutesFora: 0,
+  rpePartida: 8,
   golsMarcadosJogoAberto: 1,
   golsMarcadosBolaParada: 0,
   golsSofridosJogoAberto: 0,
@@ -47,6 +48,9 @@ test('getById mantém o log e deriva os tempos de gol', () => {
   assert.equal(match.postMatchEventCount, 2);
   assert.equal(match.teamStats.goalTimes?.length, 1);
   assert.equal(match.teamStats.passesCorrect, 1);
+  assert.equal(match.teamStats.minutesPlayed, 40);
+  assert.equal(match.teamStats.rpeMatch, 8);
+  assert.equal(match.teamStats.yellowCards, 0);
 });
 
 test('detalhe sem linha de estatísticas ainda devolve o log', () => {
@@ -68,6 +72,7 @@ test('listagem omite o log, guarda a contagem e preserva estatísticas', () => {
   assert.equal(match.teamStats.goalTimes, undefined);
   assert.equal(match.teamStats.goals, 1);
   assert.equal(match.teamStats.passesCorrect, 1);
+  assert.equal(match.teamStats.rpeMatch, 8);
   assert.deepEqual(match.lineup?.players, ['p1']);
   assert.equal(match.date, '2026-03-09');
 });

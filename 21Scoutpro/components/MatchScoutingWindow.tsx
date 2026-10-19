@@ -21,6 +21,11 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
+  EMPTY_UNION_EVENT_LOG_MESSAGE,
+  isEmptyUnionEventLogError,
+  readLineupDeletedEventIds,
+} from '../utils/eventLogConflict';
+import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
   PLANS_CTA_HREF,
@@ -1509,6 +1514,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setMatchEvents([]);
       recalcGoalsAndFoulsFromEvents([]);
     }
+    if (lastSeenMatchIdForHydrationRef.current !== mid) {
+      for (const id of readLineupDeletedEventIds(match?.lineup)) {
+        deletedEventIdsRef.current.add(id);
+      }
+    }
     lastSeenMatchIdForHydrationRef.current = mid;
 
     if (hydrationAppliedForMatchIdRef.current === mid && mid !== '') {
@@ -2441,7 +2451,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     } catch (err) {
       console.error('Erro ao finalizar coleta:', err);
-      if (isTrialExpiredSaveError(err)) {
+      if (isEmptyUnionEventLogError(err)) {
+        setFinalizeTrialExpired(false);
+        setFinalizeError(EMPTY_UNION_EVENT_LOG_MESSAGE);
+      } else if (isTrialExpiredSaveError(err)) {
         setFinalizeTrialExpired(true);
         setFinalizeError(trialExpiredMatchSaveMessage(true));
       } else {
@@ -2489,6 +2502,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } catch (err) {
         if (isTrialExpiredSaveError(err)) {
           notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        if (isEmptyUnionEventLogError(err)) {
+          alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
           autosaveSkipRef.current = false;
           return;
         }

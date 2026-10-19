@@ -63,6 +63,7 @@ import {
   isUnconfirmedSaveError,
   verifyPostMatchEventLog,
 } from './utils/verifyPostMatchEventLog';
+import { isEmptyUnionEventLogError } from './utils/eventLogConflict';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
 import { replaceMatchInList } from './utils/matchListState';
 import { rememberMatchDetail } from './utils/matchEventLog';
@@ -1248,6 +1249,10 @@ export default function App() {
           // O rascunho fica com quem chamou; o 402 não apaga o que já está no servidor.
           if (!isAutosave) throw error;
           return undefined;
+        }
+        if (isEmptyUnionEventLogError(error)) {
+          // Não troca a lista nem a coleta local por uma fita vazia.
+          throw error;
         }
         if (isUnconfirmedSaveError(error)) {
           const expectedLogLength = Array.isArray(newMatch.postMatchEventLog) ? newMatch.postMatchEventLog.length : 0;

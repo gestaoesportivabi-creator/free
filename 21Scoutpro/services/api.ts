@@ -19,18 +19,26 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+  code?: string;
 }
 
 function throwApiResponse(
   response: Response,
-  parsed: { error?: string; message?: string } | null,
+  parsed: { error?: string; message?: string; code?: string } | null,
   responseText: string
 ): never {
-  const code = typeof parsed?.error === 'string' ? parsed.error : '';
-  if (response.status === TRIAL_EXPIRED_STATUS && code === TRIAL_EXPIRED_CODE) {
-    throw new ApiRequestError(response.status, code, parsed?.message || code);
+  const errorField = typeof parsed?.error === 'string' ? parsed.error : '';
+  const codeField = typeof parsed?.code === 'string' ? parsed.code : '';
+  if (
+    response.status === TRIAL_EXPIRED_STATUS &&
+    (errorField === TRIAL_EXPIRED_CODE || codeField === TRIAL_EXPIRED_CODE)
+  ) {
+    throw new ApiRequestError(response.status, TRIAL_EXPIRED_CODE, parsed?.message || errorField || TRIAL_EXPIRED_CODE);
   }
-  throw new Error(parsed?.error || responseText || `Erro ${response.status}`);
+  if (response.status === 409 && codeField) {
+    throw new ApiRequestError(response.status, codeField, parsed?.message || errorField || codeField);
+  }
+  throw new Error(errorField || responseText || `Erro ${response.status}`);
 }
 
 /**

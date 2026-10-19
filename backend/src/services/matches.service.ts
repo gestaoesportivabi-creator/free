@@ -13,7 +13,9 @@ import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
 import { mergeLineupPreservingClockSnapshot } from './matchLineupClock';
-import { isUnionEventLogWrite, mergePostMatchEventLogs } from './postMatchEventLogMerge';
+import { isUnionEventLogWrite } from './postMatchEventLogMerge';
+import { applyUnionEventLogWrite } from './eventLogTombstones';
+import { resolveGoalOriginColumns, resolveMinutesCardsRpe } from './matchStatPreserve';
 
 function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
   const n = Number(v);
@@ -307,13 +309,15 @@ export const matchesService = {
       metodoGolTomado = JSON.stringify(teamStats.goalMethodsConceded);
     }
 
+    const teamPreserved = resolveMinutesCardsRpe({ stats: teamStats, matchLevel: data });
+    const teamGoals = resolveGoalOriginColumns({ stats: teamStats, matchLevel: data });
     await matchesRepository.upsertEstatisticasEquipe(jogo.id, {
-      minutosJogados: 40,
+      minutosJogados: teamPreserved.minutosJogados,
       gols: teamStats.goals ?? golsPro,
       golsSofridos: teamStats.goalsConceded ?? golsContra,
       assistencias: teamStats.assists ?? 0,
-      cartoesAmarelos: 0,
-      cartoesVermelhos: 0,
+      cartoesAmarelos: teamPreserved.cartoesAmarelos,
+      cartoesVermelhos: teamPreserved.cartoesVermelhos,
       passesCorretos: teamStats.passesCorrect ?? 0,
       passesErrados: teamStats.passesWrong ?? 0,
       passesErradosTransicao: teamStats.transitionErrors ?? 0,
@@ -322,11 +326,11 @@ export const matchesService = {
       desarmesSemBola: teamStats.tacklesWithoutBall ?? 0,
       chutesNoGol: teamStats.shotsOnTarget ?? 0,
       chutesFora: teamStats.shotsOffTarget ?? 0,
-      rpePartida: null,
-      golsMarcadosJogoAberto: 0,
-      golsMarcadosBolaParada: 0,
-      golsSofridosJogoAberto: 0,
-      golsSofridosBolaParada: 0,
+      rpePartida: teamPreserved.rpePartida,
+      golsMarcadosJogoAberto: teamGoals.golsMarcadosJogoAberto,
+      golsMarcadosBolaParada: teamGoals.golsMarcadosBolaParada,
+      golsSofridosJogoAberto: teamGoals.golsSofridosJogoAberto,
+      golsSofridosBolaParada: teamGoals.golsSofridosBolaParada,
     }, tx);
 
     if (metodoGol) {
@@ -341,13 +345,15 @@ export const matchesService = {
     for (const [jogadorId, stats] of Object.entries(playerStats)) {
       if (!validJogadorIds.has(jogadorId.trim())) continue;
       const s = stats as any;
+      const playerPreserved = resolveMinutesCardsRpe({ stats: s });
+      const playerGoals = resolveGoalOriginColumns({ stats: s, playerGoalsConceded: true });
       await matchesRepository.upsertEstatisticasJogador(jogo.id, jogadorId.trim(), {
-        minutosJogados: 40,
+        minutosJogados: playerPreserved.minutosJogados,
         gols: s.goals ?? 0,
-        golsSofridos: 0,
+        golsSofridos: playerGoals.golsSofridos,
         assistencias: s.assists ?? 0,
-        cartoesAmarelos: s.yellowCards ?? 0,
-        cartoesVermelhos: s.redCards ?? 0,
+        cartoesAmarelos: playerPreserved.cartoesAmarelos,
+        cartoesVermelhos: playerPreserved.cartoesVermelhos,
         passesCorretos: s.passesCorrect ?? 0,
         passesErrados: s.passesWrong ?? 0,
         passesErradosTransicao: s.transitionErrors ?? 0,
@@ -356,11 +362,11 @@ export const matchesService = {
         desarmesSemBola: s.tacklesWithoutBall ?? 0,
         chutesNoGol: s.shotsOnTarget ?? 0,
         chutesFora: s.shotsOffTarget ?? 0,
-        rpePartida: null,
-        golsMarcadosJogoAberto: 0,
-        golsMarcadosBolaParada: 0,
-        golsSofridosJogoAberto: 0,
-        golsSofridosBolaParada: 0,
+        rpePartida: playerPreserved.rpePartida,
+        golsMarcadosJogoAberto: playerGoals.golsMarcadosJogoAberto,
+        golsMarcadosBolaParada: playerGoals.golsMarcadosBolaParada,
+        golsSofridosJogoAberto: playerGoals.golsSofridosJogoAberto,
+        golsSofridosBolaParada: playerGoals.golsSofridosBolaParada,
       }, tx);
     }
 
@@ -389,6 +395,9 @@ export const matchesService = {
   },
 
   async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<MatchRecord> {
+    if (tx) {
+      await matchesRepository.lockMatchForUpdate(id, tenantInfo, tx);
+    }
     const existing = await matchesRepository.findById(id, tenantInfo, tx);
     if (!existing) throw new NotFoundError('Jogo', id);
 
@@ -406,15 +415,25 @@ export const matchesService = {
     if (data.resultado ?? data.result) jogoUpdate.resultado = data.resultado ?? data.result;
     jogoUpdate.golsPro = golsPro;
     jogoUpdate.golsContra = golsContra;
+    const existingLineup = (existing as { lineup?: unknown }).lineup;
+    const lineupProvided = data.lineup !== undefined;
+    let lineupWrittenByEventLog = false;
     if (Array.isArray(data.postMatchEventLog)) {
       if (isUnionEventLogWrite(data.eventLogWriteMode)) {
-        const mergedLog = mergePostMatchEventLogs(
-          (existing as { postMatchEventLog?: unknown }).postMatchEventLog,
-          data.postMatchEventLog,
-          data.deletedEventIds
-        );
-        jogoUpdate.postMatchEventLog = mergedLog;
-        data.postMatchEventLog = mergedLog;
+        const applied = applyUnionEventLogWrite({
+          existingLog: (existing as { postMatchEventLog?: unknown }).postMatchEventLog,
+          existingLineup,
+          incomingLog: data.postMatchEventLog,
+          incomingDeletedIds: data.deletedEventIds,
+          incomingLineup: data.lineup,
+          lineupProvided,
+        });
+        jogoUpdate.postMatchEventLog = applied.log;
+        data.postMatchEventLog = applied.log;
+        if (lineupProvided || applied.lineup !== existingLineup) {
+          jogoUpdate.lineup = applied.lineup;
+          lineupWrittenByEventLog = true;
+        }
       } else {
         // Sem eventLogWriteMode 'union' o client é anterior a este protocolo.
         // O array substitui o log, então omitir um lance continua apagando.
@@ -427,8 +446,7 @@ export const matchesService = {
       jogoUpdate.postMatchEventLog = data.postMatchEventLog;
     }
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
-    if (data.lineup !== undefined) {
-      const existingLineup = (existing as { lineup?: unknown }).lineup;
+    if (!lineupWrittenByEventLog && lineupProvided) {
       jogoUpdate.lineup = mergeLineupPreservingClockSnapshot(existingLineup, data.lineup);
     }
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
@@ -487,13 +505,24 @@ export const matchesService = {
         metodoGolTomado = JSON.stringify(teamStats.goalMethodsConceded);
       }
 
+      const existingTeam = await matchesRepository.findEstatisticasEquipe(id, tx);
+      const teamPreserved = resolveMinutesCardsRpe({
+        stats: teamStats,
+        matchLevel: data,
+        existing: existingTeam,
+      });
+      const teamGoals = resolveGoalOriginColumns({
+        stats: teamStats,
+        matchLevel: data,
+        existing: existingTeam,
+      });
       await matchesRepository.upsertEstatisticasEquipe(id, {
-        minutosJogados: 40,
+        minutosJogados: teamPreserved.minutosJogados,
         gols: teamStats.goals ?? golsPro,
         golsSofridos: teamStats.goalsConceded ?? golsContra,
         assistencias: teamStats.assists ?? 0,
-        cartoesAmarelos: 0,
-        cartoesVermelhos: 0,
+        cartoesAmarelos: teamPreserved.cartoesAmarelos,
+        cartoesVermelhos: teamPreserved.cartoesVermelhos,
         passesCorretos: teamStats.passesCorrect ?? 0,
         passesErrados: teamStats.passesWrong ?? 0,
         passesErradosTransicao: teamStats.transitionErrors ?? 0,
@@ -502,11 +531,11 @@ export const matchesService = {
         desarmesSemBola: teamStats.tacklesWithoutBall ?? 0,
         chutesNoGol: teamStats.shotsOnTarget ?? 0,
         chutesFora: teamStats.shotsOffTarget ?? 0,
-        rpePartida: null,
-        golsMarcadosJogoAberto: 0,
-        golsMarcadosBolaParada: 0,
-        golsSofridosJogoAberto: 0,
-        golsSofridosBolaParada: 0,
+        rpePartida: teamPreserved.rpePartida,
+        golsMarcadosJogoAberto: teamGoals.golsMarcadosJogoAberto,
+        golsMarcadosBolaParada: teamGoals.golsMarcadosBolaParada,
+        golsSofridosJogoAberto: teamGoals.golsSofridosJogoAberto,
+        golsSofridosBolaParada: teamGoals.golsSofridosBolaParada,
       }, tx);
 
       if (metodoGol) {
@@ -520,18 +549,32 @@ export const matchesService = {
     // Update player stats if provided
     const playerStats = data.playerStats;
     if (playerStats && Object.keys(playerStats).length > 0) {
-      const jogadoresTenant = await playersRepository.findAll(tenantInfo, tx);
+      const [jogadoresTenant, existingPlayerStats] = await Promise.all([
+        playersRepository.findAll(tenantInfo, tx),
+        matchesRepository.findEstatisticasJogadores(id, tx),
+      ]);
       const validJogadorIds = new Set(jogadoresTenant.map((j) => j.id));
+      const existingByPlayer = new Map(existingPlayerStats.map((row) => [row.jogadorId, row]));
       for (const [jogadorId, stats] of Object.entries(playerStats)) {
-        if (!validJogadorIds.has(jogadorId.trim())) continue;
+        const playerId = jogadorId.trim();
+        if (!validJogadorIds.has(playerId)) continue;
         const s = stats as any;
-        await matchesRepository.upsertEstatisticasJogador(id, jogadorId.trim(), {
-          minutosJogados: 40,
+        const playerPreserved = resolveMinutesCardsRpe({
+          stats: s,
+          existing: existingByPlayer.get(playerId),
+        });
+        const playerGoals = resolveGoalOriginColumns({
+          stats: s,
+          existing: existingByPlayer.get(playerId),
+          playerGoalsConceded: true,
+        });
+        await matchesRepository.upsertEstatisticasJogador(id, playerId, {
+          minutosJogados: playerPreserved.minutosJogados,
           gols: s.goals ?? 0,
-          golsSofridos: 0,
+          golsSofridos: playerGoals.golsSofridos,
           assistencias: s.assists ?? 0,
-          cartoesAmarelos: s.yellowCards ?? 0,
-          cartoesVermelhos: s.redCards ?? 0,
+          cartoesAmarelos: playerPreserved.cartoesAmarelos,
+          cartoesVermelhos: playerPreserved.cartoesVermelhos,
           passesCorretos: s.passesCorrect ?? 0,
           passesErrados: s.passesWrong ?? 0,
           passesErradosTransicao: s.transitionErrors ?? 0,
@@ -540,11 +583,11 @@ export const matchesService = {
           desarmesSemBola: s.tacklesWithoutBall ?? 0,
           chutesNoGol: s.shotsOnTarget ?? 0,
           chutesFora: s.shotsOffTarget ?? 0,
-          rpePartida: null,
-          golsMarcadosJogoAberto: 0,
-          golsMarcadosBolaParada: 0,
-          golsSofridosJogoAberto: 0,
-          golsSofridosBolaParada: 0,
+          rpePartida: playerPreserved.rpePartida,
+          golsMarcadosJogoAberto: playerGoals.golsMarcadosJogoAberto,
+          golsMarcadosBolaParada: playerGoals.golsMarcadosBolaParada,
+          golsSofridosJogoAberto: playerGoals.golsSofridosJogoAberto,
+          golsSofridosBolaParada: playerGoals.golsSofridosBolaParada,
         }, tx);
       }
     }
