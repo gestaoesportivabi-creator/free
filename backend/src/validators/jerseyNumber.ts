@@ -41,6 +41,41 @@ export function jerseyConflictError(numero: number, nome: string): ConflictError
   return new ConflictError(jerseyConflictMessage(numero, nome), 'JERSEY_IN_USE');
 }
 
+export type JerseyUpdateDecision =
+  | { check: false }
+  | { check: true; numeroCamisa: number | null | undefined };
+
+/**
+ * No update, a camisa só é conferida quando o número muda de fato,
+ * ou quando um jogador inativo volta a ficar ativo.
+ * Desativar (isAtivo: false) nunca confere, mesmo se o número vier junto.
+ */
+export function jerseyUpdateCheck(input: {
+  numeroInformado: boolean;
+  numeroNovo?: number | null;
+  numeroSalvo: number | null;
+  isAtivoInformado: boolean;
+  isAtivoNovo?: boolean;
+  isAtivoSalvo: boolean;
+}): JerseyUpdateDecision {
+  if (input.isAtivoInformado && input.isAtivoNovo === false) {
+    return { check: false };
+  }
+
+  const reativando = input.isAtivoInformado && input.isAtivoNovo === true && !input.isAtivoSalvo;
+  if (reativando) {
+    return {
+      check: true,
+      numeroCamisa: input.numeroInformado ? input.numeroNovo : input.numeroSalvo,
+    };
+  }
+
+  if (!input.numeroInformado || input.numeroNovo === input.numeroSalvo) {
+    return { check: false };
+  }
+  return { check: true, numeroCamisa: input.numeroNovo };
+}
+
 /**
  * Monta o filtro do Prisma. Se a equipe não é do tenant, recusa sem consultar.
  */

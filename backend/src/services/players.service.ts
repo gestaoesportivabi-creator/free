@@ -11,7 +11,7 @@ import { assessmentsRepository } from '../repositories/assessments.repository';
 import { transformPlayerToFrontend } from '../adapters/player.adapter';
 import { Player } from '../types/frontend';
 import { NotFoundError, AppError } from '../utils/errors';
-import { jerseyConflictError } from '../validators/jerseyNumber';
+import { jerseyConflictError, jerseyUpdateCheck } from '../validators/jerseyNumber';
 import prisma from '../config/database';
 import {
   createAthleteUserAccount,
@@ -480,10 +480,20 @@ export const playersService = {
     if (d.isAtivo !== undefined) payload.isAtivo = Boolean(d.isAtivo);
     if (Array.isArray(d.maxLoads) && d.maxLoads.length > 0) payload.maxLoadsJson = d.maxLoads;
 
-    const numeroEfetivo = (payload.numeroCamisa as number | undefined) ?? existing.numeroCamisa;
-    const equipesAtivas = await playersRepository.findActiveEquipeIds(id, tenantInfo, tx);
-    for (const equipeId of equipesAtivas) {
-      await assertJerseyFree(equipeId, numeroEfetivo, tenantInfo, tenantInfo.equipe_ids || [], id, tx);
+    const isAtivoInformado = d.isAtivo !== undefined;
+    const decisao = jerseyUpdateCheck({
+      numeroInformado: Object.prototype.hasOwnProperty.call(payload, 'numeroCamisa'),
+      numeroNovo: payload.numeroCamisa as number | undefined,
+      numeroSalvo: existing.numeroCamisa,
+      isAtivoInformado,
+      isAtivoNovo: isAtivoInformado ? Boolean(d.isAtivo) : undefined,
+      isAtivoSalvo: existing.isAtivo,
+    });
+    if (decisao.check) {
+      const equipesAtivas = await playersRepository.findActiveEquipeIds(id, tenantInfo, tx);
+      for (const equipeId of equipesAtivas) {
+        await assertJerseyFree(equipeId, decisao.numeroCamisa, tenantInfo, tenantInfo.equipe_ids || [], id, tx);
+      }
     }
 
     const jogador = await playersRepository.update(id, payload as any, tx);
