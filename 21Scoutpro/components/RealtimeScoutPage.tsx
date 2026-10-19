@@ -9,6 +9,8 @@ import {
   OPEN_MATCH_ANALYSIS_KEY,
   markKeepSessionAfterFinalize,
 } from '../utils/openMatchAnalysis';
+import { performFinalizeNavigation } from '../utils/sessionRestore';
+import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -27,7 +29,10 @@ interface RealtimeScoutData {
   selectedPlayerIds?: string[];
 }
 
-export const RealtimeScoutPage: React.FC = () => {
+export const RealtimeScoutPage: React.FC<{
+  /** Mesma aba: router da App, sem `location.assign` / reload. */
+  onSoftNavigateDashboard?: () => void;
+}> = ({ onSoftNavigateDashboard }) => {
   const [scoutData, setScoutData] = useState<RealtimeScoutData | null>(null);
   const [match, setMatch] = useState<MatchRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,8 +157,14 @@ export const RealtimeScoutPage: React.FC = () => {
         /* fall through to same-tab dashboard */
       }
     }
-    // Full navigation — do not clear auth token; App session restore must keep it.
-    window.location.assign('/dashboard');
+    // Soft navigation — reload via location.assign remontava o App e caía em /login.
+    performFinalizeNavigation({
+      hasLiveOpener: false,
+      pushState: (url) => window.history.pushState({}, '', url),
+      assign: (url) => window.location.assign(url),
+      close: () => window.close(),
+      softRoute: onSoftNavigateDashboard,
+    });
   };
 
   const handleSave = async (
@@ -190,6 +201,11 @@ export const RealtimeScoutPage: React.FC = () => {
       return saved;
     } catch (err) {
       console.error('Erro ao salvar partida:', err);
+      if (isTrialExpiredSaveError(err)) {
+        // A coleta permanece na tela; só o autosave engole o 402 para não interromper o relógio.
+        if (!isAutosave) throw err;
+        return undefined;
+      }
       if (!isAutosave) {
         alert('Erro ao salvar partida no servidor. Os dados NÃO foram gravados. Verifique o console (F12) e tente novamente.');
       }
