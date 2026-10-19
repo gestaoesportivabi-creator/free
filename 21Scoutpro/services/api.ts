@@ -8,6 +8,10 @@
 import { getApiUrl, API_RESOURCES } from '../config';
 import { Player, MatchRecord, PhysicalAssessment, WeeklySchedule, StatTargets, Team, SubscriptionPlanName } from '../types';
 import { ApiRequestError, TRIAL_EXPIRED_CODE, TRIAL_EXPIRED_STATUS } from '../utils/trialExpiredSave';
+import { classifyGetOneHttp, GetOneFailure, type GetOneBody } from '../utils/getOneOutcome';
+
+/** Abaixo do maxDuration de 60s da Vercel, para o cliente desistir antes do corte. */
+export const MATCH_SAVE_TIMEOUT_MS = 55_000;
 
 // Tipos de resposta da API
 interface ApiResponse<T> {
@@ -15,18 +19,26 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+  code?: string;
 }
 
 function throwApiResponse(
   response: Response,
-  parsed: { error?: string; message?: string } | null,
+  parsed: { error?: string; message?: string; code?: string } | null,
   responseText: string
 ): never {
-  const code = typeof parsed?.error === 'string' ? parsed.error : '';
-  if (response.status === TRIAL_EXPIRED_STATUS && code === TRIAL_EXPIRED_CODE) {
-    throw new ApiRequestError(response.status, code, parsed?.message || code);
+  const errorField = typeof parsed?.error === 'string' ? parsed.error : '';
+  const codeField = typeof parsed?.code === 'string' ? parsed.code : '';
+  if (
+    response.status === TRIAL_EXPIRED_STATUS &&
+    (errorField === TRIAL_EXPIRED_CODE || codeField === TRIAL_EXPIRED_CODE)
+  ) {
+    throw new ApiRequestError(response.status, TRIAL_EXPIRED_CODE, parsed?.message || errorField || TRIAL_EXPIRED_CODE);
   }
-  throw new Error(parsed?.error || responseText || `Erro ${response.status}`);
+  if (response.status === 409 && codeField) {
+    throw new ApiRequestError(response.status, codeField, parsed?.message || errorField || codeField);
+  }
+  throw new Error(errorField || responseText || `Erro ${response.status}`);
 }
 
 /**
@@ -34,7 +46,7 @@ function throwApiResponse(
  */
 async function get<T>(resource: string, id?: string): Promise<T[]> {
   try {
-    const path = id ? `${resource}/${id}` : resource;
+    const path = id ? `${resource}/${encodeURIComponent(id)}` : resource;
     const url = `${getApiUrl()}/${path}`;
     const token = localStorage.getItem('token') || '';
     const isDev = import.meta.env.DEV;
@@ -112,13 +124,14 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
  * GET de um único recurso (data é objeto, não array)
  */
 async function getOne<T>(resource: string, id: string): Promise<T | null> {
+  const label = `${resource}/${id}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  let response: Response;
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
     const token = localStorage.getItem('token') || '';
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
-
-    const response = await fetch(url, {
+    response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -127,32 +140,36 @@ async function getOne<T>(resource: string, id: string): Promise<T | null> {
       signal: controller.signal,
       cache: 'no-store',
     });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const responseText = await response.text();
-    let result: ApiResponse<T>;
-    try {
-      result = responseText ? JSON.parse(responseText) : { success: false };
-    } catch {
-      return null;
-    }
-
-    if (!result.success || result.data == null) {
-      return null;
-    }
-
-    return result.data;
   } catch (error: unknown) {
-    if (import.meta.env.DEV) {
-      console.error(`Error fetching ${resource}/${id}:`, error);
-    }
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    const reason = aborted
+      ? `Tempo esgotado ao carregar ${label}.`
+      : `Falha de rede ao carregar ${label}.`;
+    console.error(reason, error);
+    throw new GetOneFailure(reason);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  const responseText = await response.text();
+  let body: GetOneBody<T> | null = null;
+  let parseFailed = false;
+  try {
+    body = responseText ? (JSON.parse(responseText) as GetOneBody<T>) : null;
+  } catch {
+    parseFailed = true;
+  }
+
+  const decision = classifyGetOneHttp<T>({ status: response.status, parseFailed, body });
+  if (decision.kind === 'not_found') {
+    console.warn(`GET ${label} não encontrado (404).`);
     return null;
   }
+  if (decision.kind === 'failure') {
+    console.error(`GET ${label} falhou: ${decision.reason}`);
+    throw new GetOneFailure(decision.reason);
+  }
+  return decision.data;
 }
 
 /**
@@ -219,13 +236,12 @@ async function post<T>(resource: string, data: T): Promise<T | null> {
  * SIMULA PUT via POST com parâmetro method=PUT
  * Usa Content-Type: text/plain para evitar preflight OPTIONS
  */
-async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T | null> {
+async function put<T>(resource: string, id: string, data: Partial<T>, timeoutMs = 15000): Promise<T | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
+
     const response = await fetch(url, {
       method: 'PUT',
       headers: {
@@ -235,9 +251,9 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
       body: JSON.stringify(data),
       signal: controller.signal,
     });
-    
-    clearTimeout(timeoutId);
 
+    // O prazo vale até o corpo acabar. Limpar aqui deixava Salvando preso
+    // se os headers chegavam e o JSON da fita não.
     const responseText = await response.text();
     let parsed: ApiResponse<T> | null = null;
     try {
@@ -261,12 +277,14 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
   } catch (error: any) {
     if (error instanceof ApiRequestError) throw error;
     if (error.name === 'AbortError') {
-      console.error(`⏱️ Timeout ao fazer PUT em ${resource} (15s)`);
+      console.error(`⏱️ Timeout ao fazer PUT em ${resource} (${timeoutMs}ms)`);
       throw new Error('Tempo esgotado. Verifique sua conexão e tente novamente.');
     }
     if (error instanceof Error) throw error;
     console.error(`Error updating ${resource}:`, error);
     throw new Error('Erro ao comunicar com o servidor.');
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -278,7 +296,7 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
  */
 async function del(resource: string, id: string): Promise<boolean> {
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
     
     // Adicionar timeout de 10 segundos
     const controller = new AbortController();
@@ -335,7 +353,8 @@ export const matchesApi = {
   getAll: () => get<MatchRecord>(API_RESOURCES.matches),
   getById: (id: string) => getOne<MatchRecord>(API_RESOURCES.matches, id),
   create: (match: MatchRecord) => post<MatchRecord>(API_RESOURCES.matches, match),
-  update: (id: string, match: Partial<MatchRecord>) => put<MatchRecord>(API_RESOURCES.matches, id, match),
+  update: (id: string, match: Partial<MatchRecord>) =>
+    put<MatchRecord>(API_RESOURCES.matches, id, match, MATCH_SAVE_TIMEOUT_MS),
   delete: (id: string) => del(API_RESOURCES.matches, id),
 };
 

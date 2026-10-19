@@ -19,6 +19,12 @@ import {
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
+import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
+import {
+  EMPTY_UNION_EVENT_LOG_MESSAGE,
+  isEmptyUnionEventLogError,
+  readLineupDeletedEventIds,
+} from '../utils/eventLogConflict';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -110,6 +116,8 @@ interface MatchScoutingWindowProps {
   sidebarRetracted?: boolean;
   /** Após finalizar coleta com sucesso — abre análise / Dados do Jogo no match salvo */
   onCollectionFinalized?: (matchId: string) => void;
+  /** getById da partida falhou (rede/servidor). 404 não entra aqui. */
+  eventLogHydrationFailed?: boolean;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -403,6 +411,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   takeFullWidth,
   sidebarRetracted = false,
   onCollectionFinalized,
+  eventLogHydrationFailed = false,
 }) => {
   const isPostmatch = mode === 'postmatch';
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
@@ -411,6 +420,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return isPersistedServerMatchId(id) ? id : '';
   });
   const persistedMatchIdRef = useRef<string>(isPersistedServerMatchId(match?.id != null ? String(match.id).trim() : '') ? String(match.id).trim() : '');
+  /** Partida dona da fita em memória. Um detalhe sem log não pode zerar a coleta dessa mesma partida. */
+  const localEventsMatchIdRef = useRef<string>('');
+  const matchEventsRef = useRef<MatchEvent[]>([]);
   const [lastPersistedSignature, setLastPersistedSignature] = useState<string>('');
 
   useEffect(() => {
@@ -441,6 +453,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  matchEventsRef.current = matchEvents;
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null); // ID do jogador selecionado para ação
   const [goalsFor, setGoalsFor] = useState<number>(0); // Gols da nossa equipe
   const [goalsAgainst, setGoalsAgainst] = useState<number>(0); // Gols do adversário
@@ -1492,9 +1505,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setRealtimeHydrationReady(false);
     }
     const mid = String(match?.id ?? '').trim();
-    if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
+    const switchedMatch =
+      lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid;
+    if (switchedMatch) {
       hydrationAppliedForMatchIdRef.current = null;
       deletedEventIdsRef.current.clear();
+      localEventsMatchIdRef.current = '';
+      setMatchEvents([]);
+      recalcGoalsAndFoulsFromEvents([]);
+    }
+    if (lastSeenMatchIdForHydrationRef.current !== mid) {
+      for (const id of readLineupDeletedEventIds(match?.lineup)) {
+        deletedEventIdsRef.current.add(id);
+      }
     }
     lastSeenMatchIdForHydrationRef.current = mid;
 
@@ -1529,18 +1552,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    hydrationAppliedForMatchIdRef.current = mid;
-
     let converted: MatchEvent[] = [];
+    let keptLocalTape = false;
     if (hasLog) {
       converted = postMatchEventLogToMatchEvents(log, players);
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
       setMatchEvents(converted);
       recalcGoalsAndFoulsFromEvents(converted);
+    } else if (!switchedMatch && matchEventsRef.current.length > 0) {
+      // Detalhe sem fita (GET 404 ou lista sem array) não apaga o que já foi coletado nesta partida.
+      keptLocalTape = true;
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
+      converted = matchEventsRef.current;
     } else {
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
       setMatchEvents([]);
       recalcGoalsAndFoulsFromEvents([]);
     }
 
+    const hasTape = hasLog || keptLocalTape;
     const has2TEvent = converted.some((e) => e.period === '2T');
     const hasPossessionProgress =
       ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
@@ -1575,7 +1608,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setCurrentGoalkeeperId(tit[0]);
           setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
           setSquadActiveIds(tit);
-        } else if (hasLog) {
+        } else if (hasTape) {
           // Reingresso com fita: partida já começou, mas CTA padrão precisa
           // permanecer se a escalação estiver incompleta (BUG-CTA-PADRAO-REINGRESSO).
           setIsMatchStarted(true);
@@ -1587,7 +1620,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setShowLineupModal(true);
           setSquadActiveIds([]);
         }
-      } else if (hasLog && L) {
+      } else if (hasTape && L) {
         setLineupPlayers(L.players ?? []);
         setBenchPlayers(L.bench ?? []);
         if (L.ballPossessionStart) {
@@ -1604,7 +1637,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       const reopenedClock = resolveRealtimeReopenClock({
         persistedClock: match.lineup?.clockSnapshot,
         events: converted.map((event) => ({ time: event.time, period: event.period })),
-        hasLog,
+        hasLog: hasTape,
         collectionPhase: phase,
         inSecondHalf,
         hasPossessionProgress,
@@ -2363,6 +2396,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         return;
       }
 
+      const emptyLogBlock = emptyEventLogFinalizeBlock({
+        id: persistedMatchIdRef.current || match.id,
+        postMatchEventLog: match.postMatchEventLog,
+        postMatchEventCount: match.postMatchEventCount,
+        localEventCount: matchEvents.length,
+        deletedCount: deletedEventIdsRef.current.size,
+        hydrationFailed: eventLogHydrationFailed,
+      });
+      if (emptyLogBlock) {
+        setFinalizeError(emptyLogBlock);
+        setIsFinalizing(false);
+        autosaveSkipRef.current = false;
+        return;
+      }
+
       if (substitutionHistory.length > 0) {
         updateSubstitutionFrequency(substitutionHistory);
       }
@@ -2373,7 +2421,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       applySaveResult(saveResult);
 
       if (!saveResult || typeof saveResult !== 'object' || !saveResult.id) {
-        setFinalizeError('Falha ao salvar a coleta. Verifique a conexão e tente novamente.');
+        setFinalizeError('Falha ao confirmar a coleta no servidor. Os lances continuam nesta tela e não foram apagados. Tente novamente.');
         setIsFinalizing(false);
         autosaveSkipRef.current = false;
         return;
@@ -2403,7 +2451,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     } catch (err) {
       console.error('Erro ao finalizar coleta:', err);
-      if (isTrialExpiredSaveError(err)) {
+      if (isEmptyUnionEventLogError(err)) {
+        setFinalizeTrialExpired(false);
+        setFinalizeError(EMPTY_UNION_EVENT_LOG_MESSAGE);
+      } else if (isTrialExpiredSaveError(err)) {
         setFinalizeTrialExpired(true);
         setFinalizeError(trialExpiredMatchSaveMessage(true));
       } else {
@@ -2451,6 +2502,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } catch (err) {
         if (isTrialExpiredSaveError(err)) {
           notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        if (isEmptyUnionEventLogError(err)) {
+          alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
           autosaveSkipRef.current = false;
           return;
         }

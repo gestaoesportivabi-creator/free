@@ -1,4 +1,5 @@
 import type { MatchClockSnapshot } from '../types';
+import { readLineupDeletedEventIds } from './eventLogConflict';
 
 const PERSISTED_CLOCK_STATES = new Set<MatchClockSnapshot['state']>([
   'PRE_JOGO',
@@ -98,7 +99,29 @@ export function inferClockFromMatchEvents(
   };
 }
 
-type LineupWithClock<T> = Omit<T, 'clockSnapshot'> & { clockSnapshot?: MatchClockSnapshot };
+type LineupWithClock<T> = Omit<T, 'clockSnapshot'> & {
+  clockSnapshot?: MatchClockSnapshot;
+  deletedEventIds?: string[];
+};
+
+function withDeletedEventIds<T extends object>(
+  nextLineup: T,
+  existingLineup: object | null | undefined
+): T & { deletedEventIds?: string[] } {
+  const ids = [
+    ...readLineupDeletedEventIds(existingLineup),
+    ...readLineupDeletedEventIds(nextLineup),
+  ];
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+  if (merged.length === 0) return nextLineup;
+  return { ...nextLineup, deletedEventIds: merged };
+}
 
 /**
  * Mescla o clock no lineup que será gravado.
@@ -113,7 +136,7 @@ export function mergeLineupClockSnapshot<T extends object>(
     (nextLineup as { clockSnapshot?: unknown }).clockSnapshot
   );
   if (incomingClock) {
-    return { ...nextLineup, clockSnapshot: incomingClock };
+    return withDeletedEventIds({ ...nextLineup, clockSnapshot: incomingClock }, existingLineup);
   }
 
   const preserved = normalizePersistedClockSnapshot(
@@ -122,16 +145,16 @@ export function mergeLineupClockSnapshot<T extends object>(
       : undefined
   );
   if (preserved) {
-    return { ...nextLineup, clockSnapshot: preserved };
+    return withDeletedEventIds({ ...nextLineup, clockSnapshot: preserved }, existingLineup);
   }
 
   if (!('clockSnapshot' in nextLineup)) {
-    return { ...nextLineup };
+    return withDeletedEventIds({ ...nextLineup }, existingLineup);
   }
 
   const rest = { ...(nextLineup as T & { clockSnapshot?: unknown }) };
   delete rest.clockSnapshot;
-  return rest as LineupWithClock<T>;
+  return withDeletedEventIds(rest, existingLineup) as LineupWithClock<T>;
 }
 
 function pausedRestore(snapshot: MatchClockSnapshot): ReopenClockTarget {

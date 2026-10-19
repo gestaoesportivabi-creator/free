@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchRecord } from '../types';
+import { isPersistedServerMatchId } from './matchIds';
 import { matchNeedsEventLogFetch, mergeMatchWithEventLog, omitUnhydratedEventLog, replaceMatchInList } from './matchListState';
 
 function match(partial: Partial<MatchRecord> & Pick<MatchRecord, 'id' | 'date'>): MatchRecord {
@@ -52,6 +53,15 @@ describe('matchListState', () => {
     expect(merged.postMatchEventLog?.length).toBe(1);
     expect(merged.postMatchEventCount).toBe(1);
     expect(merged.teamStats.goalTimes?.length).toBe(1);
+    const withServerId = mergeMatchWithEventLog(listItem, { ...full, id: 'server-id' });
+    expect(withServerId.id).toBe('server-id');
+  });
+
+  it('id local undefined/null não é tratado como id do servidor', () => {
+    expect(isPersistedServerMatchId('undefined')).toBe(false);
+    expect(isPersistedServerMatchId('null')).toBe(false);
+    expect(isPersistedServerMatchId('  ')).toBe(false);
+    expect(omitUnhydratedEventLog(match({ id: 'undefined', date: '2026-03-01' }), 0, 0)).toBe(false);
   });
 
   it('autosave não manda log vazio de partida da lista ainda sem a fita local', () => {
@@ -60,7 +70,8 @@ describe('matchListState', () => {
     expect(omitUnhydratedEventLog({ ...fromList, postMatchEventLog: [{ id: 'e1' } as never] }, 0, 0)).toBe(true);
     expect(omitUnhydratedEventLog(fromList, 2, 0)).toBe(false);
     expect(omitUnhydratedEventLog(fromList, 0, 1)).toBe(false);
-    expect(omitUnhydratedEventLog(match({ id: 'abc', date: '2026-03-01', postMatchEventCount: 0 }), 0, 0)).toBe(false);
+    expect(omitUnhydratedEventLog(match({ id: 'abc', date: '2026-03-01', postMatchEventCount: 0 }), 0, 0)).toBe(true);
+    expect(omitUnhydratedEventLog(match({ id: 'abc', date: '2026-03-01', postMatchEventLog: [] }), 0, 0)).toBe(false);
     expect(omitUnhydratedEventLog(match({ id: 'sched-1', date: '2026-03-01', postMatchEventCount: 3 }), 0, 0)).toBe(false);
   });
 
