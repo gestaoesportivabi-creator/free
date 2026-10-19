@@ -21,9 +21,18 @@ interface RosterPasteProps {
   disabled?: boolean;
   /** Números de camisa do elenco que já está na tela. */
   existingNumbers?: readonly number[];
+  /** Erro do servidor (409, rede) preso à linha original. */
+  serverErrors?: Readonly<Record<number, string>>;
+  onDraftChange?: () => void;
 }
 
-export const RosterPaste: React.FC<RosterPasteProps> = ({ onParsed, disabled, existingNumbers }) => {
+export const RosterPaste: React.FC<RosterPasteProps> = ({
+  onParsed,
+  disabled,
+  existingNumbers,
+  serverErrors,
+  onDraftChange,
+}) => {
   const [raw, setRaw] = useState('');
   const existingKey = existingNumbers?.join(',') ?? '';
 
@@ -48,7 +57,10 @@ export const RosterPaste: React.FC<RosterPasteProps> = ({ onParsed, disabled, ex
       <textarea
         id="roster-paste"
         value={raw}
-        onChange={(e) => setRaw(e.target.value)}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          onDraftChange?.();
+        }}
         disabled={disabled}
         rows={7}
         spellCheck={false}
@@ -78,10 +90,13 @@ export const RosterPaste: React.FC<RosterPasteProps> = ({ onParsed, disabled, ex
             </p>
           </div>
           <div className="max-h-56 overflow-y-auto divide-y divide-zinc-900">
-            {result.lines.map((player) => (
+            {result.lines.map((player) => {
+              const serverMessage = serverErrors?.[player.lineNumber];
+              const hasError = player.errors.length > 0 || Boolean(serverMessage);
+              return (
               <div
                 key={player.lineNumber}
-                className={player.errors.length > 0 ? 'bg-red-500/[0.06]' : undefined}
+                className={hasError ? 'bg-red-500/[0.06]' : undefined}
               >
                 <div className="px-4 py-2 flex items-center gap-3 text-sm">
                   <span className="w-10 shrink-0 font-mono text-[10px] text-zinc-600">L{player.lineNumber}</span>
@@ -91,13 +106,16 @@ export const RosterPaste: React.FC<RosterPasteProps> = ({ onParsed, disabled, ex
                   <span className="flex-1 text-zinc-200 truncate">{player.name || 'Sem nome'}</span>
                   <span className="text-[11px] text-zinc-500 shrink-0">{player.position ?? 'sem posição'}</span>
                 </div>
-                {(player.errors.length > 0 || player.warnings.length > 0) && (
+                {(hasError || player.warnings.length > 0) && (
                   <div className="px-4 pb-2 space-y-0.5">
                     {player.errors.map((message, index) => (
                       <p key={`e-${player.lineNumber}-${index}`} className="text-[11px] text-red-300 leading-relaxed">
                         {message}
                       </p>
                     ))}
+                    {serverMessage && (
+                      <p className="text-[11px] text-red-300 leading-relaxed">{serverMessage}</p>
+                    )}
                     {player.warnings.map((message, index) => (
                       <p key={`w-${player.lineNumber}-${index}`} className="text-[11px] text-amber-200/80 leading-relaxed">
                         {message}
@@ -106,7 +124,8 @@ export const RosterPaste: React.FC<RosterPasteProps> = ({ onParsed, disabled, ex
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

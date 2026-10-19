@@ -12,6 +12,7 @@ import {
   rosterLimitMessage,
   rosterPositionError,
   rosterSaveFailureMessage,
+  runRosterSave,
   savableRosterLines,
   toRosterPlayer,
 } from './rosterParser';
@@ -261,5 +262,45 @@ describe('salvamento do elenco', () => {
     expect(rosterSaveFailureMessage(10, 14)).toBe(
       'Salvamos 10 de 14 atletas. Quem já entrou fica salvo — tentar de novo não duplica esses.',
     );
+  });
+
+  it('no meio da lista, devolve a mensagem do servidor na linha e o retry não repete quem entrou', async () => {
+    const items = [
+      { name: 'Lucas Andrade', number: 1, lineNumber: 2 },
+      { name: 'Rafael Souza', number: 12, lineNumber: 3 },
+    ];
+    const savedKeys = new Set<string>();
+    const created: string[] = [];
+    const serverMessage = 'Número 12 já está em uso por Ana nesta equipe.';
+
+    const first = await runRosterSave({
+      items,
+      savedKeys,
+      create: async (item) => {
+        created.push(item.name);
+        if (item.number === 12) throw new Error(serverMessage);
+      },
+    });
+
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    expect(first.saved).toBe(1);
+    expect(first.failedLineNumber).toBe(3);
+    expect(first.cause).toBe(serverMessage);
+    expect(first.message).toMatch(/Salvamos 1 de 2/);
+    expect(created).toEqual(['Lucas Andrade', 'Rafael Souza']);
+
+    created.length = 0;
+    const retry = await runRosterSave({
+      items,
+      savedKeys,
+      create: async (item) => {
+        created.push(item.name);
+        if (item.number === 12) throw new Error(serverMessage);
+      },
+    });
+    expect(created).toEqual(['Rafael Souza']);
+    expect(retry.ok).toBe(false);
+    if (!retry.ok) expect(retry.saved).toBe(1);
   });
 });
