@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Save, ArrowLeft, Calendar, Plus, Trash2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PostMatchAction, PostMatchEvent } from '../types';
 import { absoluteSecondsToStored, postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
@@ -202,6 +202,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
 }) => {
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [events, setEvents] = useState<PostMatchEvent[]>([]);
+  const deletedEventIdsRef = useRef<string[]>([]);
 
   const updateForm = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -247,6 +248,10 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
   };
 
   const removeEvent = (id: string) => {
+    const trimmed = String(id ?? '').trim();
+    if (trimmed && !deletedEventIdsRef.current.includes(trimmed)) {
+      deletedEventIdsRef.current.push(trimmed);
+    }
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
@@ -345,6 +350,10 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
       playerStats,
       teamStats,
       postMatchEventLog: postMatchEventLogWithRecordedBy,
+      eventLogWriteMode: 'union',
+      ...(deletedEventIdsRef.current.length > 0
+        ? { deletedEventIds: [...deletedEventIdsRef.current] }
+        : {}),
       status: 'encerrado',
     };
 

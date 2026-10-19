@@ -19,7 +19,7 @@
     "cleanup:qa-environment": "tsx scripts/cleanup-qa-environment.ts",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "test": "tsx --test src/services/matchLineupClock.test.ts src/validators/jerseyNumber.test.ts",
+    "test": "node --import tsx --test test/*.test.ts src/services/matchLineupClock.test.ts src/validators/jerseyNumber.test.ts",
     "postinstall": "prisma generate"
   },
   "keywords": [
