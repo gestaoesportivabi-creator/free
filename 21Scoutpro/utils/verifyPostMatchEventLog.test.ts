@@ -73,6 +73,18 @@ describe('verifyPostMatchEventLog', () => {
     expect(result.match.opponent).toBe('servidor');
     expect(result.match.postMatchEventLog).toHaveLength(2);
   });
+
+  it('GET em_andamento não rebaixa uma coleta que o PUT devolveu encerrada', async () => {
+    const saved = match({ id: 'jogo-1', status: 'encerrado' });
+    const result = await verifyPostMatchEventLog(
+      saved,
+      2,
+      async () => match({ id: 'jogo-1', status: 'em_andamento', postMatchEventLog: [event('e1'), event('e2')] })
+    );
+    expect(result.status).toBe('confirmed');
+    expect(result.match.status).toBe('encerrado');
+    expect(result.match.postMatchEventLog).toHaveLength(2);
+  });
 });
 
 describe('retry depois de timeout', () => {

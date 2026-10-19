@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
-import { matchesApi } from '../services/api';
+import { championshipMatchesApi, matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
 import {
   SAVE_UNCONFIRMED_MESSAGE,
@@ -17,14 +17,24 @@ import {
 } from '../utils/openMatchAnalysis';
 import { performFinalizeNavigation } from '../utils/sessionRestore';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
+import { stashFinalizedMatch } from '../utils/finalizedMatchHandoff';
+import { readKickoffTime, resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
+import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { isPersistedServerMatchId } from '../utils/matchIds';
 import { adoptServerMatch } from '../utils/realtimeMatchHydration';
+import { preserveEncerradoStatus } from '../utils/matchStatus';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
 
 interface RealtimeScoutData {
   matchId?: string;
+  /** Id em campeonatos_jogos. Não é id de jogo. */
+  agendaMatchId?: string;
+  /** Horário do card. Separa dois jogos no mesmo dia contra o mesmo adversário. */
+  time?: string;
+  /** Cards da agenda com a mesma data, adversário e competição. 1 libera fallback sem hora. */
+  scheduledBaseCount?: number;
   date: string;
   opponent: string;
   competition?: string;
@@ -71,6 +81,7 @@ export const RealtimeScoutPage: React.FC<{
           competition: data.competition,
           location: locationFromPrep,
           status: 'disponivel',
+          kickoffTime: data.time,
           result: 'E',
           goalsFor: 0,
           goalsAgainst: 0,
@@ -89,11 +100,12 @@ export const RealtimeScoutPage: React.FC<{
           playerStats: {},
         };
 
+        let fetched: MatchRecord | null = null;
         if (data.matchId && isPersistedServerMatchId(data.matchId)) {
           try {
             const dbMatch = await matchesApi.getById(data.matchId);
             if (dbMatch?.id) {
-              matchRecord = adoptServerMatch(dbMatch, locationFromPrep);
+              fetched = adoptServerMatch(dbMatch, locationFromPrep);
             }
           } catch (fetchErr) {
             setEventLogHydrationFailed(true);
@@ -102,6 +114,59 @@ export const RealtimeScoutPage: React.FC<{
               fetchErr
             );
           }
+        }
+
+        let catalog: MatchRecord[] = [];
+        if (!fetched || !fetched.postMatchEventLog?.length) {
+          try {
+            const all = await matchesApi.getAll();
+            catalog = Array.isArray(all) ? all.filter((item) => item && item.teamStats) : [];
+          } catch (catalogErr) {
+            console.warn('Não foi possível listar partidas para reabrir a coleta.', catalogErr);
+          }
+        }
+
+        const resolved = resolveRealtimeOpenTarget({
+          requestedId: data.matchId,
+          fetched,
+          catalog,
+          fixture: {
+            date: data.date,
+            opponent: data.opponent,
+            competition: data.competition,
+            time: data.time,
+          },
+          scheduledBaseCount: data.scheduledBaseCount,
+        });
+
+        if (resolved.match) {
+          let chosen = resolved.match;
+          if (matchNeedsEventLogFetch(chosen)) {
+            try {
+              const full = await matchesApi.getById(String(chosen.id));
+              if (full?.id) {
+                chosen = preserveEncerradoStatus(chosen, adoptServerMatch(full, locationFromPrep));
+              }
+            } catch (detailErr) {
+              setEventLogHydrationFailed(true);
+              console.warn('Falha ao carregar a fita da coleta existente.', detailErr);
+            }
+          }
+          const kickoff = readKickoffTime(chosen) || data.time || '';
+          matchRecord = {
+            ...chosen,
+            location: chosen.location?.trim() || locationFromPrep,
+            ...(kickoff
+              ? {
+                  kickoffTime: kickoff,
+                  lineup: chosen.lineup
+                    ? { ...chosen.lineup, kickoffTime: chosen.lineup.kickoffTime || kickoff }
+                    : chosen.lineup,
+                }
+              : {}),
+          };
+        } else if (resolved.ignoredForeignId) {
+          matchRecord = { ...matchRecord, id: `temp-${Date.now()}` };
         }
 
         setMatch(matchRecord);
@@ -207,8 +272,19 @@ export const RealtimeScoutPage: React.FC<{
       if (kept && !isAutosave) {
         // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
         if (savedMatch.status === 'encerrado') {
-          const finalizedId = String(kept.id || savedMatch.id || '').trim();
-          if (finalizedId) handoffToDashboardAnalysis(finalizedId);
+          const finalizedId = String(kept.id || saved.id || savedMatch.id || '').trim();
+          const agendaId = String(scoutData?.agendaMatchId || '').trim();
+          if (finalizedId && agendaId && agendaId !== finalizedId) {
+            try {
+              await championshipMatchesApi.update(agendaId, { jogoId: finalizedId });
+            } catch (linkErr) {
+              console.warn('Não foi possível vincular a agenda à coleta finalizada.', linkErr);
+            }
+          }
+          if (finalizedId) {
+            stashFinalizedMatch({ ...kept, id: finalizedId, status: 'encerrado' });
+            handoffToDashboardAnalysis(finalizedId);
+          }
           return kept;
         }
         alert(
