@@ -51,6 +51,8 @@ export async function verifyPostMatchEventLog(
       ...saved,
       ...fresh,
       id: fresh.id || saved.id,
+      // O GET não rebaixa um finalizar local se o servidor ainda devolveu em_andamento.
+      status: saved.status === 'encerrado' ? 'encerrado' : fresh.status ?? saved.status,
       postMatchEventLog: serverLog.length >= expectedLogLength ? serverLog : saved.postMatchEventLog,
     },
     serverLogLength: serverLog.length,

@@ -62,6 +62,23 @@ describe('verifyPostMatchEventLog', () => {
     expect(result.match.postMatchEventLog).toHaveLength(2);
   });
 
+  it('GET confirmado não rebaixa encerrado local para em_andamento', async () => {
+    const saved = match({ id: 'jogo-1', status: 'encerrado' });
+    const result = await verifyPostMatchEventLog(
+      saved,
+      2,
+      async () =>
+        match({
+          id: 'jogo-1',
+          status: 'em_andamento',
+          postMatchEventLog: [event('e1'), event('e2')],
+        })
+    );
+    expect(result.status).toBe('confirmed');
+    expect(result.match.status).toBe('encerrado');
+    expect(result.match.postMatchEventLog).toHaveLength(2);
+  });
+
   it('GET confirmado pode adotar a fita do servidor quando ela cobre o envio', async () => {
     const saved = match({ id: 'jogo-1', opponent: 'local' });
     const result = await verifyPostMatchEventLog(

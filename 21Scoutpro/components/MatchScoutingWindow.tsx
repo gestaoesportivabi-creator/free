@@ -414,15 +414,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   /** Partida dona da fita em memória. Um detalhe sem log não pode zerar a coleta dessa mesma partida. */
   const localEventsMatchIdRef = useRef<string>('');
   const matchEventsRef = useRef<MatchEvent[]>([]);
+  /** Finalizar já aconteceu nesta abertura. Autosave seguinte não manda em_andamento. */
+  const keepEncerradoOnAutosaveRef = useRef(match?.status === 'encerrado');
   const [lastPersistedSignature, setLastPersistedSignature] = useState<string>('');
 
   useEffect(() => {
     const id = match?.id != null ? String(match.id).trim() : '';
+    keepEncerradoOnAutosaveRef.current = match?.status === 'encerrado';
     if (isPersistedServerMatchId(id)) {
       setPersistedMatchId(id);
       persistedMatchIdRef.current = id;
     }
-  }, [match.id]);
+  }, [match.id, match?.status]);
 
   const applySaveResult = useCallback((r: MatchRecord | undefined | void) => {
     if (r && typeof r === 'object' && r.id != null) {
@@ -2302,7 +2305,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     autosaveForceRef.current = false;
     autosaveInFlightRef.current = true;
     try {
-      const snapshot = buildMatchSnapshot('em_andamento');
+      const snapshot = buildMatchSnapshot(
+        keepEncerradoOnAutosaveRef.current || match.status === 'encerrado' ? 'encerrado' : 'em_andamento'
+      );
       const saveResult = await onSave(snapshot, { source: 'autosave' });
       applySaveResult(saveResult);
       commitPersistedSignature(signature ?? JSON.stringify(snapshot));
@@ -2370,6 +2375,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setFinalizeError(null);
     setFinalizeTrialExpired(false);
 
+    keepEncerradoOnAutosaveRef.current = true;
     suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
     stopAutosaveSchedulers();

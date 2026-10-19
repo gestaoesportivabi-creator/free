@@ -230,6 +230,20 @@ export const matchesRepository = {
     );
   },
 
+  /**
+   * Não deixa um autosave atrasado rebaixar `encerrado`.
+   * O CASE lê a linha no momento do UPDATE, então um finalizar que já commitou vence.
+   */
+  async setStatusKeepingEncerrado(jogoId: string, status: string, tx?: TransactionClient): Promise<void> {
+    await db(tx).$executeRawUnsafe(
+      `UPDATE jogos
+       SET status = CASE WHEN status = 'encerrado' AND $1 <> 'encerrado' THEN status ELSE $1 END
+       WHERE id = $2`,
+      status,
+      jogoId
+    );
+  },
+
   /** Persiste fase da coleta (evita Prisma client desatualizado sem `collectionPhase` no create/update). */
   async setCollectionPhase(jogoId: string, phase: number, tx?: TransactionClient): Promise<void> {
     await db(tx).$executeRawUnsafe(
