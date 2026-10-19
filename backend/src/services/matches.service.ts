@@ -115,6 +115,10 @@ export const matchesService = {
       if (meta?.metodoGolTomado && match.teamStats) {
         try { match.teamStats.goalMethodsConceded = JSON.parse(meta.metodoGolTomado); } catch { /* ignore */ }
       }
+      if (meta && match.teamStats) {
+        if (meta.goalTimes.length > 0) match.teamStats.goalTimes = meta.goalTimes;
+        if (meta.goalsConcededTimes.length > 0) match.teamStats.goalsConcededTimes = meta.goalsConcededTimes;
+      }
       matches.push(match);
     }
     return matches;

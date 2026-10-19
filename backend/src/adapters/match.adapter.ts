@@ -189,7 +189,7 @@ export function transformMatchToFrontend(
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
 
   // Derivar goalTimes e goalsConcededTimes do postMatchEventLog para os gráficos de gols por período.
-  // Na listagem o log não é carregado; esses tempos voltam no getById.
+  // A listagem não carrega o log: o service grava os mesmos tempos a partir da query agregada.
   const eventLog = includeEventLog ? result.postMatchEventLog : undefined;
   if (eventLog && Array.isArray(eventLog)) {
     const goalTimes: Array<{ time: string; method?: string }> = [];
