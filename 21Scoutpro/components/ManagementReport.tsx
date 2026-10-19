@@ -14,6 +14,7 @@ import { wellnessClosenessScore, wellnessRealRadarColors } from '../utils/wellne
 import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts';
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
+import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 import { exportManagementReportPdf } from '../utils/exportManagementReportPdf';
 import { classifyBodyFatReference, type BodyFatReferenceBand } from './PhysicalAssessment';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -96,7 +97,8 @@ const HeatCallout: React.FC<HeatmapCalloutData> = ({ x, y, outward, regionLabel,
   );
 };
 
-export const ManagementReport: React.FC<ManagementReportProps> = ({ players, matches, assessments }) => {
+export const ManagementReport: React.FC<ManagementReportProps> = ({ players, matches: matchesFromList, assessments }) => {
+  const { matches, loading: eventLogsLoading } = useMatchesWithEventLogs(matchesFromList);
   const [selectedPlayerId, setSelectedPlayerId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -526,6 +528,9 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
+      {eventLogsLoading && (
+        <p className="text-xs text-zinc-500">Carregando lances das partidas para faltas, gols e duplas de assistência.</p>
+      )}
       <div className={cardBase}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>

@@ -57,6 +57,8 @@ import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
+import { replaceMatchInList } from './utils/matchListState';
+import { rememberMatchDetail } from './utils/matchEventLog';
 import { isEssentialPlanUser, isPerformanceTierUser } from './config';
 import { BlogPage } from './components/BlogPage';
 import type { BlogLang } from './blog/types';
@@ -1189,30 +1191,11 @@ export default function App() {
               console.warn('Erro ao atualizar cartões do campeonato:', e);
             }
           }
-          // Validar match salvo e recarregar da API para garantir consistência (evitar cache local)
+          // Atualiza só a partida salva. A listagem não traz o log; recarregar getAll()
+          // a cada autosave devolvia a fita de todas as partidas do tenant.
           if (saved.teamStats) {
-            try {
-              const refreshed = await matchesApi.getAll();
-              const valid = (refreshed as MatchRecord[]).filter(m => m && m.teamStats);
-              if (valid.length > 0) {
-                setMatches(valid);
-              } else {
-                // GET retornou vazio (falha silenciosa da API) — não limpar a lista; incluir a partida salva
-                setMatches(prev => {
-                  const exists = prev.some(m => m.id === saved.id);
-                  if (exists) return prev;
-                  return [saved, ...prev];
-                });
-                console.warn('Recarregar matches retornou vazio; partida salva mantida na lista.');
-              }
-            } catch (e) {
-              console.warn('Recarregar matches falhou, usando resposta do save:', e);
-              setMatches(prev => {
-                const exists = prev.some(m => m.id === saved.id);
-                if (exists) return prev;
-                return [saved, ...prev];
-              });
-            }
+            rememberMatchDetail(saved);
+            setMatches((prev) => replaceMatchInList(prev, saved));
             if (!isAutosave) {
               if (saveAsIncomplete) {
                 alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');

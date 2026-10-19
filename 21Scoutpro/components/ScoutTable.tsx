@@ -6,6 +6,8 @@ import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe, getTodayLocalYmd, toLocalYmd } from '../utils/dateUtils';
 import { timeControlsApi } from '../services/api';
+import { loadMatchWithEventLog } from '../utils/matchEventLog';
+import { matchNeedsEventLogFetch, mergeMatchWithEventLog } from '../utils/matchListState';
 import { TimeSelectionModal } from './TimeSelectionModal';
 import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
@@ -284,6 +286,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     });
     const [viewMode, setViewMode] = useState<'calendar' | 'form' | 'analysis'>('calendar');
     const [selectedMatch, setSelectedMatch] = useState<MatchRecord | null>(null);
+    const [eventLogLoading, setEventLogLoading] = useState(false);
+    const [eventLogLoadError, setEventLogLoadError] = useState<string | null>(null);
+    const [eventLogRetry, setEventLogRetry] = useState(0);
     const [technicalAnalysis, setTechnicalAnalysis] = useState<TechnicalAnalysis>(EMPTY_TECHNICAL_ANALYSIS);
     const [isSavingTechnicalAnalysis, setIsSavingTechnicalAnalysis] = useState(false);
     
@@ -1941,6 +1946,43 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     };
 
     useEffect(() => {
+        const current = selectedMatch;
+        if (!current || !matchNeedsEventLogFetch(current)) {
+            setEventLogLoading(false);
+            setEventLogLoadError(null);
+            return;
+        }
+        const id = String(current.id);
+        const eventCount = current.postMatchEventCount;
+        let cancelled = false;
+        setEventLogLoading(true);
+        setEventLogLoadError(null);
+        loadMatchWithEventLog(id, eventCount)
+            .then((full) => {
+                if (cancelled) return;
+                setEventLogLoading(false);
+                if (!full || !Array.isArray(full.postMatchEventLog)) {
+                    setEventLogLoadError('Não foi possível carregar os lances desta partida.');
+                    return;
+                }
+                setSelectedMatch((prev) => {
+                    if (!prev || String(prev.id) !== id) return prev;
+                    if (Array.isArray(prev.postMatchEventLog)) return prev;
+                    return mergeMatchWithEventLog(prev, full);
+                });
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                console.warn('Falha ao carregar lances da partida', id, error);
+                setEventLogLoading(false);
+                setEventLogLoadError('Não foi possível carregar os lances desta partida.');
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedMatch, eventLogRetry]);
+
+    useEffect(() => {
         if (!selectedMatch) {
             setTechnicalAnalysis(EMPTY_TECHNICAL_ANALYSIS);
             return;
@@ -2898,6 +2940,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         type="button"
                                         onClick={() => {
                                             const m = selectedMatch!;
+                                            const logStillMissing = matchNeedsEventLogFetch(m);
                                             const fromLineup = m.lineup?.selectedPlayerIds?.map((id) => String(id).trim()).filter(Boolean);
                                             const fromStats = Object.keys(m.playerStats || {}).map((id) => id.trim());
                                             const fromLog = collectPlayerIdsFromPostMatchLog(m.postMatchEventLog);
@@ -2929,12 +2972,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                 });
                                                 return;
                                             }
+                                            if (logStillMissing) return;
                                             setShowPostMatchSheet(true);
                                         }}
                                         data-testid="reopen-match"
-                                        className="flex items-center gap-2 bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff] font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
+                                        disabled={selectedMatch.status !== 'em_andamento' && (matchNeedsEventLogFetch(selectedMatch) || eventLogLoading)}
+                                        className={`flex items-center gap-2 font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors ${
+                                            selectedMatch.status !== 'em_andamento' && (matchNeedsEventLogFetch(selectedMatch) || eventLogLoading)
+                                                ? 'bg-zinc-800 border border-zinc-700 text-zinc-500 cursor-not-allowed'
+                                                : 'bg-[#00f0ff]/10 hover:bg-[#00f0ff]/20 border border-[#00f0ff]/50 text-[#00f0ff]'
+                                        }`}
                                     >
-                                        <Edit2 size={16} /> {selectedMatch.status === 'em_andamento' ? 'Retomar Coleta' : 'Editar Dados'}
+                                        <Edit2 size={16} /> {selectedMatch.status === 'em_andamento' ? 'Retomar Coleta' : eventLogLoading ? 'Carregando lances' : 'Editar Dados'}
                                     </button>
                                     <button
                                         type="button"
@@ -2945,6 +2994,20 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     </button>
                                 </div>
                             </div>
+                    {(eventLogLoading || eventLogLoadError) && (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-300 flex items-center justify-between gap-3">
+                            <span>{eventLogLoadError ?? 'Carregando lances desta partida.'}</span>
+                            {eventLogLoadError && (
+                                <button
+                                    type="button"
+                                    onClick={() => setEventLogRetry((value) => value + 1)}
+                                    className="text-[#00f0ff] font-bold uppercase text-xs"
+                                >
+                                    Tentar de novo
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     {/* Resultado do Jogo (baseado no card) */}
                     <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">

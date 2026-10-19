@@ -1,18 +1,13 @@
 import { MatchRecord } from '../types';
 import { matchesApi } from '../services/api';
+import { isPersistedServerMatchId } from './matchIds';
 
 export interface MatchUpsertResult {
   saved: MatchRecord;
   operation: 'created' | 'updated';
 }
 
-/** IDs locais de rascunho/agenda — não existem no servidor; não tentar PUT (evita 404 + create duplicado). */
-export function isPersistedServerMatchId(id: string): boolean {
-  const s = id.trim();
-  if (s.length === 0) return false;
-  if (s.startsWith('sched-') || s.startsWith('temp-')) return false;
-  return true;
-}
+export { isPersistedServerMatchId };
 
 export async function upsertMatchRecord(newMatch: MatchRecord): Promise<MatchUpsertResult> {
   const idStr = newMatch.id != null ? String(newMatch.id).trim() : '';

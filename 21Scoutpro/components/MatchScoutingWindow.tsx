@@ -18,6 +18,7 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
@@ -1530,6 +1531,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (hydrationAppliedForMatchIdRef.current === mid && mid !== '') {
       if (!isPostmatch) setRealtimeHydrationReady(true);
+      return;
+    }
+
+    // A lista não traz a fita. Não hidratar vazio (e não dar autosave) enquanto o getById não chega.
+    if (match && matchNeedsEventLogFetch(match)) {
+      autosaveSkipRef.current = true;
+      if (!isPostmatch) setRealtimeHydrationReady(false);
       return;
     }
 

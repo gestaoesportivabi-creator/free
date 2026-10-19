@@ -7,6 +7,7 @@ import { LockedFeatureBlock } from './EmBreve';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
+import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -345,7 +346,8 @@ function isPlayerOnCourtAtSecond(match: MatchRecord, playerId: string, absoluteS
   return onCourt;
 }
 
-export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, players = [], isFreePlan = false, comparisonChild = false }) => {
+export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: matchesFromList, players = [], isFreePlan = false, comparisonChild = false }) => {
+  const { matches, loading: eventLogsLoading } = useMatchesWithEventLogs(matchesFromList);
   const [compFilter, setCompFilter] = useState<string>('Todas');
   const [opponentFilter, setOpponentFilter] = useState<string>('Todos');
   const [locationFilter, setLocationFilter] = useState<string>('Todos');
@@ -1125,6 +1127,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
             Sair da Comparação
           </button>
         </div>
+        {eventLogsLoading && (
+          <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+            Carregando lances das partidas para faltas, defesas e gols por período.
+          </p>
+        )}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
           <div className="rounded-2xl border border-zinc-900 bg-black/30 p-3">
             <GeneralScout config={config} matches={matches} players={players} isFreePlan={isFreePlan} comparisonChild />
@@ -1139,6 +1146,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches, pla
 
   return (
     <div className="space-y-8 animate-fade-in pb-10 min-w-0 overflow-x-hidden">
+      {eventLogsLoading && !comparisonChild && (
+        <p className="text-xs text-zinc-500" style={{ fontFamily: 'Calibri', fontWeight: 'normal', fontStyle: 'normal' }}>
+          Carregando lances das partidas para faltas, defesas e gols por período.
+        </p>
+      )}
       
       {/* Control Bar - Black Piano */}
       <div className="bg-black p-5 rounded-3xl border border-zinc-900 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-end">
