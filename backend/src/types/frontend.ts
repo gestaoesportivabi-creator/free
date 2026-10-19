@@ -129,6 +129,8 @@ export interface MatchRecord {
     /** Elenco convocado (persistido no JSON `lineup`) */
     selectedPlayerIds?: string[];
     clockSnapshot?: MatchClockSnapshot;
+    /** Ids de lances excluídos no modo union. Um PUT atrasado não os recoloca. */
+    deletedEventIds?: string[];
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: {
       tactical: string;
@@ -160,6 +162,8 @@ export interface MatchStats {
   transitionErrors: number;
   yellowCards?: number;
   redCards?: number;
+  /** PSE da partida. A coluna é inteira (`rpe_partida`). */
+  rpeMatch?: number;
   goalMethodsScored?: Record<string, number>;
   goalMethodsConceded?: Record<string, number>;
   minutesPlayed?: number;

@@ -9,6 +9,7 @@ import {
   isUnconfirmedSaveError,
   verifyPostMatchEventLog,
 } from '../utils/verifyPostMatchEventLog';
+import { isEmptyUnionEventLogError } from '../utils/eventLogConflict';
 import {
   stashOpenMatchAnalysis,
   OPEN_MATCH_ANALYSIS_KEY,
@@ -19,6 +20,9 @@ import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
 import { stashFinalizedMatch } from '../utils/finalizedMatchHandoff';
 import { readKickoffTime, resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
+import { isPersistedServerMatchId } from '../utils/matchIds';
+import { adoptServerMatch } from '../utils/realtimeMatchHydration';
+import { preserveEncerradoStatus } from '../utils/matchStatus';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -51,6 +55,7 @@ export const RealtimeScoutPage: React.FC<{
   const [match, setMatch] = useState<MatchRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eventLogHydrationFailed, setEventLogHydrationFailed] = useState(false);
 
   useEffect(() => {
     const loadRealtimeMatch = async () => {
@@ -96,11 +101,18 @@ export const RealtimeScoutPage: React.FC<{
         };
 
         let fetched: MatchRecord | null = null;
-        if (data.matchId) {
+        if (data.matchId && isPersistedServerMatchId(data.matchId)) {
           try {
-            fetched = await matchesApi.getById(data.matchId);
+            const dbMatch = await matchesApi.getById(data.matchId);
+            if (dbMatch?.id) {
+              fetched = adoptServerMatch(dbMatch, locationFromPrep);
+            }
           } catch (fetchErr) {
-            console.warn('Partida pedida não é um jogo deste técnico. Buscando a coleta já salva.', fetchErr);
+            setEventLogHydrationFailed(true);
+            console.error(
+              'Falha ao buscar a partida no servidor. A finalização não envia um log vazio.',
+              fetchErr
+            );
           }
         }
 
@@ -132,8 +144,11 @@ export const RealtimeScoutPage: React.FC<{
           if (matchNeedsEventLogFetch(chosen)) {
             try {
               const full = await matchesApi.getById(String(chosen.id));
-              if (full?.id) chosen = full;
+              if (full?.id) {
+                chosen = preserveEncerradoStatus(chosen, adoptServerMatch(full, locationFromPrep));
+              }
             } catch (detailErr) {
+              setEventLogHydrationFailed(true);
               console.warn('Falha ao carregar a fita da coleta existente.', detailErr);
             }
           }
@@ -287,6 +302,9 @@ export const RealtimeScoutPage: React.FC<{
         if (!isAutosave) throw err;
         return undefined;
       }
+      if (isEmptyUnionEventLogError(err)) {
+        throw err;
+      }
       if (isUnconfirmedSaveError(err)) {
         const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;
         const id = savedMatch.id != null ? String(savedMatch.id).trim() : '';
@@ -353,6 +371,7 @@ export const RealtimeScoutPage: React.FC<{
         matchType={scoutData.matchType}
         extraTimeMinutes={scoutData.extraTimeMinutes}
         selectedPlayerIds={scoutData.selectedPlayerIds}
+        eventLogHydrationFailed={eventLogHydrationFailed}
       />
     </div>
   );

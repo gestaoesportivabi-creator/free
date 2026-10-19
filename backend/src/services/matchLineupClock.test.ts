@@ -82,16 +82,50 @@ describe('update de partida preserva clockSnapshot do próprio lineup', () => {
         players: ['p1'],
         possessionSecondsWith: 90,
         possessionSecondsWithout: 30,
+        kickoffTime: '20:00',
         clockSnapshot: clockDoClube,
       },
       { players: ['p1'], ballPossessionStart: 'us' }
-    ) as { possessionSecondsWith: number; possessionSecondsWithout: number };
+    ) as { possessionSecondsWith: number; possessionSecondsWithout: number; kickoffTime: string };
 
     assert.equal(merged.possessionSecondsWith, 90);
     assert.equal(merged.possessionSecondsWithout, 30);
+    assert.equal(merged.kickoffTime, '20:00');
   });
 
-  test('lineup nulo continua limpeza explícita e undefined não inventa lineup', () => {
+  test('lineup novo sem a lista de exclusões mantém os tombstones já gravados', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      { players: ['antigo'], deletedEventIds: ['evt-1'], clockSnapshot: clockDoClube },
+      { players: ['novo'], bench: [] }
+    ) as { players: string[]; deletedEventIds: string[]; clockSnapshot: typeof clockDoClube };
+
+    assert.deepEqual(merged.players, ['novo']);
+    assert.deepEqual(merged.deletedEventIds, ['evt-1']);
+    assert.deepEqual(merged.clockSnapshot, clockDoClube);
+  });
+
+  test('lineup sem a chave mescla ids novos com os tombstones já gravados', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      { players: ['antigo'], deletedEventIds: ['evt-1'] },
+      { players: ['novo'], deletedEventIds: ['evt-2', 'evt-1'] }
+    ) as { players: string[]; deletedEventIds: string[] };
+
+    assert.deepEqual(merged.players, ['novo']);
+    assert.deepEqual(merged.deletedEventIds, ['evt-1', 'evt-2']);
+  });
+
+  test('lineup null mantém os tombstones e limpa o restante do JSON', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      { players: ['gk'], bench: ['b'], deletedEventIds: ['evt-1'], clockSnapshot: clockDoClube },
+      null
+    ) as { deletedEventIds?: string[]; players?: string[]; clockSnapshot?: unknown };
+
+    assert.deepEqual(merged.deletedEventIds, ['evt-1']);
+    assert.equal(merged.players, undefined);
+    assert.equal(merged.clockSnapshot, undefined);
+  });
+
+  test('lineup nulo sem tombstone continua limpeza explícita e undefined não inventa lineup', () => {
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, null), null);
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, undefined), undefined);
   });

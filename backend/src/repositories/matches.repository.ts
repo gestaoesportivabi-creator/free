@@ -114,6 +114,20 @@ export const matchesRepository = {
     }) as Promise<JogoDB[]>;
   },
 
+  /**
+   * Trava a linha do jogo deste tenant antes do merge do log.
+   * Um PUT atrasado espera o tombstone do PUT que excluiu o lance.
+   */
+  async lockMatchForUpdate(id: string, tenantInfo: TenantInfo, tx: TransactionClient): Promise<void> {
+    const equipeIds = tenantInfo.equipe_ids || [];
+    if (equipeIds.length === 0) return;
+    await tx.$queryRawUnsafe(
+      `SELECT id FROM jogos WHERE id = $1 AND equipe_id = ANY($2::text[]) FOR UPDATE`,
+      id,
+      equipeIds
+    );
+  },
+
   async findById(id: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogoDB | null> {
     const equipeIds = tenantInfo.equipe_ids || [];
     if (equipeIds.length === 0) return null;

@@ -95,6 +95,9 @@ function transformStatsToMatchStats(stat: JogoEstatisticaJogadorDB | JogoEstatis
     redCards: stat.cartoesVermelhos,
   };
   if ('minutosJogados' in stat) base.minutesPlayed = stat.minutosJogados;
+  if (typeof stat.rpePartida === 'number' && Number.isFinite(stat.rpePartida)) {
+    base.rpeMatch = stat.rpePartida;
+  }
   if ('golsSofridos' in stat) base.goalsConceded = stat.golsSofridos;
   return base;
 }

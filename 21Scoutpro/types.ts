@@ -299,6 +299,8 @@ export interface MatchRecord {
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
     clockSnapshot?: MatchClockSnapshot;
+    /** Ids excluídos no modo union. O servidor também os guarda para um PUT atrasado. */
+    deletedEventIds?: string[];
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: TechnicalAnalysis;
   };

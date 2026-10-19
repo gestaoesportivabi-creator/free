@@ -9,7 +9,12 @@ import { runWithTenant } from '../utils/transactionWithTenant';
 
 function handleError(error: unknown, res: Response, fallback: string) {
   if (error instanceof AppError) {
-    return res.status(error.statusCode).json({ success: false, error: error.message });
+    return res.status(error.statusCode).json({
+      success: false,
+      error: error.message,
+      message: error.message,
+      ...(error.code ? { code: error.code } : {}),
+    });
   }
   return res.status(500).json({
     success: false,
@@ -43,7 +48,7 @@ export const matchesController = {
   create: async (req: Request, res: Response) => {
     if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const match = await runWithTenant(req, (tx) => matchesService.create(req.body, req.tenantInfo!, tx));
+      const match = await runWithTenant(req, (tx) => matchesService.create(req.body, req.tenantInfo!, tx), 'match-write');
       return res.status(201).json({ success: true, data: match });
     } catch (error) {
       console.error('[MATCHES_CONTROLLER] Erro ao criar jogo:', error);
@@ -54,7 +59,7 @@ export const matchesController = {
   update: async (req: Request, res: Response) => {
     if (!req.tenantInfo) return res.status(500).json({ success: false, error: 'Tenant info não disponível' });
     try {
-      const match = await runWithTenant(req, (tx) => matchesService.update(req.params.id, req.body, req.tenantInfo!, tx));
+      const match = await runWithTenant(req, (tx) => matchesService.update(req.params.id, req.body, req.tenantInfo!, tx), 'match-write');
       return res.json({ success: true, data: match });
     } catch (error) {
       return handleError(error, res, 'Erro ao atualizar jogo');

@@ -21,6 +21,13 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
 import { readKickoffTime } from '../utils/reopenRealtimeCollection';
+import { statusForScoutSave } from '../utils/matchStatus';
+import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
+import {
+  EMPTY_UNION_EVENT_LOG_MESSAGE,
+  isEmptyUnionEventLogError,
+  readLineupDeletedEventIds,
+} from '../utils/eventLogConflict';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -119,6 +126,8 @@ interface MatchScoutingWindowProps {
   sidebarRetracted?: boolean;
   /** Após finalizar coleta com sucesso — abre análise / Dados do Jogo no match salvo */
   onCollectionFinalized?: (matchId: string) => void;
+  /** getById da partida falhou (rede/servidor). 404 não entra aqui. */
+  eventLogHydrationFailed?: boolean;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -418,6 +427,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   takeFullWidth,
   sidebarRetracted = false,
   onCollectionFinalized,
+  eventLogHydrationFailed = false,
 }) => {
   const isPostmatch = mode === 'postmatch';
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
@@ -1520,6 +1530,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setMatchEvents([]);
       recalcGoalsAndFoulsFromEvents([]);
     }
+    if (lastSeenMatchIdForHydrationRef.current !== mid) {
+      for (const id of readLineupDeletedEventIds(match?.lineup)) {
+        deletedEventIdsRef.current.add(id);
+      }
+    }
     lastSeenMatchIdForHydrationRef.current = mid;
 
     if (hydrationAppliedForMatchIdRef.current === mid && mid !== '') {
@@ -2123,7 +2138,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const buildMatchSnapshot = (status: 'em_andamento' | 'encerrado'): MatchRecord => {
     const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-    savedMatch.status = status;
+    savedMatch.status = statusForScoutSave(match.status, status);
     savedMatch.collectionPhase = clockSnapshot.state === 'PRE_JOGO' ? 0 : currentPeriod === '1T' ? 1 : 2;
     const persistedClockSnapshot = !isPostmatch ? buildPersistedClockSnapshot(clockSnapshot) : undefined;
 
@@ -2419,6 +2434,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         return;
       }
 
+      const emptyLogBlock = emptyEventLogFinalizeBlock({
+        id: persistedMatchIdRef.current || match.id,
+        postMatchEventLog: match.postMatchEventLog,
+        postMatchEventCount: match.postMatchEventCount,
+        localEventCount: matchEvents.length,
+        deletedCount: deletedEventIdsRef.current.size,
+        hydrationFailed: eventLogHydrationFailed,
+      });
+      if (emptyLogBlock) {
+        setFinalizeError(emptyLogBlock);
+        setIsFinalizing(false);
+        autosaveSkipRef.current = false;
+        return;
+      }
+
       if (substitutionHistory.length > 0) {
         updateSubstitutionFrequency(substitutionHistory);
       }
@@ -2459,7 +2489,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     } catch (err) {
       console.error('Erro ao finalizar coleta:', err);
-      if (isTrialExpiredSaveError(err)) {
+      if (isEmptyUnionEventLogError(err)) {
+        setFinalizeTrialExpired(false);
+        setFinalizeError(EMPTY_UNION_EVENT_LOG_MESSAGE);
+      } else if (isTrialExpiredSaveError(err)) {
         setFinalizeTrialExpired(true);
         setFinalizeError(trialExpiredMatchSaveMessage(true));
       } else {
@@ -2507,6 +2540,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } catch (err) {
         if (isTrialExpiredSaveError(err)) {
           notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        if (isEmptyUnionEventLogError(err)) {
+          alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
           autosaveSkipRef.current = false;
           return;
         }
