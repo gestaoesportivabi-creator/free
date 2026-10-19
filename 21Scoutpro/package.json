@@ -11,6 +11,7 @@
     "push:blog-only": "node scripts/push-blog-only.mjs",
     "type-check": "tsc --noEmit",
     "type-check:unit": "tsc -p tsconfig.unit.json --noEmit",
+    "test": "vitest run",
     "test:unit": "node ../backend/node_modules/tsx/dist/cli.mjs --test unit/*.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -32,6 +33,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "dotenv": "^17.4.2",
     "typescript": "^5.4.2",
-    "vite": "^5.1.5"
+    "vite": "^5.1.5",
+    "vitest": "2.1.9"
   }
 }
