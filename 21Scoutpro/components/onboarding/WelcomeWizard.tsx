@@ -1,8 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Check, ClipboardList, Loader2, PlayCircle, Sparkles, Table2, Users } from 'lucide-react';
 import { Player, Position, User } from '../../types';
 import { accountApi, playersApi } from '../../services/api';
-import { ParsedPlayer, RosterPaste } from './RosterPaste';
+import { RosterPaste } from './RosterPaste';
+import {
+  planRosterSave,
+  rosterSaveFailureMessage,
+  toRosterPlayer,
+  type RosterLine,
+  type RosterPlayerDraft,
+} from '../../utils/rosterParser';
 
 /**
  * Wizard de primeiro acesso.
@@ -22,6 +29,8 @@ interface WelcomeWizardProps {
   /** Destino escolhido no passo 3. */
   onFinish: (destination: 'live' | 'postmatch' | 'dashboard') => void;
   onSkip: () => void;
+  /** Camisas do elenco já carregado na tela, para avisar número repetido. */
+  existingJerseyNumbers?: readonly number[];
 }
 
 const POSITIONS: Position[] = ['Goleiro', 'Fixo', 'Ala', 'Pivô'];
@@ -38,69 +47,69 @@ const EMPTY_ROWS: QuickRow[] = Array.from({ length: 5 }, () => ({
   position: 'Ala',
 }));
 
-/** Converte o que o wizard coletou no shape que a API de jogadores espera. */
-function toPlayer(entry: { name: string; jersey: number | null; position: Position }): Player {
-  return {
-    id: '',
-    name: entry.name,
-    nickname: entry.name.split(' ')[0] ?? entry.name,
-    position: entry.position,
-    jerseyNumber: entry.jersey ?? 0,
-    dominantFoot: 'Destro',
-    age: 0,
-    height: 0,
-  };
-}
-
-function normalizePosition(raw: string | null): Position {
-  if (raw === 'Goleiro' || raw === 'Fixo' || raw === 'Ala' || raw === 'Pivô') return raw;
-  return 'Ala';
-}
-
 const cardClass =
   'w-full text-left rounded-2xl border p-5 transition-all cursor-pointer ' +
   'hover:border-[#00f0ff]/60 hover:bg-[#00f0ff]/[0.04]';
 
-export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, onSkip }) => {
+export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({
+  user,
+  onFinish,
+  onSkip,
+  existingJerseyNumbers,
+}) => {
   const [step, setStep] = useState<StepId>(1);
   const [teamName, setTeamName] = useState(user.teamDisplayName ?? '');
   const [rosterMode, setRosterMode] = useState<RosterMode | null>(null);
   const [quickRows, setQuickRows] = useState<QuickRow[]>(EMPTY_ROWS);
   const [isSaving, setIsSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+  const [saveTotal, setSaveTotal] = useState(0);
   const [error, setError] = useState('');
+  /** Chaves nome+número (e ocorrência) já criadas neste wizard. O retry não duplica. */
+  const savedKeysRef = useRef<Set<string>>(new Set());
 
   const goToStep = (next: StepId) => {
     setError('');
     setStep(next);
   };
 
-  const savePlayers = async (players: Player[]) => {
+  const savePlayers = async (players: RosterPlayerDraft[]) => {
     if (players.length === 0) {
+      goToStep(3);
+      return;
+    }
+
+    const plan = planRosterSave(
+      players.map((player) => ({ name: player.name, number: player.jerseyNumber ?? null })),
+      savedKeysRef.current,
+    );
+    if (plan.pending.length === 0) {
       goToStep(3);
       return;
     }
 
     setIsSaving(true);
     setError('');
+    setSaveTotal(players.length);
+    let saved = plan.alreadySaved;
+    setSavedCount(saved);
 
     try {
       // Sequencial de propósito: a API de jogadores não tem endpoint em lote,
       // e disparar 30 requisições em paralelo no primeiro acesso é bom jeito
       // de tomar rate-limit e assustar o usuário com metade salva.
-      let saved = 0;
-      for (const player of players) {
-        await playersApi.create(player);
+      for (let index = 0; index < players.length; index += 1) {
+        const key = plan.keys[index];
+        if (savedKeysRef.current.has(key)) continue;
+        await playersApi.create(players[index] as Player);
+        savedKeysRef.current.add(key);
         saved += 1;
         setSavedCount(saved);
       }
       goToStep(3);
     } catch {
-      setError(
-        savedCount > 0
-          ? `Salvámos ${savedCount} atleta(s), mas houve falha no resto. Você pode completar o elenco depois.`
-          : 'Não foi possível salvar o elenco. Você pode adicionar os atletas depois, pelo menu Elenco.'
-      );
+      // `saved` é local. O estado `savedCount` ainda pode estar no valor do render anterior.
+      setError(rosterSaveFailureMessage(saved, players.length));
     } finally {
       setIsSaving(false);
     }
@@ -110,23 +119,17 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
     const players = quickRows
       .filter((row) => row.name.trim().length > 1)
       .map((row) =>
-        toPlayer({
+        toRosterPlayer({
           name: row.name.trim(),
-          jersey: row.jersey ? parseInt(row.jersey, 10) : null,
+          number: row.jersey ? parseInt(row.jersey, 10) : null,
           position: row.position,
         })
       );
     void savePlayers(players);
   };
 
-  const handlePasteSave = (parsed: ParsedPlayer[]) => {
-    const players = parsed.map((entry) =>
-      toPlayer({
-        name: entry.nome,
-        jersey: entry.numero,
-        position: normalizePosition(entry.funcao),
-      })
-    );
+  const handlePasteSave = (parsed: RosterLine[]) => {
+    const players = parsed.map((entry) => toRosterPlayer(entry));
     void savePlayers(players);
   };
 
@@ -276,7 +279,11 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
 
               {rosterMode === 'paste' && (
                 <div className="space-y-4">
-                  <RosterPaste onParsed={handlePasteSave} disabled={isSaving} />
+                  <RosterPaste
+                    onParsed={handlePasteSave}
+                    disabled={isSaving}
+                    existingNumbers={existingJerseyNumbers}
+                  />
                   <button type="button" onClick={() => setRosterMode(null)} className="text-xs text-zinc-500 hover:text-zinc-300">
                     ← Escolher outro caminho
                   </button>
@@ -347,7 +354,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
                                disabled:bg-zinc-800 disabled:text-zinc-500 text-black font-bold text-sm
                                uppercase tracking-wide rounded-xl py-3 transition-colors"
                   >
-                    {isSaving ? <><Loader2 size={16} className="animate-spin" /> Salvando {savedCount}...</> : 'Salvar elenco'}
+                    {isSaving ? <><Loader2 size={16} className="animate-spin" /> Salvando {savedCount} de {saveTotal}...</> : 'Salvar elenco'}
                   </button>
 
                   <button type="button" onClick={() => setRosterMode(null)} className="text-xs text-zinc-500 hover:text-zinc-300">
@@ -385,6 +392,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({ user, onFinish, on
                     ← Escolher outro caminho
                   </button>
                 </div>
+              )}
+
+              {isSaving && saveTotal > 0 && (
+                <p className="text-xs text-zinc-400">Salvando {savedCount} de {saveTotal} atletas…</p>
               )}
 
               {error && (

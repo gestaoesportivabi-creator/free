@@ -1889,6 +1889,9 @@ export default function App() {
     return (
       <WelcomeWizard
         user={currentUser}
+        existingJerseyNumbers={players
+          .map((player) => player.jerseyNumber)
+          .filter((jersey): jersey is number => typeof jersey === 'number' && Number.isFinite(jersey))}
         onSkip={() => {
           setActiveTab('dashboard');
           setCurrentRoute('app');
