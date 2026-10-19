@@ -72,5 +72,12 @@ export function preservePossessionSeconds<T extends object>(
     const kept = finiteSeconds(prev?.[key]);
     if (kept !== undefined) out[key] = kept;
   }
-  return out as T & { possessionSecondsWith?: number; possessionSecondsWithout?: number };
+  const nextKickoff = typeof out.kickoffTime === 'string' ? out.kickoffTime.trim() : '';
+  const prevKickoff = typeof prev?.kickoffTime === 'string' ? prev.kickoffTime.trim() : '';
+  if (!nextKickoff && prevKickoff) out.kickoffTime = prevKickoff;
+  return out as T & {
+    possessionSecondsWith?: number;
+    possessionSecondsWithout?: number;
+    kickoffTime?: string;
+  };
 }

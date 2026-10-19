@@ -12,7 +12,7 @@ import {
 import { performFinalizeNavigation } from '../utils/sessionRestore';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
 import { stashFinalizedMatch } from '../utils/finalizedMatchHandoff';
-import { resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
+import { readKickoffTime, resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
@@ -22,6 +22,10 @@ interface RealtimeScoutData {
   matchId?: string;
   /** Id em campeonatos_jogos. Não é id de jogo. */
   agendaMatchId?: string;
+  /** Horário do card. Separa dois jogos no mesmo dia contra o mesmo adversário. */
+  time?: string;
+  /** Cards da agenda com a mesma data, adversário e competição. 1 libera fallback sem hora. */
+  scheduledBaseCount?: number;
   date: string;
   opponent: string;
   competition?: string;
@@ -67,6 +71,7 @@ export const RealtimeScoutPage: React.FC<{
           competition: data.competition,
           location: locationFromPrep,
           status: 'disponivel',
+          kickoffTime: data.time,
           result: 'E',
           goalsFor: 0,
           goalsAgainst: 0,
@@ -112,7 +117,9 @@ export const RealtimeScoutPage: React.FC<{
             date: data.date,
             opponent: data.opponent,
             competition: data.competition,
+            time: data.time,
           },
+          scheduledBaseCount: data.scheduledBaseCount,
         });
 
         if (resolved.match) {
@@ -125,9 +132,18 @@ export const RealtimeScoutPage: React.FC<{
               console.warn('Falha ao carregar a fita da coleta existente.', detailErr);
             }
           }
+          const kickoff = readKickoffTime(chosen) || data.time || '';
           matchRecord = {
             ...chosen,
             location: chosen.location?.trim() || locationFromPrep,
+            ...(kickoff
+              ? {
+                  kickoffTime: kickoff,
+                  lineup: chosen.lineup
+                    ? { ...chosen.lineup, kickoffTime: chosen.lineup.kickoffTime || kickoff }
+                    : chosen.lineup,
+                }
+              : {}),
           };
         } else if (resolved.ignoredForeignId) {
           matchRecord = { ...matchRecord, id: `temp-${Date.now()}` };

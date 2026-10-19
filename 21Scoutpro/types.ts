@@ -294,6 +294,8 @@ export interface MatchRecord {
     possessionSecondsWith?: number;
     /** Segundos sem posse (adversário). */
     possessionSecondsWithout?: number;
+    /** Horário de início do card da agenda (HH:MM), para não misturar dois jogos no mesmo dia. */
+    kickoffTime?: string;
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
     clockSnapshot?: MatchClockSnapshot;
@@ -328,6 +330,8 @@ export interface MatchRecord {
   possessionSecondsWith?: number;
   /** Segundos sem posse de bola – evolução campeonato */
   possessionSecondsWithout?: number;
+  /** Horário de início (HH:MM) vindo do card da agenda. */
+  kickoffTime?: string;
   /** Link do vídeo (ex.: YouTube) para análise na cabine de vídeo */
   videoUrl?: string;
   /** Status da partida para exibição e filtros */

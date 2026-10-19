@@ -20,6 +20,7 @@ import {
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
+import { readKickoffTime } from '../utils/reopenRealtimeCollection';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -2125,6 +2126,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       benchPlayers.length > 0 ? benchPlayers : Array.isArray(prevLineup?.bench) ? prevLineup.bench : [];
     const mergedPossession =
       ballPossessionStart ?? prevLineup?.ballPossessionStart ?? ('us' as const);
+    const kickoffTime = readKickoffTime(match) || undefined;
 
     if (!isPostmatch) {
       // Always persist clock into lineup JSON on autosave/finalize whenever we have any collection progress.
@@ -2144,6 +2146,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             ballPossessionStart: mergedPossession,
             possessionSecondsWith,
             possessionSecondsWithout,
+            ...(kickoffTime ? { kickoffTime } : {}),
             ...(squadIds.length > 0
               ? { selectedPlayerIds: squadIds }
               : prevLineup?.selectedPlayerIds?.length
@@ -2169,6 +2172,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           players: lineupPlayers,
           bench: benchPlayers,
           ballPossessionStart: ballPossessionStart ?? 'us',
+          ...(kickoffTime ? { kickoffTime } : {}),
           selectedPlayerIds: squadIds,
           ...(prevLineup?.technicalAnalysis
             ? { technicalAnalysis: prevLineup.technicalAnalysis }

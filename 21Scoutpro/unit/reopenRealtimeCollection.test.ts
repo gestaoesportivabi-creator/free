@@ -5,6 +5,7 @@ import {
   resolveRealtimeOpenTarget,
   shouldResumeRealtimeCollection,
 } from '../utils/reopenRealtimeCollection';
+import { findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { splitChampionshipFixtures } from '../utils/championshipMatchBuckets';
 import { replaceMatchInList } from '../utils/matchListState';
 import type { MatchRecord } from '../types';
@@ -100,6 +101,98 @@ describe('reabrir scout em tempo real na coleta existente', () => {
       findCollectedMatchForFixture([other], { date: '2026-10-25', opponent: 'Rival QA' }),
       null
     );
+  });
+});
+
+describe('dois jogos no mesmo dia contra o mesmo adversário', () => {
+  const agendas = [
+    { id: 'agenda-20', date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '20:00' },
+    { id: 'agenda-22', date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '22:00' },
+  ];
+  const at20 = saved({
+    id: 'jogo-20',
+    competition: 'Amistoso',
+    status: 'encerrado',
+    postMatchEventCount: 21,
+    kickoffTime: '20:00',
+    lineup: { players: ['a'], bench: [], ballPossessionStart: 'us', clockSnapshot: clock, kickoffTime: '20:00' },
+  });
+  const at22 = saved({
+    id: 'jogo-22',
+    competition: 'Amistoso',
+    status: 'em_andamento',
+    postMatchEventCount: 4,
+    kickoffTime: '22:00',
+    lineup: { players: ['b'], bench: [], ballPossessionStart: 'opponent', kickoffTime: '22:00' },
+  });
+
+  test('os dois cards seguem visíveis e cada um abre a própria coleta', () => {
+    assert.equal(findSavedMatchForAgenda(agendas[0], [at20, at22], agendas)?.id, 'jogo-20');
+    assert.equal(findSavedMatchForAgenda(agendas[1], [at20, at22], agendas)?.id, 'jogo-22');
+
+    const open20 = resolveRealtimeOpenTarget({
+      requestedId: 'agenda-20',
+      fetched: null,
+      catalog: [at20, at22],
+      fixture: { date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '20:00' },
+      scheduledBaseCount: 2,
+    });
+    const open22 = resolveRealtimeOpenTarget({
+      requestedId: 'agenda-22',
+      fetched: null,
+      catalog: [at20, at22],
+      fixture: { date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '22:00' },
+      scheduledBaseCount: 2,
+    });
+    assert.equal(open20.match?.id, 'jogo-20');
+    assert.equal(open22.match?.id, 'jogo-22');
+  });
+
+  test('finalizar o das 20h não esconde nem reabre o das 22h', () => {
+    const finalized = { ...at20, status: 'encerrado' as const };
+    const split = splitChampionshipFixtures(
+      [
+        { ...agendas[0], jogoId: 'jogo-20' },
+        agendas[1],
+      ],
+      [finalized],
+      new Date(2026, 9, 19)
+    );
+    assert.deepEqual(split.past.map((item) => item.id), ['agenda-20']);
+    assert.deepEqual(split.future.map((item) => item.id), ['agenda-22']);
+
+    const open22 = resolveRealtimeOpenTarget({
+      requestedId: 'agenda-22',
+      fetched: null,
+      catalog: [finalized],
+      fixture: { date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '22:00' },
+      scheduledBaseCount: 2,
+    });
+    assert.equal(open22.match, null);
+    assert.equal(findSavedMatchForAgenda(agendas[1], [finalized], agendas), null);
+    assert.equal(findSavedMatchForAgenda({ ...agendas[0], jogoId: 'jogo-20' }, [finalized], agendas)?.id, 'jogo-20');
+  });
+
+  test('sem horário gravado e dois cards, não vincula a coleta do outro', () => {
+    const timeless = saved({
+      id: 'jogo-x',
+      status: 'encerrado',
+      postMatchEventCount: 8,
+    });
+    assert.equal(findSavedMatchForAgenda(agendas[0], [timeless], agendas), null);
+    assert.equal(findSavedMatchForAgenda(agendas[1], [timeless], agendas), null);
+  });
+
+  test('partida finalizada aberta pelo id do jogo não usa o outro horário', () => {
+    const resolution = resolveRealtimeOpenTarget({
+      requestedId: 'jogo-20',
+      fetched: at20,
+      catalog: [at22],
+      fixture: { date: '2026-10-25', opponent: 'Rival QA', competition: 'Amistoso', time: '20:00' },
+      scheduledBaseCount: 2,
+    });
+    assert.equal(resolution.match?.id, 'jogo-20');
+    assert.equal(resolution.ignoredForeignId, false);
   });
 });
 

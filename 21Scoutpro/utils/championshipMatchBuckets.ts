@@ -1,5 +1,5 @@
 import { parseLocalDateOnly } from './dateUtils';
-import { fixtureKey } from './reopenRealtimeCollection';
+import { selectSavedForFixture, type CollectedMatchRef } from './reopenRealtimeCollection';
 
 export interface ScheduledFixture {
   id: string;
@@ -13,13 +13,19 @@ export interface SavedFixtureRef {
   id?: string;
   date?: string;
   opponent?: string;
+  competition?: string;
+  time?: string;
+  kickoffTime?: string;
+  status?: string;
+  postMatchEventCount?: number;
+  postMatchEventLog?: unknown[] | null;
+  lineup?: { kickoffTime?: string; clockSnapshot?: unknown } | null;
 }
 
 /**
- * Partida da tabela sai de "futuras" quando a data já passou ou quando já
- * existe jogo salvo da mesma data e adversário (ou o jogoId vinculado).
- * A coleta finalizada precisa estar na lista de jogos; a tela que consome
- * isto tem de atualizar essa lista depois de Finalizar.
+ * Partida da tabela sai de "futuras" quando a data já passou ou quando o
+ * card tem jogoId / o mesmo horário de uma coleta salva.
+ * Dois horários no mesmo dia não se arrastam. Sem hora para decidir, o card fica.
  */
 export function splitChampionshipFixtures<T extends ScheduledFixture>(
   scheduled: T[],
@@ -29,22 +35,22 @@ export function splitChampionshipFixtures<T extends ScheduledFixture>(
   const start = new Date(today);
   start.setHours(0, 0, 0, 0);
 
-  const savedKeys = new Set<string>();
-  const savedIds = new Set<string>();
-  for (const match of saved) {
-    const key = fixtureKey(match.date, match.opponent);
-    if (key) savedKeys.add(key);
-    if (match.id) savedIds.add(String(match.id));
-  }
-
   const past: T[] = [];
   const future: T[] = [];
   for (const match of scheduled) {
     const matchDate = parseLocalDateOnly(match.date);
     if (Number.isNaN(matchDate.getTime())) continue;
-    const linkedById = Boolean(match.jogoId && savedIds.has(String(match.jogoId)));
-    const linkedByKey = savedKeys.has(fixtureKey(match.date, match.opponent));
-    if (matchDate < start || linkedById || linkedByKey) past.push(match);
+    const linked = selectSavedForFixture(
+      {
+        date: match.date,
+        opponent: match.opponent,
+        time: match.time,
+        jogoId: match.jogoId,
+      },
+      saved as CollectedMatchRef[],
+      { scheduled }
+    );
+    if (matchDate < start || linked) past.push(match);
     else future.push(match);
   }
 

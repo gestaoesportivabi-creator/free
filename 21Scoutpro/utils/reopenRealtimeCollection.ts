@@ -5,6 +5,10 @@ export interface FixtureIdentity {
   date: string;
   opponent: string;
   competition?: string;
+  /** Horário de início (HH:MM). Entra na chave; sem ele, só vincula se não houver outro jogo. */
+  time?: string;
+  /** Vínculo já gravado na agenda. Tem prioridade sobre data, adversário e hora. */
+  jogoId?: string | null;
 }
 
 export interface CollectedMatchRef {
@@ -12,10 +16,13 @@ export interface CollectedMatchRef {
   date?: string;
   opponent?: string;
   competition?: string;
+  /** Horário de início, quando a coleta foi aberta a partir de um card com hora. */
+  time?: string;
+  kickoffTime?: string;
   status?: MatchRecord['status'];
   postMatchEventLog?: unknown[] | null;
   postMatchEventCount?: number;
-  lineup?: { clockSnapshot?: unknown; selectedPlayerIds?: string[] } | null;
+  lineup?: { clockSnapshot?: unknown; selectedPlayerIds?: string[]; kickoffTime?: string } | null;
 }
 
 /** Data + adversário, sem somar hora e sem diferenciar maiúsculas. */
@@ -24,6 +31,63 @@ export function fixtureKey(date: string | undefined, opponent: string | undefine
   const name = String(opponent || '').trim().toLowerCase().replace(/\s+/g, ' ');
   if (!day || !name) return '';
   return `${day}_${name}`;
+}
+
+/** HH:MM. Vazio quando o card ou a coleta não tem horário. */
+export function normalizeKickoffTime(value: string | undefined): string {
+  if (!value) return '';
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return '';
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return '';
+  }
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+export function readKickoffTime(match: {
+  time?: string;
+  kickoffTime?: string;
+  lineup?: { kickoffTime?: string } | null;
+}): string {
+  return normalizeKickoffTime(match.kickoffTime || match.lineup?.kickoffTime || match.time);
+}
+
+function competitionBlocks(a?: string, b?: string): boolean {
+  const left = String(a || '').trim().toLowerCase();
+  const right = String(b || '').trim().toLowerCase();
+  return Boolean(left && right && left !== right);
+}
+
+/** Mesma data, adversário e, se os dois tiverem, a mesma competição. A hora fica de fora. */
+export function sameFixtureBase(
+  a: { date?: string; opponent?: string; competition?: string },
+  b: { date?: string; opponent?: string; competition?: string }
+): boolean {
+  const key = fixtureKey(a.date, a.opponent);
+  if (!key || key !== fixtureKey(b.date, b.opponent)) return false;
+  return !competitionBlocks(a.competition, b.competition);
+}
+
+/** Chave com horário, depois do filtro de data e adversário. Sem hora, `sem_hora`. */
+export function fixtureDetailKey(match: {
+  date?: string;
+  opponent?: string;
+  time?: string;
+  kickoffTime?: string;
+  lineup?: { kickoffTime?: string } | null;
+}): string {
+  const base = fixtureKey(match.date, match.opponent);
+  if (!base) return '';
+  return `${base}_${readKickoffTime(match) || 'sem_hora'}`;
 }
 
 export function collectedMatchScore(match: CollectedMatchRef | null | undefined): number {
@@ -45,32 +109,89 @@ export function shouldResumeRealtimeCollection(match: CollectedMatchRef | null |
   return collectedMatchScore(match) > 0;
 }
 
+export interface FixtureLinkOptions {
+  /**
+   * Cards da agenda usados para contar ambiguidade (mesma data, adversário
+   * e competição). Sem esta lista, hora diferente não cai no fallback.
+   */
+  scheduled?: Array<{ date?: string; opponent?: string; competition?: string; time?: string }>;
+  /** Quantidade já contada de cards com a mesma base. 1 libera o fallback sem hora. */
+  scheduledBaseCount?: number;
+}
+
+function scheduledPeerCount(fixture: FixtureIdentity, options?: FixtureLinkOptions): number | undefined {
+  if (options?.scheduled) {
+    return options.scheduled.filter((item) => sameFixtureBase(item, fixture)).length;
+  }
+  if (typeof options?.scheduledBaseCount === 'number') return options.scheduledBaseCount;
+  return undefined;
+}
+
 /**
- * Acha a coleta já gravada da mesma data e adversário.
- * O id da partida programada (tabela) não é id de jogo e não entra aqui.
+ * Partida salva que corresponde ao card.
+ * 1. jogoId, quando existir.
+ * 2. Data + adversário + competição + horário.
+ * 3. Sem horário, só se houver um único card nessa base (proteção da main).
+ * Dois resultados possíveis: não vincula.
+ */
+export function selectSavedForFixture<T extends CollectedMatchRef>(
+  fixture: FixtureIdentity,
+  matches: T[],
+  options?: FixtureLinkOptions
+): T | null {
+  if (fixture.jogoId) {
+    const byId = matches.find((match) => String(match.id || '') === String(fixture.jogoId));
+    if (byId) return byId;
+  }
+
+  const pool = matches.filter((match) => sameFixtureBase(match, fixture));
+  if (pool.length === 0) return null;
+
+  const wanted = fixtureDetailKey(fixture);
+  const exact = pool.filter((match) => fixtureDetailKey(match) === wanted);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) {
+    const collected = exact.filter((match) => collectedMatchScore(match) > 0);
+    if (collected.length === 1) return collected[0];
+    return null;
+  }
+
+  const peers = scheduledPeerCount(fixture, options);
+  const fixtureHasTime = Boolean(readKickoffTime(fixture));
+  const uniqueSchedule = peers === 1 || (peers === undefined && !fixtureHasTime && pool.length === 1);
+  if (!uniqueSchedule) return null;
+  if (pool.length === 1) return pool[0];
+  const collected = pool.filter((match) => collectedMatchScore(match) > 0);
+  const details = new Set(pool.map((match) => fixtureDetailKey(match)));
+  if (collected.length === 1 && details.size === 1) return collected[0];
+  return null;
+}
+
+/**
+ * Acha a coleta já gravada. Card de agenda não entra como id de jogo.
+ * Sem hora bastante para decidir, devolve null em vez da coleta do outro horário.
  */
 export function findCollectedMatchForFixture<T extends CollectedMatchRef>(
   matches: T[],
-  fixture: FixtureIdentity
+  fixture: FixtureIdentity,
+  options?: FixtureLinkOptions
 ): T | null {
-  const key = fixtureKey(fixture.date, fixture.opponent);
-  if (!key) return null;
-  const competition = String(fixture.competition || '').trim().toLowerCase();
-  let best: T | null = null;
-  let bestScore = 0;
-  for (const match of matches) {
-    if (fixtureKey(match.date, match.opponent) !== key) continue;
-    if (competition && match.competition) {
-      const matchCompetition = String(match.competition).trim().toLowerCase();
-      if (matchCompetition && matchCompetition !== competition) continue;
-    }
-    const score = collectedMatchScore(match);
-    if (score > bestScore) {
-      best = match;
-      bestScore = score;
-    }
-  }
-  return best;
+  const linked = selectSavedForFixture(fixture, matches, options);
+  if (!linked || collectedMatchScore(linked) <= 0) return null;
+  return linked;
+}
+
+/** Card da agenda deste jogo. Ambíguo: não devolve o outro horário. */
+export function findAgendaForFixture<T extends FixtureIdentity & { id?: string }>(
+  fixture: FixtureIdentity,
+  agendas: T[]
+): T | null {
+  const pool = agendas.filter((item) => sameFixtureBase(item, fixture));
+  if (pool.length === 1) return pool[0];
+  const wanted = fixtureDetailKey(fixture);
+  const exact = pool.filter((item) => readKickoffTime(item) && fixtureDetailKey(item) === wanted);
+  if (exact.length === 1) return exact[0];
+  return null;
 }
 
 export interface RealtimeOpenResolution<T extends CollectedMatchRef> {
@@ -84,20 +205,23 @@ export interface RealtimeOpenResolution<T extends CollectedMatchRef> {
  * Decide qual coleta o scout ao vivo abre.
  * Partida encerrada ou em andamento, com fita ou com clockSnapshot, reabre.
  * Id que não é um jogo (404 na agenda) não vira scout novo em 00:00 se já
- * existir coleta da mesma data e adversário.
+ * existir coleta da mesma data, adversário e horário.
  */
 export function resolveRealtimeOpenTarget<T extends CollectedMatchRef>(input: {
   requestedId?: string;
   fetched: T | null;
   catalog: T[];
   fixture: FixtureIdentity;
+  scheduledBaseCount?: number;
 }): RealtimeOpenResolution<T> {
   const requestedId = String(input.requestedId || '').trim();
   if (input.fetched && shouldResumeRealtimeCollection(input.fetched)) {
     return { match: input.fetched, ignoredForeignId: false };
   }
 
-  const fromCatalog = findCollectedMatchForFixture(input.catalog, input.fixture);
+  const fromCatalog = findCollectedMatchForFixture(input.catalog, input.fixture, {
+    scheduledBaseCount: input.scheduledBaseCount,
+  });
   if (fromCatalog && (!input.fetched || String(fromCatalog.id) !== String(input.fetched.id))) {
     return {
       match: fromCatalog,

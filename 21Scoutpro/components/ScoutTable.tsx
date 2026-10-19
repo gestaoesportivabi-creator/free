@@ -13,10 +13,9 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
-import { findCollectedMatchForFixture } from '../utils/reopenRealtimeCollection';
+import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { collectionCountsAsFinalized, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
-import { fixtureKey } from '../utils/reopenRealtimeCollection';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
 
@@ -1809,7 +1808,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         scheduledBaseCounts: Map<string, number>
     ): 'disponivel' | 'incompleto' | 'finalizado' => {
         if (item.type === 'scheduled') {
-            const linkedSaved = findSavedMatchForAgenda(item as ChampionshipMatch, matches || []);
+            const linkedSaved = findSavedMatchForAgenda(item as ChampionshipMatch, matches || [], championshipMatches);
             if (linkedSaved) return getSavedMatchStatus(linkedSaved as MatchRecord);
             return hasScheduledStarted(item.date, (item as ChampionshipMatch).time)
                 ? 'incompleto'
@@ -1845,7 +1844,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         const saved: CalendarMatchItem[] = dropUncollectedFixtureShells(matches).map((m) => ({ ...m, type: 'saved' as const }));
 
         const scheduled: CalendarMatchItem[] = championshipMatches
-            .filter((cm) => !findSavedMatchForAgenda(cm, matches || []))
+            .filter((cm) => !findSavedMatchForAgenda(cm, matches || [], championshipMatches))
             .map((m) => ({ ...m, type: 'scheduled' as const }));
 
         const all: CalendarMatchItem[] = [...saved, ...scheduled];
@@ -1877,11 +1876,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         setEndDate(toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     };
 
-    const agendaIdForFixture = (date?: string, opponent?: string) => {
-        const key = fixtureKey(date, opponent);
-        if (!key) return undefined;
-        return championshipMatches.find((cm) => fixtureKey(cm.date, cm.opponent) === key)?.id;
-    };
+    const agendaIdForFixture = (date?: string, opponent?: string, time?: string, competition?: string) =>
+        findAgendaForFixture(
+            { date: date || '', opponent: opponent || '', time, competition },
+            championshipMatches
+        )?.id;
+
+    const scheduledPeerCount = (date?: string, opponent?: string, competition?: string) =>
+        championshipMatches.filter((cm) =>
+            sameFixtureBase(cm, { date, opponent, competition })
+        ).length;
 
     const openRealtimeScout = (realtimeScoutData: {
         matchId?: string;
@@ -1889,6 +1893,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         date: string;
         opponent: string;
         competition?: string;
+        time?: string;
+        scheduledBaseCount?: number;
         location?: string;
         players: Player[];
         teams: Team[];
@@ -2466,7 +2472,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         )?.location;
                                         const realtimeScoutData = {
                                             matchId: selectedMatch.id,
-                                            agendaMatchId: agendaIdForFixture(selectedMatch.date, selectedMatch.opponent),
+                                            agendaMatchId: agendaIdForFixture(
+                                                selectedMatch.date,
+                                                selectedMatch.opponent,
+                                                readKickoffTime(selectedMatch),
+                                                selectedMatch.competition
+                                            ),
+                                            time: readKickoffTime(selectedMatch) || undefined,
+                                            scheduledBaseCount: scheduledPeerCount(
+                                                selectedMatch.date,
+                                                selectedMatch.opponent,
+                                                selectedMatch.competition
+                                            ),
                                             date: selectedMatch.date,
                                             opponent: selectedMatch.opponent || '',
                                             competition: selectedMatch.competition,
@@ -2931,7 +2948,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             if (m.status === 'em_andamento' && ids.length > 0) {
                                                 openRealtimeScout({
                                                     matchId: m.id,
-                                                    agendaMatchId: agendaIdForFixture(m.date, m.opponent),
+                                                    agendaMatchId: agendaIdForFixture(
+                                                        m.date,
+                                                        m.opponent,
+                                                        readKickoffTime(m),
+                                                        m.competition
+                                                    ),
+                                                    time: readKickoffTime(m) || undefined,
+                                                    scheduledBaseCount: scheduledPeerCount(m.date, m.opponent, m.competition),
                                                     date: m.date,
                                                     opponent: m.opponent || '',
                                                     competition: m.competition,
@@ -3281,11 +3305,16 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         <button
                                             onClick={() => {
                                                 if (selectedPlayersForMatch.size === 0) return;
-                                                const existing = findCollectedMatchForFixture(matches || [], {
-                                                    date: selectedScheduledMatch.date,
-                                                    opponent: selectedScheduledMatch.opponent || '',
-                                                    competition: selectedScheduledMatch.competition,
-                                                });
+                                                const existing = findCollectedMatchForFixture(
+                                                    matches || [],
+                                                    {
+                                                        date: selectedScheduledMatch.date,
+                                                        opponent: selectedScheduledMatch.opponent || '',
+                                                        competition: selectedScheduledMatch.competition,
+                                                        time: selectedScheduledMatch.time,
+                                                    },
+                                                    { scheduled: championshipMatches }
+                                                );
                                                 const savedSquad = existing?.lineup?.selectedPlayerIds
                                                     ?.map((id) => String(id).trim())
                                                     .filter(Boolean);
@@ -3293,6 +3322,12 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     matchId: existing?.id,
                                                     agendaMatchId: selectedScheduledMatch.id,
                                                     date: selectedScheduledMatch.date,
+                                                    time: selectedScheduledMatch.time,
+                                                    scheduledBaseCount: scheduledPeerCount(
+                                                        selectedScheduledMatch.date,
+                                                        selectedScheduledMatch.opponent,
+                                                        selectedScheduledMatch.competition
+                                                    ),
                                                     opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,
                                                     location:

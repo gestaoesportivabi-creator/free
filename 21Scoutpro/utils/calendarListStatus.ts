@@ -1,15 +1,25 @@
-import { fixtureKey, collectedMatchScore, findCollectedMatchForFixture, type CollectedMatchRef } from './reopenRealtimeCollection';
+import {
+  collectedMatchScore,
+  fixtureDetailKey,
+  sameFixtureBase,
+  selectSavedForFixture,
+  type CollectedMatchRef,
+  type FixtureIdentity,
+  type FixtureLinkOptions,
+} from './reopenRealtimeCollection';
 
 export interface CalendarSavedMatch {
   id?: string;
   date?: string;
   opponent?: string;
   competition?: string;
+  time?: string;
+  kickoffTime?: string;
   status?: string;
   goalsFor?: number;
   postMatchEventCount?: number;
   postMatchEventLog?: unknown[] | null;
-  lineup?: { clockSnapshot?: { state?: string } } | null;
+  lineup?: { clockSnapshot?: { state?: string }; kickoffTime?: string } | null;
 }
 
 export interface CalendarAgendaMatch {
@@ -17,6 +27,7 @@ export interface CalendarAgendaMatch {
   date?: string;
   opponent?: string;
   competition?: string;
+  time?: string;
   jogoId?: string | null;
 }
 
@@ -36,50 +47,36 @@ export function collectionCountsAsFinalized(match: CalendarSavedMatch): boolean 
 }
 
 /**
- * Esconde o jogo vazio (status disponível, sem fita) quando já existe a coleta
- * da mesma data e adversário. Dois jogos com eventos no mesmo confronto ficam.
+ * Esconde o jogo vazio quando a coleta do mesmo horário já existe.
+ * Outro horário no mesmo dia contra o mesmo adversário permanece.
  */
 export function dropUncollectedFixtureShells<T extends CalendarSavedMatch>(matches: T[]): T[] {
   return matches.filter((match) => {
     if (collectedMatchScore(match as CollectedMatchRef) > 0) return true;
-    const key = fixtureKey(match.date, match.opponent);
-    if (!key) return true;
-    const competition = String(match.competition || '').trim().toLowerCase();
+    const detail = fixtureDetailKey(match);
+    if (!detail) return true;
     const collectedSibling = matches.some((other) => {
       if (other === match) return false;
-      if (fixtureKey(other.date, other.opponent) !== key) return false;
       if (collectedMatchScore(other as CollectedMatchRef) <= 0) return false;
-      const otherCompetition = String(other.competition || '').trim().toLowerCase();
-      if (competition && otherCompetition && competition !== otherCompetition) return false;
-      return true;
+      return sameFixtureBase(other, match) && fixtureDetailKey(other) === detail;
     });
     return !collectedSibling;
   });
 }
 
-/** Partida salva que representa o card da agenda. Prefere a coleta de verdade. */
+/** Partida salva do card. jogoId primeiro; sem hora segura, não esconde o card. */
 export function findSavedMatchForAgenda<T extends CalendarSavedMatch>(
   scheduled: CalendarAgendaMatch,
-  matches: T[]
+  matches: T[],
+  agendas?: CalendarAgendaMatch[]
 ): T | null {
-  if (scheduled.jogoId) {
-    const byId = matches.find((match) => String(match.id || '') === String(scheduled.jogoId));
-    if (byId) return byId;
-  }
-  const collected = findCollectedMatchForFixture(matches as unknown as CollectedMatchRef[], {
+  const fixture: FixtureIdentity = {
     date: String(scheduled.date || ''),
     opponent: String(scheduled.opponent || ''),
     competition: scheduled.competition,
-  });
-  if (collected) return collected as T;
-  const key = fixtureKey(scheduled.date, scheduled.opponent);
-  if (!key) return null;
-  const competition = String(scheduled.competition || '').trim().toLowerCase();
-  return (
-    matches.find((match) => {
-      if (fixtureKey(match.date, match.opponent) !== key) return false;
-      if (!competition || !match.competition) return true;
-      return String(match.competition).trim().toLowerCase() === competition;
-    }) ?? null
-  );
+    time: scheduled.time,
+    jogoId: scheduled.jogoId,
+  };
+  const options: FixtureLinkOptions | undefined = agendas ? { scheduled: agendas } : undefined;
+  return selectSavedForFixture(fixture, matches as unknown as CollectedMatchRef[], options) as T | null;
 }

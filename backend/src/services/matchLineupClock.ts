@@ -90,4 +90,7 @@ function keepPossessionSeconds(incoming: Record<string, unknown>, existingLineup
     const kept = Number(prev[key]);
     if (Number.isFinite(kept) && kept >= 0) incoming[key] = Math.floor(kept);
   }
+  const nextKickoff = typeof incoming.kickoffTime === 'string' ? incoming.kickoffTime.trim() : '';
+  const prevKickoff = typeof prev.kickoffTime === 'string' ? prev.kickoffTime.trim() : '';
+  if (!nextKickoff && prevKickoff) incoming.kickoffTime = prevKickoff;
 }
