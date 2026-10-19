@@ -20,6 +20,28 @@ export function statusForScoutSave(
   return requested;
 }
 
+const SAVE_LATER_INCOMPLETE = {
+  label: 'Salvar como incompleta',
+  alert: 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.',
+} as const;
+
+const SAVE_LATER_FINISHED = {
+  label: 'Salvar alterações',
+  alert: 'Alterações salvas. A partida continua finalizada.',
+} as const;
+
+/**
+ * Partida já encerrada não oferece "salvar como incompleta": o status não regride,
+ * então o botão e o alerta descrevem só a gravação das alterações.
+ */
+export function saveLaterUi(current: MatchRecord['status'] | undefined): {
+  label: string;
+  alert: string;
+} {
+  if (statusForScoutSave(current, 'em_andamento') === 'encerrado') return SAVE_LATER_FINISHED;
+  return SAVE_LATER_INCOMPLETE;
+}
+
 /** O GET ou a listagem não substituem um encerrado já conhecido por em_andamento. */
 export function preserveEncerradoStatus<T extends { status?: MatchRecord['status'] }>(
   previous: { status?: MatchRecord['status'] } | null | undefined,

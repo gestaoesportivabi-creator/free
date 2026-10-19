@@ -25,22 +25,37 @@ function hasNonZeroCoreStats(match: MatchRecord): boolean {
   );
 }
 
+function hasEventTape(jogo?: {
+  postMatchEventLog?: unknown;
+  postMatchEventCount?: number;
+}): boolean {
+  return (
+    (typeof jogo?.postMatchEventCount === 'number' && jogo.postMatchEventCount > 0) ||
+    (Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0)
+  );
+}
+
+/**
+ * Relógio que já saiu do pré-jogo. Snapshot ausente ou PRE_JOGO não conta.
+ */
+function hasMatchClock(lineup: { clockSnapshot?: { state?: string } } | undefined): boolean {
+  const clockState = lineup?.clockSnapshot?.state;
+  return Boolean(clockState && clockState !== 'PRE_JOGO');
+}
+
 /**
  * Status lido do banco.
  * Relógio ENCERRADO com fita não vira "em andamento" só porque collectionPhase
- * ficou em 2 (segundo tempo). Status explícito continua valendo.
+ * ficou em 2 (segundo tempo). `encerrado` explícito nunca regride.
+ * `em_andamento` sem fita, sem relógio e sem estatística ainda é jogo agendado.
  */
 export function inferStatusFromData(
   rawStatus: unknown,
   match: MatchRecord,
   jogo?: { collectionPhase?: number; postMatchEventLog?: unknown; postMatchEventCount?: number; lineup?: unknown }
 ): NonNullable<MatchRecord['status']> {
-  if (rawStatus === 'encerrado' || rawStatus === 'em_andamento') return rawStatus;
-
   const phase = jogo?.collectionPhase;
-  const hasEventLog =
-    (typeof jogo?.postMatchEventCount === 'number' && jogo.postMatchEventCount > 0) ||
-    (Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0);
+  const hasEventLog = hasEventTape(jogo);
   const lineup = jogo?.lineup as
     | { players?: unknown[]; selectedPlayerIds?: unknown[]; clockSnapshot?: { state?: string } }
     | undefined;
@@ -48,12 +63,20 @@ export function inferStatusFromData(
     (Array.isArray(lineup?.players) && lineup.players.length > 0) ||
     (Array.isArray(lineup?.selectedPlayerIds) && lineup.selectedPlayerIds.length > 0);
   const clockState = lineup?.clockSnapshot?.state;
+  const hasClock = hasMatchClock(lineup);
+  const hasStats = hasNonZeroCoreStats(match);
+
+  if (rawStatus === 'encerrado') return 'encerrado';
+  if (rawStatus === 'em_andamento') {
+    if (!hasEventLog && !hasClock && !hasStats) return 'disponivel';
+    return 'em_andamento';
+  }
 
   if (clockState === 'ENCERRADO' && hasEventLog) return 'encerrado';
   if (isValidMatchStatus(rawStatus)) return rawStatus;
-  if (phase === 1 || phase === 2) return 'em_andamento';
+  if ((phase === 1 || phase === 2) && (hasEventLog || hasClock || hasStats)) return 'em_andamento';
   if (hasEventLog) return 'encerrado';
-  if (hasNonZeroCoreStats(match)) return 'encerrado';
+  if (hasStats) return 'encerrado';
   if (phase === 0 || hasLineupDraft) return 'disponivel';
   return 'disponivel';
 }

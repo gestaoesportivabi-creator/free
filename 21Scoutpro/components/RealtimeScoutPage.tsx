@@ -22,7 +22,7 @@ import { readKickoffTime, resolveRealtimeOpenTarget } from '../utils/reopenRealt
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { isPersistedServerMatchId } from '../utils/matchIds';
 import { adoptServerMatch } from '../utils/realtimeMatchHydration';
-import { preserveEncerradoStatus } from '../utils/matchStatus';
+import { preserveEncerradoStatus, saveLaterUi } from '../utils/matchStatus';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -289,7 +289,7 @@ export const RealtimeScoutPage: React.FC<{
         }
         alert(
           saveAsIncomplete
-            ? 'Dados guardados como incompleto. Pode continuar a coleta mais tarde.'
+            ? saveLaterUi(savedMatch.status).alert
             : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
         );
         exitRealtimeScout();

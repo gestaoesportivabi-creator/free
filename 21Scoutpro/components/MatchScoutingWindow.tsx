@@ -21,7 +21,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
 import { readKickoffTime } from '../utils/reopenRealtimeCollection';
-import { statusForScoutSave } from '../utils/matchStatus';
+import { saveLaterUi, statusForScoutSave } from '../utils/matchStatus';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   EMPTY_UNION_EVENT_LOG_MESSAGE,
@@ -2512,7 +2512,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setShowFinalizeConfirm(true);
   };
 
-  // Guardar como incompleto (status = em_andamento)
+  // Guardar como incompleto (status = em_andamento). Encerrado não regride: o rótulo vira "Salvar alterações".
   const handleSaveLater = async () => {
     const hasRealtimeLineupOnly =
       !isPostmatch &&
@@ -4051,7 +4051,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   data-tour-highlighted={isClockTourTargetHighlighted('save-match') ? 'true' : undefined}
                   className={`px-3 py-1.5 rounded-lg border border-zinc-600 bg-zinc-800/80 hover:bg-zinc-700 text-[10px] uppercase font-semibold tracking-wide text-zinc-300 transition-colors ${getClockTourTargetClass('save-match')}`}
                 >
-                  Salvar como incompleta
+                  {saveLaterUi(match.status).label}
                 </button>
               </div>
             </div>
