@@ -57,6 +57,17 @@ describe('matchListState', () => {
     expect(withServerId.id).toBe('server-id');
   });
 
+  it('detalhe em_andamento não rebaixa a partida encerrada da lista', () => {
+    const listItem = match({ id: 'abc', date: '2026-03-01', status: 'encerrado', postMatchEventCount: 2 });
+    const full = match({
+      id: 'abc',
+      date: '2026-03-01',
+      status: 'em_andamento',
+      postMatchEventLog: [{ id: 'e1', time: '01:00', period: '1T', playerId: 'p1', action: 'goal', tipo: 'gol', subtipo: '' }],
+    });
+    expect(mergeMatchWithEventLog(listItem, full).status).toBe('encerrado');
+  });
+
   it('id local undefined/null não é tratado como id do servidor', () => {
     expect(isPersistedServerMatchId('undefined')).toBe(false);
     expect(isPersistedServerMatchId('null')).toBe(false);

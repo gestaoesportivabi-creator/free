@@ -232,6 +232,11 @@ export interface PostMatchEvent {
   kickerId?: string;
   /** Nome do cobrador para tiro livre/pênalti */
   kickerName?: string;
+  /**
+   * Tiro livre direto com barreira (faltas 1–5 da equipe que defende)
+   * ou sem barreira (a partir da 6ª falta acumulada dessa equipe no período).
+   */
+  freeKickWall?: 'withWall' | 'noWall';
 }
 
 export interface TechnicalAnalysis {
@@ -285,6 +290,12 @@ export interface MatchRecord {
     players: string[]; // IDs dos 5 jogadores em quadra (primeiro é goleiro)
     bench: string[]; // IDs dos jogadores no banco
     ballPossessionStart: 'us' | 'opponent'; // Quem começou com a bola
+    /** Segundos com posse, gravados no JSON do lineup (a listagem não perde o campo). */
+    possessionSecondsWith?: number;
+    /** Segundos sem posse (adversário). */
+    possessionSecondsWithout?: number;
+    /** Horário de início do card da agenda (HH:MM), para não misturar dois jogos no mesmo dia. */
+    kickoffTime?: string;
     /** Todos os atletas convocados para a partida — persiste ao reabrir/editar (não só quem tem lance no log) */
     selectedPlayerIds?: string[];
     clockSnapshot?: MatchClockSnapshot;
@@ -321,6 +332,8 @@ export interface MatchRecord {
   possessionSecondsWith?: number;
   /** Segundos sem posse de bola – evolução campeonato */
   possessionSecondsWithout?: number;
+  /** Horário de início (HH:MM) vindo do card da agenda. */
+  kickoffTime?: string;
   /** Link do vídeo (ex.: YouTube) para análise na cabine de vídeo */
   videoUrl?: string;
   /** Status da partida para exibição e filtros */

@@ -19,6 +19,9 @@ import {
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
+import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
+import { readKickoffTime } from '../utils/reopenRealtimeCollection';
+import { statusForScoutSave } from '../utils/matchStatus';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   EMPTY_UNION_EVENT_LOG_MESSAGE,
@@ -39,6 +42,13 @@ import {
   resolveRealtimeReopenClock,
 } from '../utils/matchClockPersistence';
 import { FreeKickEventButton } from './FreeKickEventButton';
+import {
+  ACCUMULATED_FOULS_FOR_NO_WALL,
+  describeAccumulatedFouls,
+  directFreeKickWall,
+  freeKickWallLabel,
+  type FreeKickWall,
+} from '../utils/freeKickRule';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 import {
@@ -201,6 +211,8 @@ interface MatchEvent {
   kickerId?: string; // ID do cobrador (tiro livre/pênalti)
   kickerName?: string; // Nome do cobrador
   isForUs?: boolean; // true se tiro livre/pênalti a favor
+  /** Com barreira (faltas 1–5 de quem defende) ou sem barreira (6ª falta acumulada). */
+  freeKickWall?: FreeKickWall;
   /** Método do gol (ataque, contra-ataque, escanteio, etc.) */
   goalMethod?: string;
   /** ID do jogador que deu a assistência (só para gol nosso) */
@@ -228,7 +240,8 @@ function inferCardTypeFromSubtype(subtipo?: string): MatchEvent['cardType'] | un
 }
 
 function inferSetPieceResultFromSubtype(subtipo?: string): MatchEvent['result'] | undefined {
-  switch ((subtipo ?? '').trim()) {
+  const base = (subtipo ?? '').split('·')[0].trim();
+  switch (base) {
     case 'Gol':
       return 'goal';
     case 'Defendido':
@@ -389,6 +402,9 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       event.isForUs = pe.isForUs ?? playerId !== OPPONENT_FAKE_PLAYER_ID;
       if (pe.kickerId) event.kickerId = String(pe.kickerId).trim();
       if (pe.kickerName) event.kickerName = pe.kickerName;
+    }
+    if (pe.freeKickWall === 'withWall' || pe.freeKickWall === 'noWall') {
+      event.freeKickWall = pe.freeKickWall;
     }
     if (pe.wrongPassGeneratedTransition !== undefined) event.wrongPassGeneratedTransition = pe.wrongPassGeneratedTransition;
 
@@ -1575,8 +1591,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     const hasTape = hasLog || keptLocalTape;
     const has2TEvent = converted.some((e) => e.period === '2T');
+    const restoredPossession = readPossessionSeconds(match);
+    setPossessionSecondsWith(restoredPossession.withBall);
+    setPossessionSecondsWithout(restoredPossession.withoutBall);
     const hasPossessionProgress =
-      ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
+      restoredPossession.withBall + restoredPossession.withoutBall > 0;
     const phase = match.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
@@ -2085,6 +2104,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (e.kickerId) postEvent.kickerId = String(e.kickerId).trim();
         if (e.kickerName) postEvent.kickerName = e.kickerName;
       }
+      if (e.freeKickWall) postEvent.freeKickWall = e.freeKickWall;
       postMatchEventLog.push(postEvent);
     }
 
@@ -2118,7 +2138,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const buildMatchSnapshot = (status: 'em_andamento' | 'encerrado'): MatchRecord => {
     const savedMatch = convertMatchEventsToMatchRecord(matchEvents);
-    savedMatch.status = status;
+    savedMatch.status = statusForScoutSave(match.status, status);
     savedMatch.collectionPhase = clockSnapshot.state === 'PRE_JOGO' ? 0 : currentPeriod === '1T' ? 1 : 2;
     const persistedClockSnapshot = !isPostmatch ? buildPersistedClockSnapshot(clockSnapshot) : undefined;
 
@@ -2140,6 +2160,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       benchPlayers.length > 0 ? benchPlayers : Array.isArray(prevLineup?.bench) ? prevLineup.bench : [];
     const mergedPossession =
       ballPossessionStart ?? prevLineup?.ballPossessionStart ?? ('us' as const);
+    const kickoffTime = readKickoffTime(match) || undefined;
 
     if (!isPostmatch) {
       // Always persist clock into lineup JSON on autosave/finalize whenever we have any collection progress.
@@ -2151,11 +2172,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         savedMatch.collectionPhase !== 0;
 
       if (shouldWriteLineup) {
-        savedMatch.lineup = mergeLineupClockSnapshot(
+        savedMatch.lineup = preservePossessionSeconds(
+          mergeLineupClockSnapshot(
           {
             players: mergedPlayers,
             bench: mergedBench,
             ballPossessionStart: mergedPossession,
+            possessionSecondsWith,
+            possessionSecondsWithout,
+            ...(kickoffTime ? { kickoffTime } : {}),
             ...(squadIds.length > 0
               ? { selectedPlayerIds: squadIds }
               : prevLineup?.selectedPlayerIds?.length
@@ -2167,24 +2192,37 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
           },
           prevLineup
+        ),
+          prevLineup
         );
       }
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
       savedMatch.possessionSecondsWith = possessionSecondsWith;
       savedMatch.possessionSecondsWithout = possessionSecondsWithout;
     } else if (squadIds.length > 0) {
-      savedMatch.lineup = mergeLineupClockSnapshot(
+      savedMatch.lineup = preservePossessionSeconds(
+        mergeLineupClockSnapshot(
         {
           players: lineupPlayers,
           bench: benchPlayers,
           ballPossessionStart: ballPossessionStart ?? 'us',
+          ...(kickoffTime ? { kickoffTime } : {}),
           selectedPlayerIds: squadIds,
           ...(prevLineup?.technicalAnalysis
             ? { technicalAnalysis: prevLineup.technicalAnalysis }
             : {}),
         },
         prevLineup
+      ),
+        prevLineup
       );
+      const keptPossession = readPossessionSeconds({
+        possessionSecondsWith: match.possessionSecondsWith,
+        possessionSecondsWithout: match.possessionSecondsWithout,
+        lineup: savedMatch.lineup,
+      });
+      savedMatch.possessionSecondsWith = keptPossession.withBall;
+      savedMatch.possessionSecondsWithout = keptPossession.withoutBall;
     }
 
     savedMatch.eventLogWriteMode = 'union';
@@ -2871,7 +2909,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setSelectedAction(null);
   };
 
-  // Registrar falta: Nosso ou Adversário. Contagem continua após 5; a partir da 6ª o botão Tiro Livre fica disponível.
+  // Registrar falta: Nosso ou Adversário. A conta é por equipe e por período.
+  // Da 6ª falta acumulada de um lado, o outro cobra tiro livre direto sem barreira.
   const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
     const rawPlayerId =
       team === 'against'
@@ -3089,7 +3128,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar gol
-  const handleRegisterGoal = (goalType: 'normal' | 'contra', isOpponent: boolean = false, playerId: string | null = null, goalMethod?: string | null, goalTimeOverride?: number | null, goalPeriodOverride?: '1T' | '2T' | null, assistPlayerId?: string | null, assistPlayerName?: string | null) => {
+  const handleRegisterGoal = (goalType: 'normal' | 'contra', isOpponent: boolean = false, playerId: string | null = null, goalMethod?: string | null, goalTimeOverride?: number | null, goalPeriodOverride?: '1T' | '2T' | null, assistPlayerId?: string | null, assistPlayerName?: string | null, freeKickWall?: FreeKickWall) => {
     const player = playerId ? activePlayers.find(p => String(p.id).trim() === playerId) : null;
     const assistPlayer = assistPlayerId ? activePlayers.find(p => String(p.id).trim() === assistPlayerId) : null;
     const { tipo, subtipo } = getTipoSubtipo('goal', goalType);
@@ -3120,6 +3159,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       subtipo,
       ...(method && { goalMethod: method }),
       ...(assistPlayerId && { assistPlayerId, assistPlayerName: assistPlayerName ?? assistPlayer?.name }),
+      ...(freeKickWall ? { freeKickWall } : {}),
     };
     
     // Marcar passe como assistência apenas quando não há assistente explícito (fluxo antigo / inferência)
@@ -3229,7 +3269,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   // Registrar tiro livre
   const handleRegisterFreeKick = (team: 'for' | 'against', kickerId: string | null, result: 'goal' | 'saved' | 'outside' | 'post' | 'noGoal') => {
     const kicker = kickerId ? activePlayers.find(p => String(p.id).trim() === kickerId) : null;
-    const { tipo, subtipo } = getTipoSubtipo('freeKick', result);
+    const wall = directFreeKickWall(team, foulsForCurrentPeriod, foulsAgainstCurrentPeriod);
+    const { tipo, subtipo: resultLabel } = getTipoSubtipo('freeKick', result);
+    const subtipo = resultLabel
+      ? `${resultLabel} · ${freeKickWallLabel(wall)}`
+      : freeKickWallLabel(wall);
     const rawT = getTimeForEvent() ?? matchTime;
     const { time: evtTime, period: evtPeriod } = eventTimeAndPeriod(rawT);
     const effectivePlayerId = team === 'against' ? OPPONENT_FAKE_PLAYER_ID : (kickerId || undefined);
@@ -3247,6 +3291,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       isForUs: team === 'for',
       kickerId: kickerId || undefined,
       kickerName: kicker?.name || undefined,
+      freeKickWall: wall,
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3927,18 +3972,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full">
                   <div
                     className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
-                      foulsForCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
+                      foulsForCurrentPeriod >= ACCUMULATED_FOULS_FOR_NO_WALL ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
                     }`}
-                    title="Faltas do tempo (reinicia no intervalo)"
+                    title="Faltas nossas neste tempo. Da 6ª em diante o adversário cobra sem barreira."
                   >
                     {foulsForCurrentPeriod} F
                   </div>
                   <div />
                   <div
                     className={`rounded px-1.5 py-0.5 border text-xs font-bold flex justify-center ${
-                      foulsAgainstCurrentPeriod >= 5 ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
+                      foulsAgainstCurrentPeriod >= ACCUMULATED_FOULS_FOR_NO_WALL ? 'bg-red-500/20 border-red-500 text-red-400' : 'border-orange-500/50 text-orange-400'
                     }`}
-                    title="Faltas do tempo (reinicia no intervalo)"
+                    title="Faltas do adversário neste tempo. Da 6ª em diante nós cobramos sem barreira."
                   >
                     {foulsAgainstCurrentPeriod} F
                   </div>
@@ -5192,6 +5237,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <div className="relative w-full max-w-md bg-zinc-950 border-2 border-violet-500/40 rounded-2xl shadow-2xl shadow-violet-500/10 overflow-hidden">
                     <div className="p-4 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 to-zinc-950">
                       <h3 className="text-violet-400 font-black uppercase text-sm tracking-wider">Tiro Livre - Contra ou A favor?</h3>
+                      <p className="text-zinc-400 text-xs mt-2 normal-case font-semibold leading-snug" data-testid="tiro-livre-wall-context">
+                        {describeAccumulatedFouls(foulsForCurrentPeriod, foulsAgainstCurrentPeriod).message}
+                      </p>
                     </div>
                     <div className="p-4 flex flex-col gap-3">
                       <button
@@ -5207,12 +5255,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"
                       >
                         A Favor (Nossa Equipe)
+                        <span className="block text-[10px] normal-case font-semibold mt-1">
+                          {directFreeKickWall('for', foulsForCurrentPeriod, foulsAgainstCurrentPeriod) === 'noWall'
+                            ? 'Direto sem barreira — 6ª falta do adversário'
+                            : 'Com barreira'}
+                        </span>
                       </button>
                       <button
                         onClick={() => { setPendingFreeKickTeam('against'); setFreeKickStep('result'); }}
                         className="w-full px-4 py-4 bg-red-500/20 border-2 border-red-500 text-red-400 font-bold uppercase text-sm rounded-xl hover:bg-red-500/30 transition-colors"
                       >
                         Contra (Adversário)
+                        <span className="block text-[10px] normal-case font-semibold mt-1">
+                          {directFreeKickWall('against', foulsForCurrentPeriod, foulsAgainstCurrentPeriod) === 'noWall'
+                            ? 'Direto sem barreira — 6ª falta nossa'
+                            : 'Com barreira'}
+                        </span>
                       </button>
                       <button onClick={() => { setFreeKickStep(null); setPendingFreeKickTeam(null); setPendingFreeKickResultToRegister(null); }} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold uppercase text-xs rounded-xl transition-colors">
                         Cancelar
@@ -5242,9 +5300,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               alert('Selecione o autor do gol primeiro.');
                               return;
                             }
-                            handleRegisterGoal('normal', false, String(selectedPlayerId).trim(), 'Tiro Livre');
+                            handleRegisterGoal('normal', false, String(selectedPlayerId).trim(), 'Tiro Livre', null, null, null, null, directFreeKickWall('for', foulsForCurrentPeriod, foulsAgainstCurrentPeriod));
                           } else {
-                            handleRegisterGoal('normal', true, null, 'Tiro Livre');
+                            handleRegisterGoal('normal', true, null, 'Tiro Livre', null, null, null, null, directFreeKickWall('against', foulsForCurrentPeriod, foulsAgainstCurrentPeriod));
                           }
                         }}
                         className="w-full px-4 py-4 bg-green-500/20 border-2 border-green-500 text-green-400 font-bold uppercase text-sm rounded-xl hover:bg-green-500/30 transition-colors"

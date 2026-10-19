@@ -13,8 +13,10 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
+import { collectionCountsAsFinalized, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
 import { EMPTY_UNION_EVENT_LOG_MESSAGE, isEmptyUnionEventLogError } from '../utils/eventLogConflict';
@@ -1757,19 +1759,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         return `${dStr}_${normalizeMatchText(opponent)}_${normalizeMatchText(competition)}`;
     };
 
-    // Chave forte para dedupe em volume alto de jogos futuros.
-    const getMatchKey = (
-        date: string | undefined,
-        opponent: string | undefined,
-        competition?: string,
-        time?: string
-    ) => {
-        const base = getMatchBaseKey(date, opponent, competition);
-        if (!base) return '';
-        const normalizedTime = normalizeMatchTime(time);
-        return `${base}_${normalizedTime || 'sem_hora'}`;
-    };
-
     const hasScheduledStarted = (date: string, time?: string) => {
         const now = new Date();
         const day = date.slice(0, 10);
@@ -1811,38 +1800,12 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     };
 
     const getSavedMatchStatus = (match: MatchRecord): 'disponivel' | 'incompleto' | 'finalizado' => {
+        if (collectionCountsAsFinalized(match)) return 'finalizado';
         if (match.status === 'disponivel' || match.status === 'nao_executado') return 'disponivel';
         if (match.status === 'em_andamento') return 'incompleto';
         if (match.status === 'encerrado') return 'finalizado';
         if (match.status == null && isMatchNotExecuted(match)) return 'disponivel';
         return 'finalizado';
-    };
-
-    const findLinkedSavedMatchForScheduled = (
-        scheduled: ChampionshipMatch,
-        scheduledBaseCounts: Map<string, number>
-    ): MatchRecord | null => {
-        const detailedKey = getMatchKey(
-            scheduled.date,
-            scheduled.opponent,
-            scheduled.competition,
-            scheduled.time
-        );
-        const baseKey = getMatchBaseKey(scheduled.date, scheduled.opponent, scheduled.competition);
-        const exact = matches.find((m) => {
-            const savedDetailedKey = getMatchKey(m.date, m.opponent, m.competition);
-            return savedDetailedKey === detailedKey;
-        });
-        if (exact) return exact;
-        // Fallback sem hora apenas quando não há ambiguidade de programação.
-        if ((scheduledBaseCounts.get(baseKey) || 0) === 1) {
-            const byBase = matches.find((m) => {
-                const savedBaseKey = getMatchBaseKey(m.date, m.opponent, m.competition);
-                return savedBaseKey === baseKey;
-            });
-            if (byBase) return byBase;
-        }
-        return null;
     };
 
     /** Calendário Dados do jogo: Disponível → Incompleto → Finalizado (verde / amarelo / vermelho) */
@@ -1851,11 +1814,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         scheduledBaseCounts: Map<string, number>
     ): 'disponivel' | 'incompleto' | 'finalizado' => {
         if (item.type === 'scheduled') {
-            const linkedSaved = findLinkedSavedMatchForScheduled(
-                item as ChampionshipMatch,
-                scheduledBaseCounts
-            );
-            if (linkedSaved) return getSavedMatchStatus(linkedSaved);
+            const linkedSaved = findSavedMatchForAgenda(item as ChampionshipMatch, matches || [], championshipMatches);
+            if (linkedSaved) return getSavedMatchStatus(linkedSaved as MatchRecord);
             return hasScheduledStarted(item.date, (item as ChampionshipMatch).time)
                 ? 'incompleto'
                 : 'disponivel';
@@ -1887,10 +1847,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     // Partidas unificadas (salvas + programadas) filtradas por intervalo de datas
     // Deduplica: se uma programada já tem uma versão salva (mesma data+adversário), mostra só a salva
     const filteredMatches = useMemo((): CalendarMatchItem[] => {
-        const saved: CalendarMatchItem[] = matches.map((m) => ({ ...m, type: 'saved' as const }));
+        const saved: CalendarMatchItem[] = dropUncollectedFixtureShells(matches).map((m) => ({ ...m, type: 'saved' as const }));
 
         const scheduled: CalendarMatchItem[] = championshipMatches
-            .filter((cm) => !findLinkedSavedMatchForScheduled(cm, scheduledBaseCounts))
+            .filter((cm) => !findSavedMatchForAgenda(cm, matches || [], championshipMatches))
             .map((m) => ({ ...m, type: 'scheduled' as const }));
 
         const all: CalendarMatchItem[] = [...saved, ...scheduled];
@@ -1922,11 +1882,25 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         setEndDate(toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     };
 
+    const agendaIdForFixture = (date?: string, opponent?: string, time?: string, competition?: string) =>
+        findAgendaForFixture(
+            { date: date || '', opponent: opponent || '', time, competition },
+            championshipMatches
+        )?.id;
+
+    const scheduledPeerCount = (date?: string, opponent?: string, competition?: string) =>
+        championshipMatches.filter((cm) =>
+            sameFixtureBase(cm, { date, opponent, competition })
+        ).length;
+
     const openRealtimeScout = (realtimeScoutData: {
         matchId?: string;
+        agendaMatchId?: string;
         date: string;
         opponent: string;
         competition?: string;
+        time?: string;
+        scheduledBaseCount?: number;
         location?: string;
         players: Player[];
         teams: Team[];
@@ -2506,6 +2480,18 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         )?.location;
                                         const realtimeScoutData = {
                                             matchId: selectedMatch.id,
+                                            agendaMatchId: agendaIdForFixture(
+                                                selectedMatch.date,
+                                                selectedMatch.opponent,
+                                                readKickoffTime(selectedMatch),
+                                                selectedMatch.competition
+                                            ),
+                                            time: readKickoffTime(selectedMatch) || undefined,
+                                            scheduledBaseCount: scheduledPeerCount(
+                                                selectedMatch.date,
+                                                selectedMatch.opponent,
+                                                selectedMatch.competition
+                                            ),
                                             date: selectedMatch.date,
                                             opponent: selectedMatch.opponent || '',
                                             competition: selectedMatch.competition,
@@ -2971,6 +2957,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             if (m.status === 'em_andamento' && ids.length > 0) {
                                                 openRealtimeScout({
                                                     matchId: m.id,
+                                                    agendaMatchId: agendaIdForFixture(
+                                                        m.date,
+                                                        m.opponent,
+                                                        readKickoffTime(m),
+                                                        m.competition
+                                                    ),
+                                                    time: readKickoffTime(m) || undefined,
+                                                    scheduledBaseCount: scheduledPeerCount(m.date, m.opponent, m.competition),
                                                     date: m.date,
                                                     opponent: m.opponent || '',
                                                     competition: m.competition,
@@ -3320,21 +3314,44 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         <button
                                             onClick={() => {
                                                 if (selectedPlayersForMatch.size === 0) return;
-                                                const realtimeScoutData = {
-                                                    matchId: draftIdForChampionshipMatch(selectedScheduledMatch.id),
+                                                const existing = findCollectedMatchForFixture(
+                                                    matches || [],
+                                                    {
+                                                        date: selectedScheduledMatch.date,
+                                                        opponent: selectedScheduledMatch.opponent || '',
+                                                        competition: selectedScheduledMatch.competition,
+                                                        time: selectedScheduledMatch.time,
+                                                    },
+                                                    { scheduled: championshipMatches }
+                                                );
+                                                const savedSquad = existing?.lineup?.selectedPlayerIds
+                                                    ?.map((id) => String(id).trim())
+                                                    .filter(Boolean);
+                                                openRealtimeScout({
+                                                    matchId: existing?.id || draftIdForChampionshipMatch(selectedScheduledMatch.id),
+                                                    agendaMatchId: selectedScheduledMatch.id,
                                                     date: selectedScheduledMatch.date,
+                                                    time: selectedScheduledMatch.time,
+                                                    scheduledBaseCount: scheduledPeerCount(
+                                                        selectedScheduledMatch.date,
+                                                        selectedScheduledMatch.opponent,
+                                                        selectedScheduledMatch.competition
+                                                    ),
                                                     opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,
                                                     location:
                                                         selectedScheduledMatch.location?.trim() ||
+                                                        existing?.location?.trim() ||
                                                         undefined,
                                                     players: players || [],
                                                     teams: teams || [],
                                                     matchType: preparationMatchType,
                                                     extraTimeMinutes: preparationExtraTimeMinutes,
-                                                    selectedPlayerIds: Array.from(selectedPlayersForMatch),
-                                                };
-                                                openRealtimeScout(realtimeScoutData);
+                                                    selectedPlayerIds:
+                                                        savedSquad && savedSquad.length > 0
+                                                            ? savedSquad
+                                                            : Array.from(selectedPlayersForMatch),
+                                                });
                                                 setShowStartScoutConfirmation(false);
                                             }}
                                             data-testid="prep-confirm-start-scout"
