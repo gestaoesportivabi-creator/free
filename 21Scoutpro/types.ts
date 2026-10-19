@@ -292,6 +292,11 @@ export interface MatchRecord {
     technicalAnalysis?: TechnicalAnalysis;
   };
   postMatchEventLog?: PostMatchEvent[];
+  /**
+   * Ids de lances excluídos nesta coleta. O PUT une o log por id;
+   * omitir um evento do array não apaga o que já está gravado.
+   */
+  deletedEventIds?: string[];
   /** Histórico de substituições da partida */
   substitutionHistory?: Array<{
     playerOutId: string;

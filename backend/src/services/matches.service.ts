@@ -12,6 +12,7 @@ import { transformMatchToFrontend } from '../adapters/match.adapter';
 import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
+import { mergePostMatchEventLogs } from './postMatchEventLogMerge';
 
 function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
   const n = Number(v);
@@ -392,7 +393,17 @@ export const matchesService = {
     if (data.resultado ?? data.result) jogoUpdate.resultado = data.resultado ?? data.result;
     jogoUpdate.golsPro = golsPro;
     jogoUpdate.golsContra = golsContra;
-    if (data.postMatchEventLog !== undefined) jogoUpdate.postMatchEventLog = data.postMatchEventLog;
+    if (Array.isArray(data.postMatchEventLog)) {
+      const mergedLog = mergePostMatchEventLogs(
+        (existing as { postMatchEventLog?: unknown }).postMatchEventLog,
+        data.postMatchEventLog,
+        data.deletedEventIds
+      );
+      jogoUpdate.postMatchEventLog = mergedLog;
+      data.postMatchEventLog = mergedLog;
+    } else if (data.postMatchEventLog !== undefined) {
+      jogoUpdate.postMatchEventLog = data.postMatchEventLog;
+    }
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
     if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
