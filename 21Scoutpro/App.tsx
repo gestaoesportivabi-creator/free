@@ -65,7 +65,7 @@ import {
   verifyPostMatchEventLog,
 } from './utils/verifyPostMatchEventLog';
 import { isEmptyUnionEventLogError } from './utils/eventLogConflict';
-import { isMatchFinalizedForScout } from './utils/matchStatus';
+import { isMatchFinalizedForScout, saveLaterUi } from './utils/matchStatus';
 import { replaceMatchInList } from './utils/matchListState';
 import { rememberMatchDetail } from './utils/matchEventLog';
 import { isEssentialPlanUser, isPerformanceTierUser } from './config';
@@ -1240,7 +1240,7 @@ export default function App() {
             setMatches((prev) => replaceMatchInList(prev, kept));
             if (!isAutosave) {
               if (saveAsIncomplete) {
-                alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');
+                alert(saveLaterUi(newMatch.status).alert);
               } else if (newMatch.status === 'encerrado') {
                 // Finalizar coleta: permanece em Dados do Jogo / análise (não vai para Scout Coletivo)
               } else {

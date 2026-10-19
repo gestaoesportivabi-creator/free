@@ -16,7 +16,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
-import { collectionCountsAsFinalized, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
+import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
 import { EMPTY_UNION_EVENT_LOG_MESSAGE, isEmptyUnionEventLogError } from '../utils/eventLogConflict';
@@ -1730,25 +1730,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     const normalizeMatchText = (value: string | undefined) =>
         (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-    const normalizeMatchTime = (value: string | undefined): string => {
-        if (!value) return '';
-        const match = value.trim().match(/^(\d{1,2}):(\d{2})$/);
-        if (!match) return '';
-        const hour = Number(match[1]);
-        const minute = Number(match[2]);
-        if (
-            Number.isNaN(hour) ||
-            Number.isNaN(minute) ||
-            hour < 0 ||
-            hour > 23 ||
-            minute < 0 ||
-            minute > 59
-        ) {
-            return '';
-        }
-        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-    };
-
     const getMatchBaseKey = (
         date: string | undefined,
         opponent: string | undefined,
@@ -1757,21 +1738,6 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         if (!date) return '';
         const dStr = date.slice(0, 10);
         return `${dStr}_${normalizeMatchText(opponent)}_${normalizeMatchText(competition)}`;
-    };
-
-    const hasScheduledStarted = (date: string, time?: string) => {
-        const now = new Date();
-        const day = date.slice(0, 10);
-        if (!day) return false;
-        const normalizedTime = normalizeMatchTime(time);
-        if (normalizedTime) {
-            const startAt = new Date(`${day}T${normalizedTime}:00`);
-            if (Number.isNaN(startAt.getTime())) return false;
-            return now.getTime() > startAt.getTime();
-        }
-        const endOfDay = new Date(`${day}T23:59:59`);
-        if (Number.isNaN(endOfDay.getTime())) return false;
-        return now.getTime() > endOfDay.getTime();
     };
 
     // Função para verificar se uma partida não foi executada
@@ -1799,14 +1765,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         return hasNoStats;
     };
 
-    const getSavedMatchStatus = (match: MatchRecord): 'disponivel' | 'incompleto' | 'finalizado' => {
-        if (collectionCountsAsFinalized(match)) return 'finalizado';
-        if (match.status === 'disponivel' || match.status === 'nao_executado') return 'disponivel';
-        if (match.status === 'em_andamento') return 'incompleto';
-        if (match.status === 'encerrado') return 'finalizado';
-        if (match.status == null && isMatchNotExecuted(match)) return 'disponivel';
-        return 'finalizado';
-    };
+    const getSavedMatchStatus = (match: MatchRecord): 'disponivel' | 'incompleto' | 'finalizado' =>
+        calendarBadgeForSavedMatch(match);
 
     /** Calendário Dados do jogo: Disponível → Incompleto → Finalizado (verde / amarelo / vermelho) */
     const getMatchStatus = (
@@ -1815,10 +1775,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     ): 'disponivel' | 'incompleto' | 'finalizado' => {
         if (item.type === 'scheduled') {
             const linkedSaved = findSavedMatchForAgenda(item as ChampionshipMatch, matches || [], championshipMatches);
-            if (linkedSaved) return getSavedMatchStatus(linkedSaved as MatchRecord);
-            return hasScheduledStarted(item.date, (item as ChampionshipMatch).time)
-                ? 'incompleto'
-                : 'disponivel';
+            return calendarBadgeForScheduled(linkedSaved as MatchRecord | null);
         }
 
         if (item.type === 'saved') {
