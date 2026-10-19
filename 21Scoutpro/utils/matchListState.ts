@@ -1,6 +1,26 @@
 import type { MatchRecord } from '../types';
 import { isPersistedServerMatchId } from './matchIds';
 
+/**
+ * Autosave de partida da lista ainda sem a fita local.
+ * Log vazio sem deletedEventIds apagaria ou levaria 409; o campo sai do payload.
+ * Exclusão real (deletedCount > 0) e fita já copiada para o estado local seguem no PUT.
+ */
+export function omitUnhydratedEventLog(
+  match: Pick<MatchRecord, 'id' | 'postMatchEventLog' | 'postMatchEventCount'>,
+  localEventCount: number,
+  deletedCount: number
+): boolean {
+  const id = match.id != null ? String(match.id) : '';
+  if (!isPersistedServerMatchId(id)) return false;
+  if (localEventCount > 0 || deletedCount > 0) return false;
+  if (matchNeedsEventLogFetch(match)) return true;
+  const storedCount = Array.isArray(match.postMatchEventLog)
+    ? match.postMatchEventLog.length
+    : (match.postMatchEventCount ?? 0);
+  return storedCount > 0;
+}
+
 /** A listagem não traz o array. Quem precisa da fita busca getById. */
 export function matchNeedsEventLogFetch(match: Pick<MatchRecord, 'id' | 'postMatchEventLog' | 'postMatchEventCount'>): boolean {
   const id = match.id != null ? String(match.id) : '';

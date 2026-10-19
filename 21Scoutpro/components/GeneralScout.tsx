@@ -8,6 +8,7 @@ import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
+import { matchNeedsEventLogFetch } from '../utils/matchListState';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -186,8 +187,27 @@ function emptyScopedStats(): MatchStats {
   };
 }
 
+function goalTimesForPeriod(
+  entries: Array<{ time: string; method?: string }> | undefined,
+  period: MatchHalf
+): Array<{ time: string; method?: string }> {
+  return (entries ?? []).filter((entry) => entry.time.includes(`(${period})`));
+}
+
 function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchRecord {
   const setPieceMethods = ['ESCANTEIO', 'FALTAS', 'PÊNALTI', 'TIRO LIVRE', 'LATERAIS'];
+  // A lista já traz os tempos agregados. Sem o log, o recorte do período usa esse agregado
+  // em vez de zerar o gráfico enquanto o getById não chega.
+  if (!Array.isArray(match.postMatchEventLog) && (match.postMatchEventCount ?? 0) > 0) {
+    return {
+      ...match,
+      teamStats: {
+        ...match.teamStats,
+        goalTimes: goalTimesForPeriod(match.teamStats?.goalTimes, period),
+        goalsConcededTimes: goalTimesForPeriod(match.teamStats?.goalsConcededTimes, period),
+      },
+    };
+  }
   const srcLog = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
   const log = srcLog.filter((e) => e.period === period);
   const teamStats = emptyScopedStats();
@@ -462,6 +482,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
   const isGoalkeeperAthleteFilter = useMemo(
     () => athleteFilterIdSafe !== 'Todos' && selectedAthlete?.position === 'Goleiro',
     [athleteFilterIdSafe, selectedAthlete]
+  );
+
+  const athleteGoalClockPending = useMemo(
+    () => athleteFilterIdSafe !== 'Todos' && scopedMatches.some((match) => matchNeedsEventLogFetch(match)),
+    [athleteFilterIdSafe, scopedMatches]
   );
 
   const athleteFilteredMatches = useMemo(() => {
@@ -1270,11 +1295,11 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
               setPdfExporting(false);
             }
           }}
-          disabled={pdfExporting}
+          disabled={pdfExporting || athleteGoalClockPending}
           className="flex items-center justify-center gap-2 px-4 py-3 bg-[#00f0ff] hover:bg-[#00d4e6] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold uppercase text-xs rounded-xl transition-colors shrink-0"
         >
           <FileDown size={16} />
-          {pdfExporting ? 'Gerando PDF...' : 'Exportar PDF'}
+          {pdfExporting ? 'Gerando PDF...' : athleteGoalClockPending ? 'Carregando lances' : 'Exportar PDF'}
         </button>
         {!comparisonChild && (
           <button
@@ -1314,16 +1339,16 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
         {/* Cards de porcentagem de tempo que mais é feito/tomado gol */}
         <KPICard 
           title="Período Mais Produtivo" 
-          value={`${timePeriodData.maxScoredPeriod.percentage}%`} 
-          subtitle={`${timePeriodData.maxScoredPeriod.period}`}
+          value={athleteGoalClockPending ? '…' : `${timePeriodData.maxScoredPeriod.percentage}%`} 
+          subtitle={athleteGoalClockPending ? 'Carregando lances' : `${timePeriodData.maxScoredPeriod.period}`}
           icon={Clock} 
           color="text-[#60a5fa]" 
           bg="bg-[#60a5fa]/10 border-[#60a5fa]/20" 
         />
         <KPICard 
           title="Período Mais Vulnerável" 
-          value={`${timePeriodData.maxConcededPeriod.percentage}%`} 
-          subtitle={`${timePeriodData.maxConcededPeriod.period}`}
+          value={athleteGoalClockPending ? '…' : `${timePeriodData.maxConcededPeriod.percentage}%`} 
+          subtitle={athleteGoalClockPending ? 'Carregando lances' : `${timePeriodData.maxConcededPeriod.period}`}
           icon={ShieldAlert} 
           color="text-[#2563eb]" 
           bg="bg-[#2563eb]/10 border-[#2563eb]/20" 
@@ -1974,6 +1999,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
       {/* Row: Goals by Time Period */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ExpandableCard title="Gols Feitos por Período" icon={Clock} headerColor="text-[#22c55e]" scoutTitleStyle>
+           {athleteGoalClockPending ? (
+             <p className="text-sm text-zinc-500 py-16 text-center" style={legendLabelStyle}>
+               Carregando os lances para mostrar o minuto e o período dos gols deste atleta.
+             </p>
+           ) : (
+           <>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timePeriodData.scoredDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
@@ -2005,9 +2036,17 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.percentage}%</span> dos gols feitos saíram no período de <span className="text-[#22c55e]">{timePeriodData.maxScoredPeriod.period}</span>
              </p>
            </div>
+           </>
+           )}
         </ExpandableCard>
 
         <ExpandableCard title="Gols Tomados por Período" icon={Clock} headerColor="text-[#ff0055]" scoutTitleStyle>
+           {athleteGoalClockPending ? (
+             <p className="text-sm text-zinc-500 py-16 text-center" style={legendLabelStyle}>
+               Carregando os lances para mostrar o minuto e o período dos gols deste atleta.
+             </p>
+           ) : (
+           <>
            <div className="h-72 w-full">
              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={timePeriodData.concededDist} margin={{ top: 20, right: 30, left: 10, bottom: 72 }}>
@@ -2039,6 +2078,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.percentage}%</span> dos gols tomados saíram no período de <span className="text-[#ff0055]">{timePeriodData.maxConcededPeriod.period}</span>
              </p>
            </div>
+           </>
+           )}
         </ExpandableCard>
       </div>
 

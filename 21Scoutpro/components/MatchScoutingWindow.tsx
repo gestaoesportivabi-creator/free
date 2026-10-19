@@ -18,7 +18,7 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
-import { matchNeedsEventLogFetch } from '../utils/matchListState';
+import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -2157,6 +2157,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     savedMatch.eventLogWriteMode = 'union';
     if (deletedEventIdsRef.current.size > 0) {
       savedMatch.deletedEventIds = Array.from(deletedEventIdsRef.current);
+    }
+    // Partida da lista ainda sem a fita no estado local: não mandar [] (union 409 ou replace).
+    if (omitUnhydratedEventLog(match, matchEvents.length, deletedEventIdsRef.current.size)) {
+      delete savedMatch.postMatchEventLog;
+      delete savedMatch.eventLogWriteMode;
+      delete savedMatch.deletedEventIds;
     }
 
     return savedMatch;

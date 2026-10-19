@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { MatchRecord } from '../types';
-import { matchNeedsEventLogFetch, mergeMatchWithEventLog, replaceMatchInList } from './matchListState';
+import { matchNeedsEventLogFetch, mergeMatchWithEventLog, omitUnhydratedEventLog, replaceMatchInList } from './matchListState';
 
 function match(partial: Partial<MatchRecord> & Pick<MatchRecord, 'id' | 'date'>): MatchRecord {
   return {
@@ -53,6 +53,16 @@ test('merge preserva meta da lista e traz o log do detalhe', () => {
   assert.equal(merged.postMatchEventLog?.length, 1);
   assert.equal(merged.postMatchEventCount, 1);
   assert.equal(merged.teamStats.goalTimes?.length, 1);
+});
+
+test('autosave não manda log vazio de partida da lista ainda sem a fita local', () => {
+  const fromList = match({ id: 'abc', date: '2026-03-01', postMatchEventCount: 4 });
+  assert.equal(omitUnhydratedEventLog(fromList, 0, 0), true);
+  assert.equal(omitUnhydratedEventLog({ ...fromList, postMatchEventLog: [{ id: 'e1' } as never] }, 0, 0), true);
+  assert.equal(omitUnhydratedEventLog(fromList, 2, 0), false);
+  assert.equal(omitUnhydratedEventLog(fromList, 0, 1), false);
+  assert.equal(omitUnhydratedEventLog(match({ id: 'abc', date: '2026-03-01', postMatchEventCount: 0 }), 0, 0), false);
+  assert.equal(omitUnhydratedEventLog(match({ id: 'sched-1', date: '2026-03-01', postMatchEventCount: 3 }), 0, 0), false);
 });
 
 test('save substitui só a partida salva e insere a nova na ordem da data', () => {

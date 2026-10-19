@@ -3179,6 +3179,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     <p className="text-white text-2xl font-black">{selectedMatch.teamStats.transitionErrors}</p>
                                 </div>
                                 {(() => {
+                                  if (matchNeedsEventLogFetch(selectedMatch) || eventLogLoading) {
+                                    return (
+                                      <div className="col-span-2 md:col-span-4 bg-zinc-950 rounded-xl p-4 border border-zinc-800">
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase block mb-2">Fita de lances</span>
+                                        <p className="text-zinc-400 text-sm font-bold">Carregando lances antes de contar a fita.</p>
+                                      </div>
+                                    );
+                                  }
                                   const log = selectedMatch.postMatchEventLog || [];
                                   const count = (pred: (e: (typeof log)[number]) => boolean) =>
                                     log.filter(pred).length;

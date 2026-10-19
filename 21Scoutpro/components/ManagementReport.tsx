@@ -15,6 +15,7 @@ import { buildWellnessEngagementAlerts } from '../utils/wellnessEngagementAlerts
 import { buildHeatmapCallouts, type HeatmapCalloutData, type OutwardDir } from '../utils/physiologyHeatmapMap';
 import { postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
+import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { exportManagementReportPdf } from '../utils/exportManagementReportPdf';
 import { classifyBodyFatReference, type BodyFatReferenceBand } from './PhysicalAssessment';
 import { RadarChart, Radar, PolarGrid, PolarRadiusAxis, PolarAngleAxis, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -242,8 +243,13 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
     return { foulsCommitted, yellowCards, redCards };
   }, [filteredMatches, selectedPlayerId]);
 
+  const goalInsightsPending = useMemo(
+    () => Boolean(selectedPlayerId) && filteredMatches.some((match) => matchNeedsEventLogFetch(match)),
+    [filteredMatches, selectedPlayerId]
+  );
+
   const goalInsights = useMemo(() => {
-    if (!selectedPlayerId) return { bestPeriod: '—', bestPeriodShare: null as number | null, topMethod: '—', topOrigin: '—' };
+    if (!selectedPlayerId || goalInsightsPending) return { bestPeriod: '—', bestPeriodShare: null as number | null, topMethod: '—', topOrigin: '—' };
     const periodCount = new Array<number>(GOAL_BY_PERIOD_LABELS.length).fill(0);
     const methodCount: Record<string, number> = {};
     const originCount: Record<string, number> = {};
@@ -272,7 +278,7 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
     const bestPeriod = maxVal > 0 && maxIdx >= 0 ? GOAL_BY_PERIOD_LABELS[maxIdx] : '—';
     const bestPeriodShare = totalGoals > 0 && maxVal > 0 ? Math.round((maxVal / totalGoals) * 10000) / 100 : null;
     return { bestPeriod, bestPeriodShare, topMethod: maxOf(methodCount), topOrigin: maxOf(originCount) };
-  }, [filteredMatches, selectedPlayerId]);
+  }, [filteredMatches, goalInsightsPending, selectedPlayerId]);
 
   const avgPsePsr = useMemo(() => {
     if (!selectedPlayerId) return { avgPse: null as number | null, avgPsr: null as number | null };
@@ -483,9 +489,9 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
         { title: 'Jogos perdidos', value: String(injuryInfo?.injuries.length ?? 0) },
         { title: 'Minutos totais', value: String(playerStats.minutes) },
         { title: 'Média minutos', value: String(playerStats.avgMinutes) },
-        { title: 'Período mais produtivo', value: String(goalInsights.bestPeriod), sub: goalInsights.bestPeriodShare != null ? `${goalInsights.bestPeriodShare.toFixed(2)}% dos gols` : undefined },
-        { title: 'Método de gol +', value: String(goalInsights.topMethod) },
-        { title: 'Origem de gol +', value: String(goalInsights.topOrigin) },
+        { title: 'Período mais produtivo', value: goalInsightsPending ? 'Carregando' : String(goalInsights.bestPeriod), sub: !goalInsightsPending && goalInsights.bestPeriodShare != null ? `${goalInsights.bestPeriodShare.toFixed(2)}% dos gols` : undefined },
+        { title: 'Método de gol +', value: goalInsightsPending ? 'Carregando' : String(goalInsights.topMethod) },
+        { title: 'Origem de gol +', value: goalInsightsPending ? 'Carregando' : String(goalInsights.topOrigin) },
       ],
       scoutCards: [
         { title: 'Gols', value: String(playerStats.goals) },
@@ -617,13 +623,15 @@ export const ManagementReport: React.FC<ManagementReportProps> = ({ players, mat
                   </div>
                   <div className="text-center border border-zinc-900 rounded-xl p-4">
                     <p className="text-zinc-500 font-bold uppercase text-xs mb-2">Período mais produtivo</p>
-                    <p className="text-white font-black text-lg">{goalInsights.bestPeriod}</p>
-                    {goalInsights.bestPeriodShare != null && (
+                    <p className="text-white font-black text-lg">{goalInsightsPending ? '…' : goalInsights.bestPeriod}</p>
+                    {goalInsightsPending ? (
+                      <p className="text-zinc-500 text-[11px] font-bold mt-1">Carregando lances</p>
+                    ) : goalInsights.bestPeriodShare != null && (
                       <p className="text-zinc-500 text-[11px] font-bold mt-1">{goalInsights.bestPeriodShare.toFixed(2)}% dos gols</p>
                     )}
                   </div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Método de gol +</p><p className="text-white font-black text-lg">{goalInsights.topMethod}</p></div>
-                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Origem de gol +</p><p className="text-white font-black text-lg">{goalInsights.topOrigin}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Método de gol +</p><p className="text-white font-black text-lg">{goalInsightsPending ? '…' : goalInsights.topMethod}</p></div>
+                  <div className="text-center border border-zinc-900 rounded-xl p-4"><p className="text-zinc-500 font-bold uppercase text-xs mb-2">Origem de gol +</p><p className="text-white font-black text-lg">{goalInsightsPending ? '…' : goalInsights.topOrigin}</p></div>
                 </div>
               </div>
 
