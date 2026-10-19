@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
-import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock, Eye, EyeOff } from 'lucide-react';
+import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock, Eye, EyeOff, ClipboardPaste } from 'lucide-react';
 import { INJURY_LOCATIONS_BY_TYPE } from '../utils/injuryLocations';
 import { playersApi } from '../services/api';
+import { RosterPaste } from './onboarding/RosterPaste';
+import { runRosterSave, toRosterPlayer, type RosterLine } from '../utils/rosterParser';
 import { LockedFeatureBlock } from './EmBreve';
 
 /** Limite inferior da data de nascimento (somente validação local no formulário). */
@@ -146,6 +148,8 @@ function formatPlayerAgeDisplay(player: Player): string {
 interface TeamManagementProps {
     players: Player[];
     onAddPlayer: (player: Player) => Promise<boolean>;
+    /** Create sem alerta, usado pela colagem da planilha. Devolve o atleta salvo. */
+    onImportPlayer: (player: Player) => Promise<Player>;
     onUpdatePlayer: (player: Player) => Promise<boolean>;
     onDeletePlayer?: (player: Player) => void;
     onClearDemoData?: () => Promise<void>;
@@ -157,6 +161,7 @@ interface TeamManagementProps {
 export const TeamManagement: React.FC<TeamManagementProps> = ({
     players,
     onAddPlayer,
+    onImportPlayer,
     onUpdatePlayer,
     onDeletePlayer,
     onClearDemoData,
@@ -164,6 +169,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     isFreePlan = false,
 }) => {
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isPasteOpen, setIsPasteOpen] = useState(false);
+    const [pasteSession, setPasteSession] = useState(0);
+    const [isPasting, setIsPasting] = useState(false);
+    const [pasteSavedCount, setPasteSavedCount] = useState(0);
+    const [pasteSaveTotal, setPasteSaveTotal] = useState(0);
+    const [pasteError, setPasteError] = useState('');
+    const [pasteLineError, setPasteLineError] = useState<{ lineNumber: number; message: string } | null>(null);
+    const pasteSavedKeysRef = useRef<Set<string>>(new Set());
     const [editMode, setEditMode] = useState(false);
     const [editPlayerId, setEditPlayerId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'profile' | 'status' | 'medical' | 'maxLoad'>('profile');
@@ -584,6 +597,52 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     };
     const getPositionStyle = (pos: string) => POSITION_COLORS[pos] || POSITION_COLORS['Outros'];
 
+    const squadJerseyNumbers = useMemo(
+        () => players
+            .filter((player) => !player.isTransferred && typeof player.jerseyNumber === 'number' && Number.isFinite(player.jerseyNumber))
+            .map((player) => player.jerseyNumber),
+        [players],
+    );
+
+    const handlePasteSave = (lines: RosterLine[]) => {
+        const items = lines.map((line) => ({
+            ...toRosterPlayer(line),
+            number: line.number,
+            lineNumber: line.lineNumber,
+        }));
+        if (items.length === 0) return;
+
+        setIsPasting(true);
+        setPasteError('');
+        setPasteLineError(null);
+        setPasteSaveTotal(items.length);
+
+        void runRosterSave({
+            items,
+            savedKeys: pasteSavedKeysRef.current,
+            onProgress: (saved, total) => {
+                setPasteSavedCount(saved);
+                setPasteSaveTotal(total);
+            },
+            create: async (item) => {
+                await onImportPlayer(item as Player);
+            },
+        }).then((result) => {
+            setIsPasting(false);
+            if (result.ok) {
+                setPasteSession((session) => session + 1);
+                setIsPasteOpen(false);
+                setPasteError('');
+                setPasteLineError(null);
+                return;
+            }
+            if (result.failedLineNumber != null) {
+                setPasteLineError({ lineNumber: result.failedLineNumber, message: result.cause });
+            }
+            setPasteError(`${result.message} ${result.cause}`);
+        });
+    };
+
     const filteredPlayers = useMemo(() => {
         if (!searchQuery.trim()) return players;
         const q = searchQuery.trim().toLowerCase();
@@ -874,6 +933,18 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                     <button
                         type="button"
                         onClick={() => {
+                            setIsPasteOpen((open) => !open);
+                            setIsFormOpen(false);
+                            setPasteError('');
+                        }}
+                        className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 text-white px-4 py-3 font-bold uppercase text-xs rounded-xl transition-colors border border-zinc-700"
+                    >
+                        <ClipboardPaste size={16} className="text-[#10b981]" />
+                        {isPasteOpen ? 'Fechar colagem' : 'Colar lista da planilha'}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
                             if (!isFormOpen) {
                                 resetForm();
                                 setEditMode(false);
@@ -882,6 +953,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                             } else {
                                 resetForm();
                             }
+                            setIsPasteOpen(false);
                             setIsFormOpen(!isFormOpen);
                         }}
                         className="flex items-center gap-2 bg-[#10b981] hover:bg-[#34d399] text-white px-6 py-3 font-bold uppercase text-xs rounded-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.4)]"
@@ -890,6 +962,33 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                     </button>
                 </div>
             </div>
+
+            {isPasteOpen && (
+                <div className="bg-zinc-950 p-6 sm:p-8 rounded-3xl border border-zinc-800">
+                    <h3 className="text-white font-bold uppercase tracking-wider flex items-center gap-2 mb-4">
+                        <ClipboardPaste size={18} className="text-[#10b981]" />
+                        Colar lista da planilha
+                    </h3>
+                    <RosterPaste
+                        key={pasteSession}
+                        onParsed={handlePasteSave}
+                        disabled={isPasting}
+                        existingNumbers={squadJerseyNumbers}
+                        serverErrors={
+                            pasteLineError ? { [pasteLineError.lineNumber]: pasteLineError.message } : undefined
+                        }
+                        onDraftChange={() => setPasteLineError(null)}
+                    />
+                    {isPasting && pasteSaveTotal > 0 && (
+                        <p className="mt-3 text-xs text-zinc-400">Salvando {pasteSavedCount} de {pasteSaveTotal} atletas…</p>
+                    )}
+                    {pasteError && (
+                        <div role="alert" className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                            <p className="text-xs text-amber-200 leading-relaxed">{pasteError}</p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Registration/Edit Form */}
             {isFormOpen && (

@@ -4,11 +4,11 @@ import { Player, Position, User } from '../../types';
 import { accountApi, playersApi } from '../../services/api';
 import { RosterPaste } from './RosterPaste';
 import {
-  planRosterSave,
-  rosterSaveFailureMessage,
+  runRosterSave,
   toRosterPlayer,
   type RosterLine,
   type RosterPlayerDraft,
+  type RosterSaveItem,
 } from '../../utils/rosterParser';
 
 /**
@@ -65,6 +65,7 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({
   const [savedCount, setSavedCount] = useState(0);
   const [saveTotal, setSaveTotal] = useState(0);
   const [error, setError] = useState('');
+  const [serverLineError, setServerLineError] = useState<{ lineNumber: number; message: string } | null>(null);
   /** Chaves nome+número (e ocorrência) já criadas neste wizard. O retry não duplica. */
   const savedKeysRef = useRef<Set<string>>(new Set());
 
@@ -73,63 +74,60 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({
     setStep(next);
   };
 
-  const savePlayers = async (players: RosterPlayerDraft[]) => {
+  const savePlayers = async (players: Array<RosterPlayerDraft & RosterSaveItem>) => {
     if (players.length === 0) {
-      goToStep(3);
-      return;
-    }
-
-    const plan = planRosterSave(
-      players.map((player) => ({ name: player.name, number: player.jerseyNumber ?? null })),
-      savedKeysRef.current,
-    );
-    if (plan.pending.length === 0) {
       goToStep(3);
       return;
     }
 
     setIsSaving(true);
     setError('');
+    setServerLineError(null);
     setSaveTotal(players.length);
-    let saved = plan.alreadySaved;
-    setSavedCount(saved);
 
-    try {
-      // Sequencial de propósito: a API de jogadores não tem endpoint em lote,
-      // e disparar 30 requisições em paralelo no primeiro acesso é bom jeito
-      // de tomar rate-limit e assustar o usuário com metade salva.
-      for (let index = 0; index < players.length; index += 1) {
-        const key = plan.keys[index];
-        if (savedKeysRef.current.has(key)) continue;
-        await playersApi.create(players[index] as Player);
-        savedKeysRef.current.add(key);
-        saved += 1;
+    const result = await runRosterSave({
+      items: players,
+      savedKeys: savedKeysRef.current,
+      onProgress: (saved, total) => {
         setSavedCount(saved);
-      }
+        setSaveTotal(total);
+      },
+      create: async (player) => {
+        const saved = await playersApi.create(player as Player);
+        if (!saved) throw new Error('Não foi possível salvar o atleta no servidor.');
+      },
+    });
+
+    setIsSaving(false);
+    if (result.ok) {
       goToStep(3);
-    } catch {
-      // `saved` é local. O estado `savedCount` ainda pode estar no valor do render anterior.
-      setError(rosterSaveFailureMessage(saved, players.length));
-    } finally {
-      setIsSaving(false);
+      return;
     }
+    if (result.failedLineNumber != null) {
+      setServerLineError({ lineNumber: result.failedLineNumber, message: result.cause });
+    }
+    setError(`${result.message} ${result.cause}`);
   };
 
   const handleQuickSave = () => {
     const players = quickRows
       .filter((row) => row.name.trim().length > 1)
-      .map((row) =>
-        toRosterPlayer({
-          name: row.name.trim(),
-          number: row.jersey ? parseInt(row.jersey, 10) : null,
-          position: row.position,
-        })
-      );
+      .map((row) => {
+        const number = row.jersey ? parseInt(row.jersey, 10) : null;
+        return {
+          ...toRosterPlayer({ name: row.name.trim(), number, position: row.position }),
+          number,
+        };
+      });
     void savePlayers(players);
   };
 
   const handlePasteSave = (parsed: RosterLine[]) => {
-    const players = parsed.map((entry) => toRosterPlayer(entry));
+    const players = parsed.map((entry) => ({
+      ...toRosterPlayer(entry),
+      number: entry.number,
+      lineNumber: entry.lineNumber,
+    }));
     void savePlayers(players);
   };
 
@@ -283,6 +281,10 @@ export const WelcomeWizard: React.FC<WelcomeWizardProps> = ({
                     onParsed={handlePasteSave}
                     disabled={isSaving}
                     existingNumbers={existingJerseyNumbers}
+                    serverErrors={
+                      serverLineError ? { [serverLineError.lineNumber]: serverLineError.message } : undefined
+                    }
+                    onDraftChange={() => setServerLineError(null)}
                   />
                   <button type="button" onClick={() => setRosterMode(null)} className="text-xs text-zinc-500 hover:text-zinc-300">
                     ← Escolher outro caminho

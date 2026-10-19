@@ -1247,6 +1247,13 @@ export default function App() {
     return fallback;
   };
 
+  const importPlayer = async (newPlayer: Player): Promise<Player> => {
+    const saved = await playersApi.create(newPlayer);
+    if (!saved) throw new Error('Não foi possível salvar o atleta no servidor.');
+    setPlayers(prev => (prev.some(player => player.id === saved.id) ? prev : [...prev, saved]));
+    return saved;
+  };
+
   const handleAddPlayer = async (newPlayer: Player): Promise<boolean> => {
     try {
       const saved = await playersApi.create(newPlayer);
@@ -1614,7 +1621,7 @@ export default function App() {
               setOverviewTeamSettings({ teamName, teamShieldUrl: shieldUrl });
             } catch (_) {}
           }
-          setCurrentRoute('app');
+          setCurrentRoute(p === WELCOME_PATH && !isAthleteRestore ? 'welcome' : 'app');
           if (p === '/dashboard/assistente') setAssistantOpen(true);
           setIsInitializing(false);
           restored = true;
@@ -1627,7 +1634,7 @@ export default function App() {
                 const cached = JSON.parse(raw) as User;
                 if (cached?.id) {
                   setCurrentUser(cached);
-                  setCurrentRoute('app');
+                  setCurrentRoute(p === WELCOME_PATH && cached.role !== 'Atleta' ? 'welcome' : 'app');
                   setIsInitializing(false);
                   restored = true;
                   return;
@@ -2044,7 +2051,8 @@ export default function App() {
           <TabBackgroundWrapper>
             <TeamManagement 
               players={players} 
-              onAddPlayer={handleAddPlayer} 
+              onAddPlayer={handleAddPlayer}
+              onImportPlayer={importPlayer}
               onUpdatePlayer={handleUpdatePlayer}
               onDeletePlayer={handleDeletePlayer}
               config={config}
@@ -2503,7 +2511,7 @@ export default function App() {
           <OnboardingChecklist
             onboarding={onboarding}
             onNavigate={(stepId) => {
-              if (stepId === 'roster') handleTabChange('players');
+              if (stepId === 'roster') handleTabChange('team');
               else if (stepId === 'match') handleTabChange('table');
             }}
             onClearDemo={clearDemoData}
