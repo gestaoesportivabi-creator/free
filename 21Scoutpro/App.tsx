@@ -59,6 +59,11 @@ import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/tr
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
+import {
+  SAVE_UNCONFIRMED_MESSAGE,
+  isUnconfirmedSaveError,
+  verifyPostMatchEventLog,
+} from './utils/verifyPostMatchEventLog';
 import { isMatchFinalizedForScout } from './utils/matchStatus';
 import { replaceMatchInList } from './utils/matchListState';
 import { rememberMatchDetail } from './utils/matchEventLog';
@@ -1188,6 +1193,22 @@ export default function App() {
         const isCreated = operation === 'created';
         
         if (saved) {
+          const expectedLogLength = Array.isArray(newMatch.postMatchEventLog) ? newMatch.postMatchEventLog.length : 0;
+          const verified = await verifyPostMatchEventLog(saved, expectedLogLength);
+          const kept = verified.match;
+          if (verified.status === 'unavailable') {
+            console.warn('GET de verificação da fita falhou; a coleta do PUT foi mantida.', kept.id);
+          } else if (verified.status === 'shorter') {
+            console.warn(
+              `Fita confirmada com ${verified.serverLogLength ?? 0} lance(s); a coleta local tem ${expectedLogLength} e foi mantida.`,
+              kept.id
+            );
+            if (kept.teamStats) {
+              rememberMatchDetail(kept);
+              setMatches((prev) => replaceMatchInList(prev, kept));
+            }
+            if (!isAutosave) return undefined;
+          }
           // Devolver ao chamador (ex.: coleta) para fixar o mesmo id em memória — sem criar partidas novas a cada save
           // Atualizar cartões por campeonato (regras de suspensão) usando o payload enviado
           const competitionName = newMatch.competition || saved.competition;
@@ -1213,9 +1234,9 @@ export default function App() {
           }
           // Atualiza só a partida salva. A listagem não traz o log; recarregar getAll()
           // a cada autosave devolvia a fita de todas as partidas do tenant.
-          if (saved.teamStats) {
-            rememberMatchDetail(saved);
-            setMatches((prev) => replaceMatchInList(prev, saved));
+          if (kept.teamStats) {
+            rememberMatchDetail(kept);
+            setMatches((prev) => replaceMatchInList(prev, kept));
             if (!isAutosave) {
               if (saveAsIncomplete) {
                 alert('Dados guardados como incompleto. Pode continuar a coleta mais tarde.');
@@ -1226,15 +1247,15 @@ export default function App() {
                 if (isCreated) setActiveTab('general');
               }
             }
-            return saved;
+            return kept;
           } else {
-            console.error('❌ Erro: Match salvo sem teamStats:', saved);
+            console.error('❌ Erro: Match salvo sem teamStats:', kept);
             if (!isAutosave) alert("Partida salva, mas com dados incompletos. Verifique o console.");
-            return saved;
+            return kept;
           }
         } else {
           console.error('❌ Erro: Resposta do salvamento foi null/undefined');
-          if (!isAutosave) alert("Erro ao salvar a partida no servidor. Verifique sua conexão e tente novamente. Os dados NÃO foram gravados.");
+          if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
         }
         return undefined;
       } catch (error) {
@@ -1244,8 +1265,24 @@ export default function App() {
           if (!isAutosave) throw error;
           return undefined;
         }
+        if (isUnconfirmedSaveError(error)) {
+          const expectedLogLength = Array.isArray(newMatch.postMatchEventLog) ? newMatch.postMatchEventLog.length : 0;
+          const id = newMatch.id != null ? String(newMatch.id).trim() : '';
+          if (id && expectedLogLength > 0) {
+            const verified = await verifyPostMatchEventLog({ ...newMatch, id }, expectedLogLength);
+            if (verified.status === 'confirmed' && verified.match.teamStats) {
+              rememberMatchDetail(verified.match);
+              setMatches((prev) => replaceMatchInList(prev, verified.match));
+              return verified.match;
+            }
+          }
+          if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
+          return undefined;
+        }
         const msg = error instanceof Error ? error.message : 'Erro desconhecido';
-        if (!isAutosave) alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
+        if (!isAutosave) {
+          alert(`Erro ao salvar partida: ${msg}\n\nA coleta continua nesta tela e não foi apagada.`);
+        }
         return undefined;
       }
   };

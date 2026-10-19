@@ -82,9 +82,14 @@ export const matchesService = {
       matchesRepository.findEstatisticasEquipe(id, tx),
       matchesRepository.findEstatisticasJogadores(id, tx),
     ]);
-    if (!estatisticasEquipe) throw new NotFoundError('Estatísticas do jogo', id);
-
-    const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
+    // A listagem sintetiza teamStats quando a linha de estatísticas ainda não existe
+    // e mesmo assim devolve o jogo. 404 aqui fazia o getById (sob demanda após a
+    // listagem sem log) sumir com uma partida que o GET /matches já mostrava.
+    const match = transformMatchToFrontend(
+      jogo as any,
+      estatisticasJogadores as any,
+      estatisticasEquipe || undefined
+    );
     const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
       matchesRepository.getStatusByIds([id], tx),
       matchesRepository.getMetodoGolByJogoIds([id], tx),

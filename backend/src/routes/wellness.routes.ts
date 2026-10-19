@@ -3,10 +3,14 @@ import { wellnessController } from '../controllers/wellness.controller';
 
 const router = Router();
 
-// Buscar todos de um tipo específico (pse-treino, pse-jogo, psr-treino, psr-jogo, qualidade-sono)
-router.get('/:type', wellnessController.getAll);
+// Funções soltas: passar o método do objeto ao Express zera `this` e o
+// ramo bem-estar-diario virava TypeError → 500 em todo GET/POST.
+router.get('/:type', (req, res, next) => {
+  wellnessController.getAll(req, res).catch(next);
+});
 
-// Salvar / Sincronizar em lote
-router.post('/:type/bulk', wellnessController.saveBulk);
+router.post('/:type/bulk', (req, res, next) => {
+  wellnessController.saveBulk(req, res).catch(next);
+});
 
 export default router;

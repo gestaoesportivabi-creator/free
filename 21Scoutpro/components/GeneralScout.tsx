@@ -6,10 +6,17 @@ import { ExpandableCard } from './ExpandableCard';
 import { LockedFeatureBlock } from './EmBreve';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
+import { athleteRosterLabel } from '../utils/athleteRosterLabel';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { possessionShare, readPossessionSeconds } from '../utils/possessionStats';
+import {
+  GOAL_BY_PERIOD_LABELS,
+  countGoalsByPeriod,
+  goalClockStringsFromMatch,
+  summarizeGoalPeriods,
+} from '../utils/goalPeriodBuckets';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -21,20 +28,6 @@ interface GeneralScoutProps {
   comparisonChild?: boolean;
 }
 
-
-/** Faixas de 5 min (0–50 min) para gols por período — legendas do eixo X */
-const GOAL_BY_PERIOD_LABELS = [
-  '00:00 - 05:00',
-  '05:01 - 10:00',
-  '10:01 - 15:00',
-  '15:01 - 20:00',
-  '20:01 - 25:00',
-  '25:01 - 30:00',
-  '30:01 - 35:00',
-  '35:01 - 40:00',
-  '40:01 - 45:00',
-  '45:01 - 50:00',
-] as const;
 
 const MONTHS = [
   { value: 'Todos', label: 'Todos os Meses' },
@@ -456,20 +449,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
   }, [filteredMatches, periodFilter]);
 
   const athleteOptions = useMemo(() => {
-    const byId = new Map<string, string>();
+    const byId = new Map<string, { label: string; title: string }>();
     players
       .filter((p) => !p.isTransferred)
-      .forEach((p) => byId.set(String(p.id), p.nickname || p.name));
+      .forEach((p) => byId.set(String(p.id), athleteRosterLabel(p)));
     scopedMatches.forEach((m) => {
       const pStats = m.playerStats || {};
       Object.keys(pStats).forEach((id) => {
         const normalized = String(id).trim();
         if (!normalized || normalized === OPPONENT_FAKE_PLAYER_ID) return;
-        if (!byId.has(normalized)) byId.set(normalized, normalized);
+        if (!byId.has(normalized)) byId.set(normalized, { label: normalized, title: normalized });
       });
     });
     return Array.from(byId.entries())
-      .map(([id, name]) => ({ id, name }))
+      .map(([id, visible]) => ({ id, name: visible.label, title: visible.title }))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [players, scopedMatches]);
   const athleteFilterIdSafe = useMemo(
@@ -726,130 +719,43 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
     };
   }, [athleteFilteredMatches]);
 
-  /** Minuto absoluto do jogo (0–50) para eixos 5 em 5 min. Respeita sufixo "(1T)"/"(2T)" e legado de relógio na planilha. */
-  const parseGoalTimeToAbsoluteMinutes = (timeStr: string): number | null => {
-    if (!timeStr || typeof timeStr !== 'string') return null;
-    const paren = timeStr.match(/\(([12])T\)\s*$/i);
-    if (paren) {
-      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
-      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
-      const absSec = postMatchEventClockToAbsoluteSeconds(clockPart, period);
-      return Math.floor(absSec / 60);
-    }
-    const cleanTime = timeStr.split('(')[0].trim();
-    const parts = cleanTime.split(':');
-    if (parts.length === 2) {
-    const minutes = parseInt(parts[0], 10);
-      if (!isNaN(minutes)) return minutes;
-    }
-    const minutesOnly = parseInt(cleanTime, 10);
-    return !isNaN(minutesOnly) ? minutesOnly : null;
-  };
-
-  /** Segundos absolutos no jogo (0 … ~50 min) a partir do texto do relógio — para faixas de 5 min. */
-  const parseGoalTimeToTotalSeconds = (timeStr: string): number | null => {
-    if (!timeStr || typeof timeStr !== 'string') return null;
-    const paren = timeStr.match(/\(([12])T\)\s*$/i);
-    if (paren) {
-      const clockPart = timeStr.slice(0, timeStr.indexOf('(')).trim();
-      const period = (paren[1] === '2' ? '2T' : '1T') as MatchHalf;
-      return postMatchEventClockToAbsoluteSeconds(clockPart, period);
-    }
-    const cleanTime = timeStr.split('(')[0].trim();
-    const parts = cleanTime.split(':');
-    if (parts.length === 2) {
-      const m = parseInt(parts[0], 10);
-      const sec = parseInt(parts[1], 10);
-      if (!isNaN(m) && !isNaN(sec) && sec >= 0 && sec <= 59) return m * 60 + sec;
-    }
-    const mOnly = parseInt(cleanTime, 10);
-    return !isNaN(mOnly) ? mOnly * 60 : null;
-  };
-
-  /** Índice 0–9 em GOAL_BY_PERIOD_LABELS; primeiro bloco [0, 5:00], depois a cada 5 min (ex.: 45:01–50:00). */
-  const goalPeriodIndexFromTotalSeconds = (tSec: number): number | null => {
-    if (!Number.isFinite(tSec) || tSec < 0) return null;
-    const maxSec = 50 * 60;
-    if (tSec > maxSec) return null;
-    if (tSec <= 300) return 0;
-    return Math.min(9, Math.floor((tSec - 1) / 300));
-  };
-
-  // Time Period Data — 10 faixas de 5 min (00:00–50:00)
+  // Time Period Data — 10 faixas de 5 min (00:00–50:00).
+  // Com a fita, o relógio sai do log (igual ao pré-#10). Sem ela, do agregado "MM:SS (1T|2T)".
   const timePeriodData = useMemo(() => {
     const periods = [...GOAL_BY_PERIOD_LABELS];
     const scoredCounts = new Array(periods.length).fill(0);
     const concededCounts = new Array(periods.length).fill(0);
-    
-    athleteFilteredMatches.forEach(match => {
-      if (!match.teamStats || !match.teamStats.goalTimes) return;
-      match.teamStats.goalTimes.forEach(goalTime => {
-        const tSec = parseGoalTimeToTotalSeconds(goalTime.time);
-        if (tSec === null) return;
-        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
-        if (periodIndex !== null) scoredCounts[periodIndex]++;
+
+    athleteFilteredMatches.forEach((match) => {
+      countGoalsByPeriod(goalClockStringsFromMatch(match, 'scored')).forEach((count, index) => {
+        scoredCounts[index] += count;
+      });
+      countGoalsByPeriod(goalClockStringsFromMatch(match, 'conceded')).forEach((count, index) => {
+        concededCounts[index] += count;
       });
     });
-    
-    athleteFilteredMatches.forEach(match => {
-      if (!match.teamStats || !match.teamStats.goalsConcededTimes) return;
-      match.teamStats.goalsConcededTimes.forEach(goalConceded => {
-        const tSec = parseGoalTimeToTotalSeconds(goalConceded.time);
-        if (tSec === null) return;
-        const periodIndex = goalPeriodIndexFromTotalSeconds(tSec);
-        if (periodIndex !== null) concededCounts[periodIndex]++;
+
+    const maxScored = summarizeGoalPeriods(scoredCounts);
+    const maxConceded = summarizeGoalPeriods(concededCounts);
+
+    const toDist = (counts: number[], maxCount: number) =>
+      periods.map((period, index) => {
+        const val = counts[index];
+        const isMax = val === maxCount && maxCount > 0;
+        return {
+          period,
+          value: val,
+          isMax,
+          labelTop: isMax || val === 0 ? '' : val,
+          labelMax: isMax ? val : '',
+        };
       });
-    });
-    
-    // Máximo por chart para destacar o período com mais gols (label amarelo)
-    const maxScoredValue = scoredCounts.length ? Math.max(...scoredCounts) : 0;
-    const maxConcededValue = concededCounts.length ? Math.max(...concededCounts) : 0;
 
-    // Criar distribuição com valores reais; labelTop = valor acima (não-max), labelBottom = valor abaixo (só no período com mais gols)
-    const scoredDist = periods.map((p, i) => {
-      const val = scoredCounts[i];
-      const isMax = val === maxScoredValue && maxScoredValue > 0;
-      return {
-        period: p,
-        value: val,
-        isMax,
-        labelTop: isMax ? '' : val,
-        labelBottom: isMax ? val : ''
-      };
-    });
-
-    const concededDist = periods.map((p, i) => {
-      const val = concededCounts[i];
-      const isMax = val === maxConcededValue && maxConcededValue > 0;
-      return {
-        period: p,
-        value: val,
-        isMax,
-        labelTop: isMax ? '' : val,
-        labelBottom: isMax ? val : ''
-      };
-    });
-
-    // Calcular total de gols para porcentagem
-    const totalScored = scoredCounts.reduce((sum, count) => sum + count, 0);
-    const totalConceded = concededCounts.reduce((sum, count) => sum + count, 0);
-
-    // Encontrar período com mais gols
-    const maxScoredPeriod = scoredDist.reduce((max, curr) => curr.value > max.value ? curr : max, scoredDist[0]);
-    const maxConcededPeriod = concededDist.reduce((max, curr) => curr.value > max.value ? curr : max, concededDist[0]);
-    
-    const scoredPercentage = totalScored > 0 
-      ? ((maxScoredPeriod.value / totalScored) * 100).toFixed(2)
-      : '0.00';
-    const concededPercentage = totalConceded > 0
-      ? ((maxConcededPeriod.value / totalConceded) * 100).toFixed(2)
-      : '0.00';
-
-    return { 
-      scoredDist, 
-      concededDist,
-      maxScoredPeriod: { period: maxScoredPeriod.period, percentage: scoredPercentage },
-      maxConcededPeriod: { period: maxConcededPeriod.period, percentage: concededPercentage }
+    return {
+      scoredDist: toDist(scoredCounts, maxScored.maxCount),
+      concededDist: toDist(concededCounts, maxConceded.maxCount),
+      maxScoredPeriod: { period: maxScored.maxLabel, percentage: maxScored.percentage },
+      maxConcededPeriod: { period: maxConceded.maxLabel, percentage: maxConceded.percentage },
     };
   }, [athleteFilteredMatches]);
 
@@ -1090,7 +996,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
   const hasPossessionData = possessionDonutData !== null;
 
   const goalkeeperDefenseRows = useMemo(() => {
-    const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
+    const map = new Map<string, { name: string; title: string; easy: number; hard: number; total: number }>();
     for (const match of athleteFilteredMatches) {
       const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
       for (const e of log as any[]) {
@@ -1101,7 +1007,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
         const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!map.has(playerId)) {
           const p = players.find((x) => String(x.id).trim() === playerId);
-          map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
+          const visible = p ? athleteRosterLabel(p) : { label: playerId, title: playerId };
+          map.set(playerId, { name: visible.label, title: visible.title, easy: 0, hard: 0, total: 0 });
         }
         const row = map.get(playerId)!;
         if (norm.includes('simple') || norm.includes('simples') || norm.includes('facil')) row.easy += 1;
@@ -1215,7 +1122,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
           <Select
             value={athleteFilterIdSafe}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAthleteFilterId(e.target.value)}
-            options={[{ value: 'Todos', label: 'Todos Atletas' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name }))]}
+            title={athleteOptions.find((a) => a.id === athleteFilterIdSafe)?.title ?? 'Todos Atletas'}
+            options={[{ value: 'Todos', label: 'Todos Atletas' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name, title: a.title }))]}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1713,7 +1621,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                  {goalkeeperDefenseRows.length > 0 ? (
                    goalkeeperDefenseRows.map((row, idx) => (
                      <tr key={`def-gk-${idx}`} className="border-b border-zinc-900/50">
-                       <td className="py-2 text-white" style={legendLabelStyle}>{row.name}</td>
+                       <td className="py-2 text-white max-w-[16rem]" style={legendLabelStyle} title={row.title}>
+                         <span className="block truncate">{row.name}</span>
+                       </td>
                        <td className="py-2 text-right text-blue-300" style={legendLabelStyle}>{row.easy}</td>
                        <td className="py-2 text-right text-blue-500" style={legendLabelStyle}>{row.hard}</td>
                        <td className="py-2 text-right text-zinc-300" style={legendLabelStyle}>{row.total}</td>
@@ -2017,10 +1927,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                         activeDot={{r: 6}}
                         name="Gols Feitos"
                     >
-                        {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
-                        {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-8} />
+                        <LabelList dataKey="labelMax" position="top" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-8} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -2059,10 +1967,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                         activeDot={{r: 6}}
                         name="Gols Tomados"
                     >
-                        {/* Rótulos acima da linha (demais períodos) */}
-                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-25} />
-                        {/* Rótulo abaixo da linha só no período com mais gols (amarelo) */}
-                        <LabelList dataKey="labelBottom" position="bottom" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={18} />
+                        <LabelList dataKey="labelTop" position="top" fill="#fff" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-8} />
+                        <LabelList dataKey="labelMax" position="top" fill="#eab308" fontSize={14} fontWeight="normal" fontFamily={CHART_FONT} dy={-8} />
                     </Line>
                 </LineChart>
              </ResponsiveContainer>
@@ -2337,11 +2243,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
 };
 
 // UI Components
-const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, options: any[]}> = ({value, onChange, options}) => (
+const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, options: any[], title?: string}> = ({value, onChange, options, title}) => (
     <div className="relative">
         <select
             value={value}
             onChange={onChange}
+            title={title}
             className="w-full bg-black border border-zinc-800 text-white py-2.5 pl-3 pr-9 rounded-lg focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] outline-none text-xs font-bold appearance-none uppercase truncate"
         >
             {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -2501,8 +2408,8 @@ const PlayerStatsTable: React.FC<{
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                  <td className="py-2 text-white" style={legendStyle}>
-                    {stat.name}
+                  <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                    <span className="block truncate">{stat.name}</span>
                   </td>
                   <td className="py-2 text-right text-orange-300" style={legendStyle}>
                     {stat.correct}
@@ -2543,8 +2450,8 @@ const PlayerStatsTable: React.FC<{
             <tbody>
               {playerStats.map((stat, idx) => (
                 <tr key={idx} className="border-b border-zinc-900/50">
-                  <td className="py-2 text-white" style={legendStyle}>
-                    {stat.name}
+                  <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                    <span className="block truncate">{stat.name}</span>
                   </td>
                   <td className="py-2 text-right text-yellow-400" style={legendStyle}>
                     {stat.correct}
@@ -2607,8 +2514,8 @@ const PlayerStatsTable: React.FC<{
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                <td className="py-2 text-white" style={legendStyle}>
-                  {stat.name}
+                <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                  <span className="block truncate">{stat.name}</span>
                 </td>
                 <td className="py-2 text-right text-[#10b981]" style={legendStyle}>
                   {stat.correct}

@@ -14,11 +14,10 @@ export function omitUnhydratedEventLog(
   const id = match.id != null ? String(match.id) : '';
   if (!isPersistedServerMatchId(id)) return false;
   if (localEventCount > 0 || deletedCount > 0) return false;
-  if (matchNeedsEventLogFetch(match)) return true;
-  const storedCount = Array.isArray(match.postMatchEventLog)
-    ? match.postMatchEventLog.length
-    : (match.postMatchEventCount ?? 0);
-  return storedCount > 0;
+  // Sem o array não sabemos se o servidor tem fita (getById 404, stub, contagem 0).
+  // Mandar [] apagaria ou levaria 409. Array vazio explícito é log hidratado de verdade.
+  if (!Array.isArray(match.postMatchEventLog)) return true;
+  return match.postMatchEventLog.length > 0;
 }
 
 /** A listagem não traz o array. Quem precisa da fita busca getById. */
@@ -35,7 +34,7 @@ export function mergeMatchWithEventLog(listMatch: MatchRecord, full: MatchRecord
   return {
     ...listMatch,
     ...full,
-    id: listMatch.id || full.id,
+    id: full.id || listMatch.id,
     scoreTarget: full.scoreTarget ?? listMatch.scoreTarget,
     postMatchEventLog: log,
     postMatchEventCount: Array.isArray(log) ? log.length : listMatch.postMatchEventCount,

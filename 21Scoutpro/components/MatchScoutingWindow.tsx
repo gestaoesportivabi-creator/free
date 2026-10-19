@@ -426,6 +426,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return isPersistedServerMatchId(id) ? id : '';
   });
   const persistedMatchIdRef = useRef<string>(isPersistedServerMatchId(match?.id != null ? String(match.id).trim() : '') ? String(match.id).trim() : '');
+  /** Partida dona da fita em memória. Um detalhe sem log não pode zerar a coleta dessa mesma partida. */
+  const localEventsMatchIdRef = useRef<string>('');
+  const matchEventsRef = useRef<MatchEvent[]>([]);
   const [lastPersistedSignature, setLastPersistedSignature] = useState<string>('');
 
   useEffect(() => {
@@ -456,6 +459,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [activePlayers, setActivePlayers] = useState<Player[]>([]);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [matchEvents, setMatchEvents] = useState<MatchEvent[]>([]);
+  matchEventsRef.current = matchEvents;
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null); // ID do jogador selecionado para ação
   const [goalsFor, setGoalsFor] = useState<number>(0); // Gols da nossa equipe
   const [goalsAgainst, setGoalsAgainst] = useState<number>(0); // Gols do adversário
@@ -1507,9 +1511,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setRealtimeHydrationReady(false);
     }
     const mid = String(match?.id ?? '').trim();
-    if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
+    const switchedMatch =
+      lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid;
+    if (switchedMatch) {
       hydrationAppliedForMatchIdRef.current = null;
       deletedEventIdsRef.current.clear();
+      localEventsMatchIdRef.current = '';
+      setMatchEvents([]);
+      recalcGoalsAndFoulsFromEvents([]);
     }
     lastSeenMatchIdForHydrationRef.current = mid;
 
@@ -1544,18 +1553,28 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
-    hydrationAppliedForMatchIdRef.current = mid;
-
     let converted: MatchEvent[] = [];
+    let keptLocalTape = false;
     if (hasLog) {
       converted = postMatchEventLogToMatchEvents(log, players);
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
       setMatchEvents(converted);
       recalcGoalsAndFoulsFromEvents(converted);
+    } else if (!switchedMatch && matchEventsRef.current.length > 0) {
+      // Detalhe sem fita (GET 404 ou lista sem array) não apaga o que já foi coletado nesta partida.
+      keptLocalTape = true;
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
+      converted = matchEventsRef.current;
     } else {
+      localEventsMatchIdRef.current = mid;
+      hydrationAppliedForMatchIdRef.current = mid;
       setMatchEvents([]);
       recalcGoalsAndFoulsFromEvents([]);
     }
 
+    const hasTape = hasLog || keptLocalTape;
     const has2TEvent = converted.some((e) => e.period === '2T');
     const restoredPossession = readPossessionSeconds(match);
     setPossessionSecondsWith(restoredPossession.withBall);
@@ -1593,7 +1612,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setCurrentGoalkeeperId(tit[0]);
           setBallPossessionNow(L.ballPossessionStart === 'us' ? 'com' : 'sem');
           setSquadActiveIds(tit);
-        } else if (hasLog) {
+        } else if (hasTape) {
           // Reingresso com fita: partida já começou, mas CTA padrão precisa
           // permanecer se a escalação estiver incompleta (BUG-CTA-PADRAO-REINGRESSO).
           setIsMatchStarted(true);
@@ -1605,7 +1624,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           setShowLineupModal(true);
           setSquadActiveIds([]);
         }
-      } else if (hasLog && L) {
+      } else if (hasTape && L) {
         setLineupPlayers(L.players ?? []);
         setBenchPlayers(L.bench ?? []);
         if (L.ballPossessionStart) {
@@ -1622,7 +1641,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       const reopenedClock = resolveRealtimeReopenClock({
         persistedClock: match.lineup?.clockSnapshot,
         events: converted.map((event) => ({ time: event.time, period: event.period })),
-        hasLog,
+        hasLog: hasTape,
         collectionPhase: phase,
         inSecondHalf,
         hasPossessionProgress,
@@ -2410,7 +2429,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       applySaveResult(saveResult);
 
       if (!saveResult || typeof saveResult !== 'object' || !saveResult.id) {
-        setFinalizeError('Falha ao salvar a coleta. Verifique a conexão e tente novamente.');
+        setFinalizeError('Falha ao confirmar a coleta no servidor. Os lances continuam nesta tela e não foram apagados. Tente novamente.');
         setIsFinalizing(false);
         autosaveSkipRef.current = false;
         return;

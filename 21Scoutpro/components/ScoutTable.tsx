@@ -2897,6 +2897,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         );
                                     }
                                     if (options?.source === 'autosave') return result;
+                                    if (!result?.id) return result;
                                     if (options?.saveAsIncomplete) {
                                         handleBackToCalendar();
                                         return result;
@@ -4026,6 +4027,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             );
                         }
                         if (options?.source === 'autosave') return result;
+                        if (!result?.id) return result;
                         if (options?.saveAsIncomplete) {
                             handleBackToCalendar();
                             return result;

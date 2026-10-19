@@ -1,18 +1,31 @@
 import { Request, Response } from 'express';
-import prisma from '../config/database';
 import { randomUUID } from 'crypto';
+import prisma from '../config/database';
+import { bemEstarDiarioRepository, BemEstarDiarioRepository } from '../repositories/bemEstarDiario.repository';
+import {
+  PreparedBemEstar,
+  StaffWellnessType,
+  assertBemEstarRowInScope,
+  assertStaffWellnessType,
+  bemEstarListWhere,
+  parseBemEstarDate,
+  parseWellnessScore,
+  prepareBemEstarItem,
+  resolveTeamScope,
+  wellnessFailure,
+} from '../services/staffWellness.service';
+import { ValidationError } from '../utils/errors';
 
-type WellnessType = 'pse-treino' | 'pse-jogo' | 'psr-treino' | 'psr-jogo' | 'qualidade-sono';
-type WellnessExtendedType = WellnessType | 'bem-estar-diario';
+type ClassicWellnessType = Exclude<StaffWellnessType, 'bem-estar-diario'>;
 
-const getModelInfo = (type: WellnessType) => {
+const getModelInfo = (type: ClassicWellnessType) => {
   switch (type) {
     case 'pse-treino': return { model: prisma.pseTreino, idField: 'equipeId' as const, dateField: 'data' as const };
     case 'pse-jogo': return { model: prisma.pseJogo, idField: 'jogoId' as const, dateField: undefined };
     case 'psr-treino': return { model: prisma.psrTreino, idField: 'equipeId' as const, dateField: 'data' as const };
     case 'psr-jogo': return { model: prisma.psrJogo, idField: 'jogoId' as const, dateField: undefined };
     case 'qualidade-sono': return { model: prisma.qualidadeSono, idField: 'equipeId' as const, dateField: 'data' as const };
-    default: throw new Error('Tipo inválido');
+    default: throw new ValidationError('Tipo de wellness inválido.');
   }
 };
 
@@ -24,235 +37,228 @@ function isAdminUser(req: Request): boolean {
   return req.user?.role_id === 'ADMINISTRADOR';
 }
 
-export const wellnessController = {
-  async getBemEstarDiario(req: Request, res: Response): Promise<void> {
-    try {
-      const equipeIds = tenantEquipeIds(req);
-      const admin = isAdminUser(req);
+function respondError(res: Response, error: unknown, fallback: string): void {
+  const failure = wellnessFailure(error, fallback);
+  if (failure.status >= 500) console.error(fallback, error);
+  if (res.headersSent) return;
+  res.status(failure.status).json({ success: false, error: failure.error });
+}
 
-      if (!admin && equipeIds.length === 0) {
-        res.json({ success: true, data: [] });
-        return;
+async function listBemEstar(req: Request, res: Response, repo: BemEstarDiarioRepository): Promise<void> {
+  const scope = resolveTeamScope(isAdminUser(req), tenantEquipeIds(req));
+  if (scope.mode === 'none') {
+    res.json({ success: true, data: [] });
+    return;
+  }
+
+  const data = await repo.findMany({
+    where: bemEstarListWhere(scope),
+    orderBy: { created_at: 'desc' },
+  });
+  res.json({ success: true, data });
+}
+
+async function saveBemEstar(req: Request, res: Response, repo: BemEstarDiarioRepository): Promise<void> {
+  const items = (req.body as { items?: unknown } | undefined)?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ValidationError('Lista de dados inválida.');
+  }
+
+  const admin = isAdminUser(req);
+  const scope = resolveTeamScope(admin, tenantEquipeIds(req));
+  const prepared = items
+    .map((item) => prepareBemEstarItem(item, scope))
+    .filter((item): item is PreparedBemEstar => item !== null);
+
+  const results: unknown[] = [];
+  for (const item of prepared) {
+    const existing = await repo.findFirst({
+      where: { jogador_id: item.jogadorId, data: item.data },
+    });
+
+    if (existing) {
+      assertBemEstarRowInScope(existing.equipe_id, admin, scope);
+      const updated = await repo.update({
+        where: { id: existing.id },
+        data: {
+          ...item.payload,
+          equipe_id: item.equipeId,
+          updated_at: new Date(),
+        },
+      });
+      results.push(updated);
+    } else {
+      const created = await repo.create({
+        data: {
+          id: randomUUID(),
+          equipe_id: item.equipeId,
+          jogador_id: item.jogadorId,
+          data: item.data,
+          ...item.payload,
+        },
+      });
+      results.push(created);
+    }
+  }
+
+  res.status(200).json({ success: true, data: results });
+}
+
+export async function getAll(
+  req: Request,
+  res: Response,
+  repo: BemEstarDiarioRepository = bemEstarDiarioRepository
+): Promise<void> {
+  try {
+    const type = assertStaffWellnessType(req.params.type);
+    if (type === 'bem-estar-diario') {
+      await listBemEstar(req, res, repo);
+      return;
+    }
+
+    const { model, dateField } = getModelInfo(type);
+    const scope = resolveTeamScope(isAdminUser(req), tenantEquipeIds(req));
+    if (scope.mode === 'none') {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const teamWhere = bemEstarListWhere(scope);
+    let data: unknown[];
+    if (!teamWhere) {
+      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+        orderBy: { createdAt: 'desc' },
+      });
+    } else if (dateField !== undefined) {
+      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+        where: { equipeId: teamWhere.equipe_id },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+        where: { jogo: { equipeId: teamWhere.equipe_id } },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    res.json({ success: true, data });
+  } catch (error: unknown) {
+    respondError(res, error, 'Erro ao buscar dados.');
+  }
+}
+
+export async function saveBulk(
+  req: Request,
+  res: Response,
+  repo: BemEstarDiarioRepository = bemEstarDiarioRepository
+): Promise<void> {
+  try {
+    const type = assertStaffWellnessType(req.params.type);
+    if (type === 'bem-estar-diario') {
+      await saveBemEstar(req, res, repo);
+      return;
+    }
+
+    const items = (req.body as { items?: unknown } | undefined)?.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new ValidationError('Lista de dados inválida.');
+    }
+
+    const { model, idField, dateField } = getModelInfo(type);
+    const admin = isAdminUser(req);
+    const scope = resolveTeamScope(admin, tenantEquipeIds(req));
+
+    type Prepared = {
+      jogadorId: string;
+      fkId: string;
+      valor: number;
+      observacoes: unknown;
+      data?: Date;
+    };
+    const prepared: Prepared[] = [];
+
+    for (const raw of items) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new ValidationError('Item de wellness inválido.');
+      }
+      const item = raw as Record<string, unknown>;
+      const jogadorId = item.jogadorId;
+      const fkId = idField === 'jogoId' ? item.jogoId : item.equipeId;
+      if (typeof fkId !== 'string' || !fkId || typeof jogadorId !== 'string' || !jogadorId) continue;
+      if (item.value === undefined || item.value === null || item.value === '') continue;
+
+      const valor = parseWellnessScore(item.value);
+      if (valor === null) continue;
+
+      if (!admin) {
+        if (scope.mode === 'none') continue;
+        if (idField !== 'jogoId' && scope.mode === 'restricted' && !scope.equipeIds.includes(fkId)) continue;
       }
 
-      const data = await prisma.bem_estar_diario.findMany({
-        where: admin && equipeIds.length === 0 ? undefined : { equipe_id: { in: equipeIds } },
-        orderBy: { created_at: 'desc' },
+      let data: Date | undefined;
+      if (dateField === 'data') {
+        if (item.data === undefined || item.data === null || item.data === '') continue;
+        data = parseBemEstarDate(item.data);
+      }
+
+      prepared.push({
+        jogadorId,
+        fkId,
+        valor,
+        observacoes: item.observacoes,
+        data,
+      });
+    }
+
+    const results: unknown[] = [];
+    for (const item of prepared) {
+      if (!admin && idField === 'jogoId') {
+        if (scope.mode !== 'restricted') continue;
+        const jogo = await prisma.jogo.findUnique({
+          where: { id: item.fkId },
+          select: { equipeId: true },
+        });
+        if (!jogo || !scope.equipeIds.includes(jogo.equipeId)) continue;
+      }
+
+      const where: Record<string, unknown> = {
+        jogadorId: item.jogadorId,
+        [idField]: item.fkId,
+      };
+      if (dateField === 'data') where.data = item.data;
+
+      const existingRecord = await (model as { findFirst: (args: unknown) => Promise<{ id: string } | null> }).findFirst({
+        where,
       });
 
-      res.json({ success: true, data });
-    } catch (error: unknown) {
-      console.error('Erro ao buscar dados de bem-estar diário:', error);
-      res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
-    }
-  },
-
-  async saveBemEstarDiarioBulk(req: Request, res: Response): Promise<void> {
-    try {
-      const { items } = req.body;
-      if (!Array.isArray(items) || items.length === 0) {
-        res.status(400).json({ success: false, error: 'Lista de dados inválida.' });
-        return;
-      }
-
-      const equipeIds = tenantEquipeIds(req);
-      const admin = isAdminUser(req);
-
-      const clamp = (v: unknown): number | null => {
-        if (v === undefined || v === null || v === '') return null;
-        const n = Number(v);
-        if (Number.isNaN(n)) return null;
-        if (n < 1 || n > 5) return null;
-        return Math.round(n);
-      };
-
-      const results: unknown[] = [];
-
-      for (const item of items as Record<string, unknown>[]) {
-        const jogadorId = typeof item.jogadorId === 'string' ? item.jogadorId : '';
-        const equipeId = typeof item.equipeId === 'string' ? item.equipeId : '';
-        const dataRaw = item.data;
-        if (!jogadorId || !equipeId || (!dataRaw && dataRaw !== 0)) continue;
-
-        if (!admin) {
-          if (equipeIds.length === 0) continue;
-          if (!equipeIds.includes(equipeId)) continue;
-        }
-
-        const dataValue = new Date(dataRaw as string);
-        if (Number.isNaN(dataValue.getTime())) continue;
-
-        const payload = {
-          nivel_stress: clamp(item.nivel_stress),
-          qual_sono: clamp(item.qual_sono),
-          humor_mot: clamp(item.humor_mot),
-          dor_muscular: clamp(item.dor_muscular),
-          satisfacao: clamp(item.satisfacao),
-          observacoes: typeof item.observacoes === 'string' ? item.observacoes : null,
-        };
-
-        const existing = await prisma.bem_estar_diario.findFirst({
-          where: {
-            jogador_id: jogadorId,
-            data: dataValue,
-          },
+      if (existingRecord) {
+        const updated = await (model as { update: (args: unknown) => Promise<unknown> }).update({
+          where: { id: existingRecord.id },
+          data: { valor: item.valor, observacoes: item.observacoes },
         });
-
-        if (existing) {
-          const updated = await prisma.bem_estar_diario.update({
-            where: { id: existing.id },
-            data: {
-              ...payload,
-              equipe_id: equipeId,
-              updated_at: new Date(),
-            },
-          });
-          results.push(updated);
-        } else {
-          const created = await prisma.bem_estar_diario.create({
-            data: {
-              id: randomUUID(),
-              equipe_id: equipeId,
-              jogador_id: jogadorId,
-              data: dataValue,
-              ...payload,
-            },
-          });
-          results.push(created);
-        }
-      }
-
-      res.status(200).json({ success: true, data: results });
-    } catch (error: unknown) {
-      console.error('Erro ao salvar bem-estar diário:', error);
-      res.status(500).json({ success: false, error: 'Erro ao salvar os dados.' });
-    }
-  },
-
-  async getAll(req: Request, res: Response) {
-    try {
-      const { type } = req.params as { type: WellnessExtendedType };
-      if (type === 'bem-estar-diario') {
-        await this.getBemEstarDiario(req, res);
-        return;
-      }
-      const { model, dateField } = getModelInfo(type);
-
-      const equipeIds = tenantEquipeIds(req);
-      const admin = isAdminUser(req);
-
-      if (!admin && equipeIds.length === 0) {
-        res.json({ success: true, data: [] });
-        return;
-      }
-
-      let data: unknown[];
-      if (admin && equipeIds.length === 0) {
-        data = await (model as any).findMany({ orderBy: { createdAt: 'desc' } });
-      } else if (dateField !== undefined) {
-        data = await (model as any).findMany({
-          where: { equipeId: { in: equipeIds } },
-          orderBy: { createdAt: 'desc' },
-        });
+        results.push(updated);
       } else {
-        data = await (model as any).findMany({
-          where: { jogo: { equipeId: { in: equipeIds } } },
-          orderBy: { createdAt: 'desc' },
+        const dataToCreate: Record<string, unknown> = {
+          jogadorId: item.jogadorId,
+          [idField]: item.fkId,
+          valor: item.valor,
+          observacoes: item.observacoes,
+        };
+        if (dateField === 'data') dataToCreate.data = item.data;
+        const created = await (model as { create: (args: unknown) => Promise<unknown> }).create({
+          data: dataToCreate,
         });
+        results.push(created);
       }
-
-      res.json({ success: true, data });
-    } catch (error: unknown) {
-      console.error(`Erro ao buscar dados de ${req.params.type}:`, error);
-      res.status(500).json({ success: false, error: 'Erro ao buscar dados.' });
     }
-  },
 
-  async saveBulk(req: Request, res: Response): Promise<void> {
-    try {
-      const { type } = req.params as { type: WellnessExtendedType };
-      if (type === 'bem-estar-diario') {
-        await this.saveBemEstarDiarioBulk(req, res);
-        return;
-      }
-      const { items } = req.body;
-      const { model, idField, dateField } = getModelInfo(type);
+    res.status(200).json({ success: true, data: results });
+  } catch (error: unknown) {
+    respondError(res, error, 'Erro ao salvar os dados.');
+  }
+}
 
-      if (!Array.isArray(items) || items.length === 0) {
-        res.status(400).json({ success: false, error: 'Lista de dados inválida.' });
-        return;
-      }
-
-      const equipeIds = tenantEquipeIds(req);
-      const admin = isAdminUser(req);
-
-      const results: unknown[] = [];
-      for (const item of items) {
-        const { jogadorId, value, observacoes, data, jogoId, equipeId } = item as Record<string, unknown>;
-
-        const fkId = idField === 'jogoId' ? jogoId : equipeId;
-        if (!fkId || typeof fkId !== 'string' || !jogadorId || typeof jogadorId !== 'string' || value === undefined) continue;
-
-        if (!admin) {
-          if (equipeIds.length === 0) continue;
-          if (idField === 'jogoId') {
-            const jogo = await prisma.jogo.findUnique({
-              where: { id: fkId as string },
-              select: { equipeId: true },
-            });
-            if (!jogo || !equipeIds.includes(jogo.equipeId)) continue;
-          } else {
-            if (!equipeIds.includes(fkId as string)) continue;
-          }
-        }
-
-        let existingRecord = null;
-
-        if (dateField === 'data') {
-          if (typeof data !== 'string' && typeof data !== 'number') continue;
-          existingRecord = await (model as any).findFirst({
-            where: {
-              jogadorId,
-              [idField]: fkId,
-              [dateField]: new Date(data as string),
-            },
-          });
-        } else {
-          existingRecord = await (model as any).findFirst({
-            where: {
-              jogadorId,
-              [idField]: fkId,
-            },
-          });
-        }
-
-        if (existingRecord) {
-          const updated = await (model as any).update({
-            where: { id: existingRecord.id },
-            data: { valor: value, observacoes },
-          });
-          results.push(updated);
-        } else {
-          const dataToCreate: Record<string, unknown> = {
-            jogadorId,
-            [idField]: fkId,
-            valor: value,
-            observacoes,
-          };
-          if (dateField === 'data') {
-            if (typeof data !== 'string' && typeof data !== 'number') continue;
-            dataToCreate[dateField] = new Date(data as string);
-          }
-
-          const created = await (model as any).create({ data: dataToCreate });
-          results.push(created);
-        }
-      }
-
-      res.status(200).json({ success: true, data: results });
-    } catch (error: unknown) {
-      console.error(`Erro ao salvar dados de ${req.params.type}:`, error);
-      res.status(500).json({ success: false, error: 'Erro ao salvar os dados.' });
-    }
-  },
+export const wellnessController = {
+  getAll,
+  saveBulk,
 };
