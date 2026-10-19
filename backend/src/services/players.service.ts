@@ -11,6 +11,7 @@ import { assessmentsRepository } from '../repositories/assessments.repository';
 import { transformPlayerToFrontend } from '../adapters/player.adapter';
 import { Player } from '../types/frontend';
 import { NotFoundError, AppError } from '../utils/errors';
+import { jerseyConflictError } from '../validators/jerseyNumber';
 import prisma from '../config/database';
 import {
   createAthleteUserAccount,
@@ -20,6 +21,29 @@ import {
 
 function db(tx?: TransactionClient) {
   return tx ?? prisma;
+}
+
+/**
+ * 409 se outro atleta ativo da mesma equipe já usa a camisa.
+ * A equipe nova criada para o técnico entra no escopo; equipe de outro tenant não.
+ */
+async function assertJerseyFree(
+  equipeId: string | undefined,
+  numeroCamisa: unknown,
+  tenantInfo: TenantInfo,
+  knownEquipeIds: readonly string[],
+  excludePlayerId: string | undefined,
+  tx?: TransactionClient,
+): Promise<void> {
+  if (!equipeId || typeof numeroCamisa !== 'number' || !Number.isFinite(numeroCamisa)) return;
+  const holder = await playersRepository.findActiveJerseyHolder(
+    equipeId,
+    numeroCamisa,
+    { ...tenantInfo, equipe_ids: [...knownEquipeIds] },
+    excludePlayerId,
+    tx,
+  );
+  if (holder) throw jerseyConflictError(numeroCamisa, holder.nome);
 }
 
 async function withPlayerAccessFields(
@@ -309,6 +333,18 @@ export const playersService = {
         altura: dadosJogador.altura,
       });
 
+      const equipeIdsConsulta = equipeIds.includes(equipeIdParaVincular)
+        ? equipeIds
+        : [...equipeIds, equipeIdParaVincular];
+      await assertJerseyFree(
+        equipeIdParaVincular,
+        dadosJogador.numeroCamisa,
+        tenantInfo,
+        equipeIdsConsulta,
+        undefined,
+        tx,
+      );
+
       // Criar jogador
       const jogador = await playersRepository.create(dadosJogador, tx);
       console.log('[PLAYERS_SERVICE] create - Jogador criado no banco:', {
@@ -443,6 +479,12 @@ export const playersService = {
     if (dtNasc !== undefined) payload.dataNascimento = dtNasc;
     if (d.isAtivo !== undefined) payload.isAtivo = Boolean(d.isAtivo);
     if (Array.isArray(d.maxLoads) && d.maxLoads.length > 0) payload.maxLoadsJson = d.maxLoads;
+
+    const numeroEfetivo = (payload.numeroCamisa as number | undefined) ?? existing.numeroCamisa;
+    const equipesAtivas = await playersRepository.findActiveEquipeIds(id, tenantInfo, tx);
+    for (const equipeId of equipesAtivas) {
+      await assertJerseyFree(equipeId, numeroEfetivo, tenantInfo, tenantInfo.equipe_ids || [], id, tx);
+    }
 
     const jogador = await playersRepository.update(id, payload as any, tx);
 
