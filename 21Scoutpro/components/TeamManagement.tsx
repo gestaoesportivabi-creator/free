@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Player, Position, SportConfig, InjuryRecord, MaxLoad, LoadType } from '../types';
 import { EXERCISES, EXERCISE_CATEGORIES } from '../constants';
 import { Shirt, Save, Plus, FileText, Edit2, ShieldAlert, Activity, ArrowRightLeft, Calendar, Clock, Upload, AlertTriangle, X, Trash2, Dumbbell, Search, ChevronDown, ChevronRight, Ambulance, Pencil, Lock, Eye, EyeOff, ClipboardPaste } from 'lucide-react';
+import { athleteRosterLabel } from '../utils/athleteRosterLabel';
 import { INJURY_LOCATIONS_BY_TYPE } from '../utils/injuryLocations';
 import { playersApi } from '../services/api';
 import { RosterPaste } from './onboarding/RosterPaste';
@@ -798,8 +799,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                          </button>
                      </div>
                      
-                     <div className="absolute bottom-4 left-4">
-                         <h3 className="text-xl font-black text-white uppercase italic tracking-tighter drop-shadow-lg">{player.nickname || player.name}</h3>
+                     <div className="absolute bottom-4 left-4 right-24 min-w-0">
+                         <h3 className="text-xl font-black text-white uppercase italic tracking-tighter drop-shadow-lg truncate" title={athleteRosterLabel(player).title}>{athleteRosterLabel(player).label}</h3>
                          <p className={`font-bold text-xs uppercase tracking-widest ${player.position === 'Goleiro' ? 'text-amber-400' : 'text-[#10b981]'}`}>{player.position || '—'}</p>
                      </div>
                 </div>

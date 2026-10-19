@@ -6,6 +6,7 @@ import { ExpandableCard } from './ExpandableCard';
 import { LockedFeatureBlock } from './EmBreve';
 import { exportScoutToPdf } from '../utils/exportScoutPdf';
 import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
+import { athleteRosterLabel } from '../utils/athleteRosterLabel';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
@@ -455,20 +456,20 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
   }, [filteredMatches, periodFilter]);
 
   const athleteOptions = useMemo(() => {
-    const byId = new Map<string, string>();
+    const byId = new Map<string, { label: string; title: string }>();
     players
       .filter((p) => !p.isTransferred)
-      .forEach((p) => byId.set(String(p.id), p.nickname || p.name));
+      .forEach((p) => byId.set(String(p.id), athleteRosterLabel(p)));
     scopedMatches.forEach((m) => {
       const pStats = m.playerStats || {};
       Object.keys(pStats).forEach((id) => {
         const normalized = String(id).trim();
         if (!normalized || normalized === OPPONENT_FAKE_PLAYER_ID) return;
-        if (!byId.has(normalized)) byId.set(normalized, normalized);
+        if (!byId.has(normalized)) byId.set(normalized, { label: normalized, title: normalized });
       });
     });
     return Array.from(byId.entries())
-      .map(([id, name]) => ({ id, name }))
+      .map(([id, visible]) => ({ id, name: visible.label, title: visible.title }))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [players, scopedMatches]);
   const athleteFilterIdSafe = useMemo(
@@ -1095,7 +1096,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
   );
 
   const goalkeeperDefenseRows = useMemo(() => {
-    const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();
+    const map = new Map<string, { name: string; title: string; easy: number; hard: number; total: number }>();
     for (const match of athleteFilteredMatches) {
       const log = Array.isArray(match.postMatchEventLog) ? match.postMatchEventLog : [];
       for (const e of log as any[]) {
@@ -1106,7 +1107,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
         const norm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (!map.has(playerId)) {
           const p = players.find((x) => String(x.id).trim() === playerId);
-          map.set(playerId, { name: p?.nickname?.trim() || p?.name || playerId, easy: 0, hard: 0, total: 0 });
+          const visible = p ? athleteRosterLabel(p) : { label: playerId, title: playerId };
+          map.set(playerId, { name: visible.label, title: visible.title, easy: 0, hard: 0, total: 0 });
         }
         const row = map.get(playerId)!;
         if (norm.includes('simple') || norm.includes('simples') || norm.includes('facil')) row.easy += 1;
@@ -1220,7 +1222,8 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
           <Select
             value={athleteFilterIdSafe}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAthleteFilterId(e.target.value)}
-            options={[{ value: 'Todos', label: 'Todos Atletas' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name }))]}
+            title={athleteOptions.find((a) => a.id === athleteFilterIdSafe)?.title ?? 'Todos Atletas'}
+            options={[{ value: 'Todos', label: 'Todos Atletas' }, ...athleteOptions.map((a) => ({ value: a.id, label: a.name, title: a.title }))]}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1718,7 +1721,9 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
                  {goalkeeperDefenseRows.length > 0 ? (
                    goalkeeperDefenseRows.map((row, idx) => (
                      <tr key={`def-gk-${idx}`} className="border-b border-zinc-900/50">
-                       <td className="py-2 text-white" style={legendLabelStyle}>{row.name}</td>
+                       <td className="py-2 text-white max-w-[16rem]" style={legendLabelStyle} title={row.title}>
+                         <span className="block truncate">{row.name}</span>
+                       </td>
                        <td className="py-2 text-right text-blue-300" style={legendLabelStyle}>{row.easy}</td>
                        <td className="py-2 text-right text-blue-500" style={legendLabelStyle}>{row.hard}</td>
                        <td className="py-2 text-right text-zinc-300" style={legendLabelStyle}>{row.total}</td>
@@ -2342,11 +2347,12 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
 };
 
 // UI Components
-const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, options: any[]}> = ({value, onChange, options}) => (
+const Select: React.FC<{value: string, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void, options: any[], title?: string}> = ({value, onChange, options, title}) => (
     <div className="relative">
         <select
             value={value}
             onChange={onChange}
+            title={title}
             className="w-full bg-black border border-zinc-800 text-white py-2.5 pl-3 pr-9 rounded-lg focus:border-[#10b981] focus:ring-1 focus:ring-[#10b981] outline-none text-xs font-bold appearance-none uppercase truncate"
         >
             {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -2506,8 +2512,8 @@ const PlayerStatsTable: React.FC<{
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                  <td className="py-2 text-white" style={legendStyle}>
-                    {stat.name}
+                  <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                    <span className="block truncate">{stat.name}</span>
                   </td>
                   <td className="py-2 text-right text-orange-300" style={legendStyle}>
                     {stat.correct}
@@ -2548,8 +2554,8 @@ const PlayerStatsTable: React.FC<{
             <tbody>
               {playerStats.map((stat, idx) => (
                 <tr key={idx} className="border-b border-zinc-900/50">
-                  <td className="py-2 text-white" style={legendStyle}>
-                    {stat.name}
+                  <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                    <span className="block truncate">{stat.name}</span>
                   </td>
                   <td className="py-2 text-right text-yellow-400" style={legendStyle}>
                     {stat.correct}
@@ -2612,8 +2618,8 @@ const PlayerStatsTable: React.FC<{
           <tbody>
             {playerStats.map((stat, idx) => (
               <tr key={idx} className="border-b border-zinc-900/50">
-                <td className="py-2 text-white" style={legendStyle}>
-                  {stat.name}
+                <td className="py-2 text-white max-w-[16rem]" style={legendStyle} title={stat.name}>
+                  <span className="block truncate">{stat.name}</span>
                 </td>
                 <td className="py-2 text-right text-[#10b981]" style={legendStyle}>
                   {stat.correct}
