@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchRecord, PostMatchEvent } from '../types';
-import { verifyPostMatchEventLog } from './verifyPostMatchEventLog';
+import { isUnconfirmedSaveError, verifyPostMatchEventLog } from './verifyPostMatchEventLog';
 
 function event(id: string): PostMatchEvent {
   return { id, time: '01:00', period: '1T', playerId: 'p1', action: 'goal', tipo: 'gol', subtipo: '' };
@@ -72,5 +72,17 @@ describe('verifyPostMatchEventLog', () => {
     expect(result.status).toBe('confirmed');
     expect(result.match.opponent).toBe('servidor');
     expect(result.match.postMatchEventLog).toHaveLength(2);
+  });
+});
+
+describe('retry depois de timeout', () => {
+  it('trata abort do cliente e o timeout de 30s da transação como save não confirmado', () => {
+    expect(isUnconfirmedSaveError(new Error('Tempo esgotado. Verifique sua conexão e tente novamente.'))).toBe(true);
+    expect(
+      isUnconfirmedSaveError(
+        new Error('Transaction already closed. The timeout for this transaction was 30000 ms')
+      )
+    ).toBe(true);
+    expect(isUnconfirmedSaveError(new Error('Falha ao carregar o recurso (HTTP 500).'))).toBe(false);
   });
 });

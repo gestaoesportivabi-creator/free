@@ -19,6 +19,7 @@ import {
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
+import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -110,6 +111,8 @@ interface MatchScoutingWindowProps {
   sidebarRetracted?: boolean;
   /** Após finalizar coleta com sucesso — abre análise / Dados do Jogo no match salvo */
   onCollectionFinalized?: (matchId: string) => void;
+  /** getById da partida falhou (rede/servidor). 404 não entra aqui. */
+  eventLogHydrationFailed?: boolean;
 }
 
 type LateralResult = 'defesaDireita' | 'defesaEsquerda' | 'ataqueDireita' | 'ataqueEsquerda';
@@ -403,6 +406,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   takeFullWidth,
   sidebarRetracted = false,
   onCollectionFinalized,
+  eventLogHydrationFailed = false,
 }) => {
   const isPostmatch = mode === 'postmatch';
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
@@ -2379,6 +2383,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (!onSave) {
         setFinalizeError('Salvamento indisponível. Tente novamente.');
         setIsFinalizing(false);
+        return;
+      }
+
+      const emptyLogBlock = emptyEventLogFinalizeBlock({
+        id: persistedMatchIdRef.current || match.id,
+        postMatchEventLog: match.postMatchEventLog,
+        postMatchEventCount: match.postMatchEventCount,
+        localEventCount: matchEvents.length,
+        deletedCount: deletedEventIdsRef.current.size,
+        hydrationFailed: eventLogHydrationFailed,
+      });
+      if (emptyLogBlock) {
+        setFinalizeError(emptyLogBlock);
+        setIsFinalizing(false);
+        autosaveSkipRef.current = false;
         return;
       }
 
