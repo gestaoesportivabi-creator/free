@@ -34,7 +34,7 @@ function throwApiResponse(
  */
 async function get<T>(resource: string, id?: string): Promise<T[]> {
   try {
-    const path = id ? `${resource}/${id}` : resource;
+    const path = id ? `${resource}/${encodeURIComponent(id)}` : resource;
     const url = `${getApiUrl()}/${path}`;
     const token = localStorage.getItem('token') || '';
     const isDev = import.meta.env.DEV;
@@ -113,7 +113,7 @@ async function get<T>(resource: string, id?: string): Promise<T[]> {
  */
 async function getOne<T>(resource: string, id: string): Promise<T | null> {
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
     const token = localStorage.getItem('token') || '';
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 25000);
@@ -219,12 +219,12 @@ async function post<T>(resource: string, data: T): Promise<T | null> {
  * SIMULA PUT via POST com parâmetro method=PUT
  * Usa Content-Type: text/plain para evitar preflight OPTIONS
  */
-async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T | null> {
+async function put<T>(resource: string, id: string, data: Partial<T>, timeoutMs = 15000): Promise<T | null> {
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     
     const response = await fetch(url, {
       method: 'PUT',
@@ -261,7 +261,7 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
   } catch (error: any) {
     if (error instanceof ApiRequestError) throw error;
     if (error.name === 'AbortError') {
-      console.error(`⏱️ Timeout ao fazer PUT em ${resource} (15s)`);
+      console.error(`⏱️ Timeout ao fazer PUT em ${resource} (${timeoutMs}ms)`);
       throw new Error('Tempo esgotado. Verifique sua conexão e tente novamente.');
     }
     if (error instanceof Error) throw error;
@@ -278,7 +278,7 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
  */
 async function del(resource: string, id: string): Promise<boolean> {
   try {
-    const url = `${getApiUrl()}/${resource}/${id}`;
+    const url = `${getApiUrl()}/${resource}/${encodeURIComponent(id)}`;
     
     // Adicionar timeout de 10 segundos
     const controller = new AbortController();
@@ -335,7 +335,8 @@ export const matchesApi = {
   getAll: () => get<MatchRecord>(API_RESOURCES.matches),
   getById: (id: string) => getOne<MatchRecord>(API_RESOURCES.matches, id),
   create: (match: MatchRecord) => post<MatchRecord>(API_RESOURCES.matches, match),
-  update: (id: string, match: Partial<MatchRecord>) => put<MatchRecord>(API_RESOURCES.matches, id, match),
+  update: (id: string, match: Partial<MatchRecord>) =>
+    put<MatchRecord>(API_RESOURCES.matches, id, match, 60000),
   delete: (id: string) => del(API_RESOURCES.matches, id),
 };
 

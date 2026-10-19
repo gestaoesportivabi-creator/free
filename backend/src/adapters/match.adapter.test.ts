@@ -49,6 +49,15 @@ test('getById mantém o log e deriva os tempos de gol', () => {
   assert.equal(match.teamStats.passesCorrect, 1);
 });
 
+test('detalhe sem linha de estatísticas ainda devolve o log', () => {
+  const match = transformMatchToFrontend(jogo, [], undefined);
+  assert.equal(match.id, 'jogo-1');
+  assert.equal(match.postMatchEventLog?.length, 2);
+  assert.equal(match.teamStats.goals, 1);
+  assert.equal(match.teamStats.goalsConceded, 0);
+  assert.equal(match.teamStats.goalTimes?.[0]?.time, '03:00 (1T)');
+});
+
 test('listagem omite o log, guarda a contagem e preserva estatísticas', () => {
   const match = transformMatchToFrontend(jogo, [], equipe, {
     includeEventLog: false,
