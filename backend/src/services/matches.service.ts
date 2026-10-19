@@ -12,6 +12,7 @@ import { transformMatchToFrontend } from '../adapters/match.adapter';
 import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
+import { mergeLineupPreservingClockSnapshot } from './matchLineupClock';
 
 function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
   const n = Number(v);
@@ -394,7 +395,10 @@ export const matchesService = {
     jogoUpdate.golsContra = golsContra;
     if (data.postMatchEventLog !== undefined) jogoUpdate.postMatchEventLog = data.postMatchEventLog;
     if (data.playerRelationships !== undefined) jogoUpdate.playerRelationships = data.playerRelationships;
-    if (data.lineup !== undefined) jogoUpdate.lineup = data.lineup;
+    if (data.lineup !== undefined) {
+      const existingLineup = (existing as { lineup?: unknown }).lineup;
+      jogoUpdate.lineup = mergeLineupPreservingClockSnapshot(existingLineup, data.lineup);
+    }
     if (data.substitutionHistory !== undefined) jogoUpdate.substitutionHistory = data.substitutionHistory;
     const jogo = await matchesRepository.update(id, jogoUpdate as any, tx);
 
