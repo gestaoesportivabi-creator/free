@@ -61,6 +61,30 @@ describe('applyUnionEventLogWrite', () => {
     assert.equal(lineup.clockSnapshot.currentTimeSeconds, 90);
   });
 
+  it('lineup null no union não apaga os tombstones já gravados', () => {
+    const applied = applyUnionEventLogWrite({
+      existingLog: [{ id: 'fica', time: '01:00', period: '1T' }],
+      existingLineup: { players: ['gk'], deletedEventIds: ['saiu'], clockSnapshot: clock },
+      incomingLog: [{ id: 'fica', time: '01:00', period: '1T' }],
+      incomingDeletedIds: undefined,
+      incomingLineup: null,
+      lineupProvided: true,
+    });
+
+    const lineup = applied.lineup as {
+      deletedEventIds: string[];
+      players?: string[];
+      clockSnapshot?: unknown;
+    };
+    assert.deepEqual(lineup.deletedEventIds, ['saiu']);
+    assert.equal(lineup.players, undefined);
+    assert.equal(lineup.clockSnapshot, undefined);
+    assert.deepEqual(
+      applied.log.map((event) => (event as { id: string }).id),
+      ['fica']
+    );
+  });
+
   it('acumula tombstones novos sem apagar os antigos', () => {
     const applied = applyUnionEventLogWrite({
       existingLog: [{ id: 'b', time: '02:00', period: '1T' }],

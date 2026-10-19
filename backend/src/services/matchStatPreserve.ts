@@ -1,8 +1,13 @@
 /**
- * Minutos, cartões e RPE no PUT de partida.
+ * Colunas de estatística no PUT de partida.
  * Número presente grava (0 inclusive). Campo ausente mantém a coluna já gravada.
- * Sem linha anterior, minutos caem em 40 (o que o create já gravava) e cartões em 0.
- * RPE ausente fica null. A coluna rpe_partida é inteira.
+ * Sem linha anterior, vale o default de hoje: minutos 40, cartões 0, RPE null,
+ * gols de jogo aberto / bola parada / sofridos do jogador 0.
+ *
+ * Cartão amarelo ou vermelho omitido é preservado. Quem exclui o único cartão
+ * precisa enviar 0; a ausência da chave não zera a coluna.
+ *
+ * rpe_partida é inteiro. 7,4 grava 7 (Math.round).
  */
 
 export interface StoredMinutesCardsRpe {
@@ -53,6 +58,86 @@ function preserveRpe(incoming: number | undefined, existing: number | null | und
   if (incoming !== undefined) return Math.round(incoming);
   if (typeof existing === 'number' && Number.isFinite(existing)) return existing;
   return null;
+}
+
+const OPEN_PLAY_SCORED_KEYS = ['goalsScoredOpenPlay', 'golsMarcadosJogoAberto'];
+const SET_PIECE_SCORED_KEYS = ['goalsScoredSetPiece', 'golsMarcadosBolaParada'];
+const OPEN_PLAY_CONCEDED_KEYS = ['goalsConcededOpenPlay', 'golsSofridosJogoAberto'];
+const SET_PIECE_CONCEDED_KEYS = ['goalsConcededSetPiece', 'golsSofridosBolaParada'];
+/** Só no jogador. Na equipe, goalsConceded alimenta o placar (gols sofridos do time). */
+const PLAYER_GOALS_CONCEDED_KEYS = ['goalsConceded', 'golsSofridos'];
+
+export interface StoredGoalOrigin {
+  golsMarcadosJogoAberto?: number | null;
+  golsMarcadosBolaParada?: number | null;
+  golsSofridosJogoAberto?: number | null;
+  golsSofridosBolaParada?: number | null;
+  golsSofridos?: number | null;
+}
+
+export interface GoalOriginColumns {
+  golsMarcadosJogoAberto: number;
+  golsMarcadosBolaParada: number;
+  golsSofridosJogoAberto: number;
+  golsSofridosBolaParada: number;
+  golsSofridos: number;
+}
+
+function readCount(
+  stats: unknown,
+  matchLevel: unknown,
+  keys: string[],
+  existing: number | null | undefined
+): number {
+  return preserveNumber(
+    firstDefined(readFiniteNumber(stats, keys), readFiniteNumber(matchLevel, keys)),
+    existing,
+    0
+  );
+}
+
+/**
+ * Gols de jogo aberto, de bola parada e sofridos do jogador.
+ * playerGoalsConceded liga goalsConceded → golsSofridos. Na equipe esse campo
+ * é o placar, então o caller deixa a flag desligada.
+ */
+export function resolveGoalOriginColumns(input: {
+  stats?: unknown;
+  matchLevel?: unknown;
+  existing?: StoredGoalOrigin | null;
+  playerGoalsConceded?: boolean;
+}): GoalOriginColumns {
+  const existing = input.existing;
+  const conceded = input.playerGoalsConceded
+    ? readCount(input.stats, input.matchLevel, PLAYER_GOALS_CONCEDED_KEYS, existing?.golsSofridos)
+    : preserveNumber(undefined, existing?.golsSofridos, 0);
+  return {
+    golsMarcadosJogoAberto: readCount(
+      input.stats,
+      input.matchLevel,
+      OPEN_PLAY_SCORED_KEYS,
+      existing?.golsMarcadosJogoAberto
+    ),
+    golsMarcadosBolaParada: readCount(
+      input.stats,
+      input.matchLevel,
+      SET_PIECE_SCORED_KEYS,
+      existing?.golsMarcadosBolaParada
+    ),
+    golsSofridosJogoAberto: readCount(
+      input.stats,
+      input.matchLevel,
+      OPEN_PLAY_CONCEDED_KEYS,
+      existing?.golsSofridosJogoAberto
+    ),
+    golsSofridosBolaParada: readCount(
+      input.stats,
+      input.matchLevel,
+      SET_PIECE_CONCEDED_KEYS,
+      existing?.golsSofridosBolaParada
+    ),
+    golsSofridos: conceded,
+  };
 }
 
 export function resolveMinutesCardsRpe(input: {

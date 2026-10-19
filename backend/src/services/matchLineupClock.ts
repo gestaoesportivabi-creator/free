@@ -3,6 +3,9 @@
  * O JSON de lineup é substituído por inteiro; um payload sem snapshot novo
  * (save pós-jogo, análise técnica parcial) não pode apagar o relógio do ao vivo.
  * A mescla usa só o lineup da partida já autorizada para o tenant — não consulta outro clube.
+ * deletedEventIds (tombstones) sobrevivem a qualquer update: objeto sem a chave,
+ * objeto que manda outros ids (união) e lineup null. Null sem tombstone continua
+ * limpeza explícita do restante do JSON. undefined não inventa lineup.
  */
 
 const PERSISTED_CLOCK_STATES = new Set([
@@ -83,7 +86,11 @@ export function mergeLineupPreservingClockSnapshot(
   incomingLineup: unknown
 ): unknown {
   if (incomingLineup === undefined) return undefined;
-  if (incomingLineup === null) return null;
+  if (incomingLineup === null) {
+    const ids = deletedEventIdsOf(existingLineup);
+    if (ids.length === 0) return null;
+    return { deletedEventIds: ids };
+  }
   if (typeof incomingLineup !== 'object' || Array.isArray(incomingLineup)) {
     return incomingLineup;
   }
