@@ -6,7 +6,9 @@ import { TenantInfo } from '../utils/tenant.helper';
 import type { TransactionClient } from '../utils/transactionWithTenant';
 import { assessmentsRepository } from '../repositories/assessments.repository';
 import { PhysicalAssessment } from '../types/frontend';
-import { NotFoundError } from '../utils/errors';
+import { NotFoundError, ValidationError } from '../utils/errors';
+import prisma from '../config/database';
+import { equipeInTenant, jogadorIdsInTenant, type JogadorTenantDb } from '../utils/tenantPlayers';
 
 // Transformar avaliação do banco para frontend
 // Frontend tem campos adicionais: bodyFatPercent, actionPlan, skinfolds
@@ -56,7 +58,9 @@ export const assessmentsService = {
     return transformAssessmentToFrontend(avaliacao);
   },
 
-  async create(data: any, _tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
+  async create(data: any, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
+    await assertAssessmentPlayer(data?.playerId, data?.equipeId, tenantInfo, tx);
+
     // Mapear campos do frontend para banco
     const backendData = {
       jogadorId: data.playerId,
@@ -89,6 +93,14 @@ export const assessmentsService = {
   async update(id: string, data: Partial<any>, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PhysicalAssessment> {
     const existing = await assessmentsRepository.findById(id, tenantInfo, tx);
     if (!existing) throw new NotFoundError('Avaliação física', id);
+    if (data.playerId !== undefined || data.equipeId !== undefined) {
+      await assertAssessmentPlayer(
+        data.playerId === undefined ? existing.jogadorId : data.playerId,
+        data.equipeId,
+        tenantInfo,
+        tx
+      );
+    }
 
     // Mapear campos do frontend para banco
     const backendData: any = {};
@@ -125,4 +137,21 @@ export const assessmentsService = {
     return true;
   },
 };
+
+async function assertAssessmentPlayer(
+  playerId: unknown,
+  equipeId: unknown,
+  tenantInfo: TenantInfo,
+  tx?: TransactionClient
+): Promise<void> {
+  const equipeIds = tenantInfo.equipe_ids ?? [];
+  if (equipeId !== undefined && equipeId !== null && equipeId !== '') {
+    if (!equipeInTenant(equipeId, equipeIds)) throw new NotFoundError('Equipe');
+  }
+  if (typeof playerId !== 'string' || playerId.length === 0) {
+    throw new ValidationError('Jogador é obrigatório.');
+  }
+  const allowed = await jogadorIdsInTenant([playerId], equipeIds, (tx ?? prisma) as unknown as JogadorTenantDb);
+  if (!allowed.has(playerId)) throw new NotFoundError('Jogador');
+}
 
