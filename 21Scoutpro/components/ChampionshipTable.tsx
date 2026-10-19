@@ -26,7 +26,7 @@ interface SavedMatch {
 interface ChampionshipTableProps {
     matches?: ChampionshipMatch[];
     competitions?: string[]; // Competições disponíveis
-    onSave?: (match: ChampionshipMatch) => void;
+    onSave?: (match: ChampionshipMatch) => void | boolean | Promise<void | boolean>;
     onDelete?: (id: string) => void;
     onUseForInput?: (match: ChampionshipMatch) => void; // Callback para usar na aba Input de Dados
     onRefresh?: () => void; // Callback para recarregar dados da API
@@ -121,7 +121,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     const [timeFilter, setTimeFilter] = useState<'all' | '7days' | '30days' | '90days'>('all');
     const [viewMode, setViewMode] = useState<'all' | 'past' | 'future'>('all');
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.opponent.trim()) {
             alert('Por favor, preencha o adversário.');
             return;
@@ -141,7 +141,8 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
             } as any;
 
         if (onSave) {
-            onSave(matchToSave);
+            const ok = await Promise.resolve(onSave(matchToSave));
+            if (ok === false) return;
         }
 
         // Reset form
@@ -241,7 +242,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         }]);
     };
     
-    const handleSaveChampionshipMatches = () => {
+    const handleSaveChampionshipMatches = async () => {
         if (championshipMatchesForm.length === 0) {
             alert('Adicione pelo menos uma partida.');
             return;
@@ -255,17 +256,17 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         }
         
         // Salvar todas as partidas
-        championshipMatchesForm.forEach(match => {
-            if (match.opponent.trim()) {
-                const matchToSave: ChampionshipMatch = {
-                    ...match,
-                    id: match.id || Date.now().toString() + Math.random()
-                };
-                if (onSave) {
-                    onSave(matchToSave);
-                }
+        for (const match of championshipMatchesForm) {
+            if (!match.opponent.trim()) continue;
+            const matchToSave: ChampionshipMatch = {
+                ...match,
+                id: match.id || Date.now().toString() + Math.random()
+            };
+            if (onSave) {
+                const ok = await Promise.resolve(onSave(matchToSave));
+                if (ok === false) return;
             }
-        });
+        }
         
         alert(`✅ ${championshipMatchesForm.length} partida(s) cadastrada(s) com sucesso!`);
         setShowChampionshipMatchesForm(false);
@@ -275,7 +276,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     };
     
     // Funções para importação
-    const handleImportData = () => {
+    const handleImportData = async () => {
         if (!importData.trim()) {
             alert('Por favor, cole os dados da tabela.');
             return;
@@ -320,11 +321,12 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         const confirmMessage = `Foram encontradas ${importedMatches.length} partida(s). Deseja importar?\n\n${importedMatches.map(m => `- ${m.date} ${m.time} vs ${m.opponent}`).join('\n')}`;
         
         if (window.confirm(confirmMessage)) {
-            importedMatches.forEach(match => {
+            for (const match of importedMatches) {
                 if (onSave) {
-                    onSave(match);
+                    const ok = await Promise.resolve(onSave(match));
+                    if (ok === false) return;
                 }
-            });
+            }
             alert(`✅ ${importedMatches.length} partida(s) importada(s) com sucesso!`);
             setShowImportModal(false);
             setImportData('');

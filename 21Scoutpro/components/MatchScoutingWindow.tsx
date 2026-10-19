@@ -18,7 +18,14 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
-import { REGULATION_HALF_SECONDS, getEventStamp } from '../services/clockService';
+import {
+  isTrialExpiredSaveError,
+  notifyTrialExpiredMatchSave,
+  PLANS_CTA_HREF,
+  PLANS_CTA_LABEL,
+  trialExpiredMatchSaveMessage,
+} from '../utils/trialExpiredSave';
+import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
 import {
   buildPersistedClockSnapshot,
   mergeLineupClockSnapshot,
@@ -560,6 +567,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [editTimeInput, setEditTimeInput] = useState<string>('');
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [finalizeTrialExpired, setFinalizeTrialExpired] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   // Estados para tiro livre e pênalti (fluxo inline)
@@ -2317,6 +2325,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingFreeKickResultToRegister(null);
     setShowFinalizeConfirm(false);
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
     setIsFinalizing(false);
   }, []);
 
@@ -2326,6 +2335,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     setIsFinalizing(true);
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
 
     suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
@@ -2379,7 +2389,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     } catch (err) {
       console.error('Erro ao finalizar coleta:', err);
-      setFinalizeError('Erro ao finalizar. Tente novamente.');
+      if (isTrialExpiredSaveError(err)) {
+        setFinalizeTrialExpired(true);
+        setFinalizeError(trialExpiredMatchSaveMessage(true));
+      } else {
+        setFinalizeTrialExpired(false);
+        setFinalizeError('Erro ao finalizar. Tente novamente.');
+      }
       setIsFinalizing(false);
       autosaveSkipRef.current = false;
     }
@@ -2389,6 +2405,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
     setShowFinalizeConfirm(true);
   };
 
@@ -2412,10 +2429,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (onSave) {
       const savedMatch = buildMatchSnapshot('em_andamento');
-      applySaveResult(
-        await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
-      );
-      commitPersistedSignature(JSON.stringify(savedMatch));
+      try {
+        applySaveResult(
+          await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
+        );
+        commitPersistedSignature(JSON.stringify(savedMatch));
+      } catch (err) {
+        if (isTrialExpiredSaveError(err)) {
+          notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        throw err;
+      }
     }
     onClose();
   };
@@ -6293,8 +6319,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <p className="text-sm font-semibold text-zinc-100">{matchEvents.length}</p>
                 </div>
                 {finalizeError && (
-                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 space-y-2">
                     <p className="text-xs text-red-300 font-medium">{finalizeError}</p>
+                    {finalizeTrialExpired && (
+                      <a
+                        href={PLANS_CTA_HREF}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="trial-expired-plans-cta"
+                        className="inline-flex text-xs font-bold uppercase text-[#00f0ff] hover:text-white"
+                      >
+                        {PLANS_CTA_LABEL}
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
@@ -6305,6 +6342,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     if (isFinalizing) return;
                     setShowFinalizeConfirm(false);
                     setFinalizeError(null);
+                    setFinalizeTrialExpired(false);
                   }}
                   disabled={isFinalizing}
                   data-testid="finalize-collection-cancel"
