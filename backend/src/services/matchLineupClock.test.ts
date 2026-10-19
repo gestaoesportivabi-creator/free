@@ -76,6 +76,23 @@ describe('update de partida preserva clockSnapshot do próprio lineup', () => {
     assert.deepEqual(merged.clockSnapshot, clockDoClube);
   });
 
+  test('save sem os segundos de posse mantém os que já estavam no lineup', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      {
+        players: ['p1'],
+        possessionSecondsWith: 90,
+        possessionSecondsWithout: 30,
+        kickoffTime: '20:00',
+        clockSnapshot: clockDoClube,
+      },
+      { players: ['p1'], ballPossessionStart: 'us' }
+    ) as { possessionSecondsWith: number; possessionSecondsWithout: number; kickoffTime: string };
+
+    assert.equal(merged.possessionSecondsWith, 90);
+    assert.equal(merged.possessionSecondsWithout, 30);
+    assert.equal(merged.kickoffTime, '20:00');
+  });
+
   test('lineup novo sem a lista de exclusões mantém os tombstones já gravados', () => {
     const merged = mergeLineupPreservingClockSnapshot(
       { players: ['antigo'], deletedEventIds: ['evt-1'], clockSnapshot: clockDoClube },

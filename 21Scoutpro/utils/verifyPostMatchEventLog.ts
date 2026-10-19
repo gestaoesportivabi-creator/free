@@ -1,6 +1,7 @@
 import type { MatchRecord } from '../types';
 import { matchesApi } from '../services/api';
 import { isPersistedServerMatchId } from './matchIds';
+import { preserveEncerradoStatus } from './matchStatus';
 
 export type PostMatchEventLogVerifyStatus = 'confirmed' | 'shorter' | 'unavailable';
 
@@ -47,12 +48,12 @@ export async function verifyPostMatchEventLog(
 
   return {
     status: 'confirmed',
-    match: {
+    match: preserveEncerradoStatus(saved, {
       ...saved,
       ...fresh,
       id: fresh.id || saved.id,
       postMatchEventLog: serverLog.length >= expectedLogLength ? serverLog : saved.postMatchEventLog,
-    },
+    }),
     serverLogLength: serverLog.length,
   };
 }

@@ -1,5 +1,6 @@
 import type { MatchRecord } from '../types';
 import { isPersistedServerMatchId } from './matchIds';
+import { preserveEncerradoStatus } from './matchStatus';
 
 /**
  * Autosave de partida da lista ainda sem a fita local.
@@ -31,14 +32,14 @@ export function matchNeedsEventLogFetch(match: Pick<MatchRecord, 'id' | 'postMat
 /** Junta o detalhe (log + tempos de gol) sem perder campos só da lista, como a meta de desarmes. */
 export function mergeMatchWithEventLog(listMatch: MatchRecord, full: MatchRecord): MatchRecord {
   const log = Array.isArray(full.postMatchEventLog) ? full.postMatchEventLog : listMatch.postMatchEventLog;
-  return {
+  return preserveEncerradoStatus(listMatch, {
     ...listMatch,
     ...full,
     id: full.id || listMatch.id,
     scoreTarget: full.scoreTarget ?? listMatch.scoreTarget,
     postMatchEventLog: log,
     postMatchEventCount: Array.isArray(log) ? log.length : listMatch.postMatchEventCount,
-  };
+  });
 }
 
 /**

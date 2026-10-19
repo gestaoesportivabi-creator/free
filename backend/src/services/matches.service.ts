@@ -13,6 +13,7 @@ import { MatchRecord } from '../types/frontend';
 import { NotFoundError } from '../utils/errors';
 import prisma from '../config/database';
 import { mergeLineupPreservingClockSnapshot } from './matchLineupClock';
+import { inferStatusFromData, statusToPersist } from './matchStatus';
 import { isUnionEventLogWrite } from './postMatchEventLogMerge';
 import { applyUnionEventLogWrite } from './eventLogTombstones';
 import { resolveGoalOriginColumns, resolveMinutesCardsRpe } from './matchStatPreserve';
@@ -22,57 +23,6 @@ function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
   if (n === 1 || n === 2) return n;
   if (n === 0) return 0;
   return 0;
-}
-
-function isValidMatchStatus(v: unknown): v is NonNullable<MatchRecord['status']> {
-  return (
-    v === 'disponivel' ||
-    v === 'nao_executado' ||
-    v === 'em_andamento' ||
-    v === 'encerrado'
-  );
-}
-
-function hasNonZeroCoreStats(match: MatchRecord): boolean {
-  const t = match.teamStats;
-  if (!t) return false;
-  return (
-    (t.goals ?? 0) > 0 ||
-    (t.goalsConceded ?? 0) > 0 ||
-    (t.assists ?? 0) > 0 ||
-    (t.passesCorrect ?? 0) > 0 ||
-    (t.passesWrong ?? 0) > 0 ||
-    (t.shotsOnTarget ?? 0) > 0 ||
-    (t.shotsOffTarget ?? 0) > 0 ||
-    (t.tacklesWithBall ?? 0) > 0 ||
-    (t.tacklesWithoutBall ?? 0) > 0 ||
-    (t.tacklesCounterAttack ?? 0) > 0 ||
-    (t.transitionErrors ?? 0) > 0 ||
-    Object.keys(match.playerStats || {}).length > 0
-  );
-}
-
-function inferStatusFromData(
-  rawStatus: unknown,
-  match: MatchRecord,
-  jogo?: { collectionPhase?: number; postMatchEventLog?: unknown; postMatchEventCount?: number; lineup?: unknown }
-): NonNullable<MatchRecord['status']> {
-  if (isValidMatchStatus(rawStatus)) return rawStatus;
-
-  const phase = jogo?.collectionPhase;
-  const hasEventLog =
-    (typeof jogo?.postMatchEventCount === 'number' && jogo.postMatchEventCount > 0) ||
-    (Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0);
-  const lineup = jogo?.lineup as { players?: unknown[]; selectedPlayerIds?: unknown[] } | undefined;
-  const hasLineupDraft =
-    (Array.isArray(lineup?.players) && lineup.players.length > 0) ||
-    (Array.isArray(lineup?.selectedPlayerIds) && lineup.selectedPlayerIds.length > 0);
-
-  if (phase === 1 || phase === 2) return 'em_andamento';
-  if (hasEventLog) return 'encerrado';
-  if (hasNonZeroCoreStats(match)) return 'encerrado';
-  if (phase === 0 || hasLineupDraft) return 'disponivel';
-  return 'disponivel';
 }
 
 export const matchesService = {
@@ -461,9 +411,19 @@ export const matchesService = {
       );
     }
 
-    // Salvar status via raw SQL (coluna fora do Prisma schema)
+    // Salvar status via raw SQL (coluna fora do Prisma schema).
+    // Finalizar não volta para em_andamento se um autosave atrasado chegar depois.
     if (data.status !== undefined) {
-      await matchesRepository.setStatus(id, data.status, tx);
+      const existingStatus = (await matchesRepository.getStatusByIds([id], tx)).get(id);
+      const lineupForStatus = (jogoUpdate.lineup ?? data.lineup) as
+        | { clockSnapshot?: { state?: string } }
+        | undefined;
+      const eventCount = Array.isArray(data.postMatchEventLog) ? data.postMatchEventLog.length : 0;
+      const nextStatus = statusToPersist(existingStatus, data.status, {
+        clockState: lineupForStatus?.clockSnapshot?.state,
+        eventCount,
+      });
+      if (nextStatus) await matchesRepository.setStatus(id, nextStatus, tx);
     }
 
     // Update team stats if provided

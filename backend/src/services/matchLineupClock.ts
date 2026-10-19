@@ -96,6 +96,7 @@ export function mergeLineupPreservingClockSnapshot(
   }
 
   const incoming = { ...(incomingLineup as Record<string, unknown>) };
+  keepPossessionSeconds(incoming, existingLineup);
   const incomingClock = normalizePersistedClockSnapshot(incoming.clockSnapshot);
   if (incomingClock) {
     incoming.clockSnapshot = incomingClock;
@@ -116,4 +117,19 @@ export function mergeLineupPreservingClockSnapshot(
     delete incoming.clockSnapshot;
   }
   return attachDeletedEventIds(existingLineup, incoming);
+}
+
+/** Save pós-jogo não reenvia a posse. Sem isto o JSON novo apaga os segundos. */
+function keepPossessionSeconds(incoming: Record<string, unknown>, existingLineup: unknown): void {
+  if (!existingLineup || typeof existingLineup !== 'object' || Array.isArray(existingLineup)) return;
+  const prev = existingLineup as Record<string, unknown>;
+  for (const key of ['possessionSecondsWith', 'possessionSecondsWithout']) {
+    const current = Number(incoming[key]);
+    if (Number.isFinite(current) && current >= 0) continue;
+    const kept = Number(prev[key]);
+    if (Number.isFinite(kept) && kept >= 0) incoming[key] = Math.floor(kept);
+  }
+  const nextKickoff = typeof incoming.kickoffTime === 'string' ? incoming.kickoffTime.trim() : '';
+  const prevKickoff = typeof prev.kickoffTime === 'string' ? prev.kickoffTime.trim() : '';
+  if (!nextKickoff && prevKickoff) incoming.kickoffTime = prevKickoff;
 }
