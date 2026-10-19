@@ -5,6 +5,7 @@
 
 import { Request } from 'express';
 import prisma from '../config/database';
+import { TENANT_TRANSACTION_MAX_WAIT_MS, tenantTransactionTimeoutMs } from './transactionBudget';
 
 export type TransactionClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -14,7 +15,8 @@ export type TransactionClient = Parameters<Parameters<typeof prisma.$transaction
  */
 export async function runWithTenant<T>(
   req: Request,
-  fn: (tx: TransactionClient) => Promise<T>
+  fn: (tx: TransactionClient) => Promise<T>,
+  kind: 'default' | 'match-write' = 'default'
 ): Promise<T> {
   const tenantInfo = req.tenantInfo;
   if (!tenantInfo) {
@@ -28,7 +30,7 @@ export async function runWithTenant<T>(
     await tx.$executeRawUnsafe("SELECT set_config('app.clube_id', $1, true)", tenantInfo.clube_id ?? '');
     return fn(tx);
   }, {
-    maxWait: 10000,  // tempo máximo para adquirir conexão (10s)
-    timeout: 30000,  // tempo máximo da transação (30s)
+    maxWait: TENANT_TRANSACTION_MAX_WAIT_MS,
+    timeout: tenantTransactionTimeoutMs(kind),
   });
 }

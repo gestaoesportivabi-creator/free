@@ -13,6 +13,7 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
@@ -2861,7 +2862,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                     {showPostMatchSheet && (isScheduledMatch() ? selectedScheduledMatch : selectedMatch) && (() => {
                         const postmatchMatch: MatchRecord = isScheduledMatch() && selectedScheduledMatch
                             ? {
-                                  id: `sched-${selectedScheduledMatch.id}`,
+                                  id: draftIdForChampionshipMatch(selectedScheduledMatch.id),
                                   opponent: selectedScheduledMatch.opponent || '',
                                   date: selectedScheduledMatch.date,
                                   result: 'E',
@@ -3313,7 +3314,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             onClick={() => {
                                                 if (selectedPlayersForMatch.size === 0) return;
                                                 const realtimeScoutData = {
-                                                    matchId: selectedScheduledMatch.id,
+                                                    matchId: draftIdForChampionshipMatch(selectedScheduledMatch.id),
                                                     date: selectedScheduledMatch.date,
                                                     opponent: selectedScheduledMatch.opponent || '',
                                                     competition: selectedScheduledMatch.competition,

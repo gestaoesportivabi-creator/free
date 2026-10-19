@@ -16,6 +16,8 @@ import {
 } from '../utils/openMatchAnalysis';
 import { performFinalizeNavigation } from '../utils/sessionRestore';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
+import { isPersistedServerMatchId } from '../utils/matchIds';
+import { adoptServerMatch } from '../utils/realtimeMatchHydration';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -42,6 +44,7 @@ export const RealtimeScoutPage: React.FC<{
   const [match, setMatch] = useState<MatchRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [eventLogHydrationFailed, setEventLogHydrationFailed] = useState(false);
 
   useEffect(() => {
     const loadRealtimeMatch = async () => {
@@ -85,23 +88,18 @@ export const RealtimeScoutPage: React.FC<{
           playerStats: {},
         };
 
-        if (data.matchId) {
+        if (data.matchId && isPersistedServerMatchId(data.matchId)) {
           try {
             const dbMatch = await matchesApi.getById(data.matchId);
-            if (
-              dbMatch?.id &&
-              (dbMatch.status === 'em_andamento' ||
-                dbMatch.status === 'disponivel' ||
-                dbMatch.status === 'nao_executado' ||
-                (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
-            ) {
-              matchRecord = {
-                ...dbMatch,
-                location: dbMatch.location?.trim() || locationFromPrep,
-              };
+            if (dbMatch?.id) {
+              matchRecord = adoptServerMatch(dbMatch, locationFromPrep);
             }
           } catch (fetchErr) {
-            console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
+            setEventLogHydrationFailed(true);
+            console.error(
+              'Falha ao buscar a partida no servidor. A finalização não envia um log vazio.',
+              fetchErr
+            );
           }
         }
 
@@ -293,6 +291,7 @@ export const RealtimeScoutPage: React.FC<{
         matchType={scoutData.matchType}
         extraTimeMinutes={scoutData.extraTimeMinutes}
         selectedPlayerIds={scoutData.selectedPlayerIds}
+        eventLogHydrationFailed={eventLogHydrationFailed}
       />
     </div>
   );
