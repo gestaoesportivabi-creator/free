@@ -216,6 +216,39 @@ describe('mergePostMatchEventLogs', () => {
     assert.equal(merged[0].v, 2);
   });
 
+  it('apaga todos os lances com id quando o payload vem vazio e lista deletedEventIds', () => {
+    const merged = mergePostMatchEventLogs(
+      [
+        ev({ id: 'a', time: '01:00', period: '1T' }),
+        ev({ id: 'b', time: '12:00', period: '2T' }),
+      ],
+      [],
+      ['a', 'b']
+    );
+
+    assert.deepEqual(merged, []);
+  });
+
+  it('não apaga o lance que sobrou quando o payload vazio só lista parte dos ids', () => {
+    assert.throws(
+      () =>
+        mergePostMatchEventLogs(
+          [
+            ev({ id: 'a', time: '01:00', period: '1T' }),
+            ev({ id: 'b', time: '02:00', period: '1T' }),
+          ],
+          [],
+          ['a']
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictError);
+        assert.equal(error.statusCode, 409);
+        assert.match(error.message, /já havia 1 armazenado/);
+        return true;
+      }
+    );
+  });
+
   it('aceita log vazio quando não havia nada armazenado', () => {
     assert.deepEqual(mergePostMatchEventLogs(undefined, []), []);
   });

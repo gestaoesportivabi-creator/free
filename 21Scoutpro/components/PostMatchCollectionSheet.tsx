@@ -350,6 +350,7 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
       playerStats,
       teamStats,
       postMatchEventLog: postMatchEventLogWithRecordedBy,
+      eventLogWriteMode: 'union',
       ...(deletedEventIdsRef.current.length > 0
         ? { deletedEventIds: [...deletedEventIdsRef.current] }
         : {}),

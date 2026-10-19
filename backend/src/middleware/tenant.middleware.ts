@@ -51,10 +51,55 @@ export function tenantMiddleware() {
         console.log('[TENANT_MIDDLEWARE] Usuário:', req.user?.email);
       }
 
+      // Uma carga por userId: técnico e clube em paralelo, reutilizada pelos dois callbacks.
+      // Se o técnico existir, falha na leitura do clube não muda o tenant (o clube nem era consultado).
+      // Se não existir técnico, a falha do clube continua a rejeitar o pedido.
+      type TecnicoRow = { id: string; userId: string; nome: string };
+      type ClubeRow = { id: string; userId: string; razaoSocial: string };
+      const staffByUserId = new Map<
+        string,
+        Promise<{ tecnico: TecnicoRow | null; clube: ClubeRow | null }>
+      >();
+
+      const loadStaff = (userId: string) => {
+        const cached = staffByUserId.get(userId);
+        if (cached) return cached;
+
+        const tecnicoPromise = prisma.tecnico.findUnique({
+          where: { userId },
+          select: { id: true, userId: true, nome: true },
+        });
+        const clubePromise = prisma.clube.findUnique({
+          where: { userId },
+          select: { id: true, userId: true, razaoSocial: true },
+        });
+
+        const pending = (async () => {
+          const [tecnicoResult, clubeResult] = await Promise.allSettled([tecnicoPromise, clubePromise]);
+          if (tecnicoResult.status === 'rejected') {
+            throw tecnicoResult.reason;
+          }
+          const tecnico = tecnicoResult.value;
+          if (tecnico) {
+            return {
+              tecnico,
+              clube: clubeResult.status === 'fulfilled' ? clubeResult.value : null,
+            };
+          }
+          if (clubeResult.status === 'rejected') {
+            throw clubeResult.reason;
+          }
+          return { tecnico: null, clube: clubeResult.value };
+        })();
+
+        staffByUserId.set(userId, pending);
+        return pending;
+      };
+
       const tenantInfo = await getTenantInfo(
         req.user,
         async (userId: string) => {
-          const tecnico = await prisma.tecnico.findUnique({ where: { userId } });
+          const { tecnico } = await loadStaff(userId);
           if (isDev && !tecnico) console.log('[TENANT_MIDDLEWARE] Técnico não encontrado para userId:', userId);
           if (!tecnico) return null;
           return {
@@ -64,7 +109,7 @@ export function tenantMiddleware() {
           };
         },
         async (userId: string) => {
-          const clube = await prisma.clube.findUnique({ where: { userId } });
+          const { clube } = await loadStaff(userId);
           if (isDev && !clube) console.log('[TENANT_MIDDLEWARE] Clube não encontrado para userId:', userId);
           if (!clube) return null;
           return {
@@ -100,12 +145,10 @@ export function tenantMiddleware() {
         console.log('[TENANT_MIDDLEWARE] equipe_ids:', tenantInfo.equipe_ids?.length ?? 0);
       }
 
-      // Validação crítica: garantir que o tenantInfo corresponde ao usuário
+      // Validação crítica: garantir que o tenantInfo corresponde ao usuário.
+      // Usa a linha já carregada por loadStaff — o segundo findUnique do mesmo userId era redundante.
       if (tenantInfo.tecnico_id) {
-        // Verificar novamente que o técnico pertence ao usuário
-        const tecnicoVerificado = await prisma.tecnico.findUnique({
-          where: { userId: req.user.id },
-        });
+        const { tecnico: tecnicoVerificado } = await loadStaff(req.user.id);
         if (!tecnicoVerificado || tecnicoVerificado.id !== tenantInfo.tecnico_id) {
           console.error('[TENANT_MIDDLEWARE] ERRO CRÍTICO: tenantInfo.tecnico_id não corresponde ao usuário!', {
             tenant_tecnico_id: tenantInfo.tecnico_id,

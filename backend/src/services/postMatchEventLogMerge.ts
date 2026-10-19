@@ -1,10 +1,21 @@
 /**
  * União de postMatchEventLog no PUT /matches/:id.
+ * Só entra quando o client envia eventLogWriteMode 'union'.
+ * Client antigo (campo ausente) não passa por aqui: o service faz replace
+ * do array, e omitir um lance continua sendo exclusão.
+ *
  * Eventos com id: união; o recebido substitui o armazenado no mesmo id.
- * Eventos sem id: replace do log inteiro só se o recebido não for menor;
- * se for menor e não houver ids, 409 (não apaga lances).
- * Exclusão explícita: deletedEventIds.
+ * deletedEventIds sai do armazenado antes de comparar tamanhos — apagar
+ * todos os lances com id manda [] + a lista de ids e não pode virar 409.
+ * Eventos sem id: replace do que sobrou só se o recebido não for menor;
+ * se for menor, 409 (não apaga lances).
  */
+
+export const EVENT_LOG_WRITE_MODE_UNION = 'union';
+
+export function isUnionEventLogWrite(mode: unknown): boolean {
+  return mode === EVENT_LOG_WRITE_MODE_UNION;
+}
 
 import { ConflictError } from '../utils/errors';
 
@@ -103,7 +114,8 @@ function shrinkWithoutIdsMessage(receivedCount: number, storedCount: number): st
 }
 
 /**
- * @throws ConflictError 409 quando o payload não tem ids e é menor que o armazenado,
+ * @throws ConflictError 409 quando, depois de aplicar deletedEventIds,
+ * o payload não tem ids e ainda é menor que o que restou armazenado,
  * ou quando a parte sem id encolhe num payload que também tem ids.
  */
 export function mergePostMatchEventLogs(
@@ -114,12 +126,19 @@ export function mergePostMatchEventLogs(
   const stored = Array.isArray(storedRaw) ? storedRaw : [];
   const received = Array.isArray(receivedRaw) ? receivedRaw : [];
   const deleted = normalizeDeletedIds(deletedEventIdsRaw);
-  const storedParts = partition(stored);
+  const storedAfterDeletes =
+    deleted.size === 0
+      ? stored
+      : stored.filter((event) => {
+          const id = eventId(event);
+          return !id || !deleted.has(id);
+        });
+  const storedParts = partition(storedAfterDeletes);
   const receivedParts = partition(received);
 
   if (receivedParts.withId.length === 0) {
-    if (received.length < stored.length) {
-      throw new ConflictError(shrinkWithoutIdsMessage(received.length, stored.length));
+    if (received.length < storedAfterDeletes.length) {
+      throw new ConflictError(shrinkWithoutIdsMessage(received.length, storedAfterDeletes.length));
     }
     return received.slice();
   }
