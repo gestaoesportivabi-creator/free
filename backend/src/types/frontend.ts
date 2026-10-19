@@ -90,6 +90,8 @@ export interface MatchRecord {
   playerStats: { [playerId: string]: MatchStats };
   teamStats: MatchStats;
   playerRelationships?: { [p1: string]: { [p2: string]: { passes: number; assists: number } } };
+  /** Quantidade de lances. A listagem manda só o número; o array vem no getById. */
+  postMatchEventCount?: number;
   postMatchEventLog?: Array<{
     id: string;
     time: string;

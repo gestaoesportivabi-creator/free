@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Trophy, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { MatchRecord, Player } from '../types';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds } from '../utils/matchPeriod';
+import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 import { ExpandableCard } from './ExpandableCard';
 import { LockedFeatureBlock } from './EmBreve';
 interface QuartetAnalysisProps {
@@ -139,7 +140,8 @@ const QuartetCard: React.FC<{
   );
 };
 
-export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, players, isFreePlan = false }) => {
+export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches: matchesFromList, players, isFreePlan = false }) => {
+  const { matches, loading: eventLogsLoading } = useMatchesWithEventLogs(matchesFromList);
   const quartetAnalysis = useMemo(() => {
     type QuartetAgg = {
       playerIds: string[];
@@ -360,6 +362,9 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches, playe
         </p>
       </div>
 
+      {eventLogsLoading && (
+        <p className="text-xs text-zinc-500">Carregando lances das partidas para calcular o IPQ.</p>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <ExpandableCard title="Quarteto Alta performance" icon={Trophy} headerColor="text-[#ccff00]">
           {isFreePlan ? (

@@ -291,6 +291,11 @@ export interface MatchRecord {
     /** Análise técnica livre da comissão pós-jogo */
     technicalAnalysis?: TechnicalAnalysis;
   };
+  /**
+   * Quantidade de lances persistidos. A listagem (`GET /matches`) omite o array
+   * e manda este número; o log completo vem em `GET /matches/:id`.
+   */
+  postMatchEventCount?: number;
   postMatchEventLog?: PostMatchEvent[];
   /**
    * 'union' marca o client que exclui lance via deletedEventIds.

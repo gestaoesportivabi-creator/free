@@ -18,6 +18,7 @@ import {
   type MatchHalf,
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchListState';
 import {
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
@@ -1502,6 +1503,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
 
+    // A lista não traz a fita. Não hidratar vazio (e não dar autosave) enquanto o getById não chega.
+    if (match && matchNeedsEventLogFetch(match)) {
+      autosaveSkipRef.current = true;
+      if (!isPostmatch) setRealtimeHydrationReady(false);
+      return;
+    }
+
     const log = match.postMatchEventLog;
     const hasLog = log != null && log.length > 0;
     const L = match.lineup;
@@ -2149,6 +2157,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     savedMatch.eventLogWriteMode = 'union';
     if (deletedEventIdsRef.current.size > 0) {
       savedMatch.deletedEventIds = Array.from(deletedEventIdsRef.current);
+    }
+    // Partida da lista ainda sem a fita no estado local: não mandar [] (union 409 ou replace).
+    if (omitUnhydratedEventLog(match, matchEvents.length, deletedEventIdsRef.current.size)) {
+      delete savedMatch.postMatchEventLog;
+      delete savedMatch.eventLogWriteMode;
+      delete savedMatch.deletedEventIds;
     }
 
     return savedMatch;

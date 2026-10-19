@@ -99,13 +99,24 @@ function transformStatsToMatchStats(stat: JogoEstatisticaJogadorDB | JogoEstatis
   return base;
 }
 
+export interface TransformMatchOptions {
+  /**
+   * Listagem omite o log. getById, create e update mantêm o array completo.
+   * Default: true.
+   */
+  includeEventLog?: boolean;
+  /** Contagem já calculada no SQL, usada quando o log não vem na linha. */
+  postMatchEventCount?: number;
+}
+
 /**
  * Transforma jogo do banco de dados para formato MatchRecord do frontend
  */
 export function transformMatchToFrontend(
   jogo: JogoDB,
   estatisticasJogadores: JogoEstatisticaJogadorDB[],
-  estatisticasEquipe?: JogoEstatisticaEquipeDB
+  estatisticasEquipe?: JogoEstatisticaEquipeDB,
+  options?: TransformMatchOptions
 ): MatchRecord {
   // Transformar playerStats em objeto aninhado por jogadorId
   const playerStats: { [playerId: string]: MatchStats } = {};
@@ -164,13 +175,22 @@ export function transformMatchToFrontend(
   if (cp === 0 || cp === 1 || cp === 2) {
     result.collectionPhase = cp as 0 | 1 | 2;
   }
-  if (jogo.postMatchEventLog) result.postMatchEventLog = jogo.postMatchEventLog as MatchRecord['postMatchEventLog'];
+  const includeEventLog = options?.includeEventLog !== false;
+  if (includeEventLog && jogo.postMatchEventLog) {
+    result.postMatchEventLog = jogo.postMatchEventLog as MatchRecord['postMatchEventLog'];
+  }
+  if (Array.isArray(jogo.postMatchEventLog) && includeEventLog) {
+    result.postMatchEventCount = jogo.postMatchEventLog.length;
+  } else if (typeof options?.postMatchEventCount === 'number') {
+    result.postMatchEventCount = options.postMatchEventCount;
+  }
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
 
-  // Derivar goalTimes e goalsConcededTimes do postMatchEventLog para os gráficos de gols por período
-  const eventLog = result.postMatchEventLog;
+  // Derivar goalTimes e goalsConcededTimes do postMatchEventLog para os gráficos de gols por período.
+  // A listagem não carrega o log: o service grava os mesmos tempos a partir da query agregada.
+  const eventLog = includeEventLog ? result.postMatchEventLog : undefined;
   if (eventLog && Array.isArray(eventLog)) {
     const goalTimes: Array<{ time: string; method?: string }> = [];
     const goalsConcededTimes: Array<{ time: string; method?: string }> = [];
