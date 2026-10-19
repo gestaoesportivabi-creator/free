@@ -6,6 +6,7 @@
 import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
 import type { TransactionClient } from '../utils/transactionWithTenant';
+import { LIST_MATCH_META_SQL, listMatchMetaFromRows, type ListMatchMeta, type ListMatchMetaRow } from './matches.listMeta';
 
 function db(tx?: TransactionClient) {
   return tx ?? prisma;
@@ -77,9 +78,31 @@ type JogoEstatisticaJogadorDB = {
   golsSofridosBolaParada: number;
 };
 
+/** Colunas da listagem. O JSON de lances fica de fora de propósito. */
+const JOGO_LIST_SELECT = {
+  id: true,
+  equipeId: true,
+  adversario: true,
+  data: true,
+  campeonato: true,
+  competicaoId: true,
+  local: true,
+  resultado: true,
+  golsPro: true,
+  golsContra: true,
+  videoUrl: true,
+  observacoes: true,
+  playerRelationships: true,
+  lineup: true,
+  substitutionHistory: true,
+  createdAt: true,
+  status: true,
+  collectionPhase: true,
+} as const;
+
 export const matchesRepository = {
   /**
-   * Buscar todos os jogos do tenant
+   * Buscar todos os jogos do tenant, sem o log de lances.
    */
   async findAll(tenantInfo: TenantInfo, tx?: TransactionClient): Promise<JogoDB[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
@@ -87,6 +110,7 @@ export const matchesRepository = {
     return db(tx).jogo.findMany({
       where: { equipeId: { in: equipeIds } },
       orderBy: { data: 'desc' },
+      select: JOGO_LIST_SELECT,
     }) as Promise<JogoDB[]>;
   },
 
@@ -213,6 +237,16 @@ export const matchesRepository = {
       phase,
       jogoId
     );
+  },
+
+  async getListMetaByIds(
+    jogoIds: string[],
+    equipeIds: string[],
+    tx?: TransactionClient
+  ): Promise<Map<string, ListMatchMeta>> {
+    if (jogoIds.length === 0 || equipeIds.length === 0) return new Map();
+    const rows = await db(tx).$queryRawUnsafe<ListMatchMetaRow[]>(LIST_MATCH_META_SQL, jogoIds, equipeIds);
+    return listMatchMetaFromRows(rows);
   },
 
   async getStatusByIds(jogoIds: string[], tx?: TransactionClient): Promise<Map<string, string>> {

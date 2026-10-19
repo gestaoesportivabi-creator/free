@@ -51,13 +51,14 @@ function hasNonZeroCoreStats(match: MatchRecord): boolean {
 function inferStatusFromData(
   rawStatus: unknown,
   match: MatchRecord,
-  jogo?: { collectionPhase?: number; postMatchEventLog?: unknown; lineup?: unknown }
+  jogo?: { collectionPhase?: number; postMatchEventLog?: unknown; postMatchEventCount?: number; lineup?: unknown }
 ): NonNullable<MatchRecord['status']> {
   if (isValidMatchStatus(rawStatus)) return rawStatus;
 
   const phase = jogo?.collectionPhase;
   const hasEventLog =
-    Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0;
+    (typeof jogo?.postMatchEventCount === 'number' && jogo.postMatchEventCount > 0) ||
+    (Array.isArray(jogo?.postMatchEventLog) && jogo.postMatchEventLog.length > 0);
   const lineup = jogo?.lineup as { players?: unknown[]; selectedPlayerIds?: unknown[] } | undefined;
   const hasLineupDraft =
     (Array.isArray(lineup?.players) && lineup.players.length > 0) ||
@@ -89,26 +90,28 @@ export const matchesService = {
       porJogoJogadores.set(j.jogoId, arr);
     }
 
-    const [statusMap, metodoGolMap, metodoGolTomadoMap] = await Promise.all([
-      matchesRepository.getStatusByIds(jogoIds, tx),
-      matchesRepository.getMetodoGolByJogoIds(jogoIds, tx),
-      matchesRepository.getMetodoGolTomadoByJogoIds(jogoIds, tx),
-    ]);
+    const metaMap = await matchesRepository.getListMetaByIds(jogoIds, tenantInfo.equipe_ids || [], tx);
 
     const matches: MatchRecord[] = [];
     for (const jogo of jogos) {
       const estatisticasEquipe = porJogoEquipe.get(jogo.id);
       const estatisticasJogadores = porJogoJogadores.get(jogo.id) ?? [];
-      const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any);
-      const st = statusMap.get(jogo.id);
-      match.status = inferStatusFromData(st, match, jogo as any);
-      const mg = metodoGolMap.get(jogo.id);
-      if (mg && match.teamStats) {
-        try { match.teamStats.goalMethodsScored = JSON.parse(mg); } catch { /* ignore */ }
+      const meta = metaMap.get(jogo.id);
+      const eventCount = meta?.eventCount ?? 0;
+      const match = transformMatchToFrontend(jogo as any, estatisticasJogadores as any, estatisticasEquipe as any, {
+        includeEventLog: false,
+        postMatchEventCount: eventCount,
+      });
+      match.status = inferStatusFromData(meta?.status, match, {
+        collectionPhase: (jogo as { collectionPhase?: number }).collectionPhase,
+        postMatchEventCount: eventCount,
+        lineup: (jogo as { lineup?: unknown }).lineup,
+      });
+      if (meta?.metodoGol && match.teamStats) {
+        try { match.teamStats.goalMethodsScored = JSON.parse(meta.metodoGol); } catch { /* ignore */ }
       }
-      const mgTomado = metodoGolTomadoMap.get(jogo.id);
-      if (mgTomado && match.teamStats) {
-        try { match.teamStats.goalMethodsConceded = JSON.parse(mgTomado); } catch { /* ignore */ }
+      if (meta?.metodoGolTomado && match.teamStats) {
+        try { match.teamStats.goalMethodsConceded = JSON.parse(meta.metodoGolTomado); } catch { /* ignore */ }
       }
       matches.push(match);
     }
