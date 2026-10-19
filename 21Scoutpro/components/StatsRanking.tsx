@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MatchRecord, Player, MatchStats } from '../types';
 import { Trophy, Medal, Filter, Crown } from 'lucide-react';
+import { athleteRosterLabel } from '../utils/athleteRosterLabel';
 
 interface StatsRankingProps {
     players: Player[];
@@ -156,7 +157,7 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                                 </div>
                             </div>
                             <div className="text-center">
-                                <p className="text-xs font-bold text-white truncate max-w-[80px]">{player.nickname || player.name.split(' ')[0]}</p>
+                                <p className="text-xs font-bold text-white truncate max-w-[9.5rem]" title={athleteRosterLabel(player).title}>{athleteRosterLabel(player).label}</p>
                                 <p className={`text-[10px] font-black ${currentStatConfig?.color} tracking-wider`}>
                                     {player.value} <span className="opacity-60 text-[8px] uppercase">{currentStatConfig?.label.split(' ')[0]}</span>
                                 </p>
@@ -207,7 +208,7 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                                             </div>
                                         </div>
                                         <div>
-                                            <p className="text-white font-bold text-sm group-hover:text-[#10b981] transition-colors">{player.name}</p>
+                                            <p className="text-white font-bold text-sm group-hover:text-[#10b981] transition-colors truncate max-w-[16rem]" title={athleteRosterLabel(player).title}>{athleteRosterLabel(player).label}</p>
                                             <p className="text-[10px] text-zinc-500 font-bold uppercase md:hidden">{player.position}</p>
                                         </div>
                                     </div>
