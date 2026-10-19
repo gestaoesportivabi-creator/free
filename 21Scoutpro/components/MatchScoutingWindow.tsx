@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { X, Play, Pause, Square, Users, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff, Lock, Unlock } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction, MatchClockSnapshot } from '../types';
+import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
 import {
   HALF_RELATIVE_LAST_SECOND_1T,
@@ -26,6 +26,12 @@ import {
   trialExpiredMatchSaveMessage,
 } from '../utils/trialExpiredSave';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
+import {
+  buildPersistedClockSnapshot,
+  mergeLineupClockSnapshot,
+  resolveRealtimeReopenClock,
+} from '../utils/matchClockPersistence';
+import { FreeKickEventButton } from './FreeKickEventButton';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 import {
@@ -79,82 +85,6 @@ function parseMMSSToSeconds(s: string): number {
   }
   const fromDigits = parseManualTimeToSeconds(trimmed);
   return fromDigits ?? 0;
-}
-
-const PERSISTED_CLOCK_STATES = new Set<MatchClockSnapshot['state']>([
-  'PRE_JOGO',
-  'PRIMEIRO_TEMPO',
-  'PAUSADO',
-  'SINCRONIZANDO',
-  'INTERVALO',
-  'SEGUNDO_TEMPO',
-  'ENCERRADO',
-]);
-
-function normalizePersistedClockSnapshot(snapshot: unknown): MatchClockSnapshot | null {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return null;
-  }
-
-  const candidate = snapshot as Partial<MatchClockSnapshot>;
-  const rawSeconds = Number(candidate.currentTimeSeconds);
-  const period = candidate.period;
-  const state = candidate.state;
-
-  if (!Number.isFinite(rawSeconds)) return null;
-  if (period !== '1T' && period !== '2T') return null;
-  if (typeof state !== 'string' || !PERSISTED_CLOCK_STATES.has(state as MatchClockSnapshot['state'])) {
-    return null;
-  }
-
-  return {
-    currentTimeSeconds: Math.max(0, Math.floor(rawSeconds)),
-    period,
-    state: state as MatchClockSnapshot['state'],
-    isRunning: Boolean(candidate.isRunning),
-    firstHalfLocked: Boolean(candidate.firstHalfLocked),
-  };
-}
-
-function buildPersistedClockSnapshot(snapshot: ClockSnapshot): MatchClockSnapshot {
-  const nextState =
-    snapshot.state === 'PRIMEIRO_TEMPO' ||
-    snapshot.state === 'SEGUNDO_TEMPO' ||
-    snapshot.state === 'SINCRONIZANDO'
-      ? 'PAUSADO'
-      : snapshot.state;
-
-  return {
-    currentTimeSeconds: snapshot.currentTimeSeconds,
-    period: snapshot.period,
-    state: nextState,
-    isRunning: false,
-    firstHalfLocked: snapshot.firstHalfLocked,
-  };
-}
-
-/** Best-effort clock when lineup.clockSnapshot is missing but the event tape has times. */
-function inferClockFromMatchEvents(
-  events: MatchEvent[],
-  collectionPhase: number | undefined
-): MatchClockSnapshot | null {
-  if (!events.length) return null;
-  const has2T = events.some((e) => e.period === '2T');
-  const period: '1T' | '2T' = collectionPhase === 2 || has2T ? '2T' : '1T';
-  const inPeriod = events.filter((e) => e.period === period);
-  const source = inPeriod.length > 0 ? inPeriod : events;
-  let maxTime = 0;
-  for (const e of source) {
-    const t = Number(e.time);
-    if (Number.isFinite(t) && t > maxTime) maxTime = t;
-  }
-  return {
-    currentTimeSeconds: Math.max(0, Math.floor(maxTime)),
-    period,
-    state: 'PAUSADO',
-    isRunning: false,
-    firstHalfLocked: period === '2T',
-  };
 }
 
 interface MatchScoutingWindowProps {
@@ -1575,7 +1505,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const has2TEvent = converted.some((e) => e.period === '2T');
     const hasPossessionProgress =
       ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
-    const persistedClockSnapshot = normalizePersistedClockSnapshot(match.lineup?.clockSnapshot);
     const phase = match.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
@@ -1633,47 +1562,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
-      // Prefer saved clockSnapshot; if missing, infer from event tape before falling back to sync wall.
-      const inferredClock =
-        !persistedClockSnapshot && hasLog
-          ? inferClockFromMatchEvents(converted, phase)
-          : null;
-      const clockToRestore = persistedClockSnapshot ?? inferredClock;
-      if (clockToRestore) {
-        setNeedsClockSyncFallback(false);
-        const restoredState =
-          clockToRestore.state === 'PRIMEIRO_TEMPO' ||
-          clockToRestore.state === 'SEGUNDO_TEMPO' ||
-          clockToRestore.state === 'SINCRONIZANDO'
-            ? 'PAUSADO'
-            : clockToRestore.state;
-        hydrateClock({
-          seconds: clockToRestore.currentTimeSeconds,
-          period: clockToRestore.period,
-          firstHalfLocked: clockToRestore.firstHalfLocked,
-          state: restoredState,
-          isRunning: false,
-        });
-      } else if (!hasLog && inSecondHalf) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
-      } else if (!hasLog && hasPossessionProgress) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PAUSADO', isRunning: false });
-      } else if (!hasLog && !inSecondHalf) {
-        setNeedsClockSyncFallback(false);
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRE_JOGO', isRunning: false });
-      } else {
-        // Has log/lineup progress but no temporal source — require manual sync.
-        setNeedsClockSyncFallback(true);
-        hydrateClock({
-          seconds: 0,
-          period: inSecondHalf ? '2T' : '1T',
-          firstHalfLocked: inSecondHalf,
-          state: 'PAUSADO',
-          isRunning: false,
-        });
-      }
+      const reopenedClock = resolveRealtimeReopenClock({
+        persistedClock: match.lineup?.clockSnapshot,
+        events: converted.map((event) => ({ time: event.time, period: event.period })),
+        hasLog,
+        collectionPhase: phase,
+        inSecondHalf,
+        hasPossessionProgress,
+      });
+      setNeedsClockSyncFallback(reopenedClock.needsClockSyncFallback);
+      hydrateClock(reopenedClock.clock);
     } else if (inSecondHalf) {
       setNeedsClockSyncFallback(false);
       setManualMinute(20);
@@ -2203,34 +2101,40 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         savedMatch.collectionPhase !== 0;
 
       if (shouldWriteLineup) {
-        savedMatch.lineup = {
-          players: mergedPlayers,
-          bench: mergedBench,
-          ballPossessionStart: mergedPossession,
-          ...(squadIds.length > 0
-            ? { selectedPlayerIds: squadIds }
-            : prevLineup?.selectedPlayerIds?.length
-              ? { selectedPlayerIds: prevLineup.selectedPlayerIds }
+        savedMatch.lineup = mergeLineupClockSnapshot(
+          {
+            players: mergedPlayers,
+            bench: mergedBench,
+            ballPossessionStart: mergedPossession,
+            ...(squadIds.length > 0
+              ? { selectedPlayerIds: squadIds }
+              : prevLineup?.selectedPlayerIds?.length
+                ? { selectedPlayerIds: prevLineup.selectedPlayerIds }
+                : {}),
+            ...(prevLineup?.technicalAnalysis
+              ? { technicalAnalysis: prevLineup.technicalAnalysis }
               : {}),
-          ...(prevLineup?.technicalAnalysis
-            ? { technicalAnalysis: prevLineup.technicalAnalysis }
-            : {}),
-          ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
-        };
+            ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
+          },
+          prevLineup
+        );
       }
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
       savedMatch.possessionSecondsWith = possessionSecondsWith;
       savedMatch.possessionSecondsWithout = possessionSecondsWithout;
     } else if (squadIds.length > 0) {
-      savedMatch.lineup = {
-        players: lineupPlayers,
-        bench: benchPlayers,
-        ballPossessionStart: ballPossessionStart ?? 'us',
-        selectedPlayerIds: squadIds,
-        ...(prevLineup?.technicalAnalysis
-          ? { technicalAnalysis: prevLineup.technicalAnalysis }
-          : {}),
-      };
+      savedMatch.lineup = mergeLineupClockSnapshot(
+        {
+          players: lineupPlayers,
+          bench: benchPlayers,
+          ballPossessionStart: ballPossessionStart ?? 'us',
+          selectedPlayerIds: squadIds,
+          ...(prevLineup?.technicalAnalysis
+            ? { technicalAnalysis: prevLineup.technicalAnalysis }
+            : {}),
+        },
+        prevLineup
+      );
     }
 
     return savedMatch;
@@ -5761,86 +5665,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       >
                         PÊNALTI
                       </button>
-                      <span
-                        className="relative block w-full"
-                        data-testid="event-selector-freekick-wrap"
-                        role="group"
-                        aria-describedby={
-                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                            ? 'tiro-livre-hint'
-                            : undefined
-                        }
-                        title={
-                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                            ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
-                            : undefined
-                        }
-                      >
-                        {/* Overlay receives hover/touch when button is disabled (Chromium swallows title on disabled). */}
-                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
-                          <span
-                            className="absolute inset-0 z-10 cursor-not-allowed rounded-lg"
-                            title="Disponível após 5 faltas (nossas ou do adversário) neste tempo"
-                            aria-hidden
-                            data-testid="tiro-livre-disabled-overlay"
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (shouldDisableRealtimeEventButtons) return;
-                            if (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5) {
-                              return; // Habilitado quando pelo menos um lado tem 5 faltas no período atual
-                            }
-                            if (isPostmatch && getTimeForEvent() === null) {
-                              alert('Informe o tempo (ex.: 0100 para 01:00).');
-                              return;
-                            }
-                            applyPreActionClockBehavior('freeKick');
-                            setFreeKickStep('team');
-                            setPendingFreeKickTeam(null);
-                            setPendingFreeKickKickerId(null);
-                            setSelectedAction(null);
-                          }}
-                          data-testid="event-selector-freekick"
-                          disabled={
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                      <FreeKickEventButton
+                        foulsFor={foulsForCurrentPeriod}
+                        foulsAgainst={foulsAgainstCurrentPeriod}
+                        realtimeLocked={isRealtimeActionLocked}
+                        penaltyBlocked={isBlockedByPenalty}
+                        realtimeMessage={getRealtimeBlockMessage()}
+                        active={Boolean(freeKickStep)}
+                        onSelect={() => {
+                          if (isPostmatch && getTimeForEvent() === null) {
+                            alert('Informe o tempo (ex.: 0100 para 01:00).');
+                            return;
                           }
-                          aria-disabled={
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
-                          }
-                          title={
-                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                              ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
-                              : undefined
-                          }
-                          className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
-                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                              ? 'pointer-events-none '
-                              : ''
-                          }${
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
-                              ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                              : freeKickStep
-                                ? 'bg-red-500/40 border-red-500 text-white'
-                                : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
-                          }`}
-                        >
-                          TIRO LIVRE
-                        </button>
-                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
-                          <span
-                            id="tiro-livre-hint"
-                            data-testid="tiro-livre-rule-hint"
-                            className="mt-1 block text-center text-[9px] leading-tight text-zinc-500 uppercase tracking-wide"
-                          >
-                            Após 5 faltas neste tempo
-                          </span>
-                        ) : null}
-                      </span>
+                          applyPreActionClockBehavior('freeKick');
+                          setFreeKickStep('team');
+                          setPendingFreeKickTeam(null);
+                          setPendingFreeKickKickerId(null);
+                          setSelectedAction(null);
+                        }}
+                      />
                       <button
                         onClick={() => {
                           if (!isMatchStarted) return;

@@ -1,0 +1,80 @@
+/**
+ * Preserva lineup.clockSnapshot no update da partida.
+ * O JSON de lineup é substituído por inteiro; um payload sem snapshot novo
+ * (save pós-jogo, análise técnica parcial) não pode apagar o relógio do ao vivo.
+ * A mescla usa só o lineup da partida já autorizada para o tenant — não consulta outro clube.
+ */
+
+const PERSISTED_CLOCK_STATES = new Set([
+  'PRE_JOGO',
+  'PRIMEIRO_TEMPO',
+  'PAUSADO',
+  'SINCRONIZANDO',
+  'INTERVALO',
+  'SEGUNDO_TEMPO',
+  'ENCERRADO',
+]);
+
+export interface MatchClockSnapshot {
+  currentTimeSeconds: number;
+  period: '1T' | '2T';
+  state: string;
+  isRunning: boolean;
+  firstHalfLocked: boolean;
+}
+
+export function normalizePersistedClockSnapshot(snapshot: unknown): MatchClockSnapshot | null {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    return null;
+  }
+
+  const candidate = snapshot as Partial<MatchClockSnapshot>;
+  const rawSeconds = Number(candidate.currentTimeSeconds);
+  const period = candidate.period;
+  const state = candidate.state;
+
+  if (!Number.isFinite(rawSeconds)) return null;
+  if (period !== '1T' && period !== '2T') return null;
+  if (typeof state !== 'string' || !PERSISTED_CLOCK_STATES.has(state)) return null;
+
+  return {
+    currentTimeSeconds: Math.max(0, Math.floor(rawSeconds)),
+    period,
+    state,
+    isRunning: Boolean(candidate.isRunning),
+    firstHalfLocked: Boolean(candidate.firstHalfLocked),
+  };
+}
+
+export function mergeLineupPreservingClockSnapshot(
+  existingLineup: unknown,
+  incomingLineup: unknown
+): unknown {
+  if (incomingLineup === undefined) return undefined;
+  if (incomingLineup === null) return null;
+  if (typeof incomingLineup !== 'object' || Array.isArray(incomingLineup)) {
+    return incomingLineup;
+  }
+
+  const incoming = { ...(incomingLineup as Record<string, unknown>) };
+  const incomingClock = normalizePersistedClockSnapshot(incoming.clockSnapshot);
+  if (incomingClock) {
+    incoming.clockSnapshot = incomingClock;
+    return incoming;
+  }
+
+  const existingClock =
+    existingLineup && typeof existingLineup === 'object' && !Array.isArray(existingLineup)
+      ? normalizePersistedClockSnapshot((existingLineup as { clockSnapshot?: unknown }).clockSnapshot)
+      : null;
+
+  if (existingClock) {
+    incoming.clockSnapshot = existingClock;
+    return incoming;
+  }
+
+  if ('clockSnapshot' in incoming) {
+    delete incoming.clockSnapshot;
+  }
+  return incoming;
+}
