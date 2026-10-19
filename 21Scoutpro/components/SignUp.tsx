@@ -262,31 +262,64 @@ export const SignUp: React.FC<SignUpProps> = ({ onSignedUp, onGoToLogin, onBackT
               {errors.teamName && <p className="mt-1.5 text-xs text-red-400">{errors.teamName}</p>}
             </div>
 
-            <label className="flex items-start gap-3 cursor-pointer pt-1">
-              <span className="relative flex items-center justify-center shrink-0 mt-0.5">
+            <label
+              htmlFor="signup-terms"
+              className="flex items-start gap-3 cursor-pointer pt-1"
+              onClick={(event) => {
+                const target = event.target as HTMLElement;
+                // Links abrem o documento. O input já alterna sozinho no onChange.
+                // preventDefault no resto evita o segundo toggle da label nativa
+                // (clique na caixa/texto parecia não marcar).
+                if (target.closest('a')) return;
+                if (target instanceof HTMLInputElement && target.type === 'checkbox') return;
+                event.preventDefault();
+                setAcceptedTerms((current) => !current);
+              }}
+            >
+              <span className="relative mt-0.5 inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center">
                 <input
+                  id="signup-terms"
+                  name="acceptedTerms"
                   type="checkbox"
                   checked={acceptedTerms}
                   onChange={(e) => setAcceptedTerms(e.target.checked)}
-                  className="peer sr-only"
+                  aria-invalid={Boolean(errors.acceptedTerms)}
+                  className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
                 />
                 <span
-                  className="w-[18px] h-[18px] rounded border border-zinc-600 bg-black/60 transition-colors
-                             peer-checked:bg-[#00f0ff] peer-checked:border-[#00f0ff]
-                             peer-focus-visible:ring-2 peer-focus-visible:ring-[#00f0ff]/50"
+                  data-testid="signup-terms-box"
                   aria-hidden="true"
+                  className={`pointer-events-none absolute inset-0 rounded border transition-colors
+                             peer-focus-visible:ring-2 peer-focus-visible:ring-[#00f0ff]/50
+                             ${acceptedTerms ? 'border-[#00f0ff] bg-[#00f0ff]' : 'border-zinc-600 bg-black/60'}`}
                 />
                 {acceptedTerms && (
-                  <Check size={13} strokeWidth={3} className="absolute text-black pointer-events-none" />
+                  <Check
+                    size={13}
+                    strokeWidth={3}
+                    className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-black"
+                  />
                 )}
               </span>
               <span className="text-xs text-zinc-400 leading-relaxed">
                 Li e aceito os{' '}
-                <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-[#00f0ff] hover:underline">
+                <a
+                  href="/termos"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative z-20 text-[#00f0ff] hover:underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   Termos de Uso
                 </a>{' '}
                 e a{' '}
-                <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-[#00f0ff] hover:underline">
+                <a
+                  href="/privacidade"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative z-20 text-[#00f0ff] hover:underline"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   Política de Privacidade
                 </a>
                 .
