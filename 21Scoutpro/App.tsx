@@ -53,6 +53,8 @@ import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfterFinalize } from './utils/openMatchAnalysis';
+import { isAbortError, shouldClearSessionToken } from './utils/sessionRestore';
+import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/trialExpiredSave';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -296,6 +298,8 @@ export default function App() {
   
   // User Session (Not persisted for security in this demo, but could be)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  /** Sai de /scout-realtime sem reload (Finalizar → dashboard na mesma árvore). */
+  const [leftRealtime, setLeftRealtime] = useState(false);
 
   /** Cadeados / “Em breve” só para plano Essencial (ou fallback VITE_PLAN sem planName) */
   const essentialRestricted = useMemo(() => isEssentialPlanUser(currentUser), [currentUser]);
@@ -1219,6 +1223,11 @@ export default function App() {
         return undefined;
       } catch (error) {
         console.error('❌ Erro ao salvar partida:', error);
+        if (isTrialExpiredSaveError(error)) {
+          // O rascunho fica com quem chamou; o 402 não apaga o que já está no servidor.
+          if (!isAutosave) throw error;
+          return undefined;
+        }
         const msg = error instanceof Error ? error.message : 'Erro desconhecido';
         if (!isAutosave) alert(`Erro ao salvar partida: ${msg}\n\nOs dados NÃO foram gravados.`);
         return undefined;
@@ -1444,6 +1453,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let restored = false;
+    const controller = new AbortController();
     const p = window.location.pathname.replace(/\/$/, '') || '/';
     const blogMatch = matchBlogPath(p);
     const isBlogPath = blogMatch != null;
@@ -1472,6 +1482,24 @@ export default function App() {
       else if (p === '/' || p === '') setCurrentRoute('landing');
     };
 
+    const continueWithCachedUser = (): boolean => {
+      if (cancelled) return false;
+      if (!localStorage.getItem('token')) return false;
+      try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return false;
+        const cached = JSON.parse(raw) as User;
+        if (!cached?.id) return false;
+        setCurrentUser(cached);
+        setCurrentRoute('app');
+        setIsInitializing(false);
+        restored = true;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     const run = async () => {
       if (!token) {
         setRouteFromPath();
@@ -1483,7 +1511,10 @@ export default function App() {
         const { getApiUrl } = await import('./config');
         const profileUrl = `${getApiUrl()}/auth/profile`;
         const fetchProfile = () =>
-          fetch(profileUrl, { headers: { Authorization: `Bearer ${token}` } });
+          fetch(profileUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
+          });
 
         // Pós-Finalizar: /dashboard remonta e bate /auth/profile — retry evita logout flaky (Verify 5).
         const pendingAnalysis = Boolean(peekOpenMatchAnalysisId());
@@ -1601,46 +1632,36 @@ export default function App() {
           if (p === '/dashboard/assistente') setAssistantOpen(true);
           setIsInitializing(false);
           restored = true;
-        } else if (response.status === 401 || response.status === 403) {
-          // Grace pós-Finalizar: não limpar sessão; tentar user em cache para abrir a Análise.
-          if (keepSession) {
-            try {
-              const raw = localStorage.getItem('user');
-              if (raw) {
-                const cached = JSON.parse(raw) as User;
-                if (cached?.id) {
-                  setCurrentUser(cached);
-                  setCurrentRoute('app');
-                  setIsInitializing(false);
-                  restored = true;
-                  return;
-                }
-              }
-            } catch {
-              /* fall through */
-            }
-            // Mantém token; rota login só se não houver cache — usuário pode refresh.
-            setRouteFromPath();
-            return;
-          }
-          // Only clear the session on hard auth rejection outside finalize grace.
+        } else if (
+          shouldClearSessionToken({ type: 'http', status: response.status }, { cancelled })
+        ) {
+          // Grace pós-Finalizar: o retry acima absorve 401 instável. Só 401 confirmado
+          // limpa o token — nunca 5xx, 403, rede ou abort.
+          if (cancelled) return;
           clearAllUserData(true);
           setRouteFromPath();
         } else {
-          // Transient profile failure (e.g. right after Finalizar → /dashboard): keep token.
-          setRouteFromPath();
+          if (cancelled) return;
+          if (!continueWithCachedUser()) setRouteFromPath();
         }
-      } catch {
+      } catch (error) {
         if (cancelled) return;
-        // Network/abort blips must not log the user out (Verify 5 intermittent logout).
-        // Keep token; route from path so a refresh can restore the session.
-        setRouteFromPath();
+        const failure = isAbortError(error)
+          ? ({ type: 'abort' } as const)
+          : ({ type: 'network' } as const);
+        if (shouldClearSessionToken(failure, { cancelled })) {
+          clearAllUserData(true);
+        }
+        if (!continueWithCachedUser()) setRouteFromPath();
       } finally {
         if (!cancelled && !restored) setIsInitializing(false);
       }
     };
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   // Update URL when route changes (skip while initializing to avoid overwriting the current URL before session restore)
@@ -1772,8 +1793,19 @@ export default function App() {
 
   // Redirecionar para login se estiver na rota 'app' mas não tiver usuário
   useEffect(() => {
-    if (currentRoute === 'app' && !currentUser) {
+    if (currentRoute !== 'app' || currentUser) return;
+    const token = localStorage.getItem('token');
+    if (!token) {
       setCurrentRoute('login');
+      return;
+    }
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return;
+      const cached = JSON.parse(raw) as User;
+      if (cached?.id) setCurrentUser(cached);
+    } catch {
+      /* token permanece — JSON inválido não desloga */
     }
   }, [currentRoute, currentUser]);
 
@@ -1793,9 +1825,27 @@ export default function App() {
     return <AppInitSkeleton />;
   }
 
+  const handoffRealtimeToDashboard = () => {
+    window.history.pushState({}, '', '/dashboard');
+    try {
+      if (!currentUser && localStorage.getItem('token')) {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          const cached = JSON.parse(raw) as User;
+          if (cached?.id) setCurrentUser(cached);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setAssistantOpen(false);
+    setLeftRealtime(true);
+    setCurrentRoute('app');
+  };
+
   // Tempo real dedicado para a coleta autenticada.
-  if (window.location.pathname === '/scout-realtime') {
-    return <RealtimeScoutPage />;
+  if (window.location.pathname === '/scout-realtime' && !leftRealtime) {
+    return <RealtimeScoutPage onSoftNavigateDashboard={handoffRealtimeToDashboard} />;
   }
 
   // Blog público (sem exigir login)
@@ -1872,6 +1922,9 @@ export default function App() {
     return (
       <WelcomeWizard
         user={currentUser}
+        existingJerseyNumbers={players
+          .map((player) => player.jerseyNumber)
+          .filter((jersey): jersey is number => typeof jersey === 'number' && Number.isFinite(jersey))}
         onSkip={() => {
           setActiveTab('dashboard');
           setCurrentRoute('app');
@@ -2139,21 +2192,28 @@ export default function App() {
             onSave={async (match) => {
               try {
                 if (match.id && championshipMatches.find(m => m.id === match.id)) {
-                  // Atualizar
                   const updated = await championshipMatchesApi.update(match.id, match);
                   if (updated) {
                     setChampionshipMatches(prev => prev.map(m => m.id === match.id ? updated : m));
+                    return true;
                   }
-                } else {
-                  // Criar
-                  const saved = await championshipMatchesApi.create(match);
-                  if (saved) {
-                    setChampionshipMatches(prev => [...prev, saved]);
-                  }
+                  return false;
                 }
+                const saved = await championshipMatchesApi.create(match);
+                if (saved) {
+                  setChampionshipMatches(prev => [...prev, saved]);
+                  return true;
+                }
+                return false;
               } catch (error) {
                 console.error('Erro ao salvar partida do campeonato:', error);
-                alert('Erro ao salvar partida. Verifique o console.');
+                if (isTrialExpiredSaveError(error)) {
+                  // O formulário só é limpo depois de `true`; o 402 não apaga partidas já salvas.
+                  notifyTrialExpiredMatchSave(true);
+                } else {
+                  alert('Erro ao salvar partida. Verifique o console.');
+                }
+                return false;
               }
             }}
             onDelete={async (id) => {

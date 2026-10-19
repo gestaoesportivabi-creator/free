@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { X, Play, Pause, Square, Users, Goal, AlertTriangle, Clock, List, ArrowLeft, Target, Zap, Shield, UserRound, CornerDownRight, MoveHorizontal, Flag, CircleDot, Circle, Hand, ShieldOff, Lock, Unlock } from 'lucide-react';
-import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction, MatchClockSnapshot } from '../types';
+import { MatchRecord, MatchStats, Player, Team, PostMatchEvent, PostMatchAction } from '../types';
 import { MatchType } from './MatchTypeModal';
 import {
   HALF_RELATIVE_LAST_SECOND_1T,
@@ -19,7 +19,20 @@ import {
 } from '../utils/matchPeriod';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
+import {
+  isTrialExpiredSaveError,
+  notifyTrialExpiredMatchSave,
+  PLANS_CTA_HREF,
+  PLANS_CTA_LABEL,
+  trialExpiredMatchSaveMessage,
+} from '../utils/trialExpiredSave';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
+import {
+  buildPersistedClockSnapshot,
+  mergeLineupClockSnapshot,
+  resolveRealtimeReopenClock,
+} from '../utils/matchClockPersistence';
+import { FreeKickEventButton } from './FreeKickEventButton';
 import { useMatchClock } from '../hooks/useMatchClock';
 import { getMatchClockEventRule, type ClockPauseDirective } from '../utils/matchClockEventRules';
 import {
@@ -73,82 +86,6 @@ function parseMMSSToSeconds(s: string): number {
   }
   const fromDigits = parseManualTimeToSeconds(trimmed);
   return fromDigits ?? 0;
-}
-
-const PERSISTED_CLOCK_STATES = new Set<MatchClockSnapshot['state']>([
-  'PRE_JOGO',
-  'PRIMEIRO_TEMPO',
-  'PAUSADO',
-  'SINCRONIZANDO',
-  'INTERVALO',
-  'SEGUNDO_TEMPO',
-  'ENCERRADO',
-]);
-
-function normalizePersistedClockSnapshot(snapshot: unknown): MatchClockSnapshot | null {
-  if (!snapshot || typeof snapshot !== 'object') {
-    return null;
-  }
-
-  const candidate = snapshot as Partial<MatchClockSnapshot>;
-  const rawSeconds = Number(candidate.currentTimeSeconds);
-  const period = candidate.period;
-  const state = candidate.state;
-
-  if (!Number.isFinite(rawSeconds)) return null;
-  if (period !== '1T' && period !== '2T') return null;
-  if (typeof state !== 'string' || !PERSISTED_CLOCK_STATES.has(state as MatchClockSnapshot['state'])) {
-    return null;
-  }
-
-  return {
-    currentTimeSeconds: Math.max(0, Math.floor(rawSeconds)),
-    period,
-    state: state as MatchClockSnapshot['state'],
-    isRunning: Boolean(candidate.isRunning),
-    firstHalfLocked: Boolean(candidate.firstHalfLocked),
-  };
-}
-
-function buildPersistedClockSnapshot(snapshot: ClockSnapshot): MatchClockSnapshot {
-  const nextState =
-    snapshot.state === 'PRIMEIRO_TEMPO' ||
-    snapshot.state === 'SEGUNDO_TEMPO' ||
-    snapshot.state === 'SINCRONIZANDO'
-      ? 'PAUSADO'
-      : snapshot.state;
-
-  return {
-    currentTimeSeconds: snapshot.currentTimeSeconds,
-    period: snapshot.period,
-    state: nextState,
-    isRunning: false,
-    firstHalfLocked: snapshot.firstHalfLocked,
-  };
-}
-
-/** Best-effort clock when lineup.clockSnapshot is missing but the event tape has times. */
-function inferClockFromMatchEvents(
-  events: MatchEvent[],
-  collectionPhase: number | undefined
-): MatchClockSnapshot | null {
-  if (!events.length) return null;
-  const has2T = events.some((e) => e.period === '2T');
-  const period: '1T' | '2T' = collectionPhase === 2 || has2T ? '2T' : '1T';
-  const inPeriod = events.filter((e) => e.period === period);
-  const source = inPeriod.length > 0 ? inPeriod : events;
-  let maxTime = 0;
-  for (const e of source) {
-    const t = Number(e.time);
-    if (Number.isFinite(t) && t > maxTime) maxTime = t;
-  }
-  return {
-    currentTimeSeconds: Math.max(0, Math.floor(maxTime)),
-    period,
-    state: 'PAUSADO',
-    isRunning: false,
-    firstHalfLocked: period === '2T',
-  };
 }
 
 interface MatchScoutingWindowProps {
@@ -589,6 +526,35 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const pendingHydrationSignatureRef = useRef<string | null>(null);
   /** Evita que efeitos de `match`/`init` repõem 1T após «Encerrar coleta do 1º tempo» antes do servidor gravar `collectionPhase: 2`. */
   const userEndedFirstHalfCollectionRef = useRef(false);
+  /** Sempre a closure mais recente de saveSilently — o follow-up da fila não pode regravar o snapshot velho. */
+  const saveSilentlyRef = useRef<() => Promise<void>>(async () => {});
+  const autosaveForceRef = useRef(false);
+  /** setTimeout ainda não entrou em saveSilently; o save manual espera este flag também. */
+  const autosaveScheduledRef = useRef(false);
+  const autosaveScheduleTicketRef = useRef(0);
+  /** Exclusões explícitas. Omitir o lance do array não apaga no servidor (o PUT une por id). */
+  const deletedEventIdsRef = useRef<Set<string>>(new Set());
+
+  const rememberDeletedEventId = (id: string | null | undefined) => {
+    const trimmed = String(id ?? '').trim();
+    if (trimmed) deletedEventIdsRef.current.add(trimmed);
+  };
+
+  const requestSerializedAutosave = useCallback((force = false) => {
+    if (force) autosaveForceRef.current = true;
+    if (autosaveInFlightRef.current || autosaveScheduledRef.current) {
+      autosaveQueuedRef.current = true;
+      return;
+    }
+    const ticket = ++autosaveScheduleTicketRef.current;
+    autosaveScheduledRef.current = true;
+    window.setTimeout(() => {
+      if (autosaveScheduleTicketRef.current !== ticket) return;
+      autosaveScheduledRef.current = false;
+      autosaveSkipRef.current = false;
+      void saveSilentlyRef.current();
+    }, 0);
+  }, []);
   
   // Estados para confirmação de falta com zona
   const [showFoulConfirmation, setShowFoulConfirmation] = useState<boolean>(false);
@@ -602,6 +568,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [editTimeInput, setEditTimeInput] = useState<string>('');
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
+  const [finalizeTrialExpired, setFinalizeTrialExpired] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   
   // Estados para tiro livre e pênalti (fluxo inline)
@@ -1518,6 +1485,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       hydrationAppliedForMatchIdRef.current = null;
       lastSeenMatchIdForHydrationRef.current = null;
       pendingHydrationSignatureRef.current = null;
+      deletedEventIdsRef.current.clear();
       return;
     }
     if (!isPostmatch) {
@@ -1526,6 +1494,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const mid = String(match?.id ?? '').trim();
     if (lastSeenMatchIdForHydrationRef.current !== null && lastSeenMatchIdForHydrationRef.current !== mid) {
       hydrationAppliedForMatchIdRef.current = null;
+      deletedEventIdsRef.current.clear();
     }
     lastSeenMatchIdForHydrationRef.current = mid;
 
@@ -1575,7 +1544,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const has2TEvent = converted.some((e) => e.period === '2T');
     const hasPossessionProgress =
       ((match.possessionSecondsWith ?? 0) + (match.possessionSecondsWithout ?? 0)) > 0;
-    const persistedClockSnapshot = normalizePersistedClockSnapshot(match.lineup?.clockSnapshot);
     const phase = match.collectionPhase;
     if (phase === 2) {
       userEndedFirstHalfCollectionRef.current = false;
@@ -1633,47 +1601,16 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (titFb[0]) setCurrentGoalkeeperId(titFb[0]);
       }
       setSubstitutionHistory(match.substitutionHistory ?? []);
-      // Prefer saved clockSnapshot; if missing, infer from event tape before falling back to sync wall.
-      const inferredClock =
-        !persistedClockSnapshot && hasLog
-          ? inferClockFromMatchEvents(converted, phase)
-          : null;
-      const clockToRestore = persistedClockSnapshot ?? inferredClock;
-      if (clockToRestore) {
-        setNeedsClockSyncFallback(false);
-        const restoredState =
-          clockToRestore.state === 'PRIMEIRO_TEMPO' ||
-          clockToRestore.state === 'SEGUNDO_TEMPO' ||
-          clockToRestore.state === 'SINCRONIZANDO'
-            ? 'PAUSADO'
-            : clockToRestore.state;
-        hydrateClock({
-          seconds: clockToRestore.currentTimeSeconds,
-          period: clockToRestore.period,
-          firstHalfLocked: clockToRestore.firstHalfLocked,
-          state: restoredState,
-          isRunning: false,
-        });
-      } else if (!hasLog && inSecondHalf) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '2T', firstHalfLocked: true, state: 'PAUSADO', isRunning: false });
-      } else if (!hasLog && hasPossessionProgress) {
-        setNeedsClockSyncFallback(true);
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PAUSADO', isRunning: false });
-      } else if (!hasLog && !inSecondHalf) {
-        setNeedsClockSyncFallback(false);
-        hydrateClock({ seconds: 0, period: '1T', firstHalfLocked: false, state: 'PRE_JOGO', isRunning: false });
-      } else {
-        // Has log/lineup progress but no temporal source — require manual sync.
-        setNeedsClockSyncFallback(true);
-        hydrateClock({
-          seconds: 0,
-          period: inSecondHalf ? '2T' : '1T',
-          firstHalfLocked: inSecondHalf,
-          state: 'PAUSADO',
-          isRunning: false,
-        });
-      }
+      const reopenedClock = resolveRealtimeReopenClock({
+        persistedClock: match.lineup?.clockSnapshot,
+        events: converted.map((event) => ({ time: event.time, period: event.period })),
+        hasLog,
+        collectionPhase: phase,
+        inSecondHalf,
+        hasPossessionProgress,
+      });
+      setNeedsClockSyncFallback(reopenedClock.needsClockSyncFallback);
+      hydrateClock(reopenedClock.clock);
     } else if (inSecondHalf) {
       setNeedsClockSyncFallback(false);
       setManualMinute(20);
@@ -1787,18 +1724,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       });
     }
     if (onSave && isOpen) {
-      setTimeout(() => {
-        try {
-          autosaveSkipRef.current = false;
-          const snap = buildMatchSnapshot('em_andamento');
-          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-            applySaveResult(r);
-            commitPersistedSignature(JSON.stringify(snap));
-          });
-        } catch (_) {
-          /* noop */
-        }
-      }, 0);
+      requestSerializedAutosave(true);
     }
   };
 
@@ -1829,18 +1755,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setShowIntervalAnalysis(false);
     }
     if (onSave && isOpen) {
-      setTimeout(() => {
-        try {
-          autosaveSkipRef.current = false;
-          const snap = buildMatchSnapshot('em_andamento');
-          void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-            applySaveResult(r);
-            commitPersistedSignature(JSON.stringify(snap));
-          });
-        } catch (_) {
-          /* noop */
-        }
-      }, 0);
+      requestSerializedAutosave(true);
     }
   };
 
@@ -2203,34 +2118,45 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         savedMatch.collectionPhase !== 0;
 
       if (shouldWriteLineup) {
-        savedMatch.lineup = {
-          players: mergedPlayers,
-          bench: mergedBench,
-          ballPossessionStart: mergedPossession,
-          ...(squadIds.length > 0
-            ? { selectedPlayerIds: squadIds }
-            : prevLineup?.selectedPlayerIds?.length
-              ? { selectedPlayerIds: prevLineup.selectedPlayerIds }
+        savedMatch.lineup = mergeLineupClockSnapshot(
+          {
+            players: mergedPlayers,
+            bench: mergedBench,
+            ballPossessionStart: mergedPossession,
+            ...(squadIds.length > 0
+              ? { selectedPlayerIds: squadIds }
+              : prevLineup?.selectedPlayerIds?.length
+                ? { selectedPlayerIds: prevLineup.selectedPlayerIds }
+                : {}),
+            ...(prevLineup?.technicalAnalysis
+              ? { technicalAnalysis: prevLineup.technicalAnalysis }
               : {}),
-          ...(prevLineup?.technicalAnalysis
-            ? { technicalAnalysis: prevLineup.technicalAnalysis }
-            : {}),
-          ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
-        };
+            ...(persistedClockSnapshot ? { clockSnapshot: persistedClockSnapshot } : {}),
+          },
+          prevLineup
+        );
       }
       savedMatch.substitutionHistory = substitutionHistory.length > 0 ? substitutionHistory : undefined;
       savedMatch.possessionSecondsWith = possessionSecondsWith;
       savedMatch.possessionSecondsWithout = possessionSecondsWithout;
     } else if (squadIds.length > 0) {
-      savedMatch.lineup = {
-        players: lineupPlayers,
-        bench: benchPlayers,
-        ballPossessionStart: ballPossessionStart ?? 'us',
-        selectedPlayerIds: squadIds,
-        ...(prevLineup?.technicalAnalysis
-          ? { technicalAnalysis: prevLineup.technicalAnalysis }
-          : {}),
-      };
+      savedMatch.lineup = mergeLineupClockSnapshot(
+        {
+          players: lineupPlayers,
+          bench: benchPlayers,
+          ballPossessionStart: ballPossessionStart ?? 'us',
+          selectedPlayerIds: squadIds,
+          ...(prevLineup?.technicalAnalysis
+            ? { technicalAnalysis: prevLineup.technicalAnalysis }
+            : {}),
+        },
+        prevLineup
+      );
+    }
+
+    savedMatch.eventLogWriteMode = 'union';
+    if (deletedEventIdsRef.current.size > 0) {
+      savedMatch.deletedEventIds = Array.from(deletedEventIdsRef.current);
     }
 
     return savedMatch;
@@ -2331,40 +2257,47 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   ]);
 
   const saveSilently = async () => {
-    if (suppressBeforeUnloadRef.current) return;
+    if (suppressBeforeUnloadRef.current) {
+      autosaveForceRef.current = false;
+      return;
+    }
     if (!onSave || !isOpen || autosaveSkipRef.current) return;
     if (!isPostmatch && !isMatchStarted) return;
     if (!hasEvents && !hasRealtimeLineupDraft && !hasPostmatchSquad) return;
-
-    const signature = persistableDraftSignature;
-    if (!signature || signature === lastAutosaveSignatureRef.current) return;
 
     if (autosaveInFlightRef.current) {
       autosaveQueuedRef.current = true;
       return;
     }
 
+    const force = autosaveForceRef.current;
+    const signature = persistableDraftSignature;
+    if (!force && (!signature || signature === lastAutosaveSignatureRef.current)) return;
+
+    autosaveForceRef.current = false;
     autosaveInFlightRef.current = true;
     try {
       const snapshot = buildMatchSnapshot('em_andamento');
       const saveResult = await onSave(snapshot, { source: 'autosave' });
       applySaveResult(saveResult);
-      commitPersistedSignature(signature);
+      commitPersistedSignature(signature ?? JSON.stringify(snapshot));
     } catch (error) {
       console.warn('[autosave] falhou ao salvar partida em andamento:', error);
     } finally {
       autosaveInFlightRef.current = false;
       if (autosaveQueuedRef.current) {
         autosaveQueuedRef.current = false;
-        void saveSilently();
+        void saveSilentlyRef.current();
       }
     }
   };
 
+  saveSilentlyRef.current = saveSilently;
+
   /** Espera o autosave em curso terminar para evitar corrida com save manual (duplicata / last-write). */
   const waitForAutosaveIdle = useCallback(async (maxMs = 8000) => {
     const t0 = Date.now();
-    while (autosaveInFlightRef.current) {
+    while (autosaveInFlightRef.current || autosaveScheduledRef.current) {
       if (Date.now() - t0 > maxMs) break;
       await new Promise<void>((r) => setTimeout(r, 50));
     }
@@ -2380,6 +2313,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       autosaveIntervalRef.current = null;
     }
     autosaveQueuedRef.current = false;
+    autosaveScheduleTicketRef.current += 1;
+    autosaveScheduledRef.current = false;
+    autosaveForceRef.current = false;
   }, []);
 
   // Finalizar coleta (status = encerrado, mas editável depois)
@@ -2397,6 +2333,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     setPendingFreeKickResultToRegister(null);
     setShowFinalizeConfirm(false);
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
     setIsFinalizing(false);
   }, []);
 
@@ -2406,6 +2343,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     setIsFinalizing(true);
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
 
     suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
@@ -2439,7 +2377,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       if (
         typeof returnedLogLen === 'number' &&
         expectedLogLen > 0 &&
-        returnedLogLen !== expectedLogLen
+        returnedLogLen < expectedLogLen
       ) {
         setFinalizeError(
           `Divergência ao salvar: enviamos ${expectedLogLen} evento(s) e o servidor retornou ${returnedLogLen}. Tente novamente.`
@@ -2459,7 +2397,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     } catch (err) {
       console.error('Erro ao finalizar coleta:', err);
-      setFinalizeError('Erro ao finalizar. Tente novamente.');
+      if (isTrialExpiredSaveError(err)) {
+        setFinalizeTrialExpired(true);
+        setFinalizeError(trialExpiredMatchSaveMessage(true));
+      } else {
+        setFinalizeTrialExpired(false);
+        setFinalizeError('Erro ao finalizar. Tente novamente.');
+      }
       setIsFinalizing(false);
       autosaveSkipRef.current = false;
     }
@@ -2469,6 +2413,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const canEnd = isPostmatch ? matchEvents.length >= 1 : isMatchEnded;
     if (!canEnd) return;
     setFinalizeError(null);
+    setFinalizeTrialExpired(false);
     setShowFinalizeConfirm(true);
   };
 
@@ -2492,10 +2437,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
     if (onSave) {
       const savedMatch = buildMatchSnapshot('em_andamento');
-      applySaveResult(
-        await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
-      );
-      commitPersistedSignature(JSON.stringify(savedMatch));
+      try {
+        applySaveResult(
+          await onSave(savedMatch, { source: 'manual', saveAsIncomplete: true })
+        );
+        commitPersistedSignature(JSON.stringify(savedMatch));
+      } catch (err) {
+        if (isTrialExpiredSaveError(err)) {
+          notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        throw err;
+      }
     }
     onClose();
   };
@@ -2613,16 +2567,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       setBallPossessionNow(ballPossessionStart === 'us' ? 'com' : 'sem');
     });
     if (onSave) {
-      try {
-        autosaveSkipRef.current = false;
-        const snap = buildMatchSnapshot('em_andamento');
-        void Promise.resolve(onSave(snap, { source: 'autosave' })).then((r: MatchRecord | undefined | void) => {
-          applySaveResult(r);
-          commitPersistedSignature(JSON.stringify(snap));
-        });
-      } catch {
-        /* noop */
-      }
+      requestSerializedAutosave(true);
     }
   };
 
@@ -2676,6 +2621,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     */
     // Se já há passe pendente e clicou em Passe novamente, cancelar
     if (action === 'pass' && pendingPassEventId) {
+      rememberDeletedEventId(pendingPassEventId);
       setMatchEvents(prev => prev.filter(e => e.id !== pendingPassEventId));
       setPendingPassEventId(null);
       setPendingPassSenderId(null);
@@ -3377,6 +3323,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     setSelectedPlayerId(clickedPlayerId);
     if (pendingPassEventId) {
+      rememberDeletedEventId(pendingPassEventId);
       setMatchEvents((prev) => prev.filter((e) => e.id !== pendingPassEventId));
       setPendingPassEventId(null);
       setPendingPassSenderId(null);
@@ -4297,6 +4244,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    rememberDeletedEventId(event.id);
                                     const updated = matchEvents.filter(e => e.id !== event.id);
                                     setMatchEvents(updated);
                                     recalcGoalsAndFoulsFromEvents(updated);
@@ -5743,86 +5691,25 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       >
                         PÊNALTI
                       </button>
-                      <span
-                        className="relative block w-full"
-                        data-testid="event-selector-freekick-wrap"
-                        role="group"
-                        aria-describedby={
-                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                            ? 'tiro-livre-hint'
-                            : undefined
-                        }
-                        title={
-                          foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                            ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
-                            : undefined
-                        }
-                      >
-                        {/* Overlay receives hover/touch when button is disabled (Chromium swallows title on disabled). */}
-                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
-                          <span
-                            className="absolute inset-0 z-10 cursor-not-allowed rounded-lg"
-                            title="Disponível após 5 faltas (nossas ou do adversário) neste tempo"
-                            aria-hidden
-                            data-testid="tiro-livre-disabled-overlay"
-                          />
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (shouldDisableRealtimeEventButtons) return;
-                            if (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5) {
-                              return; // Habilitado quando pelo menos um lado tem 5 faltas no período atual
-                            }
-                            if (isPostmatch && getTimeForEvent() === null) {
-                              alert('Informe o tempo (ex.: 0100 para 01:00).');
-                              return;
-                            }
-                            applyPreActionClockBehavior('freeKick');
-                            setFreeKickStep('team');
-                            setPendingFreeKickTeam(null);
-                            setPendingFreeKickKickerId(null);
-                            setSelectedAction(null);
-                          }}
-                          data-testid="event-selector-freekick"
-                          disabled={
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
+                      <FreeKickEventButton
+                        foulsFor={foulsForCurrentPeriod}
+                        foulsAgainst={foulsAgainstCurrentPeriod}
+                        realtimeLocked={isRealtimeActionLocked}
+                        penaltyBlocked={isBlockedByPenalty}
+                        realtimeMessage={getRealtimeBlockMessage()}
+                        active={Boolean(freeKickStep)}
+                        onSelect={() => {
+                          if (isPostmatch && getTimeForEvent() === null) {
+                            alert('Informe o tempo (ex.: 0100 para 01:00).');
+                            return;
                           }
-                          aria-disabled={
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
-                          }
-                          title={
-                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                              ? 'Disponível após 5 faltas (nossas ou do adversário) neste tempo'
-                              : undefined
-                          }
-                          className={`min-h-[56px] w-full flex items-center justify-center rounded-lg border-2 font-bold uppercase text-sm transition-colors shadow-lg ${
-                            foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5
-                              ? 'pointer-events-none '
-                              : ''
-                          }${
-                            shouldDisableRealtimeEventButtons ||
-                            (foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5)
-                              ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
-                              : freeKickStep
-                                ? 'bg-red-500/40 border-red-500 text-white'
-                                : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
-                          }`}
-                        >
-                          TIRO LIVRE
-                        </button>
-                        {foulsForCurrentPeriod < 5 && foulsAgainstCurrentPeriod < 5 ? (
-                          <span
-                            id="tiro-livre-hint"
-                            data-testid="tiro-livre-rule-hint"
-                            className="mt-1 block text-center text-[9px] leading-tight text-zinc-500 uppercase tracking-wide"
-                          >
-                            Após 5 faltas neste tempo
-                          </span>
-                        ) : null}
-                      </span>
+                          applyPreActionClockBehavior('freeKick');
+                          setFreeKickStep('team');
+                          setPendingFreeKickTeam(null);
+                          setPendingFreeKickKickerId(null);
+                          setSelectedAction(null);
+                        }}
+                      />
                       <button
                         onClick={() => {
                           if (!isMatchStarted) return;
@@ -6440,8 +6327,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   <p className="text-sm font-semibold text-zinc-100">{matchEvents.length}</p>
                 </div>
                 {finalizeError && (
-                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 space-y-2">
                     <p className="text-xs text-red-300 font-medium">{finalizeError}</p>
+                    {finalizeTrialExpired && (
+                      <a
+                        href={PLANS_CTA_HREF}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="trial-expired-plans-cta"
+                        className="inline-flex text-xs font-bold uppercase text-[#00f0ff] hover:text-white"
+                      >
+                        {PLANS_CTA_LABEL}
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
@@ -6452,6 +6350,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     if (isFinalizing) return;
                     setShowFinalizeConfirm(false);
                     setFinalizeError(null);
+                    setFinalizeTrialExpired(false);
                   }}
                   disabled={isFinalizing}
                   data-testid="finalize-collection-cancel"

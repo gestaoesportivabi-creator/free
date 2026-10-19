@@ -52,6 +52,7 @@ model User {
   @@index([jogadorId])
   @@index([telegramChatId])
   @@index([telegramCoachChatId])
+  @@index([roleId])
   coachAssistantAudits CoachAssistantAudit[]
   emailAuthTokens      EmailAuthToken[]
   subscription         Subscription?
@@ -428,6 +429,8 @@ model JogosEventos {
   jogador    Jogador  @relation(fields: [jogadorId], references: [id], onDelete: Cascade)
   jogo       Jogo     @relation(fields: [jogoId], references: [id], onDelete: Cascade)
 
+  @@index([jogoId])
+  @@index([jogadorId])
   @@map("jogos_eventos")
 }
 
@@ -509,6 +512,7 @@ model ProgramacoesDias {
   createdAt       DateTime    @default(now()) @map("created_at")
   programacao     Programacao @relation(fields: [programacaoId], references: [id], onDelete: Cascade)
 
+  @@index([programacaoId])
   @@map("programacoes_dias")
 }
 
@@ -541,6 +545,7 @@ model CampeonatosJogos {
   jogo          Jogo?      @relation(fields: [jogoId], references: [id])
 
   @@index([jogoId])
+  @@index([campeonatoId])
   @@map("campeonatos_jogos")
 }
 

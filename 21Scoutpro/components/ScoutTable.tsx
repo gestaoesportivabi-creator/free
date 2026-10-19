@@ -15,6 +15,7 @@ import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
+import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
 const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
@@ -1364,7 +1365,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         });
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!opponent) {
             alert("Por favor, informe o adversário.");
             return;
@@ -1639,8 +1640,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         };
 
         try {
-        onSave(newMatch);
-        
+        const saved = await Promise.resolve(onSave(newMatch));
+        if (!saved) return;
+
         // Definir match ID atual e carregar time controls
         setCurrentMatchId(newMatch.id);
         loadTimeControls(newMatch.id);
@@ -1684,6 +1686,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             }]);
         } catch (error) {
             console.error('❌ Erro ao salvar partida:', error);
+            if (isTrialExpiredSaveError(error)) {
+                notifyTrialExpiredMatchSave(true);
+                return;
+            }
             alert('Erro ao salvar partida. Verifique o console para mais detalhes.');
         }
     };
@@ -2074,7 +2080,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             alert('Análise técnica salva com sucesso.');
         } catch (error) {
             console.error('Erro ao salvar análise técnica:', error);
-            alert('Não foi possível salvar a análise técnica.');
+            if (isTrialExpiredSaveError(error)) {
+                notifyTrialExpiredMatchSave(true);
+            } else {
+                alert('Não foi possível salvar a análise técnica.');
+            }
         } finally {
             setIsSavingTechnicalAnalysis(false);
         }

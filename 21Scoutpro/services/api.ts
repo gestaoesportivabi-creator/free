@@ -7,12 +7,26 @@
 
 import { getApiUrl, API_RESOURCES } from '../config';
 import { Player, MatchRecord, PhysicalAssessment, WeeklySchedule, StatTargets, Team, SubscriptionPlanName } from '../types';
+import { ApiRequestError, TRIAL_EXPIRED_CODE, TRIAL_EXPIRED_STATUS } from '../utils/trialExpiredSave';
 
 // Tipos de resposta da API
 interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  message?: string;
+}
+
+function throwApiResponse(
+  response: Response,
+  parsed: { error?: string; message?: string } | null,
+  responseText: string
+): never {
+  const code = typeof parsed?.error === 'string' ? parsed.error : '';
+  if (response.status === TRIAL_EXPIRED_STATUS && code === TRIAL_EXPIRED_CODE) {
+    throw new ApiRequestError(response.status, code, parsed?.message || code);
+  }
+  throw new Error(parsed?.error || responseText || `Erro ${response.status}`);
 }
 
 /**
@@ -176,9 +190,8 @@ async function post<T>(resource: string, data: T): Promise<T | null> {
     }
 
     if (!response.ok) {
-      const errMsg = parsed?.error || responseText || `Erro ${response.status}`;
-      console.error('API Error:', response.status, errMsg);
-      throw new Error(errMsg);
+      console.error('API Error:', response.status, parsed?.error || responseText);
+      throwApiResponse(response, parsed, responseText);
     }
 
     if (parsed && !parsed.success) {
@@ -189,6 +202,7 @@ async function post<T>(resource: string, data: T): Promise<T | null> {
 
     return (parsed?.data ?? null) as T | null;
   } catch (error: any) {
+    if (error instanceof ApiRequestError) throw error;
     if (error.name === 'AbortError') {
       console.error(`⏱️ Timeout ao fazer POST em ${resource} (15s)`);
       throw new Error('Tempo esgotado. Verifique sua conexão e tente novamente.');
@@ -233,9 +247,8 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
     }
 
     if (!response.ok) {
-      const errMsg = parsed?.error || responseText || `Erro ${response.status}`;
-      console.error('API Error:', response.status, errMsg);
-      throw new Error(errMsg);
+      console.error('API Error:', response.status, parsed?.error || responseText);
+      throwApiResponse(response, parsed, responseText);
     }
 
     if (parsed && !parsed.success) {
@@ -246,6 +259,7 @@ async function put<T>(resource: string, id: string, data: Partial<T>): Promise<T
 
     return (parsed?.data ?? null) as T | null;
   } catch (error: any) {
+    if (error instanceof ApiRequestError) throw error;
     if (error.name === 'AbortError') {
       console.error(`⏱️ Timeout ao fazer PUT em ${resource} (15s)`);
       throw new Error('Tempo esgotado. Verifique sua conexão e tente novamente.');

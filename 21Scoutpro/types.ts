@@ -297,6 +297,17 @@ export interface MatchRecord {
    */
   postMatchEventCount?: number;
   postMatchEventLog?: PostMatchEvent[];
+  /**
+   * 'union' marca o client que exclui lance via deletedEventIds.
+   * Campo ausente: app anterior — o servidor substitui o log inteiro
+   * e omitir um evento continua apagando.
+   */
+  eventLogWriteMode?: 'union';
+  /**
+   * Ids de lances excluídos nesta coleta. Só vale com eventLogWriteMode 'union'.
+   * Omitir o evento do array, sem este campo, não apaga o que já está gravado.
+   */
+  deletedEventIds?: string[];
   /** Histórico de substituições da partida */
   substitutionHistory?: Array<{
     playerOutId: string;
