@@ -8,6 +8,8 @@ import type { TransactionClient } from '../utils/transactionWithTenant';
 import { timeControlsRepository } from '../repositories/timeControls.repository';
 import { PlayerTimeControl } from '../types/frontend';
 import prisma from '../config/database';
+import { NotFoundError, ValidationError } from '../utils/errors';
+import { equipeInTenant, jogadorIdsInTenant, type JogadorTenantDb } from '../utils/tenantPlayers';
 
 function db(tx?: TransactionClient) {
   return tx ?? prisma;
@@ -78,12 +80,22 @@ export const timeControlsService = {
    * Buscar todos os time controls de um jogo
    */
   async getByMatchId(matchId: string, tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PlayerTimeControl[]> {
+    const equipeIds = tenantInfo.equipe_ids || [];
+    const jogo = await db(tx).jogo.findUnique({ where: { id: matchId }, select: { equipeId: true } });
+    if (!jogo || !equipeInTenant(jogo.equipeId, equipeIds)) throw new NotFoundError('Jogo');
+
     const eventos = await timeControlsRepository.findByJogoId(matchId, tenantInfo, tx);
-    if (eventos.length === 0) return [];
+    const allowed = await jogadorIdsInTenant(
+      eventos.map((evento) => evento.jogadorId),
+      equipeIds,
+      (tx ?? prisma) as unknown as JogadorTenantDb
+    );
+    const visiveis = eventos.filter((evento) => allowed.has(evento.jogadorId));
+    if (visiveis.length === 0) return [];
 
     // Agrupar eventos por jogador
     const jogadoresMap = new Map<string, any[]>();
-    eventos.forEach(evento => {
+    visiveis.forEach(evento => {
       if (!jogadoresMap.has(evento.jogadorId)) {
         jogadoresMap.set(evento.jogadorId, []);
       }
@@ -105,10 +117,17 @@ export const timeControlsService = {
    */
   async saveForMatch(matchId: string, timeControls: PlayerTimeControl[], tenantInfo: TenantInfo, tx?: TransactionClient): Promise<PlayerTimeControl[]> {
     const equipeIds = tenantInfo.equipe_ids || [];
-    if (equipeIds.length === 0) throw new Error('Nenhuma equipe encontrada para o tenant');
+    const jogo = await db(tx).jogo.findUnique({ where: { id: matchId }, select: { equipeId: true } });
+    if (!jogo || !equipeInTenant(jogo.equipeId, equipeIds)) throw new NotFoundError('Jogo');
 
-    const jogo = await db(tx).jogo.findUnique({ where: { id: matchId } });
-    if (!jogo || !equipeIds.includes(jogo.equipeId)) throw new Error('Jogo não encontrado ou não pertence ao tenant');
+    const playerIds = timeControls.map((tc) => {
+      if (!tc || typeof tc.playerId !== 'string' || tc.playerId.length === 0) {
+        throw new ValidationError('Jogador é obrigatório.');
+      }
+      return tc.playerId;
+    });
+    const allowed = await jogadorIdsInTenant(playerIds, equipeIds, (tx ?? prisma) as unknown as JogadorTenantDb);
+    if (playerIds.some((id) => !allowed.has(id))) throw new NotFoundError('Jogador');
 
     await timeControlsRepository.deleteByJogoId(matchId, tx);
 

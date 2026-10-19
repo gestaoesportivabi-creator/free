@@ -14,7 +14,8 @@ import {
   resolveTeamScope,
   wellnessFailure,
 } from '../services/staffWellness.service';
-import { ValidationError } from '../utils/errors';
+import { NotFoundError, ValidationError } from '../utils/errors';
+import { equipeInTenant, jogadorIdsInTenant, type JogadorTenantDb } from '../utils/tenantPlayers';
 
 type ClassicWellnessType = Exclude<StaffWellnessType, 'bem-estar-diario'>;
 
@@ -33,6 +34,85 @@ function tenantEquipeIds(req: Request): string[] {
   return req.tenantInfo?.equipe_ids ?? [];
 }
 
+export type ClassicIo = {
+  findMany(args: unknown): Promise<unknown[]>;
+  findFirst(args: unknown): Promise<{ id: string } | null>;
+  update(args: unknown): Promise<unknown>;
+  create(args: unknown): Promise<unknown>;
+  jogoEquipeId(jogoId: string): Promise<string | null>;
+};
+
+/** `players` e `classic` existem para o teste não abrir o Prisma. A rota não passa. */
+export type WellnessAccess = {
+  players?: JogadorTenantDb;
+  classic?: ClassicIo;
+};
+
+function playersDb(access?: WellnessAccess): JogadorTenantDb {
+  return access?.players ?? prisma;
+}
+
+function classicIo(type: ClassicWellnessType, access?: WellnessAccess): ClassicIo {
+  if (access?.classic) return access.classic;
+  const { model } = getModelInfo(type);
+  const gateway = model as {
+    findMany(args: unknown): Promise<unknown[]>;
+    findFirst(args: unknown): Promise<{ id: string } | null>;
+    update(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<unknown>;
+  };
+  return {
+    findMany: (args) => gateway.findMany(args),
+    findFirst: (args) => gateway.findFirst(args),
+    update: (args) => gateway.update(args),
+    create: (args) => gateway.create(args),
+    async jogoEquipeId(jogoId) {
+      const jogo = await prisma.jogo.findUnique({
+        where: { id: jogoId },
+        select: { equipeId: true },
+      });
+      return jogo?.equipeId ?? null;
+    },
+  };
+}
+
+function jogadorField(row: unknown, field: 'jogador_id' | 'jogadorId'): string | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  const value = (row as Record<string, unknown>)[field];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+async function filterRowsInTenant<T>(
+  rows: T[],
+  equipeIds: string[],
+  field: 'jogador_id' | 'jogadorId',
+  db: JogadorTenantDb
+): Promise<T[]> {
+  const ids = rows.flatMap((row) => {
+    const id = jogadorField(row, field);
+    return id ? [id] : [];
+  });
+  if (ids.length === 0) return rows;
+  const allowed = await jogadorIdsInTenant(ids, equipeIds, db);
+  return rows.filter((row) => {
+    const id = jogadorField(row, field);
+    return id === undefined || allowed.has(id);
+  });
+}
+
+/** Admin sem equipes (PR #12) continua sem filtro. Staff: equipe fora da lista é 404. */
+function assertPayloadEquipes(items: unknown[], scope: ReturnType<typeof resolveTeamScope>): void {
+  if (scope.mode === 'unrestricted') return;
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const equipeId = (raw as Record<string, unknown>).equipeId;
+    if (typeof equipeId !== 'string' || equipeId.length === 0) continue;
+    if (!equipeInTenant(equipeId, scope.mode === 'restricted' ? scope.equipeIds : [])) {
+      throw new NotFoundError('Equipe');
+    }
+  }
+}
+
 function isAdminUser(req: Request): boolean {
   return req.user?.role_id === 'ADMINISTRADOR';
 }
@@ -44,21 +124,34 @@ function respondError(res: Response, error: unknown, fallback: string): void {
   res.status(failure.status).json({ success: false, error: failure.error });
 }
 
-async function listBemEstar(req: Request, res: Response, repo: BemEstarDiarioRepository): Promise<void> {
+async function listBemEstar(
+  req: Request,
+  res: Response,
+  repo: BemEstarDiarioRepository,
+  access?: WellnessAccess
+): Promise<void> {
   const scope = resolveTeamScope(isAdminUser(req), tenantEquipeIds(req));
   if (scope.mode === 'none') {
     res.json({ success: true, data: [] });
     return;
   }
 
-  const data = await repo.findMany({
+  let data = await repo.findMany({
     where: bemEstarListWhere(scope),
     orderBy: { created_at: 'desc' },
   });
+  if (scope.mode === 'restricted') {
+    data = await filterRowsInTenant(data, scope.equipeIds, 'jogador_id', playersDb(access));
+  }
   res.json({ success: true, data });
 }
 
-async function saveBemEstar(req: Request, res: Response, repo: BemEstarDiarioRepository): Promise<void> {
+async function saveBemEstar(
+  req: Request,
+  res: Response,
+  repo: BemEstarDiarioRepository,
+  access?: WellnessAccess
+): Promise<void> {
   const items = (req.body as { items?: unknown } | undefined)?.items;
   if (!Array.isArray(items) || items.length === 0) {
     throw new ValidationError('Lista de dados inválida.');
@@ -66,9 +159,21 @@ async function saveBemEstar(req: Request, res: Response, repo: BemEstarDiarioRep
 
   const admin = isAdminUser(req);
   const scope = resolveTeamScope(admin, tenantEquipeIds(req));
+  assertPayloadEquipes(items, scope);
   const prepared = items
     .map((item) => prepareBemEstarItem(item, scope))
     .filter((item): item is PreparedBemEstar => item !== null);
+
+  if (scope.mode === 'restricted' && prepared.length > 0) {
+    const allowed = await jogadorIdsInTenant(
+      prepared.map((item) => item.jogadorId),
+      scope.equipeIds,
+      playersDb(access)
+    );
+    if (prepared.some((item) => !allowed.has(item.jogadorId))) {
+      throw new NotFoundError('Jogador');
+    }
+  }
 
   const results: unknown[] = [];
   for (const item of prepared) {
@@ -107,16 +212,18 @@ async function saveBemEstar(req: Request, res: Response, repo: BemEstarDiarioRep
 export async function getAll(
   req: Request,
   res: Response,
-  repo: BemEstarDiarioRepository = bemEstarDiarioRepository
+  repo: BemEstarDiarioRepository = bemEstarDiarioRepository,
+  access?: WellnessAccess
 ): Promise<void> {
   try {
     const type = assertStaffWellnessType(req.params.type);
     if (type === 'bem-estar-diario') {
-      await listBemEstar(req, res, repo);
+      await listBemEstar(req, res, repo, access);
       return;
     }
 
-    const { model, dateField } = getModelInfo(type);
+    const { dateField } = getModelInfo(type);
+    const io = classicIo(type, access);
     const scope = resolveTeamScope(isAdminUser(req), tenantEquipeIds(req));
     if (scope.mode === 'none') {
       res.json({ success: true, data: [] });
@@ -126,19 +233,23 @@ export async function getAll(
     const teamWhere = bemEstarListWhere(scope);
     let data: unknown[];
     if (!teamWhere) {
-      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+      data = await io.findMany({
         orderBy: { createdAt: 'desc' },
       });
     } else if (dateField !== undefined) {
-      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+      data = await io.findMany({
         where: { equipeId: teamWhere.equipe_id },
         orderBy: { createdAt: 'desc' },
       });
     } else {
-      data = await (model as { findMany: (args: unknown) => Promise<unknown[]> }).findMany({
+      data = await io.findMany({
         where: { jogo: { equipeId: teamWhere.equipe_id } },
         orderBy: { createdAt: 'desc' },
       });
+    }
+
+    if (scope.mode === 'restricted') {
+      data = await filterRowsInTenant(data, scope.equipeIds, 'jogadorId', playersDb(access));
     }
 
     res.json({ success: true, data });
@@ -150,12 +261,13 @@ export async function getAll(
 export async function saveBulk(
   req: Request,
   res: Response,
-  repo: BemEstarDiarioRepository = bemEstarDiarioRepository
+  repo: BemEstarDiarioRepository = bemEstarDiarioRepository,
+  access?: WellnessAccess
 ): Promise<void> {
   try {
     const type = assertStaffWellnessType(req.params.type);
     if (type === 'bem-estar-diario') {
-      await saveBemEstar(req, res, repo);
+      await saveBemEstar(req, res, repo, access);
       return;
     }
 
@@ -164,7 +276,8 @@ export async function saveBulk(
       throw new ValidationError('Lista de dados inválida.');
     }
 
-    const { model, idField, dateField } = getModelInfo(type);
+    const { idField, dateField } = getModelInfo(type);
+    const io = classicIo(type, access);
     const admin = isAdminUser(req);
     const scope = resolveTeamScope(admin, tenantEquipeIds(req));
 
@@ -191,8 +304,10 @@ export async function saveBulk(
       if (valor === null) continue;
 
       if (!admin) {
-        if (scope.mode === 'none') continue;
-        if (idField !== 'jogoId' && scope.mode === 'restricted' && !scope.equipeIds.includes(fkId)) continue;
+        if (scope.mode === 'none') throw new NotFoundError('Equipe');
+        if (idField !== 'jogoId' && scope.mode === 'restricted' && !equipeInTenant(fkId, scope.equipeIds)) {
+          throw new NotFoundError('Equipe');
+        }
       }
 
       let data: Date | undefined;
@@ -210,29 +325,35 @@ export async function saveBulk(
       });
     }
 
+    if (!admin && scope.mode === 'restricted' && prepared.length > 0) {
+      if (idField === 'jogoId') {
+        for (const item of prepared) {
+          const equipeId = await io.jogoEquipeId(item.fkId);
+          if (!equipeInTenant(equipeId, scope.equipeIds)) throw new NotFoundError('Jogo');
+        }
+      }
+      const allowed = await jogadorIdsInTenant(
+        prepared.map((item) => item.jogadorId),
+        scope.equipeIds,
+        playersDb(access)
+      );
+      if (prepared.some((item) => !allowed.has(item.jogadorId))) {
+        throw new NotFoundError('Jogador');
+      }
+    }
+
     const results: unknown[] = [];
     for (const item of prepared) {
-      if (!admin && idField === 'jogoId') {
-        if (scope.mode !== 'restricted') continue;
-        const jogo = await prisma.jogo.findUnique({
-          where: { id: item.fkId },
-          select: { equipeId: true },
-        });
-        if (!jogo || !scope.equipeIds.includes(jogo.equipeId)) continue;
-      }
-
       const where: Record<string, unknown> = {
         jogadorId: item.jogadorId,
         [idField]: item.fkId,
       };
       if (dateField === 'data') where.data = item.data;
 
-      const existingRecord = await (model as { findFirst: (args: unknown) => Promise<{ id: string } | null> }).findFirst({
-        where,
-      });
+      const existingRecord = await io.findFirst({ where });
 
       if (existingRecord) {
-        const updated = await (model as { update: (args: unknown) => Promise<unknown> }).update({
+        const updated = await io.update({
           where: { id: existingRecord.id },
           data: { valor: item.valor, observacoes: item.observacoes },
         });
@@ -245,10 +366,7 @@ export async function saveBulk(
           observacoes: item.observacoes,
         };
         if (dateField === 'data') dataToCreate.data = item.data;
-        const created = await (model as { create: (args: unknown) => Promise<unknown> }).create({
-          data: dataToCreate,
-        });
-        results.push(created);
+        results.push(await io.create({ data: dataToCreate }));
       }
     }
 
