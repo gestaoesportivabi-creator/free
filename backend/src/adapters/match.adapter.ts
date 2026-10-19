@@ -186,6 +186,16 @@ export function transformMatchToFrontend(
   }
   if (jogo.playerRelationships) result.playerRelationships = jogo.playerRelationships as MatchRecord['playerRelationships'];
   if (jogo.lineup) result.lineup = jogo.lineup as MatchRecord['lineup'];
+  const posse = result.lineup as { possessionSecondsWith?: unknown; possessionSecondsWithout?: unknown } | undefined;
+  const posseSeconds = (value: unknown): number | undefined => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return Math.floor(n);
+  };
+  const withBall = posseSeconds(posse?.possessionSecondsWith);
+  const withoutBall = posseSeconds(posse?.possessionSecondsWithout);
+  if (withBall !== undefined) result.possessionSecondsWith = withBall;
+  if (withoutBall !== undefined) result.possessionSecondsWithout = withoutBall;
   if (jogo.substitutionHistory) result.substitutionHistory = jogo.substitutionHistory as MatchRecord['substitutionHistory'];
 
   // Derivar goalTimes e goalsConcededTimes do postMatchEventLog para os gráficos de gols por período.

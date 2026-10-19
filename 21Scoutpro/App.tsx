@@ -53,6 +53,7 @@ import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfterFinalize } from './utils/openMatchAnalysis';
+import { consumeFinalizedMatch, MATCHES_DIRTY_KEY } from './utils/finalizedMatchHandoff';
 import { isAbortError, shouldClearSessionToken } from './utils/sessionRestore';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/trialExpiredSave';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
@@ -716,6 +717,9 @@ export default function App() {
     }
   };
 
+  const loadMatchesRef = useRef<() => Promise<void>>(async () => {});
+  const loadChampionshipMatchesRef = useRef<() => Promise<void>>(async () => {});
+
   const loadMatches = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -729,6 +733,7 @@ export default function App() {
       setLoadedResources(prev => ({ ...prev, matches: true }));
     }
   };
+  loadMatchesRef.current = loadMatches;
 
   const loadTeams = async () => {
     try {
@@ -809,6 +814,7 @@ export default function App() {
       setLoadedResources(prev => ({ ...prev, championshipMatches: true }));
     }
   };
+  loadChampionshipMatchesRef.current = loadChampionshipMatches;
 
   const loadChampionships = async () => {
     try {
@@ -928,6 +934,16 @@ export default function App() {
     };
     loadDashboard();
   }, [currentUser]);
+
+  // Outra aba finalizou a coleta: a lista daqui ainda está velha.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== MATCHES_DIRTY_KEY) return;
+      void loadMatchesRef.current();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // Após Finalizar coleta (realtime): abrir Dados do Jogo para a Análise
   useEffect(() => {
@@ -1845,6 +1861,12 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    const justFinalized = consumeFinalizedMatch();
+    if (justFinalized) {
+      setMatches((prev) => replaceMatchInList(prev, justFinalized));
+    }
+    void loadMatchesRef.current();
+    void loadChampionshipMatchesRef.current();
     setAssistantOpen(false);
     setLeftRealtime(true);
     setCurrentRoute('app');

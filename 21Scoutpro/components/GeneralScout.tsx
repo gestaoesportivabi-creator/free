@@ -9,6 +9,7 @@ import { buildPlayerTop10ForPdf } from '../utils/scoutPlayerStatsHelpers';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds, type MatchHalf } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
 import { matchNeedsEventLogFetch } from '../utils/matchListState';
+import { possessionShare, readPossessionSeconds } from '../utils/possessionStats';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -1069,30 +1070,24 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
     return { total, achievedCount, achievedAndVictory };
   }, [athleteFilteredMatches]);
 
-  // Posse de bola (dados do jogo após coleta encerrada: possessionSecondsWith / possessionSecondsWithout)
+  // Posse de bola: segundos no topo da partida ou, se a API só devolveu o lineup, dentro dele.
   const possessionDonutData = useMemo(() => {
     let totalWith = 0;
     let totalWithout = 0;
     filteredMatches.forEach(m => {
-      const w = m.possessionSecondsWith ?? 0;
-      const wo = m.possessionSecondsWithout ?? 0;
-      totalWith += w;
-      totalWithout += wo;
+      const posse = readPossessionSeconds(m);
+      totalWith += posse.withBall;
+      totalWithout += posse.withoutBall;
     });
-    const total = totalWith + totalWithout;
-    if (total <= 0) return null;
-    const pctUs = (totalWith / total) * 100;
-    const pctOpp = (totalWithout / total) * 100;
+    const share = possessionShare({ withBall: totalWith, withoutBall: totalWithout });
+    if (!share) return null;
     return [
-      { name: 'Nossa equipe', value: Math.round(pctUs * 10) / 10, fill: COLORS.blue },
-      { name: 'Adversário', value: Math.round(pctOpp * 10) / 10, fill: COLORS.slate }
+      { name: 'Nossa equipe', value: share.us, fill: COLORS.blue },
+      { name: 'Adversário', value: share.opponent, fill: COLORS.slate }
     ];
   }, [filteredMatches]);
 
-  const hasPossessionData = useMemo(() => 
-    athleteFilteredMatches.some(m => (m.possessionSecondsWith ?? 0) + (m.possessionSecondsWithout ?? 0) > 0),
-    [athleteFilteredMatches]
-  );
+  const hasPossessionData = possessionDonutData !== null;
 
   const goalkeeperDefenseRows = useMemo(() => {
     const map = new Map<string, { name: string; easy: number; hard: number; total: number }>();

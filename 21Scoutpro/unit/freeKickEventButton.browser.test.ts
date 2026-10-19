@@ -8,10 +8,12 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { chromium, type Browser, type Page } from 'playwright';
+import { describeAccumulatedFouls } from '../utils/freeKickRule';
 
 const SYNC_MESSAGE =
   'Necessário sincronizar o relógio. Esta partida não possui snapshot temporal salvo.';
-const FOULS_MESSAGE = 'Disponível após 5 faltas (nossas ou do adversário) neste tempo';
+const FOULS_MESSAGE = describeAccumulatedFouls(4, 3).message;
+const NO_WALL_MESSAGE = describeAccumulatedFouls(6, 0).message;
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifactDir = '/opt/cursor/artifacts';
 
@@ -96,20 +98,20 @@ describe('TIRO LIVRE — tooltip e aria', { concurrency: 1 }, () => {
     await preview?.close();
   });
 
-  test('faltas insuficientes: aviso no hover e no foco, sem disabled nativo', async () => {
-    const page = await browser.newPage({ viewport: { width: 480, height: 420 } });
+  test('4x3: com barreira liberado, texto por equipe, clique registra', async () => {
+    const page = await browser.newPage({ viewport: { width: 520, height: 420 } });
     await openMode(page, preview.url, 'fouls');
     const button = page.getByTestId('event-selector-freekick');
     const wrap = page.getByTestId('event-selector-freekick-wrap');
 
     assert.equal(await button.getAttribute('disabled'), null);
-    assert.equal(await button.getAttribute('aria-disabled'), 'true');
+    assert.equal(await button.getAttribute('aria-disabled'), 'false');
     assert.equal(await wrap.getAttribute('title'), FOULS_MESSAGE);
-    assert.equal(await button.getAttribute('title'), FOULS_MESSAGE);
-    assert.equal(await wrap.getAttribute('data-block-reason'), 'fouls');
+    assert.equal(await wrap.getAttribute('data-block-reason'), 'none');
+    assert.match(FOULS_MESSAGE, /faltam 2 faltas nossas/);
+    assert.match(FOULS_MESSAGE, /por equipe/);
 
     const hint = page.getByTestId('tiro-livre-rule-hint');
-    assert.equal(await hint.isVisible(), false);
     await button.hover();
     assert.equal(await hint.isVisible(), true);
     assert.equal((await hint.textContent())?.trim(), FOULS_MESSAGE);
@@ -119,10 +121,8 @@ describe('TIRO LIVRE — tooltip e aria', { concurrency: 1 }, () => {
     assert.equal(await hint.isVisible(), true);
     await page.screenshot({ path: path.join(artifactDir, 'tiro-livre-faltas-foco.png') });
 
-    await button.click({ force: true });
-    assert.equal(((await page.getByTestId('freekick-clicks').textContent()) || '').trim(), '0');
-    await page.keyboard.press('Enter');
-    assert.equal(((await page.getByTestId('freekick-clicks').textContent()) || '').trim(), '0');
+    await button.click();
+    assert.equal(((await page.getByTestId('freekick-clicks').textContent()) || '').trim(), '1');
     await page.close();
   });
 
@@ -157,12 +157,14 @@ describe('TIRO LIVRE — tooltip e aria', { concurrency: 1 }, () => {
     await page.close();
   });
 
-  test('com 5 faltas e relógio liberado o clique registra', async () => {
+  test('6ª falta nossa: adversário sem barreira e o clique registra', async () => {
     const page = await browser.newPage();
     await openMode(page, preview.url, 'enabled');
     const button = page.getByTestId('event-selector-freekick');
+    const wrap = page.getByTestId('event-selector-freekick-wrap');
     assert.equal(await button.getAttribute('aria-disabled'), 'false');
-    assert.equal(await page.getByTestId('tiro-livre-rule-hint').count(), 0);
+    assert.equal(await wrap.getAttribute('title'), NO_WALL_MESSAGE);
+    assert.match(NO_WALL_MESSAGE, /adversário cobra tiro livre direto sem barreira/);
     await button.click();
     assert.equal(((await page.getByTestId('freekick-clicks').textContent()) || '').trim(), '1');
     await page.close();

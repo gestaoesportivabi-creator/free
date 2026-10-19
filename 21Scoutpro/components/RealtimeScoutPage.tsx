@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { MatchRecord, Player, Team } from '../types';
 import { MatchType } from './MatchTypeModal';
-import { matchesApi } from '../services/api';
+import { championshipMatchesApi, matchesApi } from '../services/api';
 import { upsertMatchRecord } from '../utils/matchUpsert';
 import {
   stashOpenMatchAnalysis,
@@ -11,12 +11,17 @@ import {
 } from '../utils/openMatchAnalysis';
 import { performFinalizeNavigation } from '../utils/sessionRestore';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
+import { stashFinalizedMatch } from '../utils/finalizedMatchHandoff';
+import { resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
+import { matchNeedsEventLogFetch } from '../utils/matchListState';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
 
 interface RealtimeScoutData {
   matchId?: string;
+  /** Id em campeonatos_jogos. Não é id de jogo. */
+  agendaMatchId?: string;
   date: string;
   opponent: string;
   competition?: string;
@@ -80,24 +85,52 @@ export const RealtimeScoutPage: React.FC<{
           playerStats: {},
         };
 
+        let fetched: MatchRecord | null = null;
         if (data.matchId) {
           try {
-            const dbMatch = await matchesApi.getById(data.matchId);
-            if (
-              dbMatch?.id &&
-              (dbMatch.status === 'em_andamento' ||
-                dbMatch.status === 'disponivel' ||
-                dbMatch.status === 'nao_executado' ||
-                (dbMatch.postMatchEventLog && dbMatch.postMatchEventLog.length > 0))
-            ) {
-              matchRecord = {
-                ...dbMatch,
-                location: dbMatch.location?.trim() || locationFromPrep,
-              };
-            }
+            fetched = await matchesApi.getById(data.matchId);
           } catch (fetchErr) {
-            console.warn('Falha ao buscar partida incompleta no banco, usando dados locais.', fetchErr);
+            console.warn('Partida pedida não é um jogo deste técnico. Buscando a coleta já salva.', fetchErr);
           }
+        }
+
+        let catalog: MatchRecord[] = [];
+        if (!fetched || !fetched.postMatchEventLog?.length) {
+          try {
+            const all = await matchesApi.getAll();
+            catalog = Array.isArray(all) ? all.filter((item) => item && item.teamStats) : [];
+          } catch (catalogErr) {
+            console.warn('Não foi possível listar partidas para reabrir a coleta.', catalogErr);
+          }
+        }
+
+        const resolved = resolveRealtimeOpenTarget({
+          requestedId: data.matchId,
+          fetched,
+          catalog,
+          fixture: {
+            date: data.date,
+            opponent: data.opponent,
+            competition: data.competition,
+          },
+        });
+
+        if (resolved.match) {
+          let chosen = resolved.match;
+          if (matchNeedsEventLogFetch(chosen)) {
+            try {
+              const full = await matchesApi.getById(String(chosen.id));
+              if (full?.id) chosen = full;
+            } catch (detailErr) {
+              console.warn('Falha ao carregar a fita da coleta existente.', detailErr);
+            }
+          }
+          matchRecord = {
+            ...chosen,
+            location: chosen.location?.trim() || locationFromPrep,
+          };
+        } else if (resolved.ignoredForeignId) {
+          matchRecord = { ...matchRecord, id: `temp-${Date.now()}` };
         }
 
         setMatch(matchRecord);
@@ -186,7 +219,18 @@ export const RealtimeScoutPage: React.FC<{
         // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
         if (savedMatch.status === 'encerrado') {
           const finalizedId = String(saved.id || savedMatch.id || '').trim();
-          if (finalizedId) handoffToDashboardAnalysis(finalizedId);
+          const agendaId = String(scoutData?.agendaMatchId || '').trim();
+          if (finalizedId && agendaId && agendaId !== finalizedId) {
+            try {
+              await championshipMatchesApi.update(agendaId, { jogoId: finalizedId });
+            } catch (linkErr) {
+              console.warn('Não foi possível vincular a agenda à coleta finalizada.', linkErr);
+            }
+          }
+          if (finalizedId) {
+            stashFinalizedMatch({ ...saved, id: finalizedId, status: 'encerrado' });
+            handoffToDashboardAnalysis(finalizedId);
+          }
           return saved;
         }
         alert(

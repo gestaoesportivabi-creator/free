@@ -123,6 +123,9 @@ export interface MatchRecord {
     players: string[];
     bench: string[];
     ballPossessionStart: string;
+    /** Segundos com/sem posse. Vivem no JSON do lineup; o adapter copia para a partida. */
+    possessionSecondsWith?: number;
+    possessionSecondsWithout?: number;
     /** Elenco convocado (persistido no JSON `lineup`) */
     selectedPlayerIds?: string[];
     clockSnapshot?: MatchClockSnapshot;
@@ -136,6 +139,9 @@ export interface MatchRecord {
     };
   };
   substitutionHistory?: Array<{ playerOutId: string; playerInId: string; time: number; period: string }>;
+  /** Segundos de posse. Espelho do que está em `lineup` depois do adapter. */
+  possessionSecondsWith?: number;
+  possessionSecondsWithout?: number;
   status?: 'encerrado' | 'em_andamento' | 'nao_executado' | 'disponivel';
   /** Fase da coleta (coluna `collection_phase` em `jogos`): 0 não iniciada, 1º tempo, 2º tempo */
   collectionPhase?: 0 | 1 | 2;

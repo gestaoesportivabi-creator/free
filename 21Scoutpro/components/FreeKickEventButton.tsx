@@ -1,7 +1,5 @@
 import React, { useId } from 'react';
-
-export const FREE_KICK_AFTER_FOULS_MESSAGE =
-  'Disponível após 5 faltas (nossas ou do adversário) neste tempo';
+import { describeAccumulatedFouls } from '../utils/freeKickRule';
 
 export const FREE_KICK_PENALTY_MESSAGE =
   'Conclua o pênalti em andamento antes de registrar um tiro livre.';
@@ -15,9 +13,9 @@ export interface FreeKickAvailability {
 }
 
 /**
- * A regra de habilitação não muda: bloqueia com trava de coleta ao vivo,
- * pênalti em andamento, ou menos de 5 faltas no período para os dois lados.
- * O texto da trava de relógio/sync tem prioridade sobre o das faltas.
+ * A trava de relógio/sync ou de pênalti impede o clique e tem prioridade de texto.
+ * A contagem de faltas não desabilita o botão: o tiro livre com barreira existe
+ * antes da 6ª falta. O texto diz qual lado cobra sem barreira e quantas faltam.
  */
 export function resolveFreeKickAvailability(input: {
   foulsFor: number;
@@ -26,13 +24,8 @@ export function resolveFreeKickAvailability(input: {
   realtimeMessage: string;
   penaltyBlocked?: boolean;
 }): FreeKickAvailability {
-  const needsFouls = input.foulsFor < 5 && input.foulsAgainst < 5;
+  const ruleMessage = describeAccumulatedFouls(input.foulsFor, input.foulsAgainst).message;
   const penaltyBlocked = Boolean(input.penaltyBlocked);
-  const blocked = input.realtimeLocked || penaltyBlocked || needsFouls;
-
-  if (!blocked) {
-    return { blocked: false, reason: null };
-  }
 
   if (input.realtimeLocked) {
     return { blocked: true, reason: 'realtime', message: input.realtimeMessage };
@@ -42,7 +35,7 @@ export function resolveFreeKickAvailability(input: {
     return { blocked: true, reason: 'penalty', message: FREE_KICK_PENALTY_MESSAGE };
   }
 
-  return { blocked: true, reason: 'fouls', message: FREE_KICK_AFTER_FOULS_MESSAGE };
+  return { blocked: false, reason: null, message: ruleMessage };
 }
 
 const TOOLTIP_CSS = `
@@ -56,7 +49,7 @@ const TOOLTIP_CSS = `
   transform: translateX(-50%);
   z-index: 40;
   width: max-content;
-  max-width: 220px;
+  max-width: 280px;
   padding: 6px 8px;
   border-radius: 6px;
   background: #18181b;
@@ -134,7 +127,7 @@ export function FreeKickEventButton({
               : 'bg-zinc-900 border-red-500/30 text-red-500/70 hover:bg-red-500/20 hover:border-red-500 hover:text-red-400'
         }`}
         aria-disabled={availability.blocked}
-        aria-describedby={availability.blocked ? hintId : undefined}
+        aria-describedby={message ? hintId : undefined}
         title={message}
         onClick={(event) => {
           if (availability.blocked) {
@@ -152,7 +145,7 @@ export function FreeKickEventButton({
       >
         TIRO LIVRE
       </button>
-      {availability.blocked && message ? (
+      {message ? (
         <span id={hintId} role="tooltip" data-testid="tiro-livre-rule-hint" className="freekick-tip">
           {message}
         </span>

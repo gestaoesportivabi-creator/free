@@ -62,3 +62,24 @@ test('listagem omite o log, guarda a contagem e preserva estatísticas', () => {
   assert.deepEqual(match.lineup?.players, ['p1']);
   assert.equal(match.date, '2026-03-09');
 });
+
+test('listagem copia a posse de bola do lineup para a partida', () => {
+  const match = transformMatchToFrontend(
+    {
+      ...jogo,
+      lineup: {
+        players: ['p1'],
+        bench: [],
+        ballPossessionStart: 'us',
+        possessionSecondsWith: 70,
+        possessionSecondsWithout: 30,
+      },
+    },
+    [],
+    equipe,
+    { includeEventLog: false, postMatchEventCount: 2 }
+  );
+  assert.equal(match.possessionSecondsWith, 70);
+  assert.equal(match.possessionSecondsWithout, 30);
+  assert.equal(match.postMatchEventLog, undefined);
+});

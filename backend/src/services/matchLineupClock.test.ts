@@ -76,6 +76,21 @@ describe('update de partida preserva clockSnapshot do próprio lineup', () => {
     assert.deepEqual(merged.clockSnapshot, clockDoClube);
   });
 
+  test('save sem os segundos de posse mantém os que já estavam no lineup', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      {
+        players: ['p1'],
+        possessionSecondsWith: 90,
+        possessionSecondsWithout: 30,
+        clockSnapshot: clockDoClube,
+      },
+      { players: ['p1'], ballPossessionStart: 'us' }
+    ) as { possessionSecondsWith: number; possessionSecondsWithout: number };
+
+    assert.equal(merged.possessionSecondsWith, 90);
+    assert.equal(merged.possessionSecondsWithout, 30);
+  });
+
   test('lineup nulo continua limpeza explícita e undefined não inventa lineup', () => {
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, null), null);
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, undefined), undefined);

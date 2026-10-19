@@ -6,6 +6,7 @@ import prisma from '../config/database';
 import { TenantInfo } from '../utils/tenant.helper';
 import type { TransactionClient } from '../utils/transactionWithTenant';
 import { championshipMatchesRepository } from '../repositories/championshipMatches.repository';
+import { matchesRepository } from '../repositories/matches.repository';
 import { NotFoundError } from '../utils/errors';
 
 function db(tx?: TransactionClient) {
@@ -97,6 +98,14 @@ export const championshipMatchesService = {
     if (data.competition !== undefined) jogoData.competicao = data.competition || null;
     if (data.location !== undefined) jogoData.local = data.location || null;
     if (data.scoreTarget !== undefined) jogoData.metaPontuacao = data.scoreTarget || null;
+    if (data.jogoId !== undefined) {
+      const jogoId = data.jogoId ? String(data.jogoId) : null;
+      if (jogoId) {
+        const collected = await matchesRepository.findById(jogoId, tenantInfo, tx);
+        if (!collected) throw new NotFoundError('Jogo', jogoId);
+      }
+      jogoData.jogoId = jogoId;
+    }
 
     const jogo = await championshipMatchesRepository.update(id, jogoData, tx);
     return transformChampionshipMatchToFrontend(jogo);
