@@ -76,6 +76,17 @@ describe('update de partida preserva clockSnapshot do próprio lineup', () => {
     assert.deepEqual(merged.clockSnapshot, clockDoClube);
   });
 
+  test('lineup novo sem a lista de exclusões mantém os tombstones já gravados', () => {
+    const merged = mergeLineupPreservingClockSnapshot(
+      { players: ['antigo'], deletedEventIds: ['evt-1'], clockSnapshot: clockDoClube },
+      { players: ['novo'], bench: [] }
+    ) as { players: string[]; deletedEventIds: string[]; clockSnapshot: typeof clockDoClube };
+
+    assert.deepEqual(merged.players, ['novo']);
+    assert.deepEqual(merged.deletedEventIds, ['evt-1']);
+    assert.deepEqual(merged.clockSnapshot, clockDoClube);
+  });
+
   test('lineup nulo continua limpeza explícita e undefined não inventa lineup', () => {
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, null), null);
     assert.equal(mergeLineupPreservingClockSnapshot({ clockSnapshot: clockDoClube }, undefined), undefined);
