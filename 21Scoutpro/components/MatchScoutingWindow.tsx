@@ -22,6 +22,7 @@ import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchL
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
 import { readKickoffTime } from '../utils/reopenRealtimeCollection';
 import { saveLaterUi, statusForScoutSave } from '../utils/matchStatus';
+import { buildStartingLineupSave, shouldPersistStartingLineup } from '../utils/startingLineupDraft';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   EMPTY_UNION_EVENT_LOG_MESSAGE,
@@ -116,7 +117,7 @@ interface MatchScoutingWindowProps {
   mode?: 'realtime' | 'postmatch'; // postmatch = tempo manual, sem cronômetro
   onSave?: (
     match: MatchRecord,
-    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean; lineupDraft?: boolean }
   ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
   /** Usuário que está registrando as ações (para auditoria: quem fez/registrou cada ação) */
   recordedByUser?: { id?: string; name: string };
@@ -502,6 +503,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const [benchPlayers, setBenchPlayers] = useState<string[]>([]); // IDs dos jogadores no banco
   const [ballPossessionStart, setBallPossessionStart] = useState<'us' | 'opponent' | null>(null);
   const [isMatchStarted, setIsMatchStarted] = useState<boolean>(false);
+  const isMatchStartedRef = useRef(false);
+  isMatchStartedRef.current = isMatchStarted;
+  /** Já gravou a escalação antes do relógio. Remoção depois disso também persiste. */
+  const lineupDraftSavedRef = useRef(false);
+  const lineupDraftChainRef = useRef<Promise<void>>(Promise.resolve());
+  const lineupDraftRunningRef = useRef(false);
+  const lineupDraftPendingRef = useRef<{ players: string[]; bench: string[] } | null>(null);
   
   // Estados para sistema de passes com relacionamento
   const [showPassReceiverSelection, setShowPassReceiverSelection] = useState<boolean>(false);
@@ -2371,6 +2379,69 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   saveSilentlyRef.current = saveSilently;
 
+  const enqueueStartingLineupSave = (players: string[], bench: string[]) => {
+    const next = { players: [...players], bench: [...bench] };
+    const wantsSave = shouldPersistStartingLineup({
+      isPostmatch,
+      isMatchStarted: isMatchStartedRef.current,
+      eventCount: matchEventsRef.current.length,
+      playerCount: next.players.length,
+      alreadySaved: lineupDraftSavedRef.current,
+    });
+    if (!wantsSave && !lineupDraftRunningRef.current) return lineupDraftChainRef.current;
+    lineupDraftPendingRef.current = next;
+    if (lineupDraftRunningRef.current) return lineupDraftChainRef.current;
+    lineupDraftRunningRef.current = true;
+    const run = async () => {
+      try {
+        while (lineupDraftPendingRef.current) {
+          const pending = lineupDraftPendingRef.current;
+          lineupDraftPendingRef.current = null;
+          if (!onSave) return;
+          if (!shouldPersistStartingLineup({
+            isPostmatch,
+            isMatchStarted: isMatchStartedRef.current,
+            eventCount: matchEventsRef.current.length,
+            playerCount: pending.players.length,
+            alreadySaved: lineupDraftSavedRef.current,
+          })) {
+            continue;
+          }
+          const snapshotId = persistedMatchIdRef.current.length > 0 ? persistedMatchIdRef.current : match.id;
+          const snapshot = buildStartingLineupSave({
+            matchId: snapshotId,
+            opponent: match.opponent,
+            date: match.date,
+            competition: match.competition,
+            location: match.location,
+            status: match.status,
+            collectionPhase: match.collectionPhase,
+            players: pending.players,
+            bench: pending.bench,
+            selectedPlayerIds,
+            previousSelectedPlayerIds: match.lineup?.selectedPlayerIds,
+            kickoffTime: readKickoffTime(match) || undefined,
+            technicalAnalysis: match.lineup?.technicalAnalysis,
+          });
+          const saveResult = await onSave(snapshot, { source: 'autosave', lineupDraft: true });
+          applySaveResult(saveResult);
+          lineupDraftSavedRef.current = true;
+        }
+      } finally {
+        lineupDraftRunningRef.current = false;
+        const leftover = lineupDraftPendingRef.current;
+        if (leftover) {
+          void enqueueStartingLineupSave(leftover.players, leftover.bench);
+        }
+      }
+    };
+    lineupDraftChainRef.current = lineupDraftChainRef.current.then(run).catch((error) => {
+      lineupDraftRunningRef.current = false;
+      console.warn('[lineup] falhou ao gravar escalação:', error);
+    });
+    return lineupDraftChainRef.current;
+  };
+
   /** Espera o autosave em curso terminar para evitar corrida com save manual (duplicata / last-write). */
   const waitForAutosaveIdle = useCallback(async (maxMs = 8000) => {
     const t0 = Date.now();
@@ -2520,6 +2591,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       lineupPlayers.length === 5 &&
       ballPossessionStart != null;
     if (matchEvents.length === 0 && !isPostmatch && !hasRealtimeLineupOnly) {
+      await enqueueStartingLineupSave(lineupPlayers, benchPlayers);
       suppressBeforeUnloadRef.current = true;
       onClose();
       return;
@@ -2606,10 +2678,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
   }, [isOpen, isPostmatch, isMatchStarted, saveSilently]);
 
+  const startingLineupUnsaved =
+    !isPostmatch &&
+    !isMatchStarted &&
+    matchEvents.length === 0 &&
+    lineupPlayers.length === 5 &&
+    !lineupDraftSavedRef.current;
   useEffect(() => {
-    if (!isOpen || !hasUnsavedChanges || suppressBeforeUnloadRef.current) return;
+    if (!isOpen || suppressBeforeUnloadRef.current) return;
+    if (!hasUnsavedChanges && !startingLineupUnsaved) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (suppressBeforeUnloadRef.current) return;
+      if (!isPostmatch && !isMatchStartedRef.current && matchEventsRef.current.length === 0) {
+        void enqueueStartingLineupSave(lineupPlayers, benchPlayers);
+      }
       if (hasPendingSnapshotChanges) {
         void saveSilently();
       }
@@ -2618,9 +2700,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [hasPendingSnapshotChanges, hasUnsavedChanges, isOpen, saveSilently]);
+  }, [
+    benchPlayers,
+    enqueueStartingLineupSave,
+    hasPendingSnapshotChanges,
+    hasUnsavedChanges,
+    isOpen,
+    isPostmatch,
+    lineupPlayers,
+    saveSilently,
+    startingLineupUnsaved,
+  ]);
 
   const handleCloseWithSilentSave = async () => {
+    if (!isPostmatch && !isMatchStartedRef.current && matchEventsRef.current.length === 0) {
+      await enqueueStartingLineupSave(lineupPlayers, benchPlayers);
+    }
     if (!hasUnsavedChanges) {
       suppressBeforeUnloadRef.current = true;
       onClose();
@@ -2692,14 +2787,20 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
     }
 
-    setLineupPlayers((prev) => [...prev, playerId]);
-    setBenchPlayers((prev) => prev.filter((id) => id !== playerId));
+    const nextLineup = [...lineupPlayers, playerId];
+    const nextBench = benchPlayers.filter((id) => id !== playerId);
+    setLineupPlayers(nextLineup);
+    setBenchPlayers(nextBench);
+    void enqueueStartingLineupSave(nextLineup, nextBench);
   };
 
   // Remover jogador da escalação
   const handleRemoveFromLineup = (playerId: string) => {
-    setLineupPlayers(prev => prev.filter(id => id !== playerId));
-    setBenchPlayers(prev => [...prev, playerId]);
+    const nextLineup = lineupPlayers.filter((id) => id !== playerId);
+    const nextBench = benchPlayers.includes(playerId) ? benchPlayers : [...benchPlayers, playerId];
+    setLineupPlayers(nextLineup);
+    setBenchPlayers(nextBench);
+    void enqueueStartingLineupSave(nextLineup, nextBench);
   };
 
   // Selecionar ação — novo fluxo: ação → detalhes (popup) → jogador (lista lateral) → tempo (popup se necessário)
@@ -3632,7 +3733,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     const nextBench = poolIds.filter((id) => !nextLineup.includes(id));
     setLineupPlayers(nextLineup);
     setBenchPlayers(nextBench);
-  }, [benchPlayers, lineupPlayers, players, selectedPlayerIds]);
+    void enqueueStartingLineupSave(nextLineup, nextBench);
+  }, [benchPlayers, enqueueStartingLineupSave, lineupPlayers, players, selectedPlayerIds]);
 
   const isBlockedByPenalty = !!penaltyStep;
 

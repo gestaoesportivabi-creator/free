@@ -79,6 +79,54 @@ describe('reabrir scout em tempo real na coleta existente', () => {
     assert.equal(resolution.ignoredForeignId, false);
   });
 
+  test('escalação gravada sem relógio e sem fita reabre a mesma partida', () => {
+    const lineupOnly = saved({
+      id: 'jogo-disp',
+      status: 'disponivel',
+      postMatchEventCount: 0,
+      postMatchEventLog: [],
+      kickoffTime: '20:00',
+      lineup: {
+        players: ['gk', '3', '4', '5', '6'],
+        bench: ['7'],
+        ballPossessionStart: 'us',
+        selectedPlayerIds: ['gk', '3', '4', '5', '6', '7'],
+        kickoffTime: '20:00',
+      },
+    });
+    assert.equal(shouldResumeRealtimeCollection(lineupOnly), true);
+    assert.equal(
+      findCollectedMatchForFixture(
+        [lineupOnly],
+        { date: '2026-10-25', opponent: 'Rival QA', time: '20:00' }
+      )?.id,
+      'jogo-disp'
+    );
+    const resolution = resolveRealtimeOpenTarget({
+      requestedId: 'sched-agenda-1',
+      fetched: null,
+      catalog: [lineupOnly],
+      fixture: { date: '2026-10-25', opponent: 'Rival QA', time: '20:00' },
+      scheduledBaseCount: 1,
+    });
+    assert.equal(resolution.match?.id, 'jogo-disp');
+    assert.notEqual(resolution.match?.id, 'sched-agenda-1');
+  });
+
+  test('partida disponível sem escalação, fita ou relógio não vira coleta', () => {
+    const empty = saved({
+      id: 'jogo-vazio',
+      status: 'disponivel',
+      postMatchEventCount: 0,
+      postMatchEventLog: [],
+    });
+    assert.equal(shouldResumeRealtimeCollection(empty), false);
+    assert.equal(
+      findCollectedMatchForFixture([empty], { date: '2026-10-25', opponent: 'Rival QA' }),
+      null
+    );
+  });
+
   test('sem coleta anterior, o id de agenda é ignorado para não gravar em cima dele', () => {
     const resolution = resolveRealtimeOpenTarget({
       requestedId: 'agenda-futura',

@@ -15,6 +15,7 @@ import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
+import { prepSquadIdsFromLineup } from '../utils/startingLineupDraft';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
@@ -1876,12 +1877,14 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             const m = item as MatchRecord;
             setSelectedMatch(m);
             setSelectedScheduledMatch(null);
+            setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(m.lineup)));
             setViewMode('analysis');
         } else {
             const cm = item as ChampionshipMatch & { type: 'scheduled' };
+            const linked = findSavedMatchForAgenda(cm, matches || [], championshipMatches);
             setSelectedScheduledMatch(cm);
             setSelectedMatch(null);
-            setSelectedPlayersForMatch(new Set());
+            setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(linked?.lineup)));
             setPreparationMatchType('normal');
             setPreparationExtraTimeMinutes(5);
             setViewMode('analysis');

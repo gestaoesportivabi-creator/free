@@ -22,7 +22,12 @@ export interface CollectedMatchRef {
   status?: MatchRecord['status'];
   postMatchEventLog?: unknown[] | null;
   postMatchEventCount?: number;
-  lineup?: { clockSnapshot?: unknown; selectedPlayerIds?: string[]; kickoffTime?: string } | null;
+  lineup?: {
+    clockSnapshot?: unknown;
+    selectedPlayerIds?: string[];
+    players?: string[];
+    kickoffTime?: string;
+  } | null;
 }
 
 /** Data + adversário, sem somar hora e sem diferenciar maiúsculas. */
@@ -90,6 +95,19 @@ export function fixtureDetailKey(match: {
   return `${base}_${readKickoffTime(match) || 'sem_hora'}`;
 }
 
+/** Titulares ou convocados gravados. Não conta relógio nem fita. */
+export function hasPersistedLineup(
+  lineup: { players?: string[]; selectedPlayerIds?: string[] } | null | undefined
+): boolean {
+  const players = Array.isArray(lineup?.players)
+    ? lineup.players.some((id) => String(id || '').trim())
+    : false;
+  const selected = Array.isArray(lineup?.selectedPlayerIds)
+    ? lineup.selectedPlayerIds.some((id) => String(id || '').trim())
+    : false;
+  return players || selected;
+}
+
 export function collectedMatchScore(match: CollectedMatchRef | null | undefined): number {
   if (!match?.id || !isPersistedServerMatchId(String(match.id))) return 0;
   const count = Array.isArray(match.postMatchEventLog)
@@ -101,10 +119,11 @@ export function collectedMatchScore(match: CollectedMatchRef | null | undefined)
   if (match.status === 'em_andamento') score += 4;
   if (count > 0) score += 2;
   if (hasClock) score += 1;
+  if (hasPersistedLineup(match.lineup)) score += 1;
   return score;
 }
 
-/** A coleta já existe: eventos, relógio salvo, ou partida em andamento/encerrada. */
+/** A coleta já existe: eventos, relógio, escalação gravada, ou partida em andamento/encerrada. */
 export function shouldResumeRealtimeCollection(match: CollectedMatchRef | null | undefined): boolean {
   return collectedMatchScore(match) > 0;
 }
@@ -203,7 +222,7 @@ export interface RealtimeOpenResolution<T extends CollectedMatchRef> {
 
 /**
  * Decide qual coleta o scout ao vivo abre.
- * Partida encerrada ou em andamento, com fita ou com clockSnapshot, reabre.
+ * Partida encerrada, em andamento, com fita, com clockSnapshot ou com escalação gravada, reabre.
  * Id que não é um jogo (404 na agenda) não vira scout novo em 00:00 se já
  * existir coleta da mesma data, adversário e horário.
  */
