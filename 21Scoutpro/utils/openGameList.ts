@@ -45,9 +45,12 @@ export function liveCalendarExitPlan(input: {
   isPostmatch: boolean;
   isMatchStarted: boolean;
   eventCount: number;
-}): { saveCollection: boolean; destination: 'game-list' } {
+  /** Relógio correndo de verdade. Pausado e pré-jogo não pedem confirmação. */
+  clockRunning: boolean;
+}): { saveCollection: boolean; destination: 'game-list'; confirmLeave: boolean } {
   const saveCollection = input.isPostmatch
     ? input.eventCount > 0
     : input.isMatchStarted || input.eventCount > 0;
-  return { saveCollection, destination: 'game-list' };
+  const confirmLeave = !input.isPostmatch && input.clockRunning;
+  return { saveCollection, destination: 'game-list', confirmLeave };
 }

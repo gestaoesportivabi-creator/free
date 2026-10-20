@@ -16,6 +16,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { buildPrepSelectionSave, prepSelectionSignature, prepSquadIdsFromLineup, shouldPersistPrepSelection, type LineupDraftRecord } from '../utils/startingLineupDraft';
+import { consumeOpenPrep, markRealtimeFreshEntry, peekOpenPrep, prepReopenTarget } from '../utils/prepReopen';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
@@ -1872,6 +1873,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         extraTimeMinutes: number;
         selectedPlayerIds?: string[];
     }) => {
+        markRealtimeFreshEntry();
         localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
         window.location.assign('/scout-realtime');
     };
@@ -1894,6 +1896,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             setSelectedScheduledMatch(null);
             setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(m.lineup)));
             beginPrepSession(m.lineup);
+            setShowRealtimePrepForSavedMatch(prepReopenTarget(m) === 'preparation');
+            setCollectionType(null);
             setViewMode('analysis');
         } else {
             const cm = item as ChampionshipMatch & { type: 'scheduled' };
@@ -1902,11 +1906,31 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             setSelectedMatch(null);
             setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(linked?.lineup)));
             beginPrepSession(linked?.lineup);
+            setShowRealtimePrepForSavedMatch(false);
+            setCollectionType(prepReopenTarget(linked) === 'preparation' ? 'realtime' : null);
             setPreparationMatchType('normal');
             setPreparationExtraTimeMinutes(5);
             setViewMode('analysis');
         }
     };
+
+    useEffect(() => {
+        const pending = peekOpenPrep();
+        if (!pending) return;
+        if (pending.matchId) {
+            if (!matches?.length) return;
+            const found = matches.find((match) => String(match.id) === pending.matchId);
+            if (!found) return;
+            consumeOpenPrep();
+            handleMatchClick({ ...found, type: 'saved' });
+            return;
+        }
+        if (!pending.agendaMatchId || !championshipMatches?.length) return;
+        const found = championshipMatches.find((match) => String(match.id) === pending.agendaMatchId);
+        if (!found) return;
+        consumeOpenPrep();
+        handleMatchClick({ ...found, type: 'scheduled' });
+    }, [matches, championshipMatches]);
 
     const realtimePrepIsOpen = () =>
         (selectedScheduledMatch != null && collectionType === 'realtime' && !showPostMatchSheet) ||

@@ -25,6 +25,11 @@ import { adoptServerMatch } from '../utils/realtimeMatchHydration';
 import { preserveEncerradoStatus, saveLaterUi } from '../utils/matchStatus';
 import { incompleteLiveSaveDestination, OPEN_GAME_LIST_KEY, stashOpenGameList } from '../utils/openGameList';
 import type { LineupDraftRecord } from '../utils/startingLineupDraft';
+import {
+  consumeRealtimeFreshEntry,
+  shouldReturnUnconfirmedRealtimeToPrep,
+  stashOpenPrep,
+} from '../utils/prepReopen';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -169,6 +174,34 @@ export const RealtimeScoutPage: React.FC<{
           };
         } else if (resolved.ignoredForeignId) {
           matchRecord = { ...matchRecord, id: `temp-${Date.now()}` };
+        }
+
+        const storedSquad = Array.isArray(data.selectedPlayerIds) ? data.selectedPlayerIds : [];
+        const lineupSquad = matchRecord.lineup?.selectedPlayerIds?.length
+          || matchRecord.lineup?.players?.length;
+        const reopenMatch = lineupSquad || storedSquad.length === 0
+          ? matchRecord
+          : {
+              ...matchRecord,
+              lineup: {
+                players: matchRecord.lineup?.players ?? [],
+                bench: matchRecord.lineup?.bench ?? [],
+                selectedPlayerIds: storedSquad,
+                ballPossessionStart: matchRecord.lineup?.ballPossessionStart,
+                clockSnapshot: matchRecord.lineup?.clockSnapshot,
+              },
+            };
+        const freshEntry = consumeRealtimeFreshEntry();
+        if (shouldReturnUnconfirmedRealtimeToPrep(reopenMatch, freshEntry)) {
+          const matchId = String(matchRecord.id || '').trim();
+          stashOpenPrep({
+            matchId: isPersistedServerMatchId(matchId) ? matchId : undefined,
+            agendaMatchId: data.agendaMatchId,
+          });
+          stashOpenGameList();
+          localStorage.removeItem('realtimeScoutData');
+          window.location.assign('/dashboard');
+          return;
         }
 
         setMatch(matchRecord);

@@ -24,6 +24,7 @@ import { readKickoffTime } from '../utils/reopenRealtimeCollection';
 import { saveLaterUi, statusForScoutSave } from '../utils/matchStatus';
 import { buildStartingLineupSave, LineupDraftRecord, shouldPersistStartingLineup } from '../utils/startingLineupDraft';
 import { liveCalendarExitPlan } from '../utils/openGameList';
+import { benchForLineupModal, pickDefaultLineup, splitCourtAndBench } from '../utils/prepReopen';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   EMPTY_UNION_EVENT_LOG_MESSAGE,
@@ -1329,19 +1330,23 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         setManualHalfPinned(false);
         hydrateClock({ seconds: 0, firstHalfLocked: false, state: 'PRIMEIRO_TEMPO', isRunning: false });
       }
-      // Postmatch: pular lineup, usar selectedPlayerIds como jogadores ativos
-      const ids = selectedPlayerIds && selectedPlayerIds.length > 0
-        ? selectedPlayerIds
-        : players.map(p => String(p.id).trim());
-      setActivePlayers(players.filter(p => ids.includes(String(p.id).trim())));
-      setLineupPlayers(ids);
-      setBenchPlayers([]);
-      setSquadActiveIds(ids);
+      // Pós-jogo: quadra é lineup.players (no máximo 5). O restante fica no banco.
+      const split = splitCourtAndBench({
+        players: match.lineup?.players,
+        bench: match.lineup?.bench,
+        selectedPlayerIds: selectedPlayerIds && selectedPlayerIds.length > 0
+          ? selectedPlayerIds
+          : match.lineup?.selectedPlayerIds,
+      });
+      const court = split.court;
+      setActivePlayers(players.filter((p) => court.includes(String(p.id).trim())));
+      setLineupPlayers(court);
+      setBenchPlayers(split.bench);
+      setSquadActiveIds(court);
       setIsMatchStarted(true);
       setShowLineupModal(false);
-      // Definir goleiro atual: primeiro goleiro na lista de ativos, ou primeiro da lista
-      if (ids.length > 0) {
-        const gkId = ids.find(id => players.find(p => String(p.id).trim() === id)?.position === 'Goleiro') ?? ids[0];
+      if (court.length > 0) {
+        const gkId = court.find((id) => players.find((p) => String(p.id).trim() === id)?.position === 'Goleiro') ?? court[0];
         setCurrentGoalkeeperId(gkId);
       }
       return;
@@ -1357,13 +1362,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       ) {
         return;
       }
-      if (selectedPlayerIds && selectedPlayerIds.length > 0) {
-        setBenchPlayers([...selectedPlayerIds]);
-        setLineupPlayers([]);
-        setShowLineupModal(true);
-      } else if (players && players.length > 0) {
-        const allPlayerIds = players.map(p => String(p.id).trim());
-        setBenchPlayers(allPlayerIds);
+      const rosterIds = (players || []).map((p) => String(p.id).trim());
+      const bench = benchForLineupModal({
+        selectedPlayerIds,
+        lineup: Lm,
+        rosterIds,
+      });
+      if (bench.length > 0) {
+        setBenchPlayers(bench);
         setLineupPlayers([]);
         setShowLineupModal(true);
       }
@@ -2739,7 +2745,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       isPostmatch,
       isMatchStarted: isMatchStartedRef.current,
       eventCount: matchEventsRef.current.length,
+      clockRunning: isRunning,
     });
+    if (plan.confirmLeave) {
+      const leave = window.confirm(
+        'O relógio está rodando. Voltar ao calendário pausa a coleta e sai desta tela. Deseja sair?'
+      );
+      if (!leave) return;
+    }
     suppressBeforeUnloadRef.current = true;
     autosaveSkipRef.current = true;
     stopAutosaveSchedulers();
@@ -3746,41 +3759,39 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   }, [matchEvents]);
 
   const handleSelectDefaultLineup = useCallback(() => {
-    const poolIds = [
+    const convocation = [
       ...new Set(
         [
-          ...lineupPlayers,
-          ...benchPlayers,
           ...(selectedPlayerIds || []).map((id) => String(id).trim()),
-          // Full roster fallback so the CTA still works on reopen with a partial selection.
-          ...players.map((p) => String(p.id).trim()),
+          ...(match.lineup?.selectedPlayerIds || []).map((id) => String(id).trim()),
         ].filter(Boolean)
       ),
     ];
+    const poolIds = convocation.length > 0
+      ? convocation
+      : [
+          ...new Set(
+            [...lineupPlayers, ...benchPlayers].map((id) => String(id).trim()).filter(Boolean)
+          ),
+        ];
     const pool = poolIds
       .map((id) => players.find((p) => String(p.id).trim() === id))
-      .filter((p): p is Player => !!p);
-    const byJerseyThenName = (a: Player, b: Player) => {
-      const ja = Number(a.jerseyNumber) || 999;
-      const jb = Number(b.jerseyNumber) || 999;
-      if (ja !== jb) return ja - jb;
-      return (a.name || '').localeCompare(b.name || '', 'pt-BR');
-    };
-    const gk = pool.filter((p) => p.position === 'Goleiro').sort(byJerseyThenName)[0];
-    const outfield = pool
-      .filter((p) => p.position !== 'Goleiro' && (!gk || String(p.id).trim() !== String(gk.id).trim()))
-      .sort(byJerseyThenName)
-      .slice(0, 4);
-    if (!gk || outfield.length < 4) {
-      alert('É preciso ter pelo menos 1 goleiro e 4 atletas de linha disponíveis para o padrão (1+4).');
+      .filter((p): p is Player => !!p)
+      .map((player) => ({
+        id: String(player.id).trim(),
+        position: player.position,
+        jerseyNumber: player.jerseyNumber,
+        name: player.name,
+      }));
+    const picked = pickDefaultLineup(pool);
+    if (!picked) {
+      alert('É preciso ter pelo menos 1 goleiro e 4 atletas de linha na seleção atual para o padrão (1+4).');
       return;
     }
-    const nextLineup = [String(gk.id).trim(), ...outfield.map((p) => String(p.id).trim())];
-    const nextBench = poolIds.filter((id) => !nextLineup.includes(id));
-    setLineupPlayers(nextLineup);
-    setBenchPlayers(nextBench);
-    void enqueueStartingLineupSave(nextLineup, nextBench);
-  }, [benchPlayers, enqueueStartingLineupSave, lineupPlayers, players, selectedPlayerIds]);
+    setLineupPlayers(picked.court);
+    setBenchPlayers(picked.bench);
+    void enqueueStartingLineupSave(picked.court, picked.bench);
+  }, [benchPlayers, enqueueStartingLineupSave, lineupPlayers, match.lineup?.selectedPlayerIds, players, selectedPlayerIds]);
 
   const isBlockedByPenalty = !!penaltyStep;
 
@@ -4645,7 +4656,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   )}
                   {lockerOpen && (
                     <div className="rounded-lg border border-amber-500/60 bg-amber-500/10 px-2 py-2 text-center mb-2 shrink-0">
-                      <p className="text-amber-200 text-[11px] font-bold">{lockerDraftIds.length} de 5 atletas em quadra</p>
+                      <p className="text-amber-200 text-[11px] font-bold">{Math.min(lockerDraftIds.length, 5)} de 5 em quadra · {allSquadPlayers.filter((player) => !lockerDraftIds.includes(String(player.id).trim())).length} no banco</p>
                       <p className="text-amber-100/90 text-[10px]">Máximo de 1 goleiro</p>
                       <p className="text-amber-100/80 text-[10px]">Toque nos números e confirme abaixo</p>
                     </div>
@@ -4752,7 +4763,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               onClick={() => {
                 if (lockerOpen) {
                   if (lockerDraftIds.length > 0 && lockerDraftIds.length <= 5) {
-                    setSquadActiveIds([...lockerDraftIds]);
+                    const nextCourt = [...lockerDraftIds];
+                    setSquadActiveIds(nextCourt);
+                    if (isPostmatch) {
+                      const courtSet = new Set(nextCourt);
+                      const nextBench = [...new Set(
+                        [...lineupPlayers, ...benchPlayers].map((id) => String(id).trim()).filter(Boolean)
+                      )].filter((id) => !courtSet.has(id));
+                      setLineupPlayers(nextCourt);
+                      setBenchPlayers(nextBench);
+                      setActivePlayers(players.filter((player) => nextCourt.includes(String(player.id).trim())));
+                      const gkId = nextCourt.find((id) => players.find((player) => String(player.id).trim() === id)?.position === 'Goleiro') ?? nextCourt[0];
+                      if (gkId) setCurrentGoalkeeperId(gkId);
+                    }
                     setLockerOpen(false);
                   } else {
                     setLockerOpen(false);
@@ -4760,13 +4783,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   }
                 } else {
                   const fromLineup = lineupPlayers.map((id) => String(id).trim()).filter(Boolean);
-                  const raw =
-                    fromLineup.length > 0
-                      ? fromLineup
-                      : squadActiveIds.length > 0
-                        ? [...squadActiveIds]
-                        : [];
-                  setLockerDraftIds(sanitizeLockerDraftIds(raw));
+                  const fromSquad = squadActiveIds.map((id) => String(id).trim()).filter(Boolean);
+                  const raw = fromLineup.length > 0 && fromLineup.length <= 5
+                    ? fromLineup
+                    : fromSquad.length > 0 && fromSquad.length <= 5
+                      ? fromSquad
+                      : fromLineup.slice(0, 5);
+                  setLockerDraftIds(sanitizeLockerDraftIds(raw).slice(0, 5));
                   setLockerOpen(true);
                 }
               }}
