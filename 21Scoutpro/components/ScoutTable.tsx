@@ -16,7 +16,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { buildPrepSelectionSave, prepSelectionSignature, prepSquadIdsFromLineup, shouldPersistPrepSelection, type LineupDraftRecord } from '../utils/startingLineupDraft';
-import { consumeOpenPrep, markRealtimeFreshEntry, peekOpenPrep, prepReopenTarget } from '../utils/prepReopen';
+import { consumeOpenPrep, markExplicitScoutStart, peekOpenPrep, prepReopenTarget } from '../utils/prepReopen';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
@@ -1873,8 +1873,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         extraTimeMinutes: number;
         selectedPlayerIds?: string[];
     }) => {
-        markRealtimeFreshEntry();
-        localStorage.setItem('realtimeScoutData', JSON.stringify(realtimeScoutData));
+        markExplicitScoutStart();
+        localStorage.setItem(
+            'realtimeScoutData',
+            JSON.stringify({ ...realtimeScoutData, explicitStart: true })
+        );
         window.location.assign('/scout-realtime');
     };
 

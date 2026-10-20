@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   benchForLineupModal,
+  clearExplicitScoutStart,
   consumeOpenPrep,
-  consumeRealtimeFreshEntry,
-  markRealtimeFreshEntry,
+  hasExplicitScoutStart,
+  isExplicitScoutStart,
+  markExplicitScoutStart,
   OPEN_PREP_KEY,
   pickDefaultLineup,
   prepReopenTarget,
   REALTIME_FRESH_KEY,
+  realtimeEntryDecision,
   shouldReturnUnconfirmedRealtimeToPrep,
   splitCourtAndBench,
   stashOpenPrep,
@@ -45,16 +48,57 @@ describe('reabrir a seleção manual na Preparação', () => {
     expect(shouldReturnUnconfirmedRealtimeToPrep(draft, true)).toBe(false);
   });
 
-  it('F5 da Escalação Inicial não confirmada volta à Preparação; a entrada recém-confirmada fica', () => {
+  it('Iniciar Scout da Partida não volta para a Preparação, nem numa segunda leitura', () => {
+    const previousSession = globalThis.sessionStorage;
+    globalThis.sessionStorage = storageMock();
+    const fresh = {
+      status: 'disponivel' as const,
+      postMatchEventCount: 0,
+      teamStats: { goals: 0, passesCorrect: 0 },
+      playerStats: {},
+      lineup: {
+        players: [] as string[],
+        selectedPlayerIds: manual,
+        clockSnapshot: { state: 'PRE_JOGO' },
+      },
+    };
+    try {
+      markExplicitScoutStart();
+      const payload = { explicitStart: true as const };
+      const stay = () => isExplicitScoutStart(payload);
+      expect(stay()).toBe(true);
+      expect(realtimeEntryDecision(fresh, stay())).toBe('collection');
+      expect(shouldReturnUnconfirmedRealtimeToPrep(fresh, stay())).toBe(false);
+      expect(hasExplicitScoutStart()).toBe(true);
+      expect(sessionStorage.getItem(REALTIME_FRESH_KEY)).toBe('1');
+      expect(shouldReturnUnconfirmedRealtimeToPrep(fresh, stay())).toBe(false);
+
+      expect(realtimeEntryDecision(fresh, true)).toBe('collection');
+
+      clearExplicitScoutStart();
+      expect(hasExplicitScoutStart()).toBe(false);
+      expect(isExplicitScoutStart({ explicitStart: true })).toBe(true);
+      expect(shouldReturnUnconfirmedRealtimeToPrep(fresh, isExplicitScoutStart({ explicitStart: true }))).toBe(false);
+      expect(prepReopenTarget(fresh)).toBe('preparation');
+      expect(realtimeEntryDecision(fresh, false)).toBe('preparation');
+      expect(shouldReturnUnconfirmedRealtimeToPrep(fresh, isExplicitScoutStart({}))).toBe(true);
+    } finally {
+      globalThis.sessionStorage = previousSession;
+    }
+  });
+
+  it('a marca de iniciar não some na primeira leitura; sair da coleta apaga', () => {
     const previousLocal = globalThis.localStorage;
     const previousSession = globalThis.sessionStorage;
     globalThis.localStorage = storageMock();
     globalThis.sessionStorage = storageMock();
     try {
-      markRealtimeFreshEntry();
-      expect(consumeRealtimeFreshEntry()).toBe(true);
-      expect(sessionStorage.getItem(REALTIME_FRESH_KEY)).toBeNull();
-      expect(consumeRealtimeFreshEntry()).toBe(false);
+      markExplicitScoutStart();
+      expect(hasExplicitScoutStart()).toBe(true);
+      expect(hasExplicitScoutStart()).toBe(true);
+      expect(sessionStorage.getItem(REALTIME_FRESH_KEY)).toBe('1');
+      clearExplicitScoutStart();
+      expect(hasExplicitScoutStart()).toBe(false);
 
       stashOpenPrep({ matchId: 'jogo-prep', agendaMatchId: 'agenda-prep' });
       expect(localStorage.getItem(OPEN_PREP_KEY)).toContain('jogo-prep');

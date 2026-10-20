@@ -26,7 +26,8 @@ import { preserveEncerradoStatus, saveLaterUi } from '../utils/matchStatus';
 import { incompleteLiveSaveDestination, OPEN_GAME_LIST_KEY, stashOpenGameList } from '../utils/openGameList';
 import type { LineupDraftRecord } from '../utils/startingLineupDraft';
 import {
-  consumeRealtimeFreshEntry,
+  clearExplicitScoutStart,
+  isExplicitScoutStart,
   shouldReturnUnconfirmedRealtimeToPrep,
   stashOpenPrep,
 } from '../utils/prepReopen';
@@ -52,6 +53,8 @@ interface RealtimeScoutData {
   matchType: MatchType;
   extraTimeMinutes: number;
   selectedPlayerIds?: string[];
+  /** Gravado só por Iniciar Scout / Confirmar e Iniciar. Reabrir pelo calendário não traz esta marca. */
+  explicitStart?: boolean;
 }
 
 export const RealtimeScoutPage: React.FC<{
@@ -65,6 +68,7 @@ export const RealtimeScoutPage: React.FC<{
   const [eventLogHydrationFailed, setEventLogHydrationFailed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const loadRealtimeMatch = async () => {
       try {
         const storedData = localStorage.getItem('realtimeScoutData');
@@ -191,8 +195,10 @@ export const RealtimeScoutPage: React.FC<{
                 clockSnapshot: matchRecord.lineup?.clockSnapshot,
               },
             };
-        const freshEntry = consumeRealtimeFreshEntry();
-        if (shouldReturnUnconfirmedRealtimeToPrep(reopenMatch, freshEntry)) {
+        const explicitStart = isExplicitScoutStart(data);
+        if (shouldReturnUnconfirmedRealtimeToPrep(reopenMatch, explicitStart)) {
+          if (cancelled) return;
+          clearExplicitScoutStart();
           const matchId = String(matchRecord.id || '').trim();
           stashOpenPrep({
             matchId: isPersistedServerMatchId(matchId) ? matchId : undefined,
@@ -204,9 +210,11 @@ export const RealtimeScoutPage: React.FC<{
           return;
         }
 
+        if (cancelled) return;
         setMatch(matchRecord);
         setIsLoading(false);
       } catch (err) {
+        if (cancelled) return;
         console.error('Erro ao carregar dados da partida:', err);
         setError('Erro ao carregar dados da partida. Por favor, tente novamente.');
         setIsLoading(false);
@@ -214,6 +222,9 @@ export const RealtimeScoutPage: React.FC<{
     };
 
     void loadRealtimeMatch();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Manter URL sempre em /scout-realtime: não permitir voltar para /dashboard nesta aba
@@ -231,6 +242,7 @@ export const RealtimeScoutPage: React.FC<{
   }, []);
 
   const exitRealtimeScout = () => {
+    clearExplicitScoutStart();
     localStorage.removeItem('realtimeScoutData');
     if (window.opener && !window.opener.closed) {
       window.close();
@@ -255,6 +267,7 @@ export const RealtimeScoutPage: React.FC<{
     stashOpenMatchAnalysis(finalizedId);
     markKeepSessionAfterFinalize();
     // Only clear scout bootstrap payload — never touch `token` / `user`.
+    clearExplicitScoutStart();
     localStorage.removeItem('realtimeScoutData');
     if (window.opener && !window.opener.closed) {
       try {
