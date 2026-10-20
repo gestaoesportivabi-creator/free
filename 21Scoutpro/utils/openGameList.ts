@@ -36,3 +36,18 @@ export function incompleteLiveSaveDestination(
 ): 'game-list' | 'overview' {
   return saveAsIncomplete ? 'game-list' : 'overview';
 }
+
+/**
+ * Voltar ao calendário na tela ao vivo: a lista de jogos, e a coleta já
+ * iniciada é gravada antes de sair. Escalação sem relógio usa o outro save.
+ */
+export function liveCalendarExitPlan(input: {
+  isPostmatch: boolean;
+  isMatchStarted: boolean;
+  eventCount: number;
+}): { saveCollection: boolean; destination: 'game-list' } {
+  const saveCollection = input.isPostmatch
+    ? input.eventCount > 0
+    : input.isMatchStarted || input.eventCount > 0;
+  return { saveCollection, destination: 'game-list' };
+}

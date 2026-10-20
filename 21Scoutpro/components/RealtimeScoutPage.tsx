@@ -24,6 +24,7 @@ import { isPersistedServerMatchId } from '../utils/matchIds';
 import { adoptServerMatch } from '../utils/realtimeMatchHydration';
 import { preserveEncerradoStatus, saveLaterUi } from '../utils/matchStatus';
 import { incompleteLiveSaveDestination, OPEN_GAME_LIST_KEY, stashOpenGameList } from '../utils/openGameList';
+import type { LineupDraftRecord } from '../utils/startingLineupDraft';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -205,6 +206,18 @@ export const RealtimeScoutPage: React.FC<{
     window.location.assign('/dashboard');
   };
 
+  const leaveToGameList = () => {
+    stashOpenGameList();
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.localStorage.setItem(OPEN_GAME_LIST_KEY, '1');
+      } catch {
+        /* a aba de origem segue onde estava */
+      }
+    }
+    exitRealtimeScout();
+  };
+
   const handoffToDashboardAnalysis = (finalizedId: string) => {
     stashOpenMatchAnalysis(finalizedId);
     markKeepSessionAfterFinalize();
@@ -238,22 +251,23 @@ export const RealtimeScoutPage: React.FC<{
   };
 
   const handleSave = async (
-    savedMatch: MatchRecord,
+    savedMatch: MatchRecord | LineupDraftRecord,
     options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean; lineupDraft?: boolean }
   ) => {
     const isAutosave = options?.source === 'autosave' || options?.lineupDraft === true;
     const saveAsIncomplete = options?.saveAsIncomplete === true;
     try {
-      if (!savedMatch || !savedMatch.teamStats) {
+      if (!savedMatch || (!options?.lineupDraft && !('teamStats' in savedMatch && savedMatch.teamStats))) {
         if (!isAutosave) alert('Dados da partida incompletos. Não foi possível salvar.');
         return;
       }
-      const { saved } = await upsertMatchRecord(savedMatch);
+      const { saved } = await upsertMatchRecord(savedMatch as MatchRecord);
       if (!saved) {
         if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
         return undefined;
       }
-      const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;
+      const sentLog = 'postMatchEventLog' in savedMatch ? savedMatch.postMatchEventLog : undefined;
+      const expectedLogLength = Array.isArray(sentLog) ? sentLog.length : 0;
       const verified = await verifyPostMatchEventLog(saved, expectedLogLength);
       const kept = verified.match;
       if (verified.status === 'unavailable') {
@@ -263,7 +277,7 @@ export const RealtimeScoutPage: React.FC<{
           `Fita confirmada com ${verified.serverLogLength ?? 0} lance(s); a coleta local tem ${expectedLogLength} e foi mantida.`,
           kept.id
         );
-        setMatch((prev) => (prev ? { ...prev, ...kept, id: kept.id, postMatchEventLog: savedMatch.postMatchEventLog } : kept));
+        setMatch((prev) => (prev ? { ...prev, ...kept, id: kept.id, postMatchEventLog: sentLog } : kept));
         if (!isAutosave) alert(SAVE_UNCONFIRMED_MESSAGE);
         return undefined;
       }
@@ -337,9 +351,10 @@ export const RealtimeScoutPage: React.FC<{
         throw err;
       }
       if (isUnconfirmedSaveError(err)) {
-        const expectedLogLength = Array.isArray(savedMatch.postMatchEventLog) ? savedMatch.postMatchEventLog.length : 0;
+        const sentLog = 'postMatchEventLog' in savedMatch ? savedMatch.postMatchEventLog : undefined;
+        const expectedLogLength = Array.isArray(sentLog) ? sentLog.length : 0;
         const id = savedMatch.id != null ? String(savedMatch.id).trim() : '';
-        if (id && expectedLogLength > 0) {
+        if (id && expectedLogLength > 0 && 'teamStats' in savedMatch) {
           const verified = await verifyPostMatchEventLog({ ...savedMatch, id }, expectedLogLength);
           if (verified.status === 'confirmed') {
             setMatch((prev) => (prev ? { ...prev, ...verified.match, id: verified.match.id } : verified.match));
@@ -379,10 +394,11 @@ export const RealtimeScoutPage: React.FC<{
           <div className="text-red-400 text-xl font-black uppercase mb-4">Erro</div>
           <div className="text-zinc-400 text-sm mb-6">{error || 'Dados da partida não encontrados'}</div>
           <button
-            onClick={exitRealtimeScout}
+            onClick={leaveToGameList}
+            data-testid="realtime-back-calendar"
             className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase text-sm rounded-xl transition-colors"
           >
-            Fechar
+            Voltar ao Calendário
           </button>
         </div>
       </div>
@@ -394,6 +410,7 @@ export const RealtimeScoutPage: React.FC<{
       <MatchScoutingWindow
         isOpen={true}
         onClose={handleClose}
+        onBackToCalendar={leaveToGameList}
         onSave={handleSave}
         onCollectionFinalized={handleCollectionFinalized}
         match={match}

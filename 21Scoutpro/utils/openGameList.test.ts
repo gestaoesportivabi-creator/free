@@ -2,12 +2,31 @@ import { describe, expect, it } from 'vitest';
 import {
   consumeOpenGameList,
   incompleteLiveSaveDestination,
+  liveCalendarExitPlan,
   OPEN_GAME_LIST_KEY,
   peekOpenGameList,
   stashOpenGameList,
 } from './openGameList';
 
 describe('salvar como incompleta volta à lista de jogos', () => {
+  it('voltar ao calendário guarda a coleta e abre a lista de jogos', () => {
+    expect(liveCalendarExitPlan({
+      isPostmatch: false,
+      isMatchStarted: true,
+      eventCount: 2,
+    })).toEqual({ saveCollection: true, destination: 'game-list' });
+    expect(liveCalendarExitPlan({
+      isPostmatch: false,
+      isMatchStarted: false,
+      eventCount: 0,
+    })).toEqual({ saveCollection: false, destination: 'game-list' });
+    expect(liveCalendarExitPlan({
+      isPostmatch: true,
+      isMatchStarted: false,
+      eventCount: 1,
+    }).saveCollection).toBe(true);
+  });
+
   it('o botão da tela ao vivo pede a lista, o fechar comum pede a visão geral', () => {
     expect(incompleteLiveSaveDestination(true)).toBe('game-list');
     expect(incompleteLiveSaveDestination(false)).toBe('overview');

@@ -22,7 +22,8 @@ import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchL
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
 import { readKickoffTime } from '../utils/reopenRealtimeCollection';
 import { saveLaterUi, statusForScoutSave } from '../utils/matchStatus';
-import { buildStartingLineupSave, shouldPersistStartingLineup } from '../utils/startingLineupDraft';
+import { buildStartingLineupSave, LineupDraftRecord, shouldPersistStartingLineup } from '../utils/startingLineupDraft';
+import { liveCalendarExitPlan } from '../utils/openGameList';
 import { emptyEventLogFinalizeBlock } from '../utils/finalizeEventLogGuard';
 import {
   EMPTY_UNION_EVENT_LOG_MESSAGE,
@@ -116,9 +117,11 @@ interface MatchScoutingWindowProps {
   selectedPlayerIds?: string[]; // IDs dos jogadores selecionados
   mode?: 'realtime' | 'postmatch'; // postmatch = tempo manual, sem cronômetro
   onSave?: (
-    match: MatchRecord,
+    match: MatchRecord | LineupDraftRecord,
     options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean; lineupDraft?: boolean }
   ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
+  /** Tela ao vivo: guarda a coleta e volta para a lista de jogos. */
+  onBackToCalendar?: () => void;
   /** Usuário que está registrando as ações (para auditoria: quem fez/registrou cada ação) */
   recordedByUser?: { id?: string; name: string };
   /** Quando true, ocupa todo o viewport (ex.: sidebar foi escondida pelo app) */
@@ -429,6 +432,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   sidebarRetracted = false,
   onCollectionFinalized,
   eventLogHydrationFailed = false,
+  onBackToCalendar,
 }) => {
   const isPostmatch = mode === 'postmatch';
   /** Id gravado no servidor; após o 1º save substitui `temp-`/`sched-` para os próximos PUTs não criarem linhas novas. */
@@ -2421,6 +2425,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             selectedPlayerIds,
             previousSelectedPlayerIds: match.lineup?.selectedPlayerIds,
             kickoffTime: readKickoffTime(match) || undefined,
+            ballPossessionStart: match.lineup?.ballPossessionStart,
             technicalAnalysis: match.lineup?.technicalAnalysis,
           });
           const saveResult = await onSave(snapshot, { source: 'autosave', lineupDraft: true });
@@ -2727,6 +2732,47 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     suppressBeforeUnloadRef.current = true;
     onClose();
+  };
+
+  const handleBackToCalendar = async () => {
+    const plan = liveCalendarExitPlan({
+      isPostmatch,
+      isMatchStarted: isMatchStartedRef.current,
+      eventCount: matchEventsRef.current.length,
+    });
+    suppressBeforeUnloadRef.current = true;
+    autosaveSkipRef.current = true;
+    stopAutosaveSchedulers();
+    await enqueueStartingLineupSave(lineupPlayers, benchPlayers);
+    await waitForAutosaveIdle();
+    if (plan.saveCollection && onSave) {
+      try {
+        const savedMatch = buildMatchSnapshot(match.status === 'encerrado' ? 'encerrado' : 'em_andamento');
+        const result = await onSave(savedMatch, { source: 'autosave' });
+        applySaveResult(result);
+        if (!result || !result.id) {
+          suppressBeforeUnloadRef.current = false;
+          autosaveSkipRef.current = false;
+          alert('Não foi possível guardar a coleta. Ela continua nesta tela.');
+          return;
+        }
+      } catch (err) {
+        suppressBeforeUnloadRef.current = false;
+        autosaveSkipRef.current = false;
+        if (isTrialExpiredSaveError(err)) {
+          notifyTrialExpiredMatchSave(true);
+          return;
+        }
+        if (isEmptyUnionEventLogError(err)) {
+          alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
+          return;
+        }
+        alert('Não foi possível guardar a coleta. Ela continua nesta tela.');
+        return;
+      }
+    }
+    if (onBackToCalendar) onBackToCalendar();
+    else onClose();
   };
 
   // Confirmar escalação e iniciar partida
@@ -4045,8 +4091,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
         {/* DADOS DA PARTIDA - placar centralizado e botão sair na mesma box */}
         <div className="bg-zinc-950 border-b border-zinc-800 p-1.5 shrink-0">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
+          <div className="flex items-center justify-between mb-1 gap-2">
+            {isRealtimePage ? (
+              <button
+                type="button"
+                onClick={() => { void handleBackToCalendar(); }}
+                data-testid={showLineupModal ? undefined : 'realtime-back-calendar'}
+                className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
+              >
+                <ArrowLeft size={16} /> Voltar ao Calendário
+              </button>
+            ) : (
+              <p className="text-zinc-500 text-[10px] font-bold uppercase">DADOS DA PARTIDA</p>
+            )}
             <button
               onClick={handleCloseWithSilentSave}
               className="bg-zinc-900 hover:bg-zinc-800 text-white p-1.5 rounded-full transition-colors border border-zinc-700"
@@ -6045,22 +6102,34 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         {showLineupModal && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
-              <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+              <div className="flex items-center justify-between p-6 border-b border-zinc-800 gap-3">
                 <h3 className="text-xl font-black text-white uppercase tracking-wide flex items-center gap-3">
                   <Users className="text-[#00f0ff]" size={24} />
                   Escalação Inicial
                 </h3>
-                <button
-                  onClick={() => {
-                    if (isMatchStarted) {
-                      setShowLineupModal(false);
-                    }
-                  }}
-                  className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                  disabled={!isMatchStarted}
-                >
-                  <X size={20} className="text-zinc-500 hover:text-white" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {isRealtimePage && (
+                    <button
+                      type="button"
+                      onClick={() => { void handleBackToCalendar(); }}
+                      data-testid="realtime-back-calendar"
+                      className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
+                    >
+                      <ArrowLeft size={16} /> Voltar ao Calendário
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (isMatchStarted) {
+                        setShowLineupModal(false);
+                      }
+                    }}
+                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                    disabled={!isMatchStarted}
+                  >
+                    <X size={20} className="text-zinc-500 hover:text-white" />
+                  </button>
+                </div>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <div className="mb-6">

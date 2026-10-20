@@ -1,18 +1,5 @@
 import type { MatchRecord } from '../types';
 
-const ZERO_STATS = {
-  goals: 0,
-  assists: 0,
-  passesCorrect: 0,
-  passesWrong: 0,
-  shotsOnTarget: 0,
-  shotsOffTarget: 0,
-  tacklesWithBall: 0,
-  tacklesWithoutBall: 0,
-  tacklesCounterAttack: 0,
-  transitionErrors: 0,
-} as const;
-
 function uniqueIds(ids: Array<string | undefined | null>): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -51,6 +38,15 @@ export function shouldPersistStartingLineup(input: {
   return input.alreadySaved && input.playerCount >= 0 && input.playerCount < 5;
 }
 
+/** Escolha manual na Preparação: grava a partir do primeiro atleta, e também o esvaziar depois disso. */
+export function shouldPersistPrepSelection(input: {
+  selectedCount: number;
+  alreadySaved: boolean;
+}): boolean {
+  if (input.selectedCount > 0) return true;
+  return input.alreadySaved;
+}
+
 /** Atletas da Preparação: convocados, ou os titulares se só eles foram gravados. */
 export function prepSquadIdsFromLineup(
   lineup?: { players?: string[]; selectedPlayerIds?: string[] } | null
@@ -58,6 +54,94 @@ export function prepSquadIdsFromLineup(
   const selected = uniqueIds(lineup?.selectedPlayerIds ?? []);
   if (selected.length > 0) return selected;
   return uniqueIds(lineup?.players ?? []);
+}
+
+/** Assinatura estável da escolha manual, para não regravar o mesmo elenco. */
+export function prepSelectionSignature(ids: Iterable<string>): string {
+  return uniqueIds([...ids]).sort().join('|');
+}
+
+export interface LineupDraftLineup {
+  players: string[];
+  bench: string[];
+  selectedPlayerIds?: string[];
+  kickoffTime?: string;
+  ballPossessionStart?: 'us' | 'opponent';
+  technicalAnalysis?: NonNullable<MatchRecord['lineup']>['technicalAnalysis'];
+}
+
+/** PUT da escalação: só o jogo e o lineup. Sem placar, resultado ou estatística. */
+export interface LineupDraftRecord {
+  id: string;
+  opponent: string;
+  date: string;
+  competition?: string;
+  location?: string;
+  status: 'disponivel' | 'em_andamento' | 'encerrado';
+  collectionPhase?: 1 | 2;
+  lineup: LineupDraftLineup;
+}
+
+const SCORE_FIELDS = [
+  'result',
+  'resultado',
+  'goalsFor',
+  'goalsAgainst',
+  'golsPro',
+  'golsContra',
+  'teamStats',
+  'playerStats',
+] as const;
+
+export function lineupDraftHasScoreFields(payload: object): boolean {
+  return SCORE_FIELDS.some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+}
+
+function draftPhase(phase: 0 | 1 | 2 | undefined): 1 | 2 | undefined {
+  if (phase === 1 || phase === 2) return phase;
+  return undefined;
+}
+
+function lineupWithoutScore(input: {
+  players: string[];
+  bench: string[];
+  selectedPlayerIds: string[];
+  kickoffTime?: string;
+  ballPossessionStart?: 'us' | 'opponent';
+  technicalAnalysis?: LineupDraftLineup['technicalAnalysis'];
+}): LineupDraftLineup {
+  const kickoffTime = String(input.kickoffTime || '').trim();
+  return {
+    players: input.players,
+    bench: input.bench,
+    ...(input.selectedPlayerIds.length > 0 ? { selectedPlayerIds: input.selectedPlayerIds } : {}),
+    ...(kickoffTime ? { kickoffTime } : {}),
+    ...(input.ballPossessionStart ? { ballPossessionStart: input.ballPossessionStart } : {}),
+    ...(input.technicalAnalysis ? { technicalAnalysis: input.technicalAnalysis } : {}),
+  };
+}
+
+function draftEnvelope(input: {
+  matchId: string;
+  opponent: string;
+  date: string;
+  competition?: string;
+  location?: string;
+  status?: MatchRecord['status'];
+  collectionPhase?: 0 | 1 | 2;
+  lineup: LineupDraftLineup;
+}): LineupDraftRecord {
+  const phase = draftPhase(input.collectionPhase);
+  return {
+    id: input.matchId,
+    opponent: input.opponent,
+    date: input.date,
+    competition: input.competition,
+    location: input.location,
+    status: statusForLineupDraft(input.status),
+    ...(phase ? { collectionPhase: phase } : {}),
+    lineup: input.lineup,
+  };
 }
 
 export interface StartingLineupSaveInput {
@@ -73,14 +157,15 @@ export interface StartingLineupSaveInput {
   selectedPlayerIds?: string[];
   previousSelectedPlayerIds?: string[];
   kickoffTime?: string;
-  technicalAnalysis?: NonNullable<MatchRecord['lineup']>['technicalAnalysis'];
+  ballPossessionStart?: 'us' | 'opponent';
+  technicalAnalysis?: LineupDraftLineup['technicalAnalysis'];
 }
 
 /**
  * Payload da escalação sem relógio e sem fita.
- * Não manda clockSnapshot: PRE_JOGO não pode virar sinal de coleta.
+ * Não manda placar, resultado, estatística nem clockSnapshot.
  */
-export function buildStartingLineupSave(input: StartingLineupSaveInput): MatchRecord {
+export function buildStartingLineupSave(input: StartingLineupSaveInput): LineupDraftRecord {
   const players = uniqueIds(input.players);
   const bench = uniqueIds(input.bench).filter((id) => !players.includes(id));
   const selectedPlayerIds = uniqueIds([
@@ -89,29 +174,60 @@ export function buildStartingLineupSave(input: StartingLineupSaveInput): MatchRe
     ...(input.selectedPlayerIds ?? []),
     ...(input.previousSelectedPlayerIds ?? []),
   ]);
-  const kickoffTime = String(input.kickoffTime || '').trim();
-  const lineup = {
-    players,
-    bench,
-    ...(selectedPlayerIds.length > 0 ? { selectedPlayerIds } : {}),
-    ...(kickoffTime ? { kickoffTime } : {}),
-    ...(input.technicalAnalysis ? { technicalAnalysis: input.technicalAnalysis } : {}),
-  } as MatchRecord['lineup'];
+  return draftEnvelope({
+    ...input,
+    lineup: lineupWithoutScore({
+      players,
+      bench,
+      selectedPlayerIds,
+      kickoffTime: input.kickoffTime,
+      ballPossessionStart: input.ballPossessionStart,
+      technicalAnalysis: input.technicalAnalysis,
+    }),
+  });
+}
 
-  const phase = input.collectionPhase;
-  return {
-    id: input.matchId,
+export interface PrepSelectionSaveInput {
+  matchId: string;
+  opponent: string;
+  date: string;
+  competition?: string;
+  location?: string;
+  status?: MatchRecord['status'];
+  collectionPhase?: 0 | 1 | 2;
+  selectedPlayerIds: string[];
+  kickoffTime?: string;
+  existingLineup?: {
+    players?: string[];
+    bench?: string[];
+    kickoffTime?: string;
+    ballPossessionStart?: 'us' | 'opponent';
+    technicalAnalysis?: LineupDraftLineup['technicalAnalysis'];
+  } | null;
+}
+
+/**
+ * Escolha manual da Preparação. Mantém titulares já gravados e troca só os convocados.
+ */
+export function buildPrepSelectionSave(input: PrepSelectionSaveInput): LineupDraftRecord {
+  const existing = input.existingLineup;
+  const players = uniqueIds(existing?.players ?? []);
+  const bench = uniqueIds(existing?.bench ?? []).filter((id) => !players.includes(id));
+  return draftEnvelope({
+    matchId: input.matchId,
     opponent: input.opponent,
     date: input.date,
     competition: input.competition,
     location: input.location,
-    status: statusForLineupDraft(input.status),
-    result: 'E',
-    goalsFor: 0,
-    goalsAgainst: 0,
-    playerStats: {},
-    teamStats: { ...ZERO_STATS },
-    ...(phase === 1 || phase === 2 ? { collectionPhase: phase } : { collectionPhase: 0 as const }),
-    lineup,
-  };
+    status: input.status,
+    collectionPhase: input.collectionPhase,
+    lineup: lineupWithoutScore({
+      players,
+      bench,
+      selectedPlayerIds: uniqueIds(input.selectedPlayerIds),
+      kickoffTime: input.kickoffTime || existing?.kickoffTime,
+      ballPossessionStart: existing?.ballPossessionStart,
+      technicalAnalysis: existing?.technicalAnalysis,
+    }),
+  });
 }
