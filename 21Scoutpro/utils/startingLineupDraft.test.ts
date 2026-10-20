@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { calendarBadgeForSavedMatch } from './calendarListStatus';
 import {
+  buildPrepSelectionSave,
   buildStartingLineupSave,
+  lineupDraftHasScoreFields,
+  prepSelectionSignature,
   prepSquadIdsFromLineup,
+  shouldPersistPrepSelection,
   shouldPersistStartingLineup,
   statusForLineupDraft,
 } from './startingLineupDraft';
@@ -35,8 +39,8 @@ describe('escalação sem relógio', () => {
     });
 
     expect(saved.status).toBe('disponivel');
-    expect(saved.collectionPhase).toBe(0);
-    expect(saved.postMatchEventLog).toBeUndefined();
+    expect(saved.collectionPhase).toBeUndefined();
+    expect(lineupDraftHasScoreFields(saved)).toBe(false);
     expect(saved.lineup?.clockSnapshot).toBeUndefined();
     expect(saved.lineup?.ballPossessionStart).toBeUndefined();
     expect(saved.lineup?.players).toEqual(['gk', '3', '4', '5', '6']);
@@ -97,6 +101,38 @@ describe('escalação sem relógio', () => {
       playerCount: 5,
       alreadySaved: true,
     })).toBe(false);
+  });
+
+  it('a escolha manual da preparação grava os convocados e não manda placar', () => {
+    expect(shouldPersistPrepSelection({ selectedCount: 3, alreadySaved: false })).toBe(true);
+    expect(shouldPersistPrepSelection({ selectedCount: 0, alreadySaved: false })).toBe(false);
+    expect(shouldPersistPrepSelection({ selectedCount: 0, alreadySaved: true })).toBe(true);
+
+    const saved = buildPrepSelectionSave({
+      matchId: 'jogo-disp',
+      opponent: 'Rival QA Disp',
+      date: '2026-10-19',
+      status: 'disponivel',
+      selectedPlayerIds: ['gk', '4', '8'],
+      kickoffTime: '20:00',
+      existingLineup: {
+        players: ['gk', '3', '4', '5', '6'],
+        bench: ['7'],
+        ballPossessionStart: 'us',
+      },
+    });
+
+    expect(lineupDraftHasScoreFields(saved)).toBe(false);
+    expect(saved.lineup.selectedPlayerIds).toEqual(['gk', '4', '8']);
+    expect(saved.lineup.players).toEqual(['gk', '3', '4', '5', '6']);
+    expect(saved.lineup.ballPossessionStart).toBe('us');
+    expect(saved.lineup.kickoffTime).toBe('20:00');
+    expect(prepSquadIdsFromLineup(saved.lineup)).toEqual(['gk', '4', '8']);
+    expect(prepSelectionSignature(['8', 'gk', '4', 'gk'])).toBe('4|8|gk');
+    expect(prepSquadIdsFromLineup({
+      players: [],
+      selectedPlayerIds: ['gk', '4', '8'],
+    })).toEqual(['gk', '4', '8']);
   });
 
   it('a preparação reabre pelos convocados e, sem eles, pelos titulares', () => {

@@ -68,6 +68,7 @@ import {
 import { isEmptyUnionEventLogError } from './utils/eventLogConflict';
 import { isMatchFinalizedForScout, saveLaterUi } from './utils/matchStatus';
 import { replaceMatchInList } from './utils/matchListState';
+import type { LineupDraftRecord } from './utils/startingLineupDraft';
 import { rememberMatchDetail } from './utils/matchEventLog';
 import { isEssentialPlanUser, isPerformanceTierUser } from './config';
 import { BlogPage } from './components/BlogPage';
@@ -1205,24 +1206,26 @@ export default function App() {
   };
 
   const handleSaveMatch = async (
-    newMatch: MatchRecord,
-    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+    newMatch: MatchRecord | LineupDraftRecord,
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean; lineupDraft?: boolean }
   ): Promise<MatchRecord | undefined> => {
-      const isAutosave = options?.source === 'autosave';
+      const isAutosave = options?.source === 'autosave' || options?.lineupDraft === true;
       const saveAsIncomplete = options?.saveAsIncomplete === true;
+      const lineupDraft = options?.lineupDraft === true;
       try {
-        // Validar match antes de salvar
-        if (!newMatch || !newMatch.teamStats) {
+        const hasSheet = 'teamStats' in newMatch && Boolean(newMatch.teamStats);
+        if (!newMatch || (!lineupDraft && !hasSheet)) {
           console.error('❌ Erro: Match inválido ao salvar:', newMatch);
           if (!isAutosave) alert("Erro: Dados da partida incompletos. Verifique o console para mais detalhes.");
           return;
         }
 
-        const { saved, operation } = await upsertMatchRecord(newMatch);
+        const { saved, operation } = await upsertMatchRecord(newMatch as MatchRecord);
         const isCreated = operation === 'created';
         
         if (saved) {
-          const expectedLogLength = Array.isArray(newMatch.postMatchEventLog) ? newMatch.postMatchEventLog.length : 0;
+          const sentLog = 'postMatchEventLog' in newMatch ? newMatch.postMatchEventLog : undefined;
+          const expectedLogLength = Array.isArray(sentLog) ? sentLog.length : 0;
           const verified = await verifyPostMatchEventLog(saved, expectedLogLength);
           const kept = verified.match;
           if (verified.status === 'unavailable') {
@@ -1241,7 +1244,7 @@ export default function App() {
           // Devolver ao chamador (ex.: coleta) para fixar o mesmo id em memória — sem criar partidas novas a cada save
           // Atualizar cartões por campeonato (regras de suspensão) usando o payload enviado
           const competitionName = newMatch.competition || saved.competition;
-          const statsSource = newMatch.playerStats || saved.playerStats;
+          const statsSource = 'playerStats' in newMatch ? (newMatch.playerStats || saved.playerStats) : undefined;
           if (competitionName && statsSource) {
             try {
               const savedChampionships = championships;
@@ -1299,9 +1302,10 @@ export default function App() {
           throw error;
         }
         if (isUnconfirmedSaveError(error)) {
-          const expectedLogLength = Array.isArray(newMatch.postMatchEventLog) ? newMatch.postMatchEventLog.length : 0;
+          const sentLog = 'postMatchEventLog' in newMatch ? newMatch.postMatchEventLog : undefined;
+          const expectedLogLength = Array.isArray(sentLog) ? sentLog.length : 0;
           const id = newMatch.id != null ? String(newMatch.id).trim() : '';
-          if (id && expectedLogLength > 0) {
+          if (id && expectedLogLength > 0 && 'postMatchEventLog' in newMatch) {
             const verified = await verifyPostMatchEventLog({ ...newMatch, id }, expectedLogLength);
             if (verified.status === 'confirmed' && verified.match.teamStats) {
               rememberMatchDetail(verified.match);

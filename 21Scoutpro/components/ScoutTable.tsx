@@ -5,7 +5,7 @@ import { computePlayerPhysiologyForMatch, loadPhysiologySources, type Physiology
 import { calcularIndiceFisico } from '../utils/calcularIndiceFisico';
 import { getChampionshipCards, getPlayerStatus } from '../utils/championshipCards';
 import { parseLocalDateOnly, formatDateSafe, getTodayLocalYmd, toLocalYmd } from '../utils/dateUtils';
-import { timeControlsApi } from '../services/api';
+import { championshipMatchesApi, timeControlsApi } from '../services/api';
 import { loadMatchWithEventLog } from '../utils/matchEventLog';
 import { matchNeedsEventLogFetch, mergeMatchWithEventLog } from '../utils/matchListState';
 import { TimeSelectionModal } from './TimeSelectionModal';
@@ -15,7 +15,7 @@ import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
-import { prepSquadIdsFromLineup } from '../utils/startingLineupDraft';
+import { buildPrepSelectionSave, prepSelectionSignature, prepSquadIdsFromLineup, shouldPersistPrepSelection, type LineupDraftRecord } from '../utils/startingLineupDraft';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
@@ -101,14 +101,15 @@ interface ChampionshipMatch {
     competition: string;
     location?: string;
     scoreTarget?: string;
+    jogoId?: string | null;
 }
 
 type CalendarMatchItem = (MatchRecord & { type: 'saved' }) | (ChampionshipMatch & { type: 'scheduled' });
 
 interface ScoutTableProps {
     onSave?: (
-        match: MatchRecord,
-        options?: { source?: 'manual' | 'autosave' }
+        match: MatchRecord | LineupDraftRecord,
+        options?: { source?: 'manual' | 'autosave'; lineupDraft?: boolean }
     ) => void | MatchRecord | undefined | Promise<MatchRecord | undefined | void>;
     players: Player[];
     competitions: string[];
@@ -197,6 +198,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     const [selectedExtraTimeMinutes, setSelectedExtraTimeMinutes] = useState<number>(5);
     const [selectedScheduledMatch, setSelectedScheduledMatch] = useState<ChampionshipMatch | null>(null); // Partida programada selecionada
     const [selectedPlayersForMatch, setSelectedPlayersForMatch] = useState<Set<string>>(new Set()); // IDs dos jogadores selecionados
+    const prepSessionRef = useRef(0);
+    const prepChainRef = useRef<Promise<void>>(Promise.resolve());
+    const prepSavedIdBySessionRef = useRef(new Map<number, string>());
+    const prepSignatureBySessionRef = useRef(new Map<number, string>());
+    const prepEverBySessionRef = useRef(new Map<number, boolean>());
     const [preparationMatchType, setPreparationMatchType] = useState<MatchType>('normal'); // Tipo de partida para preparação
     const [physiologySources, setPhysiologySources] = useState<PhysiologySources | null>(null);
 
@@ -1870,6 +1876,15 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         window.location.assign('/scout-realtime');
     };
 
+    const beginPrepSession = (
+        lineup: { players?: string[]; selectedPlayerIds?: string[] } | null | undefined
+    ) => {
+        const session = ++prepSessionRef.current;
+        const ids = prepSquadIdsFromLineup(lineup);
+        prepSignatureBySessionRef.current.set(session, prepSelectionSignature(ids));
+        prepEverBySessionRef.current.set(session, ids.length > 0);
+    };
+
     const handleMatchClick = (item: CalendarMatchItem) => {
         setCollectionType(null);
         setShowPostMatchSheet(false);
@@ -1878,6 +1893,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             setSelectedMatch(m);
             setSelectedScheduledMatch(null);
             setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(m.lineup)));
+            beginPrepSession(m.lineup);
             setViewMode('analysis');
         } else {
             const cm = item as ChampionshipMatch & { type: 'scheduled' };
@@ -1885,10 +1901,94 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             setSelectedScheduledMatch(cm);
             setSelectedMatch(null);
             setSelectedPlayersForMatch(new Set(prepSquadIdsFromLineup(linked?.lineup)));
+            beginPrepSession(linked?.lineup);
             setPreparationMatchType('normal');
             setPreparationExtraTimeMinutes(5);
             setViewMode('analysis');
         }
+    };
+
+    const realtimePrepIsOpen = () =>
+        (selectedScheduledMatch != null && collectionType === 'realtime' && !showPostMatchSheet) ||
+        (selectedScheduledMatch == null && selectedMatch != null && showRealtimePrepForSavedMatch);
+
+    const persistPrepSelection = (ids: string[]): Promise<void> => {
+        if (!onSave || !realtimePrepIsOpen()) return Promise.resolve();
+        const session = prepSessionRef.current;
+        const signature = prepSelectionSignature(ids);
+        const selectedIds = signature ? signature.split('|') : [];
+        const scheduled = selectedScheduledMatch;
+        const saved = selectedMatch;
+        const linked = scheduled
+            ? findSavedMatchForAgenda(scheduled, matches || [], championshipMatches)
+            : saved;
+        const linkedId = linked?.id && isPersistedServerMatchId(String(linked.id)) ? String(linked.id) : '';
+        const snapshot = {
+            session,
+            fallbackMatchId: scheduled
+                ? (linkedId || draftIdForChampionshipMatch(scheduled.id))
+                : String(saved?.id || ''),
+            opponent: (scheduled?.opponent || saved?.opponent || ''),
+            date: scheduled?.date || saved?.date || '',
+            competition: scheduled?.competition || saved?.competition,
+            location: scheduled?.location || saved?.location,
+            status: linked?.status,
+            collectionPhase: linked?.collectionPhase,
+            kickoffTime: scheduled?.time || (saved ? readKickoffTime(saved) : ''),
+            existingLineup: linked?.lineup,
+            agendaId: scheduled?.id || (saved
+                ? agendaIdForFixture(saved.date, saved.opponent, readKickoffTime(saved), saved.competition)
+                : undefined),
+            agendaJogoId: scheduled?.jogoId ? String(scheduled.jogoId) : '',
+        };
+        const run = prepChainRef.current.then(async () => {
+            if (prepSignatureBySessionRef.current.get(session) === signature) return;
+            const alreadySaved = prepEverBySessionRef.current.get(session) === true;
+            if (!shouldPersistPrepSelection({ selectedCount: selectedIds.length, alreadySaved })) return;
+            const remembered = prepSavedIdBySessionRef.current.get(session) || '';
+            const matchId = (isPersistedServerMatchId(remembered) ? remembered : '') || snapshot.fallbackMatchId;
+            if (!matchId || !snapshot.date) return;
+            const previousSignature = prepSignatureBySessionRef.current.get(session);
+            prepSignatureBySessionRef.current.set(session, signature);
+            try {
+                const payload = buildPrepSelectionSave({
+                    matchId,
+                    opponent: snapshot.opponent,
+                    date: snapshot.date,
+                    competition: snapshot.competition,
+                    location: snapshot.location,
+                    status: snapshot.status,
+                    collectionPhase: snapshot.collectionPhase,
+                    selectedPlayerIds: selectedIds,
+                    kickoffTime: snapshot.kickoffTime,
+                    existingLineup: snapshot.existingLineup,
+                });
+                const result = await onSave(payload, { source: 'autosave', lineupDraft: true });
+                const returnedId = result && typeof result === 'object' && result.id != null
+                    ? String(result.id).trim()
+                    : '';
+                const finalId = isPersistedServerMatchId(returnedId)
+                    ? returnedId
+                    : (isPersistedServerMatchId(matchId) ? matchId : '');
+                if (finalId) prepSavedIdBySessionRef.current.set(session, finalId);
+                if (selectedIds.length > 0) prepEverBySessionRef.current.set(session, true);
+                if (finalId && snapshot.agendaId && snapshot.agendaId !== finalId && snapshot.agendaJogoId !== finalId) {
+                    try {
+                        await championshipMatchesApi.update(snapshot.agendaId, { jogoId: finalId });
+                    } catch (linkErr) {
+                        console.warn('Não foi possível vincular a agenda à seleção da preparação.', linkErr);
+                    }
+                }
+            } catch (err) {
+                if (prepSignatureBySessionRef.current.get(session) === signature) {
+                    if (previousSignature === undefined) prepSignatureBySessionRef.current.delete(session);
+                    else prepSignatureBySessionRef.current.set(session, previousSignature);
+                }
+                console.warn('Não foi possível gravar a seleção da preparação.', err);
+            }
+        });
+        prepChainRef.current = run.then(() => undefined, () => undefined);
+        return run;
     };
 
     useEffect(() => {
@@ -1943,12 +2043,29 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         });
     }, [selectedMatch]);
 
+    useEffect(() => {
+        if (!realtimePrepIsOpen()) return;
+        const ids = Array.from(selectedPlayersForMatch);
+        const signature = prepSelectionSignature(ids);
+        const session = prepSessionRef.current;
+        if (prepSignatureBySessionRef.current.get(session) === signature) return;
+        const timer = window.setTimeout(() => {
+            void persistPrepSelection(ids);
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [selectedPlayersForMatch, selectedScheduledMatch, selectedMatch, collectionType, showPostMatchSheet, showRealtimePrepForSavedMatch, matches, championshipMatches]);
+
     // Função helper para verificar se é partida programada
     const isScheduledMatch = (): boolean => {
         return selectedScheduledMatch !== null;
     };
 
     const handleBackToCalendar = () => {
+        if (realtimePrepIsOpen()) {
+            void persistPrepSelection(Array.from(selectedPlayersForMatch));
+            prepSessionRef.current += 1;
+        }
+        setShowRealtimePrepForSavedMatch(false);
         setViewMode('calendar');
         setSelectedMatch(null);
         setSelectedScheduledMatch(null);
@@ -2316,7 +2433,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                 </h2>
                                 <button
                                     type="button"
-                                    onClick={() => setShowRealtimePrepForSavedMatch(false)}
+                                    onClick={() => {
+                                        void persistPrepSelection(Array.from(selectedPlayersForMatch));
+                                        setShowRealtimePrepForSavedMatch(false);
+                                    }}
                                     className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold uppercase text-xs px-3 py-2 rounded-xl transition-colors"
                                 >
                                     <ArrowLeft size={16} /> Voltar
@@ -2432,6 +2552,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                     onClick={() => {
                                         if (selectedPlayersForMatch.size === 0) return;
                                         if (!validateFutsalLineupSelection()) return;
+                                        const ids = Array.from(selectedPlayersForMatch);
+                                        void persistPrepSelection(ids).finally(() => {
+                                        const persisted = prepSavedIdBySessionRef.current.get(prepSessionRef.current) || '';
                                         const locationFromChampionship = championshipMatches.find(
                                             (cm) =>
                                                 cm.date === selectedMatch.date &&
@@ -2439,7 +2562,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                                     (selectedMatch.opponent || '').trim().toLowerCase()
                                         )?.location;
                                         const realtimeScoutData = {
-                                            matchId: selectedMatch.id,
+                                            matchId: isPersistedServerMatchId(persisted) ? persisted : selectedMatch.id,
                                             agendaMatchId: agendaIdForFixture(
                                                 selectedMatch.date,
                                                 selectedMatch.opponent,
@@ -2463,10 +2586,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                             teams: teams || [],
                                             matchType: selectedMatchType,
                                             extraTimeMinutes: selectedExtraTimeMinutes ?? 5,
-                                            selectedPlayerIds: Array.from(selectedPlayersForMatch),
+                                            selectedPlayerIds: ids,
                                         };
                                         openRealtimeScout(realtimeScoutData);
                                         setShowRealtimePrepForSavedMatch(false);
+                                        });
                                     }}
                                     data-testid="prep-start-scout"
                                     disabled={selectedPlayersForMatch.size === 0}
@@ -3274,45 +3398,47 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         <button
                                             onClick={() => {
                                                 if (selectedPlayersForMatch.size === 0) return;
+                                                const ids = Array.from(selectedPlayersForMatch);
+                                                const scheduled = selectedScheduledMatch;
+                                                void persistPrepSelection(ids).finally(() => {
                                                 const existing = findCollectedMatchForFixture(
                                                     matches || [],
                                                     {
-                                                        date: selectedScheduledMatch.date,
-                                                        opponent: selectedScheduledMatch.opponent || '',
-                                                        competition: selectedScheduledMatch.competition,
-                                                        time: selectedScheduledMatch.time,
+                                                        date: scheduled.date,
+                                                        opponent: scheduled.opponent || '',
+                                                        competition: scheduled.competition,
+                                                        time: scheduled.time,
                                                     },
                                                     { scheduled: championshipMatches }
                                                 );
-                                                const savedSquad = existing?.lineup?.selectedPlayerIds
-                                                    ?.map((id) => String(id).trim())
-                                                    .filter(Boolean);
+                                                const persisted = prepSavedIdBySessionRef.current.get(prepSessionRef.current) || '';
+                                                const matchId = isPersistedServerMatchId(persisted)
+                                                    ? persisted
+                                                    : (existing?.id || draftIdForChampionshipMatch(scheduled.id));
                                                 openRealtimeScout({
-                                                    matchId: existing?.id || draftIdForChampionshipMatch(selectedScheduledMatch.id),
-                                                    agendaMatchId: selectedScheduledMatch.id,
-                                                    date: selectedScheduledMatch.date,
-                                                    time: selectedScheduledMatch.time,
+                                                    matchId,
+                                                    agendaMatchId: scheduled.id,
+                                                    date: scheduled.date,
+                                                    time: scheduled.time,
                                                     scheduledBaseCount: scheduledPeerCount(
-                                                        selectedScheduledMatch.date,
-                                                        selectedScheduledMatch.opponent,
-                                                        selectedScheduledMatch.competition
+                                                        scheduled.date,
+                                                        scheduled.opponent,
+                                                        scheduled.competition
                                                     ),
-                                                    opponent: selectedScheduledMatch.opponent || '',
-                                                    competition: selectedScheduledMatch.competition,
+                                                    opponent: scheduled.opponent || '',
+                                                    competition: scheduled.competition,
                                                     location:
-                                                        selectedScheduledMatch.location?.trim() ||
+                                                        scheduled.location?.trim() ||
                                                         existing?.location?.trim() ||
                                                         undefined,
                                                     players: players || [],
                                                     teams: teams || [],
                                                     matchType: preparationMatchType,
                                                     extraTimeMinutes: preparationExtraTimeMinutes,
-                                                    selectedPlayerIds:
-                                                        savedSquad && savedSquad.length > 0
-                                                            ? savedSquad
-                                                            : Array.from(selectedPlayersForMatch),
+                                                    selectedPlayerIds: ids,
                                                 });
                                                 setShowStartScoutConfirmation(false);
+                                                });
                                             }}
                                             data-testid="prep-confirm-start-scout"
                                             disabled={selectedPlayersForMatch.size === 0}

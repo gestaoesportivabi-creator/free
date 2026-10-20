@@ -17,6 +17,7 @@ import { inferStatusFromData, statusToPersist } from './matchStatus';
 import { isUnionEventLogWrite } from './postMatchEventLogMerge';
 import { applyUnionEventLogWrite } from './eventLogTombstones';
 import { resolveGoalOriginColumns, resolveMinutesCardsRpe } from './matchStatPreserve';
+import { resolveLineupOnlyUpdate } from './lineupOnlyUpdate';
 
 function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
   const n = Number(v);
@@ -351,8 +352,16 @@ export const matchesService = {
     const existing = await matchesRepository.findById(id, tenantInfo, tx);
     if (!existing) throw new NotFoundError('Jogo', id);
 
-    const golsPro = data.golsPro ?? data.goalsFor ?? existing.golsPro;
-    const golsContra = data.golsContra ?? data.goalsAgainst ?? existing.golsContra;
+    const scoreUpdate = resolveLineupOnlyUpdate(
+      {
+        resultado: existing.resultado,
+        golsPro: existing.golsPro,
+        golsContra: existing.golsContra,
+      },
+      data
+    );
+    const golsPro = scoreUpdate.golsPro;
+    const golsContra = scoreUpdate.golsContra;
 
     const jogoUpdate: Record<string, unknown> = {};
     if (data.adversario ?? data.opponent) jogoUpdate.adversario = data.adversario ?? data.opponent;
@@ -362,7 +371,7 @@ export const matchesService = {
     }
     if (data.campeonato ?? data.competition) jogoUpdate.campeonato = data.campeonato ?? data.competition;
     if (data.local !== undefined || data.location !== undefined) jogoUpdate.local = data.local ?? data.location ?? null;
-    if (data.resultado ?? data.result) jogoUpdate.resultado = data.resultado ?? data.result;
+    if (scoreUpdate.resultado) jogoUpdate.resultado = scoreUpdate.resultado;
     jogoUpdate.golsPro = golsPro;
     jogoUpdate.golsContra = golsContra;
     const existingLineup = (existing as { lineup?: unknown }).lineup;
@@ -427,7 +436,7 @@ export const matchesService = {
     }
 
     // Update team stats if provided
-    const teamStats = data.teamStats;
+    const teamStats = scoreUpdate.applyTeamStats ? data.teamStats : undefined;
     if (teamStats) {
       let metodoGol: string | null = null;
       const eventLog = data.postMatchEventLog as Array<{ action?: string; goalMethod?: string; isOpponentGoal?: boolean; subtipo?: string }> | undefined;
@@ -507,7 +516,7 @@ export const matchesService = {
     }
 
     // Update player stats if provided
-    const playerStats = data.playerStats;
+    const playerStats = scoreUpdate.applyPlayerStats ? data.playerStats : undefined;
     if (playerStats && Object.keys(playerStats).length > 0) {
       const [jogadoresTenant, existingPlayerStats] = await Promise.all([
         playersRepository.findAll(tenantInfo, tx),
