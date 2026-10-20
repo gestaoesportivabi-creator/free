@@ -19,7 +19,12 @@ export interface CalendarSavedMatch {
   goalsFor?: number;
   postMatchEventCount?: number;
   postMatchEventLog?: unknown[] | null;
-  lineup?: { clockSnapshot?: { state?: string }; kickoffTime?: string } | null;
+  lineup?: {
+    clockSnapshot?: { state?: string };
+    kickoffTime?: string;
+    players?: string[];
+    selectedPlayerIds?: string[];
+  } | null;
 }
 
 export interface CalendarAgendaMatch {

@@ -53,6 +53,7 @@ import { AthleteWellnessForm } from './components/athlete/AthleteWellnessForm';
 import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfterFinalize } from './utils/openMatchAnalysis';
+import { consumeOpenGameList, OPEN_GAME_LIST_KEY } from './utils/openGameList';
 import { consumeFinalizedMatch, MATCHES_DIRTY_KEY } from './utils/finalizedMatchHandoff';
 import { isAbortError, shouldClearSessionToken } from './utils/sessionRestore';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/trialExpiredSave';
@@ -946,6 +947,33 @@ export default function App() {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== MATCHES_DIRTY_KEY) return;
       void loadMatchesRef.current();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // Salvar como incompleta no ao vivo: abrir a lista de jogos, não a visão geral.
+  useEffect(() => {
+    if (isInitializing || !currentUser) return;
+    if (!consumeOpenGameList()) return;
+    if (currentUser.role === 'Atleta') return;
+    if (activeTab !== 'table') setActiveTab('table');
+    const resources = TAB_REQUIRED_RESOURCES.table ?? [];
+    const missing = resources.filter((r) => !loadedResources[r]);
+    if (missing.length === 0) return;
+    setIsLoading(true);
+    Promise.all(missing.map((r) => Promise.resolve(loadResource(r)))).then(() => setIsLoading(false));
+  }, [isInitializing, currentUser]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== OPEN_GAME_LIST_KEY || event.newValue !== '1') return;
+      try {
+        localStorage.removeItem(OPEN_GAME_LIST_KEY);
+      } catch {
+        /* ignore */
+      }
+      setActiveTab('table');
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);

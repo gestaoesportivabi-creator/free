@@ -23,6 +23,7 @@ import { matchNeedsEventLogFetch } from '../utils/matchListState';
 import { isPersistedServerMatchId } from '../utils/matchIds';
 import { adoptServerMatch } from '../utils/realtimeMatchHydration';
 import { preserveEncerradoStatus, saveLaterUi } from '../utils/matchStatus';
+import { incompleteLiveSaveDestination, OPEN_GAME_LIST_KEY, stashOpenGameList } from '../utils/openGameList';
 
 // Recurso legado: tempo real está isolado/desativado na UI principal.
 // Este componente permanece para possível reativação futura controlada.
@@ -238,9 +239,9 @@ export const RealtimeScoutPage: React.FC<{
 
   const handleSave = async (
     savedMatch: MatchRecord,
-    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean }
+    options?: { source?: 'manual' | 'autosave'; saveAsIncomplete?: boolean; lineupDraft?: boolean }
   ) => {
-    const isAutosave = options?.source === 'autosave';
+    const isAutosave = options?.source === 'autosave' || options?.lineupDraft === true;
     const saveAsIncomplete = options?.saveAsIncomplete === true;
     try {
       if (!savedMatch || !savedMatch.teamStats) {
@@ -269,6 +270,26 @@ export const RealtimeScoutPage: React.FC<{
       if (kept?.id) {
         setMatch((prev) => (prev ? { ...prev, ...kept, id: kept.id } : kept));
       }
+      if (kept?.id && options?.lineupDraft) {
+        const savedId = String(kept.id).trim();
+        try {
+          const raw = localStorage.getItem('realtimeScoutData');
+          if (raw) {
+            const stored = JSON.parse(raw) as RealtimeScoutData;
+            localStorage.setItem('realtimeScoutData', JSON.stringify({ ...stored, matchId: savedId }));
+          }
+        } catch {
+          /* o catálogo ainda acha a partida pela data e pelo adversário */
+        }
+        const agendaId = String(scoutData?.agendaMatchId || '').trim();
+        if (agendaId && agendaId !== savedId) {
+          try {
+            await championshipMatchesApi.update(agendaId, { jogoId: savedId });
+          } catch (linkErr) {
+            console.warn('Não foi possível vincular a agenda à escalação gravada.', linkErr);
+          }
+        }
+      }
       if (kept && !isAutosave) {
         // Finalizar coleta: sem alert nativo (e2e + UX); abre Análise em Dados do Jogo
         if (savedMatch.status === 'encerrado') {
@@ -292,6 +313,16 @@ export const RealtimeScoutPage: React.FC<{
             ? saveLaterUi(savedMatch.status).alert
             : 'Partida salva com sucesso! Os dados foram gravados no sistema.'
         );
+        if (incompleteLiveSaveDestination(saveAsIncomplete) === 'game-list') {
+          stashOpenGameList();
+          if (window.opener && !window.opener.closed) {
+            try {
+              window.opener.localStorage.setItem(OPEN_GAME_LIST_KEY, '1');
+            } catch {
+              /* a aba de origem segue na visão geral */
+            }
+          }
+        }
         exitRealtimeScout();
       }
       return kept;
