@@ -4,8 +4,9 @@ import { prepSquadIdsFromLineup } from './startingLineupDraft';
 export const OPEN_PREP_KEY = 'scout21_open_prep';
 
 /**
- * Marca a entrada que o usuário acabou de confirmar em "Iniciar Scout".
- * O F5 seguinte não herda a marca: a página recarrega e a seleção volta à Preparação.
+ * Intenção da ação "Iniciar Scout da Partida" / "Confirmar e Iniciar".
+ * A leitura não apaga a marca: uma segunda avaliação do efeito não devolve a Preparação.
+ * Sai só quando a pessoa deixa a coleta.
  */
 export const REALTIME_FRESH_KEY = 'scout21_realtime_fresh';
 
@@ -119,15 +120,28 @@ export function prepReopenTarget(
 }
 
 /**
- * F5 ou reload de /scout-realtime sem a marca da entrada recém-confirmada
- * não pode reabrir a Escalação Inicial. A seleção volta para a Preparação.
+ * Iniciar de propósito fica na coleta, mesmo com relógio PRE_JOGO e zero eventos.
+ * Sem essa intenção, a reabertura de uma convocação pura volta para a Preparação.
  */
+export function realtimeEntryDecision(
+  match: PrepReopenMatch | null | undefined,
+  explicitStart: boolean
+): 'collection' | 'preparation' {
+  if (explicitStart) return 'collection';
+  return prepReopenTarget(match) === 'preparation' ? 'preparation' : 'collection';
+}
+
+/** A página de coleta só volta para a Preparação quando a decisão é preparation. */
 export function shouldReturnUnconfirmedRealtimeToPrep(
   match: PrepReopenMatch | null | undefined,
-  freshEntry: boolean
+  explicitStart: boolean
 ): boolean {
-  if (freshEntry) return false;
-  return prepReopenTarget(match) === 'preparation';
+  return realtimeEntryDecision(match, explicitStart) === 'preparation';
+}
+
+/** Payload gravado por Iniciar/Confirmar, ou a marca da mesma aba. Qualquer um basta. */
+export function isExplicitScoutStart(payload: { explicitStart?: boolean } | null | undefined): boolean {
+  return payload?.explicitStart === true || hasExplicitScoutStart();
 }
 
 function byJerseyThenName(a: DefaultLineupAthlete, b: DefaultLineupAthlete): number {
@@ -248,7 +262,7 @@ export function consumeOpenPrep(): OpenPrepRequest | null {
   return pending;
 }
 
-export function markRealtimeFreshEntry(): void {
+export function markExplicitScoutStart(): void {
   try {
     sessionStorage.setItem(REALTIME_FRESH_KEY, '1');
   } catch {
@@ -256,12 +270,19 @@ export function markRealtimeFreshEntry(): void {
   }
 }
 
-export function consumeRealtimeFreshEntry(): boolean {
+/** Não remove a chave. A segunda leitura do efeito de carga continua vendo a intenção. */
+export function hasExplicitScoutStart(): boolean {
   try {
-    if (sessionStorage.getItem(REALTIME_FRESH_KEY) !== '1') return false;
-    sessionStorage.removeItem(REALTIME_FRESH_KEY);
-    return true;
+    return sessionStorage.getItem(REALTIME_FRESH_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+export function clearExplicitScoutStart(): void {
+  try {
+    sessionStorage.removeItem(REALTIME_FRESH_KEY);
+  } catch {
+    /* ignore */
   }
 }
