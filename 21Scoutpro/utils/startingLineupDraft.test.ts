@@ -47,6 +47,25 @@ describe('escalação sem relógio', () => {
     expect(saved.lineup?.bench).toEqual(['7']);
     expect(saved.lineup?.selectedPlayerIds).toEqual(['gk', '3', '4', '5', '6', '7']);
     expect(saved.lineup?.kickoffTime).toBe('20:00');
+    expect(saved.lineupOnly).toBe(true);
+  });
+
+  it('o banco do elenco inteiro não substitui a convocação manual', () => {
+    const roster = Array.from({ length: 14 }, (_, index) => String(index + 1));
+    const saved = buildStartingLineupSave({
+      matchId: 'jogo-prep',
+      opponent: 'Rival QA Prep',
+      date: '2026-10-19',
+      status: 'disponivel',
+      players: [],
+      bench: roster,
+      selectedPlayerIds: ['2', '7', '8', '9', '10'],
+      previousSelectedPlayerIds: ['2', '7', '8', '9', '10'],
+    });
+    expect(saved.lineupOnly).toBe(true);
+    expect(saved.lineup.selectedPlayerIds).toEqual(['2', '7', '8', '9', '10']);
+    expect(saved.lineup.bench).toEqual(['2', '7', '8', '9', '10']);
+    expect(saved.lineup.players).toEqual([]);
   });
 
   it('encerrado não regride e em andamento não vira disponível no PUT', () => {
@@ -123,6 +142,7 @@ describe('escalação sem relógio', () => {
     });
 
     expect(lineupDraftHasScoreFields(saved)).toBe(false);
+    expect(saved.lineupOnly).toBe(true);
     expect(saved.lineup.selectedPlayerIds).toEqual(['gk', '4', '8']);
     expect(saved.lineup.players).toEqual(['gk', '3', '4', '5', '6']);
     expect(saved.lineup.ballPossessionStart).toBe('us');

@@ -14,17 +14,32 @@ describe('salvar como incompleta volta à lista de jogos', () => {
       isPostmatch: false,
       isMatchStarted: true,
       eventCount: 2,
-    })).toEqual({ saveCollection: true, destination: 'game-list' });
+      clockRunning: false,
+    })).toEqual({ saveCollection: true, destination: 'game-list', confirmLeave: false });
     expect(liveCalendarExitPlan({
       isPostmatch: false,
       isMatchStarted: false,
       eventCount: 0,
-    })).toEqual({ saveCollection: false, destination: 'game-list' });
+      clockRunning: false,
+    })).toEqual({ saveCollection: false, destination: 'game-list', confirmLeave: false });
     expect(liveCalendarExitPlan({
       isPostmatch: true,
       isMatchStarted: false,
       eventCount: 1,
+      clockRunning: true,
     }).saveCollection).toBe(true);
+    expect(liveCalendarExitPlan({
+      isPostmatch: false,
+      isMatchStarted: true,
+      eventCount: 1,
+      clockRunning: true,
+    }).confirmLeave).toBe(true);
+    expect(liveCalendarExitPlan({
+      isPostmatch: true,
+      isMatchStarted: false,
+      eventCount: 1,
+      clockRunning: true,
+    }).confirmLeave).toBe(false);
   });
 
   it('o botão da tela ao vivo pede a lista, o fechar comum pede a visão geral', () => {

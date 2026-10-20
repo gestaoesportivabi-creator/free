@@ -46,10 +46,23 @@ describe('PUT de escalação não apaga o jogo', () => {
       },
     };
 
-    assert.equal(isLineupOnlyWrite(incoming), true);
-    const sheet = resolveLineupOnlyUpdate(
+    assert.equal(isLineupOnlyWrite(incoming), false);
+    const correction = resolveLineupOnlyUpdate(
       { resultado: 'V', golsPro: 3, golsContra: 1 },
       incoming
+    );
+    assert.equal(correction.lineupOnly, false);
+    assert.equal(correction.golsPro, 0);
+    assert.equal(correction.golsContra, 0);
+    assert.equal(correction.resultado, 'E');
+    assert.equal(correction.applyTeamStats, true);
+    assert.equal(correction.applyPlayerStats, false);
+
+    const flagged = { ...incoming, lineupOnly: true as const };
+    assert.equal(isLineupOnlyWrite(flagged), true);
+    const sheet = resolveLineupOnlyUpdate(
+      { resultado: 'V', golsPro: 3, golsContra: 1 },
+      flagged
     );
     assert.equal(sheet.lineupOnly, true);
     assert.equal(sheet.golsPro, 3);
@@ -87,5 +100,22 @@ describe('PUT de escalação não apaga o jogo', () => {
     assert.equal(withTape.resultado, 'V');
     assert.equal(withTape.applyTeamStats, true);
     assert.equal(withTape.applyPlayerStats, true);
+
+    const zeroedPlayers = resolveLineupOnlyUpdate(
+      { resultado: 'V', golsPro: 3, golsContra: 0 },
+      {
+        result: 'E',
+        goalsFor: 0,
+        goalsAgainst: 0,
+        teamStats: { goals: 0, passesCorrect: 0 },
+        playerStats: { p1: { goals: 0, passesCorrect: 0 } },
+        lineup: { players: ['p1'] },
+      }
+    );
+    assert.equal(zeroedPlayers.lineupOnly, false);
+    assert.equal(zeroedPlayers.golsPro, 0);
+    assert.equal(zeroedPlayers.resultado, 'E');
+    assert.equal(zeroedPlayers.applyTeamStats, true);
+    assert.equal(zeroedPlayers.applyPlayerStats, true);
   });
 });

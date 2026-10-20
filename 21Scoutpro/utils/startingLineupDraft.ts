@@ -49,11 +49,11 @@ export function shouldPersistPrepSelection(input: {
 
 /** Atletas da Preparação: convocados, ou os titulares se só eles foram gravados. */
 export function prepSquadIdsFromLineup(
-  lineup?: { players?: string[]; selectedPlayerIds?: string[] } | null
+  lineup?: { players?: readonly string[]; selectedPlayerIds?: readonly string[] } | null
 ): string[] {
-  const selected = uniqueIds(lineup?.selectedPlayerIds ?? []);
+  const selected = uniqueIds([...(lineup?.selectedPlayerIds ?? [])]);
   if (selected.length > 0) return selected;
-  return uniqueIds(lineup?.players ?? []);
+  return uniqueIds([...(lineup?.players ?? [])]);
 }
 
 /** Assinatura estável da escolha manual, para não regravar o mesmo elenco. */
@@ -70,7 +70,10 @@ export interface LineupDraftLineup {
   technicalAnalysis?: NonNullable<MatchRecord['lineup']>['technicalAnalysis'];
 }
 
-/** PUT da escalação: só o jogo e o lineup. Sem placar, resultado ou estatística. */
+/**
+ * PUT da escalação, antes do relógio. Sem placar, resultado ou estatística.
+ * `lineupOnly` é o único sinal para o backend não gravar esses campos.
+ */
 export interface LineupDraftRecord {
   id: string;
   opponent: string;
@@ -79,6 +82,7 @@ export interface LineupDraftRecord {
   location?: string;
   status: 'disponivel' | 'em_andamento' | 'encerrado';
   collectionPhase?: 1 | 2;
+  lineupOnly: true;
   lineup: LineupDraftLineup;
 }
 
@@ -139,6 +143,7 @@ function draftEnvelope(input: {
     competition: input.competition,
     location: input.location,
     status: statusForLineupDraft(input.status),
+    lineupOnly: true,
     ...(phase ? { collectionPhase: phase } : {}),
     lineup: input.lineup,
   };
@@ -167,13 +172,17 @@ export interface StartingLineupSaveInput {
  */
 export function buildStartingLineupSave(input: StartingLineupSaveInput): LineupDraftRecord {
   const players = uniqueIds(input.players);
-  const bench = uniqueIds(input.bench).filter((id) => !players.includes(id));
-  const selectedPlayerIds = uniqueIds([
-    ...players,
-    ...bench,
-    ...(input.selectedPlayerIds ?? []),
-    ...(input.previousSelectedPlayerIds ?? []),
-  ]);
+  const explicit = uniqueIds(input.selectedPlayerIds ?? []);
+  const previous = uniqueIds(input.previousSelectedPlayerIds ?? []);
+  const convocation = explicit.length > 0 ? explicit : previous;
+  let bench = uniqueIds(input.bench).filter((id) => !players.includes(id));
+  const selectedPlayerIds = convocation.length > 0
+    ? convocation
+    : uniqueIds([...players, ...bench]);
+  if (convocation.length > 0) {
+    const allowed = new Set(convocation);
+    bench = bench.filter((id) => allowed.has(id));
+  }
   return draftEnvelope({
     ...input,
     lineup: lineupWithoutScore({
