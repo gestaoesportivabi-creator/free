@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { MatchRecord, Player, MatchStats } from '../types';
 import { Trophy, Medal, Filter, Crown } from 'lucide-react';
 import { athleteRosterLabel } from '../utils/athleteRosterLabel';
+import { AthleteAvatar } from './AthleteAvatar';
 
 interface StatsRankingProps {
     players: Player[];
@@ -144,8 +145,8 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                         <div key={player.id} className="flex flex-col items-center gap-2 group cursor-pointer hover:-translate-y-1 transition-transform duration-300">
                             <div className={`relative p-[3px] rounded-full bg-gradient-to-tr ${getRingColor(index)} shadow-lg`}>
                                 <div className="bg-black p-[2px] rounded-full">
-                                    <div className="w-20 h-20 rounded-full overflow-hidden relative">
-                                        <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
+                                    <div className="w-20 h-20 rounded-full overflow-hidden relative bg-black">
+                                        <AthleteAvatar name={player.name} photoUrl={player.photoUrl} initialsClassName="text-sm" />
                                         {index === 0 && (
                                             <div className="absolute inset-0 bg-yellow-500/20 mix-blend-overlay"></div>
                                         )}
@@ -204,7 +205,7 @@ export const StatsRanking: React.FC<StatsRankingProps> = ({ players, matches, co
                                     <div className="flex items-center gap-3">
                                         <div className={`w-10 h-10 rounded-full p-[2px] bg-gradient-to-tr ${getRingColor(index)}`}>
                                             <div className="w-full h-full rounded-full overflow-hidden bg-black border-2 border-black">
-                                                <img src={player.photoUrl} className="w-full h-full object-cover" alt="" />
+                                                <AthleteAvatar name={player.name} photoUrl={player.photoUrl} />
                                             </div>
                                         </div>
                                         <div>

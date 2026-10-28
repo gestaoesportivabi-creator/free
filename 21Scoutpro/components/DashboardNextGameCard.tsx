@@ -2,6 +2,7 @@ import React from 'react';
 import { Trophy, Calendar, MapPin } from 'lucide-react';
 import { Player } from '../types';
 import { Championship } from '../types';
+import { formatMatchDayLabel } from '../utils/dateUtils';
 
 export type NextMatchInfo = {
   id?: string;
@@ -44,9 +45,7 @@ export const DashboardNextGameCard: React.FC<DashboardNextGameCardProps> = ({
     );
   }
 
-  const dateLabel = nextMatch.date
-    ? new Date(nextMatch.date).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
-    : '—';
+  const dateLabel = nextMatch.date ? formatMatchDayLabel(nextMatch.date) : '—';
   const timeLabel = nextMatch.time ? nextMatch.time.slice(0, 5) : '';
   const locationLabel = nextMatch.location && nextMatch.location.trim() ? nextMatch.location.trim() : null;
 
