@@ -22,6 +22,7 @@ import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedF
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
 import { EMPTY_UNION_EVENT_LOG_MESSAGE, isEmptyUnionEventLogError } from '../utils/eventLogConflict';
+import { ShotHeatMap } from './liveScout/ShotHeatMap';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
 const EMPTY_TECHNICAL_ANALYSIS: TechnicalAnalysis = {
@@ -3171,6 +3172,11 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                             </div>
                         </div>
                     </div>
+
+                    <ShotHeatMap
+                        events={selectedMatch.postMatchEventLog}
+                        pending={matchNeedsEventLogFetch(selectedMatch) || eventLogLoading}
+                    />
 
                     {/* Informações Básicas */}
                     <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg">

@@ -13,6 +13,7 @@ const JacksonPollock7Page = React.lazy(() =>
 );
 import { TrialBanner } from './components/TrialBanner';
 import { AppInitSkeleton } from './components/AppInitSkeleton';
+import { isLocalQuadraPreview, QuadraScoutPreview } from './components/liveScout/QuadraScoutPreview';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
 import { authApi } from './services/api';
 import { useSubscription } from './hooks/useSubscription';
@@ -1552,6 +1553,10 @@ export default function App() {
     let restored = false;
     const controller = new AbortController();
     const p = window.location.pathname.replace(/\/$/, '') || '/';
+    if (isLocalQuadraPreview()) {
+      setIsInitializing(false);
+      return;
+    }
     const blogMatch = matchBlogPath(p);
     const isBlogPath = blogMatch != null;
     const initialBlogSlug = blogMatch?.slug ?? null;
@@ -1918,6 +1923,10 @@ export default function App() {
   };
 
   // Mostrar loading enquanto inicializa (ANTES das verificações de rota para evitar flash da landing page)
+  if (isLocalQuadraPreview()) {
+    return <QuadraScoutPreview />;
+  }
+
   if (isInitializing) {
     return <AppInitSkeleton />;
   }

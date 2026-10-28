@@ -1,3 +1,5 @@
+import type { ShotOriginZone } from './utils/shotCourtZones';
+
 // User Types
 export type UserRole = 'Treinador' | 'Preparador Físico' | 'Supervisor' | 'Diretor' | 'Atleta';
 
@@ -202,8 +204,13 @@ export interface PostMatchEvent {
   playerName?: string;
   /** Nome do atleta que recebeu o passe (para passes) */
   passToPlayerName?: string;
-  /** Zona da quadra (AT ESQ, AT DIR, DF ESQ, DF DIR) */
+  /** Zona da quadra (AT ESQ, AT DIR, DF ESQ, DF DIR) — lateral e escanteio */
   zone?: 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR';
+  /**
+   * Origem do chute nas 8 zonas da quadra ao vivo.
+   * Não reutiliza `zone`. Ausente em lances antigos.
+   */
+  shotOriginZone?: ShotOriginZone;
   /** ID do usuário que registrou a ação (auditoria) */
   recordedByUserId?: string;
   /** Nome do usuário que registrou a ação (auditoria) */

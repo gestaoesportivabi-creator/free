@@ -47,6 +47,11 @@ export function shouldBootPublicApp(): boolean {
   if (typeof window === 'undefined') return false;
   const p = normalizePathname();
   if (isAuthenticatedAppPath(p)) return false;
+  // Harness da quadra. Fora de localhost o path continua 404 no shell público.
+  if (p === '/dev/quadra') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') return false;
+  }
   if ((p === '/' || p === '') && localStorage.getItem('token')) return false;
   if (matchBlogPath(p)) return true;
   if (matchLegalPath(p)) return true;

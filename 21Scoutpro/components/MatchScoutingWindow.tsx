@@ -60,6 +60,13 @@ import {
   type ClockTourTargetId,
 } from '../content/clockProductTour';
 import { ClockHelpPanel } from './guide/ClockHelpPanel';
+import { LiveScoutCourt, type ShotZonePick } from './liveScout/LiveScoutCourt';
+import {
+  aggregateShotZoneHeat,
+  readShotOriginZone,
+  shotOriginZoneLabel,
+  type ShotOriginZone,
+} from '../utils/shotCourtZones';
 
 const CLOCK_TOUR_COMPLETED_STORAGE_KEY = 'scout21.clockTour.v1.completed';
 
@@ -228,6 +235,8 @@ interface MatchEvent {
   goalPeriod?: number;
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */
   wrongPassGeneratedTransition?: boolean;
+  /** Origem do chute nas 8 zonas. Independente de `result` (lateral/escanteio). */
+  shotOriginZone?: ShotOriginZone;
 }
 
 /** Converte PostMatchEvent[] (do banco/API) para MatchEvent[] (estado da janela de coleta). */
@@ -412,6 +421,10 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
       event.freeKickWall = pe.freeKickWall;
     }
     if (pe.wrongPassGeneratedTransition !== undefined) event.wrongPassGeneratedTransition = pe.wrongPassGeneratedTransition;
+    const shotOrigin = readShotOriginZone(pe.shotOriginZone);
+    if (shotOrigin && (type === 'shot' || type === 'save')) {
+      event.shotOriginZone = shotOrigin;
+    }
 
     return event;
   });
@@ -633,7 +646,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   }, [isOpen]);
 
   // Novo fluxo: Ação → Detalhes (popup) → Jogador (lista lateral) → Tempo (popup se necessário)
-  type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
+  type ActionFlowStep = 'details' | 'zone' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
   const [actionFlow, setActionFlow] = useState<{
     step: ActionFlowStep;
     action: string | null;
@@ -643,6 +656,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     cardTeam?: 'for' | 'against';
     foulTeam?: 'for' | 'against';
     zone?: LateralResult;
+    shotOriginZone?: ShotOriginZone;
     pendingTime?: number;
     /** Passe errado: true = gerou transição, false = não gerou */
     wrongPassTransition?: boolean;
@@ -1044,6 +1058,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       selectedPlayerId: cleanSelectedPlayerId.length > 0 ? cleanSelectedPlayerId : undefined,
     };
 
+    // Chute nosso e chute sofrido: a origem é um toque na quadra, antes do resultado.
+    if (action === 'shot' || action === 'save') {
+      setActionFlow({ ...flow, step: 'zone' });
+      return;
+    }
+
     // Escanteio e Lateral: após detalhes, jogador só pela lista à esquerda
     if ((action === 'lateral' || action === 'corner' || action === 'block') && flow.selectedPlayerId) {
       executeActionFlow({ ...flow, step: 'details' as const }, flow.selectedPlayerId);
@@ -1051,6 +1071,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
 
     setActionFlow(flow as any);
+  };
+
+  const handlePickShotZone = (zone: ShotOriginZone) => {
+    setActionFlow((prev) => {
+      if (!prev || prev.step !== 'zone') return prev;
+      if (prev.action !== 'shot' && prev.action !== 'save') return prev;
+      return { ...prev, step: 'details', shotOriginZone: zone };
+    });
   };
 
   const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
@@ -1166,7 +1194,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           break;
         }
         case 'shot':
-          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, rawT, periodOverride);
+          handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'foul':
           handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride);
@@ -1178,7 +1206,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride, flow.cardTeam ?? 'for');
           break;
         case 'save':
-          handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride);
+          handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'lateral':
           handleRegisterLateral(flow.zone, playerId, rawT, periodOverride);
@@ -2123,6 +2151,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         if (e.kickerName) postEvent.kickerName = e.kickerName;
       }
       if (e.freeKickWall) postEvent.freeKickWall = e.freeKickWall;
+      const shotOrigin = readShotOriginZone(e.shotOriginZone);
+      if (
+        shotOrigin &&
+        (action === 'shotOn' || action === 'shotOff' || action === 'shotZonaChute' || action === 'save')
+      ) {
+        postEvent.shotOriginZone = shotOrigin;
+      }
       postMatchEventLog.push(postEvent);
     }
 
@@ -2988,7 +3023,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     difficulty: 'simple' | 'hard' | 'outside',
     playerIdOverride?: string,
     timeOverride?: number,
-    periodOverride?: '1T' | '2T'
+    periodOverride?: '1T' | '2T',
+    shotOriginZone?: ShotOriginZone
   ) => {
     const selectedSidebarGoalkeeperId =
       selectedPlayerId &&
@@ -3026,6 +3062,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       subtipo,
       details:
         difficulty === 'outside' ? { saveOutcome: 'outside' as const } : { saveDifficulty: difficulty },
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
 
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3188,7 +3225,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar resultado de chute — posse fica selecionável depois (usuário define com Com posse / Sem posse)
-  const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterShot = (result: 'inside' | 'outside' | 'post' | 'blocked', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
@@ -3207,6 +3244,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       result,
       tipo,
       subtipo,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3716,7 +3754,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const lastCommandDisplayLines = useMemo(() => {
     const lines: Array<{ key: string; relativeTime: number; period: '1T' | '2T'; playerName: string; actionText: string; zone?: string }> = [];
     for (const event of lastRecentEvents) {
-      const zone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
+      const lateralZone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
+      const zone = event.shotOriginZone ? shotOriginZoneLabel(event.shotOriginZone) : lateralZone;
       const isPassWithReceiver = event.type === 'pass' && event.passToPlayerId && event.passToPlayerName;
       const relativeTime = Math.max(0, event.time);
       if (isPassWithReceiver) {
@@ -3924,7 +3963,18 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     return { passesCorrect, passesWrong, duplasTop, playersTop, mostCorrectPassesPlayer };
   }, [matchEvents, players]);
 
+  const liveShotZoneHeat = useMemo(() => aggregateShotZoneHeat(matchEvents), [matchEvents]);
+
   if (!isOpen) return null;
+
+  const shotZonePick: ShotZonePick =
+    actionFlow?.step === 'zone'
+      ? actionFlow.action === 'save'
+        ? 'conceded'
+        : actionFlow.action === 'shot'
+          ? 'ours'
+          : null
+      : null;
 
   const canEndTime = matchTime >= REGULATION_HALF_SECONDS;
   const isRealtimeActionLocked = !isPostmatch && !canRegisterRealtimeEvent;
@@ -4473,6 +4523,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                         assistPlayerId: editDraft.assistPlayerId ?? undefined,
                                         assistPlayerName: editDraft.assistPlayerName ?? undefined,
                                       }),
+                                      shotOriginZone:
+                                        editDraft.type === 'shot' || editDraft.type === 'save'
+                                          ? e.shotOriginZone
+                                          : undefined,
                                     } : e);
                                     setMatchEvents(updatedEvents);
                                     recalcGoalsAndFoulsFromEvents(updatedEvents);
@@ -5689,8 +5743,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </button>
                   </div>
 
-                  {/* Layout - FALTA/ESCANTEIO | TEMPO | PASSE/CHUTE - ocupa 80%, tamanhos similares, cronômetro maior */}
-                  <div className="flex-1 flex flex-col min-h-0 gap-1 overflow-hidden">
+                  {/* Layout - FALTA/ESCANTEIO | QUADRA | PASSE/CHUTE */}
+                  <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
                     {/* Linha central: FALTA/ESCANTEIO | TEMPO (maior) | PASSE/CHUTE */}
                     <div className="flex-1 flex items-stretch justify-center gap-1 min-h-0 overflow-hidden">
                       {/* Esquerda - FALTA e ESCANTEIO */}
@@ -5730,49 +5784,34 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </button>
                       </div>
 
-                      {/* TEMPO - Centro: cronômetro (realtime) - MAIOR que os outros botões */}
+                      {/* Quadra no centro. Cronômetro semitransparente na linha do meio. */}
                       <div
                         data-testid="match-clock-panel"
                         data-tour-highlighted={isClockTourTargetHighlighted('match-clock-panel') ? 'true' : undefined}
-                        className={`relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden ${getClockTourTargetClass('match-clock-panel')}`}
+                        className={`relative z-10 flex flex-[2] min-h-0 min-w-0 flex-col items-stretch justify-start gap-1 overflow-x-hidden overflow-y-auto ${getClockTourTargetClass('match-clock-panel')}`}
                       >
-                        {isPostmatch ? (
-                          <div className="w-full h-full min-h-[80px] py-2 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
+                        <LiveScoutCourt
+                          className="min-h-[240px] w-full flex-1"
+                          counts={liveShotZoneHeat}
+                          picking={shotZonePick}
+                          selectedZone={actionFlow?.shotOriginZone ?? null}
+                          onSelectZone={handlePickShotZone}
+                          onCancelPick={cancelActionFlow}
+                        >
+                          {isPostmatch ? (
                             <p
                               data-testid="postmatch-period-label"
-                              className={`text-sm sm:text-base font-black uppercase tracking-wide ${
+                              className={`text-center text-[11px] font-black uppercase tracking-wide ${
                                 currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
                               }`}
                             >
-                              {currentPeriod === '1T' ? '1º tempo · coleta' : '2º tempo · coleta'}
+                              {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
                             </p>
-                            {currentPeriod === '1T' && (
-                              <button
-                                type="button"
-                                onClick={handleEndFirstHalfCollection}
-                                data-testid="postmatch-end-first-half"
-                                className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-amber-500/70 bg-amber-500/15 text-amber-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-amber-500/25 transition-colors"
-                              >
-                                Encerrar coleta do 1º tempo
-                              </button>
-                            )}
-                            {currentPeriod === '2T' && (
-                              <button
-                                type="button"
-                                onClick={handleReturnToFirstHalfCollection}
-                                data-testid="postmatch-return-first-half"
-                                className="w-full mt-1 px-2 py-2 rounded-lg border-2 border-sky-500/70 bg-sky-500/15 text-sky-200 text-[10px] sm:text-xs font-bold uppercase hover:bg-sky-500/25 transition-colors"
-                              >
-                                Voltar ao 1º tempo
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <>
-                            <div className="w-full flex flex-col items-center gap-0.5 shrink-0 px-1">
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
                               <span
                                 data-testid="clock-state"
-                                className={`text-[11px] font-black uppercase tracking-[0.12em] text-center leading-tight ${
+                                className={`text-center text-[9px] font-black uppercase leading-tight tracking-[0.12em] ${
                                   currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
                                 }`}
                               >
@@ -5783,9 +5822,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                   ? ` · ${currentPeriod === '1T' ? '1T' : '2T'}`
                                   : ''}
                               </span>
-                            </div>
-                            <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-2 flex flex-col items-center justify-center gap-1.5 shrink-0">
-                              <div data-testid="clock-time" className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight tabular-nums leading-none">
+                              <div data-testid="clock-time" className="font-mono text-2xl font-black tabular-nums leading-none tracking-tight text-white">
                                 {formatTime(matchTime)}
                               </div>
                               {clockPrimaryAction ? (
@@ -5803,83 +5840,105 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                           ? 'clock-start-second-half'
                                           : 'clock-pause'
                                   }
-                                  className={`w-full min-h-[44px] px-3 py-2 rounded-lg border-2 font-black uppercase text-xs sm:text-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 focus:ring-white ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98]'} ${getClockTourTargetClass('clock-primary')}`}
+                                  className={`w-full min-h-[40px] rounded-full border-2 px-3 py-1.5 text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-950 sm:text-xs ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'cursor-not-allowed opacity-50' : 'active:scale-[0.98]'} ${getClockTourTargetClass('clock-primary')}`}
                                 >
                                   {clockPrimaryAction.label}
                                 </button>
                               ) : (
-                                <div className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-950 text-zinc-500 text-xs font-bold uppercase flex items-center justify-center">
+                                <div className="flex min-h-[40px] w-full items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[10px] font-bold uppercase text-zinc-500">
                                   Partida encerrada
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                onClick={openClockSyncModal}
-                                disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
-                                data-testid="clock-sync"
-                                data-tour-highlighted={isClockTourTargetHighlighted('clock-sync') ? 'true' : undefined}
-                                className={`w-full px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-colors ${
-                                  clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
-                                    ? 'border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed'
-                                    : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
-                                } ${getClockTourTargetClass('clock-sync')}`}
-                              >
-                                Sincronizar cronômetro
-                              </button>
-                              {isPausedByEvent && (
-                                <p className="text-center text-[10px] font-bold uppercase text-emerald-200 leading-tight">
-                                  Evento pausou o relógio. Continue a partida.
-                                </p>
-                              )}
-                              {isRealtimeActionLocked && (
-                                <p className="text-center text-[10px] font-bold uppercase text-amber-200 leading-tight">
-                                  {getRealtimeBlockMessage()}
-                                </p>
-                              )}
                             </div>
-                            <div className="w-full flex flex-col gap-1 shrink-0">
-                              {currentPeriod === '1T' && canEndTime && !isMatchEnded && (
-                                <button
-                                  onClick={handleEndTime}
-                                  data-testid="clock-end-period"
-                                  className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                                >
-                                  Encerrar Tempo
-                                </button>
-                              )}
-                              {currentPeriod === '2T' && !isMatchEnded && (
-                                <button
-                                  type="button"
-                                  onClick={handleEndMatchRealtime}
-                                  data-testid="clock-end-match"
-                                  className="w-full px-2 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-400 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                                >
-                                  Encerrar partida
-                                </button>
-                              )}
-                              {currentPeriod === '1T' && !isMatchEnded && (
-                                <button
-                                  type="button"
-                                  onClick={handleEndFirstHalfCollection}
-                                  data-testid="clock-end-first-half"
-                                  className="w-full px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/70 text-amber-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                                >
-                                  Encerrar coleta do 1º tempo
-                                </button>
-                              )}
-                              {currentPeriod === '2T' && !isMatchEnded && (
-                                <button
-                                  type="button"
-                                  onClick={handleReturnToFirstHalfCollection}
-                                  data-testid="clock-return-first-half"
-                                  className="w-full px-2 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/70 text-sky-200 text-[10px] font-bold uppercase rounded-lg transition-colors"
-                                >
-                                  Voltar ao 1º tempo
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        )}
+                          )}
+                        </LiveScoutCourt>
+                        <div className="flex w-full shrink-0 flex-col gap-1">
+                          {!isPostmatch && (
+                            <button
+                              type="button"
+                              onClick={openClockSyncModal}
+                              disabled={clockSnapshot.state === 'ENCERRADO' || showClockSyncModal}
+                              data-testid="clock-sync"
+                              data-tour-highlighted={isClockTourTargetHighlighted('clock-sync') ? 'true' : undefined}
+                              className={`w-full rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase transition-colors ${
+                                clockSnapshot.state === 'ENCERRADO' || showClockSyncModal
+                                  ? 'cursor-not-allowed border-zinc-800 bg-zinc-900 text-zinc-600'
+                                  : 'border-zinc-600 bg-zinc-800/80 text-zinc-200 hover:bg-zinc-700'
+                              } ${getClockTourTargetClass('clock-sync')}`}
+                            >
+                              Sincronizar cronômetro
+                            </button>
+                          )}
+                          {isPausedByEvent && (
+                            <p className="text-center text-[10px] font-bold uppercase leading-tight text-emerald-200">
+                              Evento pausou o relógio. Continue a partida.
+                            </p>
+                          )}
+                          {isRealtimeActionLocked && (
+                            <p className="text-center text-[10px] font-bold uppercase leading-tight text-amber-200">
+                              {getRealtimeBlockMessage()}
+                            </p>
+                          )}
+                          {isPostmatch && currentPeriod === '1T' && (
+                            <button
+                              type="button"
+                              onClick={handleEndFirstHalfCollection}
+                              data-testid="postmatch-end-first-half"
+                              className="w-full rounded-full border-2 border-amber-500/70 bg-amber-500/15 px-2 py-2 text-[10px] font-bold uppercase text-amber-200 transition-colors hover:bg-amber-500/25 sm:text-xs"
+                            >
+                              Encerrar coleta do 1º tempo
+                            </button>
+                          )}
+                          {isPostmatch && currentPeriod === '2T' && (
+                            <button
+                              type="button"
+                              onClick={handleReturnToFirstHalfCollection}
+                              data-testid="postmatch-return-first-half"
+                              className="w-full rounded-full border-2 border-sky-500/70 bg-sky-500/15 px-2 py-2 text-[10px] font-bold uppercase text-sky-200 transition-colors hover:bg-sky-500/25 sm:text-xs"
+                            >
+                              Voltar ao 1º tempo
+                            </button>
+                          )}
+                          {!isPostmatch && currentPeriod === '1T' && canEndTime && !isMatchEnded && (
+                            <button
+                              onClick={handleEndTime}
+                              data-testid="clock-end-period"
+                              className="w-full rounded-full border border-red-500 bg-red-500/20 px-2 py-1 text-[10px] font-bold uppercase text-red-400 transition-colors hover:bg-red-500/30"
+                            >
+                              Encerrar Tempo
+                            </button>
+                          )}
+                          {!isPostmatch && currentPeriod === '2T' && !isMatchEnded && (
+                            <button
+                              type="button"
+                              onClick={handleEndMatchRealtime}
+                              data-testid="clock-end-match"
+                              className="w-full rounded-full border border-red-500 bg-red-500/20 px-2 py-1 text-[10px] font-bold uppercase text-red-400 transition-colors hover:bg-red-500/30"
+                            >
+                              Encerrar partida
+                            </button>
+                          )}
+                          {!isPostmatch && currentPeriod === '1T' && !isMatchEnded && (
+                            <button
+                              type="button"
+                              onClick={handleEndFirstHalfCollection}
+                              data-testid="clock-end-first-half"
+                              className="w-full rounded-full border border-amber-500/70 bg-amber-500/20 px-2 py-1.5 text-[10px] font-bold uppercase text-amber-200 transition-colors hover:bg-amber-500/30"
+                            >
+                              Encerrar coleta do 1º tempo
+                            </button>
+                          )}
+                          {!isPostmatch && currentPeriod === '2T' && !isMatchEnded && (
+                            <button
+                              type="button"
+                              onClick={handleReturnToFirstHalfCollection}
+                              data-testid="clock-return-first-half"
+                              className="w-full rounded-full border border-sky-500/70 bg-sky-500/20 px-2 py-1.5 text-[10px] font-bold uppercase text-sky-200 transition-colors hover:bg-sky-500/30"
+                            >
+                              Voltar ao 1º tempo
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Direita - Vertical: COM posse = PASSE/CHUTE; SEM posse = DESARME/DEFESA - tamanhos similares */}
@@ -6483,7 +6542,8 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         .slice(-10)
                         .reverse()
                         .flatMap((event) => {
-                          const zone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
+                          const lateralZone = event.result && lateralToZoneLabel[event.result] ? lateralToZoneLabel[event.result] : undefined;
+                          const zone = event.shotOriginZone ? shotOriginZoneLabel(event.shotOriginZone) : lateralZone;
                           const isPassWithReceiver = event.type === 'pass' && event.passToPlayerId && event.passToPlayerName;
                           if (isPassWithReceiver) {
                             return [
