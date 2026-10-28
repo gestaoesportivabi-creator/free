@@ -17,16 +17,36 @@ export function isLocalQuadraPreview(): boolean {
   return window.location.pathname.replace(/\/$/, '') === '/dev/quadra';
 }
 
+/** Partida de exemplo com finalizações nos dois tempos. O 2º tempo já está no lado invertido. */
 const SEED: ShotHeatSource[] = [
-  { type: 'shot', shotOriginZone: 'AREA_ADV' },
-  { type: 'shot', shotOriginZone: 'AREA_ADV' },
-  { type: 'shot', shotOriginZone: 'ENTRE_ADV' },
-  { type: 'shot', shotOriginZone: 'LAT_AT_DIR' },
-  { type: 'shot', shotOriginZone: 'FAIXA_AT' },
-  { type: 'save', shotOriginZone: 'AREA_DEF' },
-  { type: 'save', shotOriginZone: 'AREA_DEF' },
-  { type: 'save', shotOriginZone: 'ENTRE_DEF' },
-  { type: 'shot' },
+  { type: 'shot', period: '1T', shotOriginZone: 'AREA_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'AREA_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'AREA_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'AREA_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'ENTRE_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'ENTRE_ADV' },
+  { type: 'shot', period: '1T', shotOriginZone: 'LAT_AT_DIR' },
+  { type: 'shot', period: '1T', shotOriginZone: 'LAT_AT_DIR' },
+  { type: 'shot', period: '1T', shotOriginZone: 'LAT_AT_DIR' },
+  { type: 'shot', period: '1T', shotOriginZone: 'LAT_AT_ESQ' },
+  { type: 'shot', period: '1T', shotOriginZone: 'FAIXA_AT' },
+  { type: 'shot', period: '2T', shotOriginZone: 'AREA_DEF' },
+  { type: 'shot', period: '2T', shotOriginZone: 'AREA_DEF' },
+  { type: 'shot', period: '2T', shotOriginZone: 'AREA_DEF' },
+  { type: 'shot', period: '2T', shotOriginZone: 'ENTRE_DEF' },
+  { type: 'shot', period: '2T', shotOriginZone: 'LAT_DF_ESQ' },
+  { type: 'shot', period: '2T', shotOriginZone: 'LAT_DF_DIR' },
+  { type: 'shot', period: '2T', shotOriginZone: 'FAIXA_DF' },
+  { type: 'save', period: '1T', shotOriginZone: 'AREA_DEF' },
+  { type: 'save', period: '1T', shotOriginZone: 'AREA_DEF' },
+  { type: 'save', period: '1T', shotOriginZone: 'AREA_DEF' },
+  { type: 'save', period: '1T', shotOriginZone: 'ENTRE_DEF' },
+  { type: 'save', period: '1T', shotOriginZone: 'LAT_DF_ESQ' },
+  { type: 'save', period: '2T', shotOriginZone: 'AREA_ADV' },
+  { type: 'save', period: '2T', shotOriginZone: 'AREA_ADV' },
+  { type: 'save', period: '2T', shotOriginZone: 'LAT_AT_DIR' },
+  { type: 'shot', period: '1T' },
+  { type: 'pass', period: '2T', shotOriginZone: 'AREA_ADV' },
 ];
 
 type PendingAction = {
@@ -321,9 +341,9 @@ export function QuadraScoutPreview() {
           </div>
         </section>
 
-        <aside className="lg:w-[340px] lg:shrink-0 lg:overflow-y-auto">
+        <div className="lg:w-[400px] lg:shrink-0 lg:overflow-y-auto">
           <ShotHeatMap events={heatEvents} />
-        </aside>
+        </div>
       </div>
     </div>
   );

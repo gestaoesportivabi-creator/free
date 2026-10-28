@@ -50,9 +50,11 @@ A pausa fácil não muda o motor do relógio. Com o relógio pausado, os botões
 
 ## Pós-jogo
 
-Na Análise da Partida, o mapa de calor usa as mesmas regiões. Ciano é chute nosso. Rosa é chute sofrido (o evento de defesa). A intensidade segue a região com mais chutes. O centro mostra os totais.
+Na Análise da Partida, o mapa de finalizações usa a mesma quadra, com fundo azul escuro. Cada metade fica em quatro zonas. A cor vai de verde a amarelo, laranja e vermelho conforme a contagem. O número aparece em cada zona. Há uma versão contínua, no mesmo desenho, para comparar.
 
-Gol sofrido continua no fluxo de gol e não pinta a quadra. Passe, falta e os outros lances com região ficam na fita e não entram no mapa.
+O 1º tempo ataca para cima. No intervalo o lado inverte sozinho: no 2º tempo atacamos para baixo, e o lance entra na metade de ataque do desenho. Feitas e sofridas ficam separadas.
+
+Gol sofrido continua no fluxo de gol e não pinta a quadra. Passe, falta e os outros lances com região ficam na fita e não entram no mapa. Lance sem região também não entra.
 
 ## Banco
 

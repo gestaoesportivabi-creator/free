@@ -71,6 +71,8 @@ export type ShotHeatSource = {
   type?: string;
   action?: string;
   shotOriginZone?: unknown;
+  /** 1T ataca para cima. 2T inverte sozinho. Ausente: trata como 1º tempo. */
+  period?: '1T' | '2T' | string;
 };
 
 const COURT_ZONE_EVENT_TYPES = new Set([
