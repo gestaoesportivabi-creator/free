@@ -17,6 +17,7 @@ import {
   goalClockStringsFromMatch,
   summarizeGoalPeriods,
 } from '../utils/goalPeriodBuckets';
+import { applyDerivedShotsOnTarget, isShotOnTargetEvent } from '../utils/shotsOnTarget';
 
 interface GeneralScoutProps {
   config: SportConfig;
@@ -264,7 +265,7 @@ function buildMatchScopedByPeriod(match: MatchRecord, period: MatchHalf): MatchR
         teamStats.transitionErrors = (teamStats.transitionErrors ?? 0) + 1;
         ps.transitionErrors = (ps.transitionErrors ?? 0) + 1;
       }
-    } else if (action === 'shotOn') {
+    } else if (isShotOnTargetEvent(e)) {
       ps.shotsOnTarget += 1; teamStats.shotsOnTarget += 1;
     } else if (action === 'shotOff') {
       ps.shotsOffTarget += 1; teamStats.shotsOffTarget += 1;
@@ -445,7 +446,7 @@ export const GeneralScout: React.FC<GeneralScoutProps> = ({ config, matches: mat
     if (periodFilter === '1T' || periodFilter === '2T') {
       return filteredMatches.map((m) => buildMatchScopedByPeriod(m, periodFilter as MatchHalf));
     }
-    return filteredMatches;
+    return filteredMatches.map((m) => applyDerivedShotsOnTarget(m));
   }, [filteredMatches, periodFilter]);
 
   const athleteOptions = useMemo(() => {

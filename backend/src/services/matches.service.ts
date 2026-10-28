@@ -17,6 +17,7 @@ import { inferStatusFromData, statusToPersist } from './matchStatus';
 import { isUnionEventLogWrite } from './postMatchEventLogMerge';
 import { applyUnionEventLogWrite } from './eventLogTombstones';
 import { resolveGoalOriginColumns, resolveMinutesCardsRpe } from './matchStatPreserve';
+import { derivedShotsOnTarget } from './shotsOnTarget';
 import { resolveLineupOnlyUpdate } from './lineupOnlyUpdate';
 
 function normalizeCollectionPhase(v: unknown): 0 | 1 | 2 {
@@ -262,6 +263,7 @@ export const matchesService = {
 
     const teamPreserved = resolveMinutesCardsRpe({ stats: teamStats, matchLevel: data });
     const teamGoals = resolveGoalOriginColumns({ stats: teamStats, matchLevel: data });
+    const derivedShots = derivedShotsOnTarget(eventLog);
     await matchesRepository.upsertEstatisticasEquipe(jogo.id, {
       minutosJogados: teamPreserved.minutosJogados,
       gols: teamStats.goals ?? golsPro,
@@ -275,7 +277,7 @@ export const matchesService = {
       desarmesComBola: teamStats.tacklesWithBall ?? 0,
       desarmesContraAtaque: teamStats.tacklesCounterAttack ?? 0,
       desarmesSemBola: teamStats.tacklesWithoutBall ?? 0,
-      chutesNoGol: teamStats.shotsOnTarget ?? 0,
+      chutesNoGol: derivedShots ? derivedShots.team : (teamStats.shotsOnTarget ?? 0),
       chutesFora: teamStats.shotsOffTarget ?? 0,
       rpePartida: teamPreserved.rpePartida,
       golsMarcadosJogoAberto: teamGoals.golsMarcadosJogoAberto,
@@ -311,7 +313,7 @@ export const matchesService = {
         desarmesComBola: s.tacklesWithBall ?? 0,
         desarmesContraAtaque: s.tacklesCounterAttack ?? 0,
         desarmesSemBola: s.tacklesWithoutBall ?? 0,
-        chutesNoGol: s.shotsOnTarget ?? 0,
+        chutesNoGol: derivedShots ? (derivedShots.byPlayer[jogadorId.trim()] ?? 0) : (s.shotsOnTarget ?? 0),
         chutesFora: s.shotsOffTarget ?? 0,
         rpePartida: playerPreserved.rpePartida,
         golsMarcadosJogoAberto: playerGoals.golsMarcadosJogoAberto,
@@ -485,6 +487,7 @@ export const matchesService = {
         matchLevel: data,
         existing: existingTeam,
       });
+      const derivedShots = derivedShotsOnTarget(eventLog);
       await matchesRepository.upsertEstatisticasEquipe(id, {
         minutosJogados: teamPreserved.minutosJogados,
         gols: teamStats.goals ?? golsPro,
@@ -498,7 +501,7 @@ export const matchesService = {
         desarmesComBola: teamStats.tacklesWithBall ?? 0,
         desarmesContraAtaque: teamStats.tacklesCounterAttack ?? 0,
         desarmesSemBola: teamStats.tacklesWithoutBall ?? 0,
-        chutesNoGol: teamStats.shotsOnTarget ?? 0,
+        chutesNoGol: derivedShots ? derivedShots.team : (teamStats.shotsOnTarget ?? 0),
         chutesFora: teamStats.shotsOffTarget ?? 0,
         rpePartida: teamPreserved.rpePartida,
         golsMarcadosJogoAberto: teamGoals.golsMarcadosJogoAberto,
@@ -524,6 +527,7 @@ export const matchesService = {
       ]);
       const validJogadorIds = new Set(jogadoresTenant.map((j) => j.id));
       const existingByPlayer = new Map(existingPlayerStats.map((row) => [row.jogadorId, row]));
+      const derivedShots = derivedShotsOnTarget(data.postMatchEventLog);
       for (const [jogadorId, stats] of Object.entries(playerStats)) {
         const playerId = jogadorId.trim();
         if (!validJogadorIds.has(playerId)) continue;
@@ -550,7 +554,7 @@ export const matchesService = {
           desarmesComBola: s.tacklesWithBall ?? 0,
           desarmesContraAtaque: s.tacklesCounterAttack ?? 0,
           desarmesSemBola: s.tacklesWithoutBall ?? 0,
-          chutesNoGol: s.shotsOnTarget ?? 0,
+          chutesNoGol: derivedShots ? (derivedShots.byPlayer[playerId] ?? 0) : (s.shotsOnTarget ?? 0),
           chutesFora: s.shotsOffTarget ?? 0,
           rpePartida: playerPreserved.rpePartida,
           golsMarcadosJogoAberto: playerGoals.golsMarcadosJogoAberto,

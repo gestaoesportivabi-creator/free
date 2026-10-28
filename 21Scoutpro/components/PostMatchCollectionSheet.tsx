@@ -83,6 +83,7 @@ const ACTION_TIPO_SUBTIPO: Record<PostMatchAction, { tipo: string; subtipo: stri
   shotOn: { tipo: 'Finalização', subtipo: 'No gol' },
   shotOff: { tipo: 'Finalização', subtipo: 'Pra fora' },
   shotZonaChute: { tipo: 'Finalização', subtipo: 'Zona de chute' },
+  shotPost: { tipo: 'Finalização', subtipo: 'Trave' },
   falta: { tipo: 'Falta', subtipo: '' },
   tackleWithBall: { tipo: 'Desarme', subtipo: 'Com posse' },
   tackleWithoutBall: { tipo: 'Desarme', subtipo: 'Sem posse' },
@@ -313,6 +314,8 @@ export const PostMatchCollectionSheet: React.FC<PostMatchCollectionSheetProps> =
         case 'shotZonaChute':
           ps.shotsShootZone = (ps.shotsShootZone ?? 0) + 1;
           teamStats.shotsShootZone = (teamStats.shotsShootZone ?? 0) + 1;
+          break;
+        case 'shotPost':
           break;
         case 'falta':
           ps.fouls = (ps.fouls ?? 0) + 1;
