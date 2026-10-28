@@ -424,7 +424,7 @@ export const RealtimeScoutPage: React.FC<{
 
   if (isLoading) {
     return (
-      <div className="w-screen h-dvh min-h-dvh bg-black flex items-center justify-center">
+      <div className="scout-live-page w-full max-w-full h-dvh min-h-dvh overflow-x-hidden bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="text-[#00f0ff] text-2xl font-black uppercase mb-4">Carregando...</div>
           <div className="text-zinc-400 text-sm">Preparando interface de coleta</div>
@@ -435,7 +435,7 @@ export const RealtimeScoutPage: React.FC<{
 
   if (error || !scoutData || !match) {
     return (
-      <div className="w-screen h-dvh min-h-dvh bg-black flex items-center justify-center">
+      <div className="scout-live-page w-full max-w-full h-dvh min-h-dvh overflow-x-hidden bg-black flex items-center justify-center">
         <div className="text-center max-w-md mx-4">
           <div className="text-red-400 text-xl font-black uppercase mb-4">Erro</div>
           <div className="text-zinc-400 text-sm mb-6">{error || 'Dados da partida não encontrados'}</div>
@@ -452,7 +452,7 @@ export const RealtimeScoutPage: React.FC<{
   }
 
   return (
-    <div className="w-screen h-dvh min-h-dvh overflow-hidden bg-black">
+    <div className="scout-live-page w-full max-w-full h-dvh min-h-dvh overflow-hidden bg-black">
       <MatchScoutingWindow
         isOpen={true}
         onClose={handleClose}

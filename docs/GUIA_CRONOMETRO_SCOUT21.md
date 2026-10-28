@@ -9,6 +9,10 @@
 - `Segundo tempo`: a segunda etapa esta em andamento.
 - `Partida encerrada`: o cronometro chegou ao estado final e a coleta pode ser concluida.
 
+## Exibicao do tempo
+
+O cronometro, a posse e o tempo dos eventos aparecem sempre em `mm:ss`, com zero a esquerda: `00:00`, `05:07`. A funcao unica e `formatClockTime` (`21Scoutpro/utils/formatClockTime.ts`). Nao ha outro formatador de relogio na coleta.
+
 ## Acoes do cronometro
 
 ### Iniciar partida

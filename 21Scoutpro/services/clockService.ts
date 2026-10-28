@@ -1,3 +1,4 @@
+import { formatClockTime } from '../utils/formatClockTime';
 import {
   HALF_RELATIVE_LAST_SECOND_1T,
   HALF_RELATIVE_LAST_SECOND_2T,
@@ -67,13 +68,6 @@ const clampRealtimeSeconds = (seconds: number, period: MatchHalf): number =>
 const clampPostmatchSeconds = (seconds: number, firstHalfLocked: boolean): number => {
   const clamped = clamp(Math.floor(seconds), 0, MATCH_ABSOLUTE_MAX_SECONDS);
   return firstHalfLocked ? Math.max(REGULATION_HALF_SECONDS, clamped) : clamped;
-};
-
-const formatClockTime = (seconds: number): string => {
-  const clamped = Math.max(0, Math.floor(seconds));
-  const mins = Math.floor(clamped / 60);
-  const secs = clamped % 60;
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 };
 
 const resolvePostmatchPeriod = (seconds: number, firstHalfLocked: boolean): MatchHalf =>

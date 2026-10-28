@@ -39,6 +39,7 @@ import {
   trialExpiredMatchSaveMessage,
 } from '../utils/trialExpiredSave';
 import { REGULATION_HALF_SECONDS, getEventStamp, type ClockSnapshot } from '../services/clockService';
+import { formatClockTime } from '../utils/formatClockTime';
 import {
   buildPersistedClockSnapshot,
   mergeLineupClockSnapshot,
@@ -1879,11 +1880,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     saves: 0,
   });
 
-  const formatTimeToMMSS = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
+  const formatTimeToMMSS = (seconds: number): string => formatClockTime(seconds);
 
   const matchEventToPostMatchAction = (e: MatchEvent): PostMatchAction | null => {
     switch (e.type) {
@@ -4087,10 +4084,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   const useFullViewport = isRealtimePage || takeFullWidth;
   const leftOffset = sidebarRetracted ? 'left-16' : 'left-64';
   return (
-    <div className={`fixed z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-fade-in overflow-hidden p-0 ${
+    <div className={`scout-live-shell fixed z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center animate-fade-in overflow-hidden p-0 ${
       useFullViewport ? 'inset-0 h-dvh min-h-dvh' : `${leftOffset} top-0 right-0 bottom-0`
     }`}>
-      <div className="w-full h-full min-h-0 bg-black flex flex-col relative overflow-hidden">
+      <div className="scout-live-shell w-full h-full min-h-0 bg-black flex flex-col relative overflow-hidden">
         {topRightNotice && (
           <div
             role="alert"
@@ -4162,7 +4159,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
             </div>
 
             {/* Log no extremo esquerdo, Finalizar Coleta no extremo direito */}
-            <div className="flex items-center justify-between w-full">
+            <div className="scout-live-header-actions flex items-center justify-between w-full">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -4206,7 +4203,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                 </div>
                 <p
                   data-testid="collection-status"
-                  className={`max-w-[240px] text-right text-[10px] font-semibold ${
+                  className={`scout-live-status max-w-[240px] text-right text-[10px] font-semibold ${
                     (isPostmatch && matchEvents.length >= 1) || isMatchEnded
                       ? 'text-emerald-300'
                       : 'text-amber-200'
@@ -4549,12 +4546,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         ) : (
         <>
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}
-        <div className="flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
+        <div className="scout-live-body flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
           {/* Painel Esquerdo - Seleção de Jogador (ocupa toda a altura; lista + substituição preenchem o card) */}
           <div
             data-testid="player-selector-panel"
             data-tour-highlighted={isClockTourTargetHighlighted('player-selector-panel') ? 'true' : undefined}
-            className={`rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
+            className={`scout-live-players rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
             shouldHighlightPlayerPanel ? 'w-64 min-w-[10rem] max-w-[17rem] animate-pulse' : 'w-52 min-w-[7rem] max-w-[14rem]'
           } ${
             goalStep === 'time'
@@ -4661,7 +4658,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <p className="text-amber-100/80 text-[10px]">Toque nos números e confirme abaixo</p>
                     </div>
                   )}
-                <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
+                <div className="scout-live-player-grid grid grid-cols-2 gap-2 min-h-0 content-start">
                   {allSquadPlayers.map((player) => {
                   const pid = String(player.id).trim();
                   const isSelected = selectedPlayerId === pid;
@@ -4806,7 +4803,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           </div>
 
           {/* Painel Direito - Ações/Eventos (flex-1 + min-w-0 para responsivo) */}
-          <div className="flex-1 min-w-0 bg-black border-2 border-blue-500 rounded-lg p-2 flex flex-col min-h-0">
+          <div className="scout-live-board flex-1 min-w-0 bg-black border-2 border-blue-500 rounded-lg p-2 flex flex-col min-h-0">
             {goalStep === 'author' && !pendingGoalIsOpponent && (
               <div className="mb-2 p-2 bg-green-500/10 border border-green-500/50 rounded-lg">
                 <p className="text-green-300 text-xs font-bold text-center">Toque no autor do gol na lista à esquerda</p>
@@ -5631,7 +5628,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               ) : (
                 <div className="flex-[8] flex flex-col gap-1 min-h-0 flex-1 overflow-hidden">
                   {/* Sem posse | GOL | Com posse - três botões iguais em uma linha */}
-                  <div className="relative z-20 flex gap-1 shrink-0 min-h-[48px]">
+                  <div className="scout-live-poss relative z-20 flex gap-1 shrink-0 min-h-[48px]">
                     <button
                       onClick={() => setBallPossessionNow('sem')}
                       disabled={isBlockedByPenalty || isRealtimeActionLocked}
@@ -5690,11 +5687,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                   </div>
 
                   {/* Layout - FALTA/ESCANTEIO | TEMPO | PASSE/CHUTE - ocupa 80%, tamanhos similares, cronômetro maior */}
-                  <div className="flex-1 flex flex-col min-h-0 gap-1 overflow-hidden">
+                  <div className="scout-live-stack flex-1 flex flex-col min-h-0 gap-1 overflow-hidden">
                     {/* Linha central: FALTA/ESCANTEIO | TEMPO (maior) | PASSE/CHUTE */}
-                    <div className="flex-1 flex items-stretch justify-center gap-1 min-h-0 overflow-hidden">
+                    <div className="scout-live-center flex-1 flex items-stretch justify-center gap-1 min-h-0 overflow-hidden">
                       {/* Esquerda - FALTA e ESCANTEIO */}
-                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
+                      <div className="scout-live-side flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
                         <button
                           onClick={() => {
                             if (shouldDisableRealtimeEventButtons) return;
@@ -5734,7 +5731,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <div
                         data-testid="match-clock-panel"
                         data-tour-highlighted={isClockTourTargetHighlighted('match-clock-panel') ? 'true' : undefined}
-                        className={`relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden ${getClockTourTargetClass('match-clock-panel')}`}
+                        className={`scout-live-clock relative z-10 flex flex-col items-center justify-start gap-1 flex-[2] min-w-0 min-h-0 overflow-y-auto overflow-x-hidden ${getClockTourTargetClass('match-clock-panel')}`}
                       >
                         {isPostmatch ? (
                           <div className="w-full h-full min-h-[80px] py-2 px-3 rounded-lg border-2 border-zinc-600 bg-zinc-900/50 flex flex-col items-center justify-center gap-2">
@@ -5785,7 +5782,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               </span>
                             </div>
                             <div className="w-full rounded-lg border-2 border-zinc-700 bg-zinc-950/70 px-3 py-2 flex flex-col items-center justify-center gap-1.5 shrink-0">
-                              <div data-testid="clock-time" className="text-3xl sm:text-4xl font-black font-mono text-white tracking-tight tabular-nums leading-none">
+                              <div data-testid="clock-time" className="scout-live-clock-time text-3xl sm:text-4xl font-black font-mono text-white tracking-tight tabular-nums leading-none">
                                 {formatTime(matchTime)}
                               </div>
                               {clockPrimaryAction ? (
@@ -5883,7 +5880,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       </div>
 
                       {/* Direita - Vertical: COM posse = PASSE/CHUTE; SEM posse = DESARME/DEFESA - tamanhos similares */}
-                      <div className="flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
+                      <div className="scout-live-side flex flex-col gap-1 flex-1 min-w-0 min-h-0 overflow-hidden">
                         {ballPossessionNow === 'com' ? (
                           <>
                             <button
@@ -5968,7 +5965,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                     </div>
 
                     {/* Linha inferior: PÊNALTI, TIRO LIVRE, LATERAL, CARTÃO, CARTÃO ADVERSÁRIO */}
-                    <div className="relative z-20 grid grid-cols-5 gap-1 shrink-0 min-h-[56px] bg-black">
+                    <div className="scout-live-bottom relative z-20 grid grid-cols-5 gap-1 shrink-0 min-h-[56px] bg-black">
                       <button
                         onClick={() => {
                           if (shouldDisableRealtimeEventButtons) return;

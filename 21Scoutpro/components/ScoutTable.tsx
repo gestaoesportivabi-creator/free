@@ -13,6 +13,7 @@ import { MatchTypeModal, MatchType } from './MatchTypeModal';
 import { MatchScoutingWindow } from './MatchScoutingWindow';
 import { CollectionTypeSelector, CollectionType } from './CollectionTypeSelector';
 import { isPersistedServerMatchId } from '../utils/matchUpsert';
+import { formatClockMinutes, formatClockTime } from '../utils/formatClockTime';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { buildPrepSelectionSave, prepSelectionSignature, prepSquadIdsFromLineup, shouldPersistPrepSelection, type LineupDraftRecord } from '../utils/startingLineupDraft';
@@ -426,18 +427,9 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
     }, [timerRunning]);
 
     // Função para formatar tempo do cronômetro (MM:SS)
-    const formatTimerTime = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
+    const formatTimerTime = (seconds: number): string => formatClockTime(seconds);
 
-    // Função para formatar tempo do cronômetro para registro de eventos (MM:SS)
-    const formatEventTime = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
+    const formatEventTime = (seconds: number): string => formatClockTime(seconds);
 
     // Calcular resultado automaticamente baseado em gols feitos vs tomados
     useEffect(() => {
@@ -3500,10 +3492,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             {/* Formulário de Nova Partida / Input de Dados */}
                     {/* Cronômetro */}
                     <div className="bg-black rounded-3xl border border-zinc-900 p-6 shadow-lg mb-6">
-                        <div className="flex items-center justify-center gap-6">
+                        <div className="scout-live-timer flex items-center justify-center gap-6">
                             <div className="text-center">
                                 <p className="text-zinc-400 text-xs font-bold uppercase mb-2">Cronômetro</p>
-                                <p className="text-[#00f0ff] text-6xl font-black font-mono">{formatTimerTime(elapsedTime)}</p>
+                                <p className="scout-live-timer-face text-[#00f0ff] text-6xl font-black font-mono">{formatTimerTime(elapsedTime)}</p>
                             </div>
                             <div className="flex flex-col gap-2">
                                 <button
@@ -4057,11 +4049,7 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         };
                                         
                                         const totalTime = calculateTotal();
-                                        const formatTime = (minutes: number): string => {
-                                            const mins = Math.floor(minutes);
-                                            const secs = Math.round((minutes - mins) * 60);
-                                            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-                                        };
+                                        const formatTime = (minutes: number): string => formatClockMinutes(minutes);
 
                                         return (
                                             <tr key={tc.id} className="border-b border-zinc-900 hover:bg-zinc-950">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUpDown, Plus, Save, Trash2 } from 'lucide-react';
 import { PlayerTimeControl, PlayerTimeEntry, MatchRecord, Player } from '../types';
 import { timeControlsApi } from '../services/api';
+import { formatClockMinutes } from '../utils/formatClockTime';
 
 interface TimeControlProps {
     match: MatchRecord;
@@ -99,11 +100,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({ match, players, onSave
         return minutes + (seconds / 60);
     };
 
-    const formatMinutesToTime = (minutes: number): string => {
-        const mins = Math.floor(minutes);
-        const secs = Math.round((minutes - mins) * 60);
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    };
+    const formatMinutesToTime = (minutes: number): string => formatClockMinutes(minutes);
 
     // Função helper para calcular tempo total de um timeControl
     const calculateTotalTime = (tc: PlayerTimeControl): number => {
@@ -254,7 +251,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({ match, players, onSave
     return (
         <div className="space-y-6 animate-fade-in pb-12">
             <div className="bg-black p-6 rounded-3xl border border-zinc-900 shadow-lg">
-                <div className="flex items-center justify-between mb-6">
+                <div className="time-control-header flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
                             <ArrowUpDown className="text-[#10b981]" /> Entradas e Saídas
@@ -271,7 +268,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({ match, players, onSave
                     </button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="time-control-table overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1200px]">
                         <thead>
                             <tr className="bg-zinc-950 text-[10px] text-zinc-400 uppercase tracking-wider font-bold border-b border-zinc-800">
@@ -374,6 +371,78 @@ export const TimeControl: React.FC<TimeControlProps> = ({ match, players, onSave
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                <div className="time-control-cards hidden flex-col gap-3">
+                    {timeControlsWithTotals.map((tc) => {
+                        const player = players.find((item) => item.id === tc.playerId);
+                        return (
+                        <div key={tc.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="min-w-0">
+                                    <p className="text-white text-sm font-bold truncate">{player?.name || 'Atleta'}</p>
+                                    <p className="text-zinc-500 text-[11px]">{player?.position || '—'} · #{player?.jerseyNumber ?? '—'}</p>
+                                </div>
+                                <p className="text-white font-mono font-black text-lg tabular-nums shrink-0">{formatMinutesToTime(tc.totalTime)}</p>
+                            </div>
+                            <div className="space-y-2">
+                                {tc.timeEntries.map((entry, entryIdx) => (
+                                    <div key={entryIdx} className="grid grid-cols-2 gap-2">
+                                        <label className="text-[10px] font-bold uppercase text-zinc-500">
+                                            Entrada {entryIdx + 1}
+                                            <input
+                                                type="text"
+                                                placeholder="00:00"
+                                                value={entry?.entryTime || ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === '' || /^\d{0,2}:?\d{0,2}$/.test(value.replace(':', ''))) {
+                                                        updateTimeEntry(tc.playerId, entryIdx, 'entryTime', value);
+                                                    }
+                                                }}
+                                                className="mt-1 w-full min-h-[44px] bg-zinc-900 border border-zinc-700 rounded px-2 py-2 text-white text-sm font-mono outline-none focus:border-[#10b981]"
+                                            />
+                                        </label>
+                                        <label className="text-[10px] font-bold uppercase text-zinc-500">
+                                            Saída {entryIdx + 1}
+                                            <input
+                                                type="text"
+                                                placeholder="00:00"
+                                                value={entry?.exitTime || ''}
+                                                disabled={!entry?.entryTime}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === '' || /^\d{0,2}:?\d{0,2}$/.test(value.replace(':', ''))) {
+                                                        updateTimeEntry(tc.playerId, entryIdx, 'exitTime', value);
+                                                    }
+                                                }}
+                                                className="mt-1 w-full min-h-[44px] bg-zinc-900 border border-zinc-700 rounded px-2 py-2 text-white text-sm font-mono outline-none focus:border-[#10b981] disabled:opacity-40"
+                                            />
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => addTimeEntry(tc.playerId)}
+                                    className="min-h-[44px] flex-1 rounded-lg border border-[#10b981] text-[#10b981] text-xs font-bold uppercase"
+                                >
+                                    Entrada
+                                </button>
+                                {tc.timeEntries.length > 1 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => removeTimeEntry(tc.playerId, tc.timeEntries.length - 1)}
+                                        className="min-h-[44px] flex-1 rounded-lg border border-red-500 text-red-400 text-xs font-bold uppercase"
+                                    >
+                                        Remover
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>

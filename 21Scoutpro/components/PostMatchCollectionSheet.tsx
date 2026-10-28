@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Save, ArrowLeft, Calendar, Plus, Trash2 } from 'lucide-react';
 import { MatchRecord, MatchStats, Player, PostMatchAction, PostMatchEvent } from '../types';
 import { absoluteSecondsToStored, postMatchEventClockToAbsoluteSeconds } from '../utils/matchPeriod';
+import { formatClockTime } from '../utils/formatClockTime';
 import { readLineupDeletedEventIds } from '../utils/eventLogConflict';
 
 export interface PostMatchMatchContext {
@@ -148,9 +149,7 @@ function parseMMSSClockToSeconds(mmss: string): number {
 }
 
 function formatSecondsToMMSS(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = Math.floor(totalSeconds % 60);
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return formatClockTime(totalSeconds);
 }
 
 /**
