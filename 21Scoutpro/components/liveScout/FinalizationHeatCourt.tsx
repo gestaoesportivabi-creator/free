@@ -7,6 +7,7 @@ import {
   heatRampStep,
   type DensityPoint,
   type HeatCellCount,
+  type HeatRampStep,
 } from '../../utils/finalizationHeatMap';
 
 type FinalizationHeatCourtProps = {
@@ -15,6 +16,44 @@ type FinalizationHeatCourtProps = {
   points: readonly DensityPoint[];
   className?: string;
 };
+
+/** Número com halo para continuar legível sobre a linha branca e sobre a mancha. */
+function HeatCount({
+  x,
+  y,
+  n,
+  step,
+  size,
+}: {
+  x: number;
+  y: number;
+  n: number;
+  step: HeatRampStep;
+  size: number;
+}) {
+  const empty = step === 0;
+  const fill = empty ? 'rgba(248,250,252,0.92)' : heatRampInk(step);
+  const lightInk = empty || fill === '#f8fafc';
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fontSize={size}
+      fontWeight={800}
+      fontFamily="ui-sans-serif, system-ui, sans-serif"
+      fill={fill}
+      stroke={lightInk ? '#071422' : '#fff7ed'}
+      strokeWidth={lightInk ? 3.4 : 3.8}
+      paintOrder="stroke fill"
+      strokeLinejoin="round"
+      data-testid="heat-count"
+    >
+      {n}
+    </text>
+  );
+}
 
 export function FinalizationHeatCourt({ mode, counts, points, className = '' }: FinalizationHeatCourtProps) {
   const blurId = useId().replace(/:/g, '');
@@ -34,36 +73,23 @@ export function FinalizationHeatCourt({ mode, counts, points, className = '' }: 
 
         {mode === 'zones'
           ? HEAT_CELLS.map((cell) => {
-              const count = counts[cell.id];
-              const step = heatRampStep(count, max);
+              const step = heatRampStep(counts[cell.id], max);
               return (
-                <g key={cell.id}>
-                  <rect
-                    x={cell.x}
-                    y={cell.y}
-                    width={cell.w}
-                    height={cell.h}
-                    fill={heatRampFill(step)}
-                    opacity={step === 0 ? 0 : 0.82}
-                  />
-                  <text
-                    x={cell.x + cell.w / 2}
-                    y={cell.y + cell.h / 2}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={22}
-                    fontWeight={800}
-                    fill={step === 0 ? 'rgba(248,250,252,0.45)' : heatRampInk(step)}
-                  >
-                    {count}
-                  </text>
-                </g>
+                <rect
+                  key={cell.id}
+                  x={cell.x}
+                  y={cell.y}
+                  width={cell.w}
+                  height={cell.h}
+                  fill={heatRampFill(step)}
+                  opacity={step === 0 ? 0 : 0.82}
+                />
               );
             })
           : null}
 
         {mode === 'continuous' ? (
-          <g filter={`url(#${blurId})`}>
+          <g data-testid="heat-blobs" filter={`url(#${blurId})`}>
             {points.map((point) => {
               const step = heatRampStep(point.n, max);
               return (
@@ -80,7 +106,7 @@ export function FinalizationHeatCourt({ mode, counts, points, className = '' }: 
           </g>
         ) : null}
 
-        <g fill="none" stroke="#f4f7fb" strokeWidth={1.7} strokeLinejoin="miter" pointerEvents="none">
+        <g data-testid="heat-lines" fill="none" stroke="#f4f7fb" strokeWidth={1.7} strokeLinejoin="miter" pointerEvents="none">
           <rect x={0.9} y={0.9} width={198.2} height={398.2} />
           <line x1={0} y1={200} x2={200} y2={200} />
           <circle cx={100} cy={200} r={30} />
@@ -99,6 +125,29 @@ export function FinalizationHeatCourt({ mode, counts, points, className = '' }: 
         <g pointerEvents="none" fill="#dbeafe" fontSize={8} fontWeight={700} textAnchor="middle">
           <text x={100} y={-15}>ATAQUE</text>
           <text x={100} y={426}>NOSSA DEFESA</text>
+        </g>
+        <g data-testid="heat-counts" pointerEvents="none">
+          {mode === 'zones'
+            ? HEAT_CELLS.map((cell) => (
+                <HeatCount
+                  key={cell.id}
+                  x={cell.x + cell.w / 2}
+                  y={cell.y + cell.h / 2}
+                  n={counts[cell.id]}
+                  step={heatRampStep(counts[cell.id], max)}
+                  size={22}
+                />
+              ))
+            : points.map((point) => (
+                <HeatCount
+                  key={`${point.x}-${point.y}`}
+                  x={point.x}
+                  y={point.y}
+                  n={point.n}
+                  step={heatRampStep(point.n, max)}
+                  size={20}
+                />
+              ))}
         </g>
         <defs>
           <filter id={blurId} x="-20%" y="-20%" width="140%" height="140%">
