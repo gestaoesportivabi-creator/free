@@ -3973,6 +3973,94 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const liveShotZoneHeat = useMemo(() => aggregateShotZoneHeat(matchEvents), [matchEvents]);
 
+  const visibleCourtIds = lockerOpen
+    ? lockerDraftIds
+    : squadActiveIds.length > 0
+      ? squadActiveIds
+      : lineupPlayers;
+  const visibleCourtIdSet = new Set(visibleCourtIds.map((id) => String(id).trim()));
+  const courtSquad = visibleCourtIds
+    .map((id) => allSquadPlayers.find((player) => String(player.id).trim() === String(id).trim()))
+    .filter((player): player is Player => player != null);
+  const benchSquad = allSquadPlayers.filter((player) => !visibleCourtIdSet.has(String(player.id).trim()));
+
+  const renderSquadButton = (player: Player, place: 'court' | 'bench') => {
+    const pid = String(player.id).trim();
+    const isSelected = selectedPlayerId === pid;
+    const isGoalkeeper = pid === currentGoalkeeperId;
+    const isGk = player.position === 'Goleiro' || isGoalkeeper;
+    const displayNum = player.jerseyNumber ?? '?';
+    const labelName = player.nickname?.trim() || player.name || '';
+    const isInactiveLocked =
+      !isPostmatch &&
+      !lockerOpen &&
+      isMatchStarted &&
+      (squadActiveIds.length === 0 || !squadActiveIds.includes(pid));
+    const isExpelled = expelledPlayerIds.includes(pid);
+    const inLockerSelection = lockerOpen ? lockerDraftIds.includes(pid) : squadActiveIds.includes(pid);
+    return (
+      <button
+        key={player.id}
+        type="button"
+        title={isGk ? `${labelName} — Goleiro` : labelName}
+        data-testid={`player-button-${pid}`}
+        data-player-name={labelName}
+        data-player-jersey={String(displayNum)}
+        data-player-place={place}
+        onClick={() => {
+          if (lockerOpen) {
+            if (isExpelled) return;
+            toggleLockerDraft(pid);
+            return;
+          }
+          if (isInactiveLocked || isExpelled) return;
+          handleLateralPlayerClick(pid);
+        }}
+        disabled={
+          (!isMatchStarted && !goalStep && !lockerOpen)
+          || (lockerOpen ? isExpelled : isInactiveLocked || isExpelled)
+        }
+        className={`relative flex shrink-0 items-center justify-center font-black transition-all ${
+          place === 'court'
+            ? 'h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-2xl text-base lg:h-12 lg:w-full lg:flex-none lg:flex-row lg:justify-start lg:gap-2 lg:rounded-xl lg:px-2 lg:text-sm'
+            : 'h-10 w-10 rounded-full text-sm lg:h-11 lg:w-[calc(50%-0.25rem)]'
+        } ${
+          !isMatchStarted && !lockerOpen
+            ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
+            : isExpelled
+            ? 'bg-red-500/15 border-2 border-red-500 text-red-300 cursor-not-allowed opacity-85'
+            : lockerOpen
+            ? inLockerSelection
+              ? 'bg-emerald-500/30 border-2 border-emerald-400 text-white shadow-[0_0_10px_rgba(52,211,153,0.35)]'
+              : 'bg-zinc-800/50 border-2 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-800'
+            : isInactiveLocked
+            ? 'bg-zinc-800/90 border-2 border-zinc-700 text-zinc-500 cursor-not-allowed opacity-55'
+            : isSelected
+            ? 'bg-[#00f0ff]/25 border-2 border-[#00f0ff] text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+            : pendingPassEventId && pid !== pendingPassSenderId
+            ? 'bg-yellow-500/25 border-2 border-yellow-500 text-yellow-100 hover:bg-yellow-500/35'
+            : place === 'court'
+            ? 'bg-green-500/15 border-2 border-green-500/70 text-white hover:bg-green-500/25 hover:border-green-400'
+            : 'bg-zinc-900 border-2 border-zinc-600 text-zinc-200 hover:border-zinc-400'
+        }`}
+      >
+        <span className="tabular-nums leading-none">{displayNum}</span>
+        {place === 'court' && (
+          <span className="max-w-[3.2rem] truncate text-[9px] font-bold leading-none normal-case lg:max-w-none lg:text-left lg:text-[11px]">{labelName}</span>
+        )}
+        {isGk && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
+        )}
+        {isExpelled && (
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-red-600/90 px-1 py-px text-[7px] font-bold uppercase text-white">expulso</span>
+        )}
+        {pendingPassEventId && pid !== pendingPassSenderId && !lockerOpen && !isInactiveLocked && (
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
+        )}
+      </button>
+    );
+  };
+
   if (!isOpen) return null;
 
   const canEndTime = matchTime >= REGULATION_HALF_SECONDS;
@@ -4601,13 +4689,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         ) : (
         <>
         {/* Corpo Principal - Painéis Esquerdo e Direito (responsivo: celular horizontal mantém proporções) */}
-        <div className="flex-1 flex gap-2 p-2 overflow-hidden min-h-0 min-w-0">
-          {/* Painel Esquerdo - Seleção de Jogador (ocupa toda a altura; lista + substituição preenchem o card) */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-2 lg:flex-row">
+          {/* Atletas sempre na tela: 5 em quadra e o banco. No celular ficam acima da quadra; no desktop, ao lado. */}
           <div
             data-testid="player-selector-panel"
             data-tour-highlighted={isClockTourTargetHighlighted('player-selector-panel') ? 'true' : undefined}
-            className={`rounded-lg p-2 flex flex-col border-2 shrink-0 min-h-0 bg-black transition-all duration-300 ${
-            shouldHighlightPlayerPanel ? 'w-64 min-w-[10rem] max-w-[17rem] animate-pulse' : 'w-52 min-w-[7rem] max-w-[14rem]'
+            className={`flex shrink-0 flex-col rounded-lg border-2 bg-black p-2 transition-all duration-300 lg:min-h-0 lg:w-60 ${
+            shouldHighlightPlayerPanel ? 'animate-pulse' : ''
           } ${
             goalStep === 'time'
               ? 'border-cyan-500/70'
@@ -4685,7 +4773,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
               <p className="text-yellow-300 text-[10px] font-bold uppercase text-center mb-2 shrink-0">Toque no recebedor do passe</p>
             )}
 
-            <div data-testid="player-selector" className="flex-1 min-h-0 overflow-y-auto space-y-1">
+            <div data-testid="player-selector" className="flex flex-col gap-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
               {!isMatchStarted ? (
                 <div className="bg-yellow-500/20 border-2 border-yellow-500 rounded-lg p-2 text-center">
                   <p className="text-yellow-400 text-xs font-bold">Complete a escalação para iniciar</p>
@@ -4713,73 +4801,21 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                       <p className="text-amber-100/80 text-[10px]">Toque nos números e confirme abaixo</p>
                     </div>
                   )}
-                <div className="grid grid-cols-2 gap-2 min-h-0 content-start">
-                  {allSquadPlayers.map((player) => {
-                  const pid = String(player.id).trim();
-                  const isSelected = selectedPlayerId === pid;
-                  const isGoalkeeper = pid === currentGoalkeeperId;
-                  const isGk = player.position === 'Goleiro' || isGoalkeeper;
-                  const displayNum = player.jerseyNumber ?? '?';
-                  const labelName = player.nickname?.trim() || player.name || '';
-                  const isInactiveLocked =
-                    !isPostmatch &&
-                    !lockerOpen &&
-                    isMatchStarted &&
-                    (squadActiveIds.length === 0 || !squadActiveIds.includes(pid));
-                  const isExpelled = expelledPlayerIds.includes(pid);
-                  const inLockerSelection = lockerOpen ? lockerDraftIds.includes(pid) : squadActiveIds.includes(pid);
-                  return (
-                    <button
-                      key={player.id}
-                      type="button"
-                      title={isGk ? `${labelName} — Goleiro` : labelName}
-                      data-testid={`player-button-${pid}`}
-                      data-player-name={labelName}
-                      data-player-jersey={String(displayNum)}
-                      onClick={() => {
-                        if (lockerOpen) {
-                          if (isExpelled) return;
-                          toggleLockerDraft(pid);
-                          return;
-                        }
-                        if (isInactiveLocked || isExpelled) return;
-                        handleLateralPlayerClick(pid);
-                      }}
-                      disabled={
-                        (!isMatchStarted && !goalStep && !lockerOpen)
-                        || (lockerOpen ? isExpelled : isInactiveLocked || isExpelled)
-                      }
-                      className={`relative flex aspect-square w-full max-h-[2.6rem] items-center justify-center rounded-full text-base font-black transition-all ${
-                        !isMatchStarted && !lockerOpen
-                          ? 'bg-zinc-800 border-2 border-zinc-700 text-zinc-600 cursor-not-allowed'
-                          : isExpelled
-                          ? 'bg-red-500/15 border-2 border-red-500 text-red-300 cursor-not-allowed opacity-85'
-                          : lockerOpen
-                          ? inLockerSelection
-                            ? 'bg-emerald-500/30 border-2 border-emerald-400 text-white shadow-[0_0_10px_rgba(52,211,153,0.35)]'
-                            : 'bg-zinc-800/50 border-2 border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:bg-zinc-800'
-                          : isInactiveLocked
-                          ? 'bg-zinc-800/90 border-2 border-zinc-700 text-zinc-500 cursor-not-allowed opacity-55'
-                          : isSelected
-                          ? 'bg-[#00f0ff]/25 border-2 border-[#00f0ff] text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
-                          : pendingPassEventId && pid !== pendingPassSenderId
-                          ? 'bg-yellow-500/25 border-2 border-yellow-500 text-yellow-100 hover:bg-yellow-500/35'
-                          : 'bg-green-500/15 border-2 border-green-500/70 text-white hover:bg-green-500/25 hover:border-green-400'
-                      }`}
-                    >
-                      <span className="tabular-nums leading-none">{displayNum}</span>
-                      {isGk && (
-                        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
-                      )}
-                      {isExpelled && (
-                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-red-600/90 px-1 py-px text-[7px] font-bold uppercase text-white">expulso</span>
-                      )}
-                      {pendingPassEventId && pid !== pendingPassSenderId && !lockerOpen && !isInactiveLocked && (
-                        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-yellow-600/90 px-1 py-px text-[7px] font-bold uppercase text-black">passe</span>
-                      )}
-                    </button>
-                  );
-                  })}
+                <div data-testid="court-athletes" className="shrink-0">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">Em quadra · {courtSquad.length}/5</p>
+                  <div className="flex gap-1.5 lg:flex-col">
+                    {courtSquad.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500">Nenhum atleta em quadra</p>
+                    ) : courtSquad.map((player) => renderSquadButton(player, 'court'))}
+                  </div>
+                </div>
+                <div data-testid="bench-athletes" className="shrink-0">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Banco · {benchSquad.length}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {benchSquad.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500">Banco vazio</p>
+                    ) : benchSquad.map((player) => renderSquadButton(player, 'bench'))}
+                  </div>
                 </div>
                 </>
               ) : (

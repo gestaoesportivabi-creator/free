@@ -1,6 +1,6 @@
 # Quadra do scout ao vivo
 
-A quadra fica no centro da coleta. Os botões de ação ficam em volta. O cronômetro fica na linha do meio, semitransparente. Só o botão de pausa recebe o toque; o resto do relógio deixa a região do centro clicável.
+A quadra fica no centro da coleta. Os botões de ação ficam em volta. Os cinco atletas em quadra e o banco ficam sempre na mesma tela, em dois grupos, sem modal: no celular, acima da quadra; no desktop, na coluna ao lado. O cronômetro fica na linha do meio, semitransparente. Só o botão de pausa recebe o toque; o resto do relógio deixa a região do centro clicável.
 
 ## Quadra
 

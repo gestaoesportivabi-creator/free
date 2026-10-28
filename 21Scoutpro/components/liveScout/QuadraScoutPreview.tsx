@@ -64,6 +64,25 @@ const TACKLE_RESULTS = [
   { id: 'counter', label: 'Contra-ataque' },
 ] as const;
 
+type PreviewAthlete = { id: string; number: number; name: string; gk?: boolean };
+
+const PREVIEW_COURT: PreviewAthlete[] = [
+  { id: '1', number: 1, name: 'Dudu', gk: true },
+  { id: '7', number: 7, name: 'Bia' },
+  { id: '10', number: 10, name: 'Léo' },
+  { id: '8', number: 8, name: 'Nina' },
+  { id: '4', number: 4, name: 'Caio' },
+];
+
+const PREVIEW_BENCH: PreviewAthlete[] = [
+  { id: '2', number: 2, name: 'Rafa' },
+  { id: '3', number: 3, name: 'Mel' },
+  { id: '5', number: 5, name: 'Ivo' },
+  { id: '6', number: 6, name: 'Ana' },
+  { id: '9', number: 9, name: 'Tom' },
+  { id: '11', number: 11, name: 'Lia' },
+];
+
 /**
  * Harness visual em `vite` (`/dev/quadra`). A coleta real embute `LiveScoutCourt`
  * no miolo do `MatchScoutingWindow`. Esta tela não grava partida.
@@ -75,6 +94,7 @@ export function QuadraScoutPreview() {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [last, setLast] = useState<string | null>(null);
   const [events, setEvents] = useState<ShotHeatSource[]>([]);
+  const [athleteId, setAthleteId] = useState<string | null>(null);
 
   const heatEvents = useMemo(() => [...SEED, ...events], [events]);
   const liveHeat = useMemo(() => aggregateShotZoneHeat(events), [events]);
@@ -82,10 +102,11 @@ export function QuadraScoutPreview() {
   const finish = (action: string, actionLabel: string, resultLabel: string | null) => {
     const located = eventTypeUsesCourtZone(action);
     const place = located && zone ? shotOriginZoneLabel(zone) : 'sem região';
+    const athlete = [...PREVIEW_COURT, ...PREVIEW_BENCH].find((item) => item.id === athleteId);
     if ((action === 'shot' || action === 'save') && zone) {
       setEvents((prev) => [...prev, { type: action, shotOriginZone: zone }]);
     }
-    setLast(`${actionLabel}${resultLabel ? ` · ${resultLabel}` : ''} · ${place}`);
+    setLast(`${actionLabel}${resultLabel ? ` · ${resultLabel}` : ''} · ${place}${athlete ? ` · #${athlete.number} ${athlete.name}` : ''}`);
     setZone(null);
     setPending(null);
   };
@@ -109,9 +130,40 @@ export function QuadraScoutPreview() {
         : 'border-white/15 bg-zinc-950 text-zinc-200 hover:border-white/40'
     }`;
 
+  const athleteButton = (athlete: PreviewAthlete, place: 'court' | 'bench') => {
+    const selected = athleteId === athlete.id;
+    return (
+      <button
+        key={athlete.id}
+        type="button"
+        data-testid={`preview-athlete-${athlete.id}`}
+        onClick={() => setAthleteId((current) => (current === athlete.id ? null : athlete.id))}
+        className={`relative flex shrink-0 items-center justify-center font-black ${
+          place === 'court'
+            ? 'h-14 min-w-0 flex-1 flex-col gap-0.5 rounded-2xl text-base lg:h-12 lg:w-full lg:flex-none lg:flex-row lg:justify-start lg:gap-2 lg:rounded-xl lg:px-2 lg:text-sm'
+            : 'h-10 w-10 rounded-full text-sm'
+        } ${
+          selected
+            ? 'border-2 border-[#00f0ff] bg-[#00f0ff]/25 text-white shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+            : place === 'court'
+              ? 'border-2 border-green-500/70 bg-green-500/15 text-white'
+              : 'border-2 border-zinc-600 bg-zinc-900 text-zinc-200'
+        }`}
+      >
+        <span className="tabular-nums leading-none">{athlete.number}</span>
+        {place === 'court' && (
+          <span className="max-w-[3.2rem] truncate text-[9px] font-bold leading-none normal-case lg:max-w-none lg:text-left lg:text-[11px]">{athlete.name}</span>
+        )}
+        {athlete.gk && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-[9px] ring-1 ring-amber-500/80" aria-hidden>🥅</span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-white lg:h-dvh lg:overflow-hidden">
-      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 px-3 py-3 lg:h-full lg:flex-row lg:items-stretch lg:gap-5 lg:px-6 lg:py-4">
+      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-3 px-3 py-3 lg:h-full lg:flex-row lg:items-stretch lg:gap-4 lg:px-5 lg:py-4">
         <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <header className="flex items-end justify-between gap-3">
             <div>
@@ -122,7 +174,21 @@ export function QuadraScoutPreview() {
               Região primeiro. O evento vem em seguida.
             </p>
           </header>
-
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-stretch">
+          <aside
+            data-testid="preview-athletes"
+            className="shrink-0 rounded-2xl border border-zinc-800 bg-black p-2 lg:flex lg:w-56 lg:flex-col"
+          >
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-emerald-300">Em quadra · 5/5</p>
+            <div className="flex gap-1.5 lg:flex-col">
+              {PREVIEW_COURT.map((athlete) => athleteButton(athlete, 'court'))}
+            </div>
+            <p className="mb-1 mt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Banco · {PREVIEW_BENCH.length}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {PREVIEW_BENCH.map((athlete) => athleteButton(athlete, 'bench'))}
+            </div>
+          </aside>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div className="flex gap-1">
             <button type="button" className={stand(possession === 'sem')} onClick={() => setPossession('sem')}>
               Sem posse
@@ -139,7 +205,7 @@ export function QuadraScoutPreview() {
             </button>
           </div>
 
-          <div className="flex h-[min(58dvh,520px)] min-h-[360px] gap-1 lg:h-auto lg:min-h-0 lg:flex-1">
+          <div className="flex h-[min(42dvh,460px)] min-h-[260px] gap-1 lg:h-auto lg:min-h-0 lg:flex-1">
             <div className="flex w-[4.6rem] flex-col gap-1 sm:w-28 lg:w-32 lg:justify-center lg:gap-3">
               <button type="button" className={stand(pending?.action === 'foul')} onClick={() => chooseAction('foul', 'Falta', FOUL_RESULTS)}>
                 Falta
@@ -251,9 +317,11 @@ export function QuadraScoutPreview() {
           >
             {last ? `Último lance: ${last}` : 'Nenhum lance nesta tela'}
           </p>
+          </div>
+          </div>
         </section>
 
-        <aside className="lg:w-[400px] lg:shrink-0 lg:overflow-y-auto">
+        <aside className="lg:w-[340px] lg:shrink-0 lg:overflow-y-auto">
           <ShotHeatMap events={heatEvents} />
         </aside>
       </div>
