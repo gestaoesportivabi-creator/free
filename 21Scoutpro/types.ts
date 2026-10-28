@@ -207,7 +207,7 @@ export interface PostMatchEvent {
   /** Zona da quadra (AT ESQ, AT DIR, DF ESQ, DF DIR) — lateral e escanteio */
   zone?: 'AT_ESQ' | 'AT_DIR' | 'DF_ESQ' | 'DF_DIR';
   /**
-   * Origem do chute nas 8 zonas da quadra ao vivo.
+   * Região da quadra no lance (área, 10 m, faixa, lateral, centro).
    * Não reutiliza `zone`. Ausente em lances antigos.
    */
   shotOriginZone?: ShotOriginZone;

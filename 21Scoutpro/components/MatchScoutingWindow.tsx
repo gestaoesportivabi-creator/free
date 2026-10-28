@@ -60,9 +60,10 @@ import {
   type ClockTourTargetId,
 } from '../content/clockProductTour';
 import { ClockHelpPanel } from './guide/ClockHelpPanel';
-import { LiveScoutCourt, type ShotZonePick } from './liveScout/LiveScoutCourt';
+import { LiveScoutCourt } from './liveScout/LiveScoutCourt';
 import {
   aggregateShotZoneHeat,
+  eventTypeUsesCourtZone,
   readShotOriginZone,
   shotOriginZoneLabel,
   type ShotOriginZone,
@@ -235,7 +236,7 @@ interface MatchEvent {
   goalPeriod?: number;
   /** Passe errado que gerou transição (para gráfico Erros Críticos) */
   wrongPassGeneratedTransition?: boolean;
-  /** Origem do chute nas 8 zonas. Independente de `result` (lateral/escanteio). */
+  /** Região da quadra. Independente de `result` (lateral/escanteio). Ausente em lances antigos. */
   shotOriginZone?: ShotOriginZone;
 }
 
@@ -422,7 +423,7 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
     }
     if (pe.wrongPassGeneratedTransition !== undefined) event.wrongPassGeneratedTransition = pe.wrongPassGeneratedTransition;
     const shotOrigin = readShotOriginZone(pe.shotOriginZone);
-    if (shotOrigin && (type === 'shot' || type === 'save')) {
+    if (shotOrigin && eventTypeUsesCourtZone(type)) {
       event.shotOriginZone = shotOrigin;
     }
 
@@ -646,7 +647,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   }, [isOpen]);
 
   // Novo fluxo: Ação → Detalhes (popup) → Jogador (lista lateral) → Tempo (popup se necessário)
-  type ActionFlowStep = 'details' | 'zone' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
+  type ActionFlowStep = 'details' | 'wrongPassTransition' | 'player' | 'goalkeeper' | 'time' | null;
   const [actionFlow, setActionFlow] = useState<{
     step: ActionFlowStep;
     action: string | null;
@@ -661,6 +662,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     /** Passe errado: true = gerou transição, false = não gerou */
     wrongPassTransition?: boolean;
   } | null>(null);
+  /** Região escolhida na quadra antes do evento. Some quando o lance é gravado. */
+  const [courtZone, setCourtZone] = useState<ShotOriginZone | null>(null);
+  const recordedEventCount = useRef(matchEvents.length);
+  useEffect(() => {
+    const previous = recordedEventCount.current;
+    recordedEventCount.current = matchEvents.length;
+    if (matchEvents.length === previous + 1) setCourtZone(null);
+  }, [matchEvents.length]);
   const [showPenaltyKickerSelection, setShowPenaltyKickerSelection] = useState<boolean>(false);
   const [showPenaltyResult, setShowPenaltyResult] = useState<boolean>(false);
   const [pendingPenaltyTeam, setPendingPenaltyTeam] = useState<'for' | 'against' | null>(null);
@@ -1051,34 +1060,22 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   const startActionFlow = (action: string, preSelectedPlayerId?: string | null) => {
     const cleanSelectedPlayerId = preSelectedPlayerId != null ? String(preSelectedPlayerId).trim() : '';
+    const shotOriginZone = eventTypeUsesCourtZone(action) ? courtZone ?? undefined : undefined;
     const flow = {
       step: needsDetails(action) ? 'details' as const : 'player' as const,
       action,
       details: null as string | null,
       selectedPlayerId: cleanSelectedPlayerId.length > 0 ? cleanSelectedPlayerId : undefined,
+      shotOriginZone,
     };
 
-    // Chute nosso e chute sofrido: a origem é um toque na quadra, antes do resultado.
-    if (action === 'shot' || action === 'save') {
-      setActionFlow({ ...flow, step: 'zone' });
-      return;
-    }
-
-    // Escanteio e Lateral: após detalhes, jogador só pela lista à esquerda
+    // Escanteio, lateral e bloqueio: jogador só pela lista à esquerda, quando já há um escolhido.
     if ((action === 'lateral' || action === 'corner' || action === 'block') && flow.selectedPlayerId) {
       executeActionFlow({ ...flow, step: 'details' as const }, flow.selectedPlayerId);
       return;
     }
 
     setActionFlow(flow as any);
-  };
-
-  const handlePickShotZone = (zone: ShotOriginZone) => {
-    setActionFlow((prev) => {
-      if (!prev || prev.step !== 'zone') return prev;
-      if (prev.action !== 'shot' && prev.action !== 'save') return prev;
-      return { ...prev, step: 'details', shotOriginZone: zone };
-    });
   };
 
   const advanceActionFlowToPlayer = (details: string | null, extra?: { cardType?: 'yellow' | 'secondYellow' | 'red'; cardTeam?: 'for' | 'against'; foulTeam?: 'for' | 'against'; zone?: LateralResult; wrongPassTransition?: boolean }) => {
@@ -1190,17 +1187,17 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         case 'pass': {
           const isWrong = flow.details === 'wrong';
           const generatedTransition = isWrong ? (flow.wrongPassTransition === true) : undefined;
-          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, rawT, periodOverride, generatedTransition);
+          handleRegisterPass(flow.details as 'correct' | 'wrong', playerId, rawT, periodOverride, generatedTransition, flow.shotOriginZone);
           break;
         }
         case 'shot':
           handleRegisterShot(flow.details as 'inside' | 'outside' | 'post' | 'blocked', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'foul':
-          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride);
+          handleRegisterFoul(flow.foulTeam ?? 'for', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'tackle':
-          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride);
+          handleRegisterTackle(flow.details as 'withBall' | 'withoutBall' | 'counter', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'card':
           handleRegisterCard(flow.cardType ?? 'yellow', playerId, rawT, periodOverride, flow.cardTeam ?? 'for');
@@ -1209,13 +1206,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           handleRegisterSave(flow.details as 'simple' | 'hard' | 'outside', playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'lateral':
-          handleRegisterLateral(flow.zone, playerId, rawT, periodOverride);
+          handleRegisterLateral(flow.zone, playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'corner':
-          handleRegisterCorner(flow.zone, playerId, rawT, periodOverride);
+          handleRegisterCorner(flow.zone, playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         case 'block':
-          handleRegisterBlock(playerId, rawT, periodOverride);
+          handleRegisterBlock(playerId, rawT, periodOverride, flow.shotOriginZone);
           break;
         default:
           break;
@@ -2152,10 +2149,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       }
       if (e.freeKickWall) postEvent.freeKickWall = e.freeKickWall;
       const shotOrigin = readShotOriginZone(e.shotOriginZone);
-      if (
-        shotOrigin &&
-        (action === 'shotOn' || action === 'shotOff' || action === 'shotZonaChute' || action === 'save')
-      ) {
+      if (shotOrigin && eventTypeUsesCourtZone(e.type)) {
         postEvent.shotOriginZone = shotOrigin;
       }
       postMatchEventLog.push(postEvent);
@@ -2927,6 +2921,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     
     // Ações com fluxo próprio (GOL, PÊNALTI, TIRO LIVRE) — agora também no padrão jogador-primeiro
     if (action === 'goal' || action === 'penalty' || action === 'freeKick') {
+      setCourtZone(null);
       if (!hasSelectedPlayer && action !== 'goal') {
         alert('Selecione um atleta primeiro.');
         return;
@@ -2945,6 +2940,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       return;
     }
     if (action === 'cardAgainst') {
+      setCourtZone(null);
       setActionFlow({
         step: 'details',
         action: 'card',
@@ -2963,7 +2959,12 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
     }
     if (ballPossessionNow === 'sem' && action === 'block') {
       applyPreActionClockBehavior('block');
-      handleRegisterBlock(hasSelectedPlayer ? selectedPlayerId : TEAM_EVENT_FAKE_PLAYER_ID);
+      handleRegisterBlock(
+        hasSelectedPlayer ? selectedPlayerId : TEAM_EVENT_FAKE_PLAYER_ID,
+        undefined,
+        undefined,
+        courtZone ?? undefined
+      );
       setSelectedAction(action);
       return;
     }
@@ -2971,13 +2972,14 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       alert('Selecione um atleta primeiro.');
       return;
     }
+    if (!eventTypeUsesCourtZone(action)) setCourtZone(null);
     applyPreActionClockBehavior(action as MatchEvent['type']);
     startActionFlow(action, selectedPlayerId);
     setSelectedAction(action);
   };
   
   // Registrar desarme
-  const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterTackle = (result: 'withBall' | 'withoutBall' | 'counter', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const pid =
       playerIdOverride ??
       selectedPlayerId ??
@@ -3002,6 +3004,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       result,
       tipo,
       subtipo,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3072,7 +3075,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
   
   // Registrar bloqueio
-  const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterBlock = (playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const pid =
       playerIdOverride ??
       selectedPlayerId ??
@@ -3096,6 +3099,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       period: evtPeriod,
       tipo,
       subtipo,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3108,7 +3112,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   // Registrar falta: Nosso ou Adversário. A conta é por equipe e por período.
   // Da 6ª falta acumulada de um lado, o outro cobra tiro livre direto sem barreira.
-  const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterFoul = (team: 'for' | 'against', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const rawPlayerId =
       team === 'against'
         ? (playerIdOverride ?? OPPONENT_FAKE_PLAYER_ID)
@@ -3132,6 +3136,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       tipo: 'Falta',
       subtipo: subtipoText,
       foulTeam: team,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
 
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3146,7 +3151,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar resultado de passe (wrongPassGeneratedTransition: true = gerou transição; false = não gerou; undefined = passe certo)
-  const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', wrongPassGeneratedTransition?: boolean) => {
+  const handleRegisterPass = (result: 'correct' | 'wrong', playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', wrongPassGeneratedTransition?: boolean, shotOriginZone?: ShotOriginZone) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
@@ -3168,6 +3173,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       tipo,
       subtipo,
       ...(result === 'wrong' && { wrongPassGeneratedTransition: wrongPassGeneratedTransition === true }),
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3256,7 +3262,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
   
   // Registrar escanteio (zone opcional: Defesa/Ataque - Esquerda/Direita)
-  const handleRegisterCorner = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterCorner = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
@@ -3275,6 +3281,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       ...(zone && { result: zone }),
       tipo,
       subtipo,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
     
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3283,7 +3290,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
   };
 
   // Registrar lateral (cronômetro já parado ao clicar em LATERAL); zona opcional (preenchida em outro momento)
-  const handleRegisterLateral = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T') => {
+  const handleRegisterLateral = (zone?: LateralResult, playerIdOverride?: string, timeOverride?: number, periodOverride?: '1T' | '2T', shotOriginZone?: ShotOriginZone) => {
     const pid = playerIdOverride ?? selectedPlayerId;
     if (!pid) return;
 
@@ -3302,6 +3309,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       ...(zone && { result: zone }),
       tipo,
       subtipo: subtipoText,
+      ...(shotOriginZone ? { shotOriginZone } : {}),
     };
 
     setMatchEvents(prev => [...prev, newEvent]);
@@ -3967,15 +3975,6 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
 
   if (!isOpen) return null;
 
-  const shotZonePick: ShotZonePick =
-    actionFlow?.step === 'zone'
-      ? actionFlow.action === 'save'
-        ? 'conceded'
-        : actionFlow.action === 'shot'
-          ? 'ours'
-          : null
-      : null;
-
   const canEndTime = matchTime >= REGULATION_HALF_SECONDS;
   const isRealtimeActionLocked = !isPostmatch && !canRegisterRealtimeEvent;
   const shouldDisableRealtimeEventButtons = isBlockedByPenalty || isRealtimeActionLocked;
@@ -4523,10 +4522,9 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                         assistPlayerId: editDraft.assistPlayerId ?? undefined,
                                         assistPlayerName: editDraft.assistPlayerName ?? undefined,
                                       }),
-                                      shotOriginZone:
-                                        editDraft.type === 'shot' || editDraft.type === 'save'
-                                          ? e.shotOriginZone
-                                          : undefined,
+                                      shotOriginZone: eventTypeUsesCourtZone(editDraft.type)
+                                        ? e.shotOriginZone
+                                        : undefined,
                                     } : e);
                                     setMatchEvents(updatedEvents);
                                     recalcGoalsAndFoulsFromEvents(updatedEvents);
@@ -5709,6 +5707,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                           return;
                         }
                         applyPreActionClockBehavior('goal');
+                        setCourtZone(null);
                         setPendingGoalTime(null);
                         setGoalStep('team');
                         setPendingGoalIsOpponent(false);
@@ -5793,10 +5792,15 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         <LiveScoutCourt
                           className="min-h-[240px] w-full flex-1"
                           counts={liveShotZoneHeat}
-                          picking={shotZonePick}
-                          selectedZone={actionFlow?.shotOriginZone ?? null}
-                          onSelectZone={handlePickShotZone}
-                          onCancelPick={cancelActionFlow}
+                          selectedZone={actionFlow?.shotOriginZone ?? courtZone}
+                          onClearZone={() => {
+                            if (actionFlow) return;
+                            setCourtZone(null);
+                          }}
+                          onSelectZone={(zone) => {
+                            if (actionFlow || shouldDisableRealtimeEventButtons) return;
+                            setCourtZone((current) => (current === zone ? null : zone));
+                          }}
                         >
                           {isPostmatch ? (
                             <p
@@ -5808,22 +5812,19 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                               {currentPeriod === '1T' ? '1º tempo' : '2º tempo'}
                             </p>
                           ) : (
-                            <div className="flex flex-col items-center gap-1">
-                              <span
-                                data-testid="clock-state"
-                                className={`text-center text-[9px] font-black uppercase leading-tight tracking-[0.12em] ${
-                                  currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
-                                }`}
-                              >
-                                {getClockStateLabel(clockSnapshot.state)}
-                                {clockSnapshot.state !== 'PRE_JOGO' &&
-                                clockSnapshot.state !== 'INTERVALO' &&
-                                clockSnapshot.state !== 'ENCERRADO'
-                                  ? ` · ${currentPeriod === '1T' ? '1T' : '2T'}`
-                                  : ''}
-                              </span>
-                              <div data-testid="clock-time" className="font-mono text-2xl font-black tabular-nums leading-none tracking-tight text-white">
-                                {formatTime(matchTime)}
+                            <div className="flex items-center justify-center gap-1.5">
+                              <div className="min-w-0 text-center">
+                                <span
+                                  data-testid="clock-state"
+                                  className={`block text-center text-[8px] font-black uppercase leading-tight tracking-[0.08em] ${
+                                    currentPeriod === '1T' ? 'text-[#00f0ff]' : 'text-emerald-400'
+                                  }`}
+                                >
+                                  {getClockStateLabel(clockSnapshot.state)}
+                                </span>
+                                <div data-testid="clock-time" className="font-mono text-lg font-black tabular-nums leading-none tracking-tight text-white sm:text-xl">
+                                  {formatTime(matchTime)}
+                                </div>
                               </div>
                               {clockPrimaryAction ? (
                                 <button
@@ -5840,13 +5841,13 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                                           ? 'clock-start-second-half'
                                           : 'clock-pause'
                                   }
-                                  className={`w-full min-h-[40px] rounded-full border-2 px-3 py-1.5 text-[10px] font-black uppercase transition-all focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-950 sm:text-xs ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'cursor-not-allowed opacity-50' : 'active:scale-[0.98]'} ${getClockTourTargetClass('clock-primary')}`}
+                                  className={`max-w-[6.2rem] min-h-[32px] rounded-full border-2 px-2 py-1 text-[8px] font-black uppercase leading-tight transition-all focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-zinc-950 sm:text-[10px] ${clockPrimaryAction.className} ${clockPrimaryAction.disabled ? 'cursor-not-allowed opacity-50' : 'active:scale-[0.98]'} ${getClockTourTargetClass('clock-primary')}`}
                                 >
                                   {clockPrimaryAction.label}
                                 </button>
                               ) : (
-                                <div className="flex min-h-[40px] w-full items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[10px] font-bold uppercase text-zinc-500">
-                                  Partida encerrada
+                                <div className="flex min-h-[32px] items-center justify-center rounded-full border border-zinc-700 bg-zinc-950 px-2 py-1 text-[8px] font-bold uppercase leading-tight text-zinc-500">
+                                  Encerrada
                                 </div>
                               )}
                             </div>
@@ -6036,6 +6037,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             return;
                           }
                           applyPreActionClockBehavior('penalty');
+                          setCourtZone(null);
                           setPenaltyStep('team');
                           setPendingPenaltyTeam(null);
                           setPendingPenaltyKickerId(null);
@@ -6065,6 +6067,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                             return;
                           }
                           applyPreActionClockBehavior('freeKick');
+                          setCourtZone(null);
                           setFreeKickStep('team');
                           setPendingFreeKickTeam(null);
                           setPendingFreeKickKickerId(null);

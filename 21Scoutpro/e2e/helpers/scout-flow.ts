@@ -467,13 +467,13 @@ export async function registrarEvento(
       await page.getByTestId('event-result-pass-wrong').click();
       break;
     case 'shot-outside':
+      await page.getByTestId('shot-zone-AREA_ADV').click();
       await page.getByTestId('event-selector-shot').click();
-      await page.getByTestId('shot-zone-AT2_ESQ').click();
       await page.getByTestId('event-result-shot-outside').click();
       break;
     case 'shot-inside':
+      await page.getByTestId('shot-zone-ENTRE_ADV').click();
       await page.getByTestId('event-selector-shot').click();
-      await page.getByTestId('shot-zone-AT2_DIR').click();
       await page.getByTestId('event-result-shot-inside').click();
       break;
     case 'foul-for':

@@ -29,7 +29,7 @@ Não saíram agora.
 | --- | --- | --- |
 | Relógio pausado bloqueia todo evento. A mensagem pede para retomar a partida. | A pausa fácil no meio da quadra serve para pensar, e o lance que motivou a pausa não pode ser marcado até o relógio voltar a correr. | A trava está no motor (`isRunning` + estados em jogo), não num botão solto. O restore de `clockSnapshot` é área sensível. Soltar isso muda o carimbo de tempo de toda a fita. Recomendação: permitir registrar com o relógio pausado, usando o segundo em que parou, e manter bloqueados pré-jogo, intervalo, sincronização e encerrado. |
 | Gol exige um atleta nosso selecionado antes de abrir "gol nosso ou gol do adversário". | Para marcar gol sofrido é preciso escolher um jogador nosso que não entra no lance. | O fluxo de autor do gol nosso assume que esse atleta já está escolhido. Tirar o alerta sem separar os dois caminhos marca gol nosso sem autor. Recomendação: abrir a escolha de equipe sem atleta; só o gol nosso continua exigindo autor. |
-| Resultado do chute ainda é um modal por cima da quadra (no gol, fora, trave, bloqueado), depois da zona. | São dois toques além do botão. | Sem o resultado, chute no gol, para fora e bloqueado deixam de existir na estatística. A zona entrou antes do modal, não no lugar dele. Recomendação: manter o resultado; não voltar a pedir zona num segundo modal. |
+| Resultado do chute ainda é um modal (no gol, fora, trave, bloqueado), depois da região e do botão. | São dois toques além da região. | Sem o resultado, chute no gol, para fora e bloqueado deixam de existir na estatística. A região é escolhida antes do evento e não substitui o resultado. Recomendação: manter o resultado. |
 
 ## O que já está solto e deve continuar solto
 
