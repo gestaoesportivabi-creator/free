@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agendaCanOpenPreparation,
   benchForLineupModal,
   clearExplicitScoutStart,
   consumeOpenPrep,
@@ -138,6 +139,26 @@ describe('reabrir a seleção manual na Preparação', () => {
     expect(shouldReturnUnconfirmedRealtimeToPrep({
       lineup: { players: manual, ballPossessionStart: 'opponent' },
     }, false)).toBe(false);
+  });
+
+  it('tabela abre a Preparação sem coleta ou com convocação, e não abre a encerrada', () => {
+    expect(agendaCanOpenPreparation(null)).toBe(true);
+    expect(agendaCanOpenPreparation({
+      status: 'disponivel',
+      postMatchEventCount: 0,
+      lineup: { selectedPlayerIds: manual, clockSnapshot: { state: 'PRE_JOGO' } },
+    })).toBe(true);
+    expect(agendaCanOpenPreparation({ status: 'encerrado', lineup: { selectedPlayerIds: manual } })).toBe(false);
+    expect(agendaCanOpenPreparation({
+      lineup: { players: manual, selectedPlayerIds: manual, ballPossessionStart: 'us' },
+    })).toBe(false);
+    const convocation = {
+      status: 'disponivel' as const,
+      postMatchEventCount: 0,
+      lineup: { selectedPlayerIds: manual, clockSnapshot: { state: 'PRE_JOGO' } },
+    };
+    expect(realtimeEntryDecision(convocation, true)).toBe('collection');
+    expect(realtimeEntryDecision(convocation, false)).toBe('preparation');
   });
 
   it('PRE_JOGO sozinho não confirma a coleta', () => {

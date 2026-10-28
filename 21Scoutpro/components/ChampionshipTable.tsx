@@ -4,6 +4,8 @@ import { Championship } from '../types';
 import { setChampionshipCards } from '../utils/championshipCards';
 import { parseLocalDateOnly, isDateInPast, formatDateSafe, getTodayLocalYmd } from '../utils/dateUtils';
 import { splitChampionshipFixtures } from '../utils/championshipMatchBuckets';
+import { findSavedMatchForAgenda, type CalendarSavedMatch } from '../utils/calendarListStatus';
+import { agendaCanOpenPreparation } from '../utils/prepReopen';
 import { LockedFeatureBlock } from './EmBreve';
 
 export interface ChampionshipMatch {
@@ -19,23 +21,19 @@ export interface ChampionshipMatch {
     jogoId?: string | null; // ID do jogo realizado quando vinculado
 }
 
-interface SavedMatch {
-    id?: string;
-    date: string;
-    opponent: string;
-}
-
 interface ChampionshipTableProps {
     matches?: ChampionshipMatch[];
     competitions?: string[]; // Competições disponíveis
     onSave?: (match: ChampionshipMatch) => void | boolean | Promise<void | boolean>;
     onDelete?: (id: string) => void;
     onUseForInput?: (match: ChampionshipMatch) => void; // Callback para usar na aba Input de Dados
+    /** Abre a Preparação já usada em Dados do Jogo (stashOpenPrep + aba da coleta). */
+    onPrepareMatch?: (match: ChampionshipMatch) => void;
     onRefresh?: () => void; // Callback para recarregar dados da API
     championships?: Championship[]; // Campeonatos cadastrados
     onSaveChampionship?: (championship: Championship) => void; // Callback para salvar campeonato
     teams?: { id: string; nome: string }[]; // Equipes para cadastrar no campeonato
-    allMatches?: SavedMatch[];
+    allMatches?: CalendarSavedMatch[];
     isFreePlan?: boolean;
 }
 
@@ -50,6 +48,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
     onSave, 
     onDelete,
     onUseForInput,
+    onPrepareMatch,
     onRefresh,
     championships = [],
     onSaveChampionship,
@@ -411,6 +410,38 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
         });
     };
 
+    const canPrepareMatch = (match: ChampionshipMatch) =>
+        Boolean(onPrepareMatch) &&
+        agendaCanOpenPreparation(findSavedMatchForAgenda(match, allMatches, matches));
+
+    const listedSections: { key: string; title: string | null; tone: 'past' | 'future'; rows: ChampionshipMatch[] }[] =
+        viewMode === 'past'
+            ? [{ key: 'past', title: null, tone: 'past', rows: applyTimeFilter(pastMatches) }]
+            : viewMode === 'future'
+                ? [{ key: 'future', title: null, tone: 'future', rows: futureMatches }]
+                : [
+                    pastMatches.length > 0
+                        ? { key: 'past', title: `Partidas Passadas (${pastMatches.length})`, tone: 'past' as const, rows: pastMatches }
+                        : null,
+                    futureMatches.length > 0
+                        ? { key: 'future', title: `Partidas Futuras (${futureMatches.length})`, tone: 'future' as const, rows: futureMatches }
+                        : null,
+                ].filter((section): section is { key: string; title: string; tone: 'past' | 'future'; rows: ChampionshipMatch[] } => section !== null);
+
+    const renderPrepareButton = (match: ChampionshipMatch) => {
+        if (!canPrepareMatch(match)) return null;
+        return (
+            <button
+                type="button"
+                data-testid="preparar-partida"
+                onClick={() => onPrepareMatch?.(match)}
+                className="w-full min-h-[44px] px-3 py-2 rounded-lg bg-[#00f0ff]/15 border border-[#00f0ff]/50 text-[#00f0ff] text-xs font-black uppercase tracking-wide hover:bg-[#00f0ff]/25 transition-colors"
+            >
+                Preparar partida
+            </button>
+        );
+    };
+
     return (
         <div className="space-y-6 animate-fade-in pb-12">
             <div className="bg-black p-4 md:p-6 rounded-3xl border border-zinc-900 shadow-lg">
@@ -518,6 +549,11 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                     <p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-500">
                                         {match.location || 'Local indefinido'}
                                     </p>
+                                    {canPrepareMatch(match) && (
+                                        <div className="mt-3">
+                                            {renderPrepareButton(match)}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -769,16 +805,92 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                     )}
                 </div>
 
-                {/* Tabela de partidas — colunas com largura mínima, sem comprimir */}
-                <div className="overflow-x-auto -mx-4 md:mx-0 px-2 md:px-0">
-                    <table className="w-full min-w-[580px] table-auto text-left border-collapse">
+                {/* Retrato: card com Preparar partida visível, sem rolagem horizontal */}
+                <div className="md:hidden space-y-3">
+                    {matches.length === 0 ? (
+                        <div className="p-6 text-center text-zinc-500 text-sm">
+                            Nenhuma partida cadastrada. Clique em &quot;Nova Partida&quot; para começar.
+                        </div>
+                    ) : viewMode === 'past' && listedSections.every((section) => section.rows.length === 0) ? (
+                        <div className="p-6 text-center text-zinc-500 text-sm">
+                            Nenhuma partida passada encontrada no período selecionado.
+                        </div>
+                    ) : viewMode === 'future' && futureMatches.length === 0 ? (
+                        <div className="p-6 text-center text-zinc-500 text-sm">
+                            Nenhuma partida futura cadastrada.
+                        </div>
+                    ) : listedSections.map((section) => (
+                        <div key={section.key} className="space-y-3">
+                            {section.title && (
+                                <div className="flex items-center gap-2 px-1">
+                                    {section.tone === 'past' ? (
+                                        <BarChart3 className="text-blue-400" size={16} />
+                                    ) : (
+                                        <Calendar className="text-purple-400" size={16} />
+                                    )}
+                                    <span className={`font-bold text-xs uppercase tracking-wider ${section.tone === 'past' ? 'text-blue-400' : 'text-purple-400'}`}>
+                                        {section.title}
+                                    </span>
+                                </div>
+                            )}
+                            {section.rows.map((match) => {
+                                let dateDisplay = '-';
+                                try {
+                                    if (match.date) dateDisplay = formatDateSafe(match.date);
+                                } catch (e) {
+                                    console.error('Erro ao formatar data:', match.date, e);
+                                }
+                                return (
+                                    <div key={match.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-white font-bold text-sm break-words">{match.opponent || '-'}</p>
+                                                <p className="text-zinc-400 text-xs mt-1">{dateDisplay} • {formatTime(match.time)}</p>
+                                                <p className="text-zinc-500 text-xs mt-1 break-words">{match.competition || '-'}</p>
+                                            </div>
+                                            <div className="flex items-center shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleEdit(match)}
+                                                    className="min-h-[44px] min-w-[44px] flex items-center justify-center text-blue-400 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                {onDelete && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (window.confirm('Tem certeza que deseja excluir esta partida?')) {
+                                                                onDelete(match.id);
+                                                            }
+                                                        }}
+                                                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-400 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                        title="Excluir"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {renderPrepareButton(match)}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                </div>
+
+                {/* Tabela de partidas — a partir de md; no celular a lista acima cobre 360/390/414 */}
+                <div className="hidden md:block overflow-x-auto -mx-4 md:mx-0 px-2 md:px-0">
+                    <table className="w-full min-w-[680px] table-auto text-left border-collapse">
                         <thead>
                             <tr className="bg-zinc-950 text-[10px] text-zinc-400 uppercase tracking-wider font-bold border-b border-zinc-800">
                                 <th className="min-w-[100px] p-1.5 md:p-2 border-r border-zinc-900">Data</th>
                                 <th className="min-w-[70px] p-1.5 md:p-2 border-r border-zinc-900">Hora</th>
                                 <th className="min-w-[140px] p-1.5 md:p-2 border-r border-zinc-900">Adversário</th>
                                 <th className="min-w-[160px] p-1.5 md:p-2 border-r border-zinc-900">Competição</th>
-                                <th className="min-w-[90px] p-1.5 md:p-2 text-center">Ações</th>
+                                <th className="min-w-[150px] p-1.5 md:p-2 text-center">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -814,8 +926,10 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                             <td className="p-1.5 md:p-2 border-r border-zinc-900 text-white text-xs whitespace-nowrap">
                                                 {match.competition || '-'}
                                             </td>
-                                            <td className="p-1.5 md:p-2 whitespace-nowrap">
-                                                <div className="flex items-center justify-center gap-0.5 md:gap-1">
+                                            <td className="p-1.5 md:p-2">
+                                                <div className="flex flex-col items-stretch gap-1 min-w-[9.5rem]">
+                                                    {renderPrepareButton(match)}
+                                                    <div className="flex items-center justify-center gap-1">
                                                     <button
                                                         onClick={() => handleEdit(match)}
                                                         className="p-1 md:p-1.5 text-blue-400 hover:bg-zinc-900 rounded-lg transition-colors"
@@ -836,6 +950,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                                             <Trash2 size={14} />
                                                         </button>
                                                     )}
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>

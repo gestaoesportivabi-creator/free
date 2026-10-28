@@ -16,7 +16,7 @@ import { isPersistedServerMatchId } from '../utils/matchUpsert';
 import { findAgendaForFixture, findCollectedMatchForFixture, readKickoffTime, sameFixtureBase } from '../utils/reopenRealtimeCollection';
 import { draftIdForChampionshipMatch } from '../utils/matchIds';
 import { buildPrepSelectionSave, prepSelectionSignature, prepSquadIdsFromLineup, shouldPersistPrepSelection, type LineupDraftRecord } from '../utils/startingLineupDraft';
-import { consumeOpenPrep, markExplicitScoutStart, peekOpenPrep, prepReopenTarget } from '../utils/prepReopen';
+import { agendaCanOpenPreparation, consumeOpenPrep, markExplicitScoutStart, peekOpenPrep, prepReopenTarget } from '../utils/prepReopen';
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
@@ -1933,6 +1933,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
         if (!found) return;
         consumeOpenPrep();
         handleMatchClick({ ...found, type: 'scheduled' });
+        const linked = findSavedMatchForAgenda(found, matches || [], championshipMatches);
+        if (agendaCanOpenPreparation(linked)) {
+            setCollectionType('realtime');
+        }
     }, [matches, championshipMatches]);
 
     const realtimePrepIsOpen = () =>

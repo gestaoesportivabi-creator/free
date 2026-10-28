@@ -120,6 +120,17 @@ export function prepReopenTarget(
 }
 
 /**
+ * Tabela de Campeonato → Preparação.
+ * Sem coleta, ou só com convocação, abre. Encerrada ou já confirmada não abre.
+ * Não substitui o início explícito: esse continua na coleta.
+ */
+export function agendaCanOpenPreparation(
+  match: PrepReopenMatch | null | undefined
+): boolean {
+  return prepReopenTarget(match) !== 'collection';
+}
+
+/**
  * Iniciar de propósito fica na coleta, mesmo com relógio PRE_JOGO e zero eventos.
  * Sem essa intenção, a reabertura de uma convocação pura volta para a Preparação.
  */

@@ -54,6 +54,7 @@ import { AthleteProfile } from './components/athlete/AthleteProfile';
 import { RealtimeScoutPage } from './components/RealtimeScoutPage';
 import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfterFinalize } from './utils/openMatchAnalysis';
 import { consumeOpenGameList, OPEN_GAME_LIST_KEY } from './utils/openGameList';
+import { stashOpenPrep } from './utils/prepReopen';
 import { consumeFinalizedMatch, MATCHES_DIRTY_KEY } from './utils/finalizedMatchHandoff';
 import { isAbortError, shouldClearSessionToken } from './utils/sessionRestore';
 import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/trialExpiredSave';
@@ -2343,6 +2344,11 @@ export default function App() {
                 scoreTarget: match.scoreTarget,
                 time: match.time
               };
+            }}
+            onPrepareMatch={(match) => {
+              if (!match.id) return;
+              stashOpenPrep({ agendaMatchId: String(match.id) });
+              handleTabChange('table');
             }}
             onRefresh={async () => {
               try {
