@@ -120,6 +120,7 @@ export function QuadraScoutPreview() {
   const liveHeat = useMemo(() => aggregateShotZoneHeat(events), [events]);
 
   const finish = (action: string, actionLabel: string, resultLabel: string | null) => {
+    if (!running) return;
     const located = eventTypeUsesCourtZone(action);
     const place = located && zone ? shotOriginZoneLabel(zone) : 'sem região';
     const athlete = [...PREVIEW_COURT, ...PREVIEW_BENCH].find((item) => item.id === athleteId);
@@ -132,6 +133,7 @@ export function QuadraScoutPreview() {
   };
 
   const chooseAction = (action: string, label: string, results: readonly { id: string; label: string }[]) => {
+    if (!running) return;
     if (!eventTypeUsesCourtZone(action)) {
       finish(action, label, null);
       return;
@@ -143,11 +145,14 @@ export function QuadraScoutPreview() {
     setPending({ action, label, results });
   };
 
+  const locked = !running;
   const stand = (active: boolean) =>
     `flex min-h-[48px] flex-1 items-center justify-center rounded-2xl border-2 px-1 text-center text-[11px] font-black uppercase leading-tight lg:h-24 lg:flex-none lg:text-sm ${
-      active
-        ? 'border-white bg-white/15 text-white'
-        : 'border-white/15 bg-zinc-950 text-zinc-200 hover:border-white/40'
+      locked
+        ? 'cursor-not-allowed border-zinc-800 bg-zinc-950 text-zinc-600'
+        : active
+          ? 'border-white bg-white/15 text-white'
+          : 'border-white/15 bg-zinc-950 text-zinc-200 hover:border-white/40'
     }`;
 
   const athleteButton = (athlete: PreviewAthlete, place: 'court' | 'bench') => {
@@ -210,27 +215,29 @@ export function QuadraScoutPreview() {
           </aside>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div className="flex gap-1">
-            <button type="button" className={stand(possession === 'sem')} onClick={() => setPossession('sem')}>
+            <button type="button" className={stand(possession === 'sem')} disabled={locked} onClick={() => setPossession('sem')}>
               Sem posse
             </button>
             <button
               type="button"
-              className={`${stand(false)} border-green-500/50 text-green-300`}
+              data-testid="preview-goal"
+              disabled={locked}
+              className={locked ? stand(false) : `${stand(false)} border-green-500/50 text-green-300`}
               onClick={() => chooseAction('goal', 'Gol', [])}
             >
               Gol
             </button>
-            <button type="button" className={stand(possession === 'com')} onClick={() => setPossession('com')}>
+            <button type="button" className={stand(possession === 'com')} disabled={locked} onClick={() => setPossession('com')}>
               Com posse
             </button>
           </div>
 
           <div className="flex h-[min(42dvh,460px)] min-h-[260px] gap-1 lg:h-auto lg:min-h-0 lg:flex-1">
             <div className="flex w-[4.6rem] flex-col gap-1 sm:w-28 lg:w-32 lg:justify-center lg:gap-3">
-              <button type="button" className={stand(pending?.action === 'foul')} onClick={() => chooseAction('foul', 'Falta', FOUL_RESULTS)}>
+              <button type="button" className={stand(pending?.action === 'foul')} disabled={locked} onClick={() => chooseAction('foul', 'Falta', FOUL_RESULTS)}>
                 Falta
               </button>
-              <button type="button" className={stand(false)} onClick={() => chooseAction('corner', 'Escanteio', [])}>
+              <button type="button" className={stand(false)} disabled={locked} onClick={() => chooseAction('corner', 'Escanteio', [])}>
                 Escanteio
               </button>
             </div>
@@ -256,7 +263,11 @@ export function QuadraScoutPreview() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setRunning((value) => !value)}
+                  data-testid="preview-pause"
+                  onClick={() => {
+                    setRunning((value) => !value);
+                    setPending(null);
+                  }}
                   className="h-9 w-9 shrink-0 rounded-full border border-amber-300/80 bg-amber-500/25 text-[9px] font-black uppercase leading-none text-amber-50"
                 >
                   {running ? 'Pausa' : 'Vai'}
@@ -266,13 +277,14 @@ export function QuadraScoutPreview() {
             <div className="flex w-[4.6rem] flex-col gap-1 sm:w-28 lg:w-32 lg:justify-center lg:gap-3">
               {possession === 'com' ? (
                 <>
-                  <button type="button" className={stand(pending?.action === 'pass')} onClick={() => chooseAction('pass', 'Passe', PASS_RESULTS)}>
+                  <button type="button" className={stand(pending?.action === 'pass')} disabled={locked} onClick={() => chooseAction('pass', 'Passe', PASS_RESULTS)}>
                     Passe
                   </button>
                   <button
                     type="button"
                     data-testid="preview-shot"
                     className={stand(pending?.action === 'shot')}
+                    disabled={locked}
                     onClick={() => chooseAction('shot', 'Chute', SHOT_RESULTS)}
                   >
                     Chute
@@ -280,18 +292,19 @@ export function QuadraScoutPreview() {
                 </>
               ) : (
                 <>
-                  <button type="button" className={stand(pending?.action === 'tackle')} onClick={() => chooseAction('tackle', 'Desarme', TACKLE_RESULTS)}>
+                  <button type="button" className={stand(pending?.action === 'tackle')} disabled={locked} onClick={() => chooseAction('tackle', 'Desarme', TACKLE_RESULTS)}>
                     Desarme
                   </button>
                   <button
                     type="button"
                     data-testid="preview-save"
                     className={stand(pending?.action === 'save')}
+                    disabled={locked}
                     onClick={() => chooseAction('save', 'Chute adversário', SAVE_RESULTS)}
                   >
                     Chute adv.
                   </button>
-                  <button type="button" className={stand(false)} onClick={() => chooseAction('block', 'Bloqueio', [])}>
+                  <button type="button" className={stand(false)} disabled={locked} onClick={() => chooseAction('block', 'Bloqueio', [])}>
                     Bloqueio
                   </button>
                 </>
@@ -299,7 +312,13 @@ export function QuadraScoutPreview() {
             </div>
           </div>
 
-          {pending ? (
+          {locked ? (
+            <p data-testid="preview-paused-lock" className="text-center text-[11px] font-black uppercase tracking-wide text-amber-300">
+              Pausado. Lances travados até retomar.
+            </p>
+          ) : null}
+
+          {pending && !locked ? (
             <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" data-testid="preview-results">
               {pending.results.map((result) => (
                 <button
@@ -314,16 +333,16 @@ export function QuadraScoutPreview() {
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-1 text-[9px] font-black uppercase sm:text-[11px]">
-              <button type="button" className={`${stand(false)} min-h-[44px]`} onClick={() => chooseAction('penalty', 'Pênalti', [])}>
+              <button type="button" className={`${stand(false)} min-h-[44px]`} disabled={locked} onClick={() => chooseAction('penalty', 'Pênalti', [])}>
                 Pênalti
               </button>
-              <button type="button" className={`${stand(false)} min-h-[44px]`} onClick={() => chooseAction('freeKick', 'Tiro livre', [])}>
+              <button type="button" data-testid="preview-free-kick" className={`${stand(false)} min-h-[44px]`} disabled={locked} onClick={() => chooseAction('freeKick', 'Tiro livre', [])}>
                 Tiro livre
               </button>
-              <button type="button" className={`${stand(false)} min-h-[44px]`} onClick={() => chooseAction('lateral', 'Lateral', [])}>
+              <button type="button" className={`${stand(false)} min-h-[44px]`} disabled={locked} onClick={() => chooseAction('lateral', 'Lateral', [])}>
                 Lateral
               </button>
-              <button type="button" className={`${stand(false)} min-h-[44px]`} onClick={() => chooseAction('card', 'Cartão', [])}>
+              <button type="button" className={`${stand(false)} min-h-[44px]`} disabled={locked} onClick={() => chooseAction('card', 'Cartão', [])}>
                 Cartão
               </button>
             </div>

@@ -15,7 +15,7 @@ type LiveScoutCourtProps = {
   selectedZone?: ShotOriginZone | null;
   onSelectZone?: (zone: ShotOriginZone) => void;
   onClearZone?: () => void;
-  /** Relógio na linha do meio. O toque passa para o círculo, exceto no botão. */
+  /** Relógio fora da quadra clicável, para não cobrir o círculo nem as laterais. */
   children?: React.ReactNode;
   className?: string;
 };
@@ -214,7 +214,6 @@ export function LiveScoutCourt({
               const ours = counts?.[zone.id].ours ?? 0;
               const conceded = counts?.[zone.id].conceded ?? 0;
               if (ours === 0 && conceded === 0) return null;
-              if (zone.id === 'CENTRO' && children) return null;
               const anchor = COURT_ZONE_ANCHORS[zone.id];
               return (
                 <text key={zone.id} x={anchor.x} y={anchor.y} dominantBaseline="middle">
@@ -233,14 +232,14 @@ export function LiveScoutCourt({
             </linearGradient>
           </defs>
         </svg>
-        {children ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="pointer-events-none w-[11rem] max-w-[72%] rounded-full border border-white/25 bg-black/55 px-2 py-1 shadow-lg backdrop-blur-md [&_button]:pointer-events-auto">
-              {children}
-            </div>
-          </div>
-        ) : null}
       </div>
+      {children ? (
+        <div data-testid="court-clock" className="relative z-20 mt-1 flex shrink-0 justify-center">
+          <div className="rounded-full border border-white/25 bg-black/80 px-2 py-1 shadow-lg">
+            {children}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -5819,7 +5819,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
                         </button>
                       </div>
 
-                      {/* Quadra no centro. Cronômetro semitransparente na linha do meio. */}
+                      {/* Quadra no centro. O cronômetro fica abaixo, fora da área clicável. */}
                       <div
                         data-testid="match-clock-panel"
                         data-tour-highlighted={isClockTourTargetHighlighted('match-clock-panel') ? 'true' : undefined}

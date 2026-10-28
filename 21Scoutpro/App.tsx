@@ -1770,6 +1770,9 @@ export default function App() {
   // Nunca alterar a URL quando estiver em /scout-realtime: a aba deve permanecer nessa URL e não ir para /dashboard
   useEffect(() => {
     if (isInitializing) return;
+    // O preview local não é rota da landing. Sem este retorno o efeito grava `/`
+    // e o reload abre a home.
+    if (isLocalQuadraPreview()) return;
     if (window.location.pathname === '/scout-realtime') return;
     if (currentRoute === 'blog') {
       const blogUrl = blogPathFor(blogLang, blogSlug);
