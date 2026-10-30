@@ -781,6 +781,10 @@ export interface SubscriptionSnapshot {
   trialEndsAt: string | null;
   isExpired: boolean;
   emailVerificationOverdue: boolean;
+  isPro?: boolean;
+  isLifetimePro?: boolean;
+  billingProvider?: 'stripe' | 'lifetime' | null;
+  currentPeriodEnd?: string | null;
 }
 
 export interface OnboardingStep {

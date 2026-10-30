@@ -68,11 +68,26 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
             Seu teste terminou. Você continua a poder <strong>consultar e exportar</strong> tudo o que registou.
           </p>
           <a
-            href="mailto:contato@scout21.com.br?subject=Continuar%20com%20o%20SCOUT21"
+            href="/planos"
             className="text-xs font-semibold text-red-200 hover:text-red-100 underline"
           >
-            Falar sobre continuar
+            Ver plano PRO
           </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (subscription.isPro || subscription.isLifetimePro) {
+    return (
+      <div className="w-full bg-zinc-900/60 border-b border-zinc-800 px-4 py-2">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-3 text-xs text-zinc-300">
+          <span>{subscription.isLifetimePro ? 'PRO permanente.' : 'Plano PRO ativo.'}</span>
+          {!subscription.isLifetimePro && (
+            <a href="/planos/conta" className="font-semibold text-[#00f0ff] hover:underline">
+              Gerir assinatura
+            </a>
+          )}
         </div>
       </div>
     );
@@ -97,6 +112,9 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
             ? 'Último dia do seu teste gratuito.'
             : `Faltam ${days} dia${days === 1 ? '' : 's'} do seu teste gratuito.`}
           <span className="text-zinc-500 ml-1.5 hidden sm:inline">Nada será cobrado.</span>
+          <a href="/planos" className="font-semibold text-[#00f0ff] hover:underline">
+            Conhecer o PRO
+          </a>
         </p>
 
         {!isUrgent && (

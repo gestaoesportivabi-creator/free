@@ -36,6 +36,7 @@ import telegramRoutes from './routes/telegram.routes';
 import assistantRoutes from './routes/assistant.routes';
 import webAssistantRoutes from './routes/webAssistant.routes';
 import { startTelegramPolling } from './services/telegram/telegramPolling';
+import { billingController, billingWebhookHandler } from './controllers/billing.controller';
 
 const app: Express = express();
 
@@ -68,6 +69,14 @@ app.use(cors({
   credentials: true,
 }));
 
+// Webhook do Stripe precisa do corpo cru para verificar a assinatura.
+// Tem de ficar antes do express.json(), senão a assinatura nunca fecha.
+app.post(
+  '/api/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  billingWebhookHandler
+);
+
 // Parser de JSON (aumentado para suportar foto base64 no cadastro/edição de atleta)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -78,6 +87,10 @@ app.get('/health', (_req, res) => {
 });
 
 // Rotas públicas (sem autenticação)
+app.get('/api/billing/config', billingController.config);
+app.post('/api/billing/checkout', authMiddleware, billingController.checkout);
+app.post('/api/billing/portal', authMiddleware, billingController.portal);
+
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadsRoutes);
 // Cron do ciclo de vida do teste — protegido por Bearer CRON_SECRET no próprio router.

@@ -54,6 +54,16 @@ const getApp = () => {
 // Cache do app para evitar recarregar a cada requisição
 let cachedApp: any = null;
 
+/**
+ * O Express lê o corpo. Com o parser da Vercel ligado, o webhook do Stripe
+ * chega como objeto e a verificação de assinatura falha.
+ */
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 // Handler serverless para Vercel
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {

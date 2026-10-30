@@ -41,7 +41,7 @@ export const IS_FREE_PLAN = (import.meta.env.VITE_PLAN ?? 'free') === 'free';
 
 /**
  * UI com cadeados / “Em breve” apenas no plano Essencial.
- * COMPETICAO, PERFORMANCE e ADMINISTRADOR: sem restrições de UI de plano.
+ * COMPETICAO, PERFORMANCE, PRO e ADMINISTRADOR: sem restrições de UI de plano.
  * Sem `planName`: mantém comportamento antigo via `IS_FREE_PLAN`.
  */
 export function isEssentialPlanUser(user: User | null): boolean {
@@ -54,7 +54,7 @@ export function isEssentialPlanUser(user: User | null): boolean {
 export function isPerformanceTierUser(user: User | null): boolean {
   if (!user) return false;
   if (user.isPlatformAdmin || user.planName === 'ADMINISTRADOR') return true;
-  return user.planName === 'PERFORMANCE';
+  return user.planName === 'PERFORMANCE' || user.planName === 'PRO';
 }
 
 // Mapeamento de recursos para rotas da API

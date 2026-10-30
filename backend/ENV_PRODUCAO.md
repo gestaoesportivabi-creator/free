@@ -40,3 +40,19 @@ Substitua `[YOUR-PASSWORD]` pela senha do banco (ou use a senha que você defini
 - **JWT_SECRET** ausente ou igual ao default: risco de segurança; tokens podem ser forjados.
 
 Após alterar variáveis no Vercel, faça um novo **Redeploy** do projeto para que as mudanças tenham efeito.
+
+## Stripe — plano PRO
+
+Painel: Vercel → projeto do site (scout21.com.br) → **Settings** → **Environment Variables**. Ambiente **Production**. Use **Sensitive** na secret key e no segredo do webhook. Não commitar valores.
+
+| Variável | Onde nasce | Função |
+|----------|------------|--------|
+| `STRIPE_SECRET_KEY` | Stripe → Developers → API keys. Preferir chave restrita `rk_` | Checkout, cliente e portal. Sem ela o pagamento fica desligado |
+| `STRIPE_PUBLISHABLE_KEY` | Mesma página, chave publicável `pk_` | O backend entrega ao browser sob pedido. Não usar prefixo `VITE_` |
+| `STRIPE_WEBHOOK_SECRET` | Stripe → Developers → Webhooks → endpoint `{URL publica}/api/billing/webhook` → signing secret | Verificação de assinatura. Sem ela o webhook responde 503 |
+| `STRIPE_PRICE_PRO_MONTHLY` | Stripe → Product catalogue → produto PRO → preço mensal (`price_`) | Checkout mensal |
+| `STRIPE_PRICE_PRO_YEARLY` | Preço anual do mesmo produto PRO | Checkout anual |
+| `STRIPE_PRICE_PRO` | Opcional | Mensal, se `STRIPE_PRICE_PRO_MONTHLY` não estiver definida |
+| `LIFETIME_PRO_EMAILS` | Lista interna, separada por vírgula | PRO permanente além das contas com role `ADMINISTRADOR` |
+
+O portal do cliente precisa estar ativo no Dashboard Stripe (modo de teste primeiro). Imposto automático fica desligado até existir registro fiscal.

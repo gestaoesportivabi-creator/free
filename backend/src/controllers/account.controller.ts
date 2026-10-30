@@ -31,6 +31,10 @@ export const accountController = {
         trialEndsAt: access.trialEndsAt,
         isExpired: access.isExpired,
         emailVerificationOverdue: access.emailVerificationOverdue,
+        isPro: access.isPro,
+        isLifetimePro: access.isLifetimePro,
+        billingProvider: access.billingProvider,
+        currentPeriodEnd: access.currentPeriodEnd,
       },
     });
   },

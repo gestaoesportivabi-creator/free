@@ -8,6 +8,7 @@ import type { User } from './types';
 import type { BlogLang } from './blog/types';
 import { applyRouteMeta } from './utils/seo';
 import { trackPageView } from './utils/analytics';
+import { PlansPage } from './components/billing/PlansPage';
 
 const LandingPage = lazy(() =>
   import('./components/LandingPage').then((m) => ({ default: m.LandingPage }))
@@ -29,7 +30,11 @@ const NotFoundPage = lazy(() =>
   import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
 );
 
-type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal' | 'calculator' | 'notfound';
+type PublicRoute = 'landing' | 'login' | 'signup' | 'blog' | 'legal' | 'calculator' | 'planos' | 'notfound';
+
+function isPlansPath(p: string): boolean {
+  return p === '/planos' || p === '/planos/conta';
+}
 
 function normalizePathname(): string {
   return window.location.pathname.replace(/\/$/, '') || '/';
@@ -71,6 +76,7 @@ function getInitialRoute(): PublicRoute {
   if (SIGNUP_PATHS.includes(p)) return 'signup';
   if (isCalculatorPath(p)) return 'calculator';
   if (p === '/login' || matchAuthEmailPath(p)) return 'login';
+  if (isPlansPath(p)) return 'planos';
   if (p === '/' || p === '' || p === '/newsletter') return 'landing';
   return 'notfound';
 }
@@ -148,6 +154,19 @@ export function PublicApp() {
       }
       return;
     }
+    if (route === 'planos') {
+      const path = normalizePathname();
+      if (!isPlansPath(path)) {
+        window.history.replaceState({}, '', `/planos${window.location.search}`);
+      }
+      applyRouteMeta({
+        title: 'Plano PRO — SCOUT 21',
+        description: 'Assinatura PRO do SCOUT 21. O pagamento abre no Stripe quando as chaves do ambiente estão configuradas.',
+        path: isPlansPath(path) ? path : '/planos',
+      });
+      trackPageView(isPlansPath(path) ? path : '/planos');
+      return;
+    }
     if (route === 'login') {
       if (!matchAuthEmailPath(normalizePathname())) {
         window.history.replaceState({}, '', '/login');
@@ -212,6 +231,26 @@ export function PublicApp() {
       ) : null}
 
       {route === 'calculator' ? <JacksonPollock7Page /> : null}
+
+      {route === 'planos' ? (
+        <PlansPage
+          onHome={() => {
+            setRoute('landing');
+            window.history.pushState({}, '', '/');
+          }}
+          onLogin={() => {
+            setRoute('login');
+            window.history.pushState({}, '', '/login');
+          }}
+          onOpenApp={() => {
+            if (localStorage.getItem('token')) goDashboard();
+            else {
+              setRoute('login');
+              window.history.pushState({}, '', '/login');
+            }
+          }}
+        />
+      ) : null}
 
       {route === 'notfound' ? (
         <NotFoundPage

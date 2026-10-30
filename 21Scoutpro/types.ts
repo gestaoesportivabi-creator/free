@@ -2,14 +2,14 @@
 export type UserRole = 'Treinador' | 'Preparador Físico' | 'Supervisor' | 'Diretor' | 'Atleta';
 
 /** Plano na base (Role.name); usado para UI de cadeados — não confundir com `role` do front (Treinador, etc.) */
-export type SubscriptionPlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'ADMINISTRADOR';
+export type SubscriptionPlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'PRO' | 'ADMINISTRADOR';
 
 export interface User {
   id?: string;
   name: string;
   email: string;
   role: UserRole;
-  /** Plano real do backend (ESSENCIAL, COMPETICAO, PERFORMANCE, ADMINISTRADOR) */
+  /** Plano real do backend (ESSENCIAL, COMPETICAO, PERFORMANCE, PRO, ADMINISTRADOR) */
   planName?: SubscriptionPlanName;
   isPlatformAdmin?: boolean;
   photoUrl?: string;

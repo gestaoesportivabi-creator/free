@@ -12,6 +12,7 @@ const JacksonPollock7Page = React.lazy(() =>
   import('./components/calculator/JacksonPollock7Page').then((m) => ({ default: m.JacksonPollock7Page }))
 );
 import { TrialBanner } from './components/TrialBanner';
+import { PlansPage } from './components/billing/PlansPage';
 import { AppInitSkeleton } from './components/AppInitSkeleton';
 import { OnboardingChecklist } from './components/OnboardingChecklist';
 import { authApi } from './services/api';
@@ -257,6 +258,11 @@ function isSignupPath(p: string): boolean {
   return SIGNUP_PATHS.includes(p);
 }
 
+function isPlansPath(path?: string): boolean {
+  const p = path ?? normalizePathname();
+  return p === '/planos' || p === '/planos/conta';
+}
+
 function matchLegalPath(p: string): 'terms' | 'privacy' | null {
   if (p === '/termos' || p === '/termos-de-uso') return 'terms';
   if (p === '/privacidade' || p === '/politica-de-privacidade') return 'privacy';
@@ -267,7 +273,7 @@ function isCalculatorPath(p: string): boolean {
   return p === '/calculadoras/jackson-pollock-7-dobras' || p === '/calculadora/jackson-pollock-7-dobras';
 }
 
-type AppRoute = 'landing' | 'login' | 'app' | 'blog' | 'signup' | 'welcome' | 'legal' | 'calculator';
+type AppRoute = 'landing' | 'login' | 'app' | 'blog' | 'signup' | 'welcome' | 'legal' | 'calculator' | 'planos';
 
 /** 1.º render alinhado à URL — evita cair na landing ao abrir /blog (SPA + Strict Mode). */
 function getInitialRouteFromPath(): AppRoute {
@@ -275,6 +281,7 @@ function getInitialRouteFromPath(): AppRoute {
   if (matchBlogPath(p)) return 'blog';
   if (matchLegalPath(p)) return 'legal';
   if (isSignupPath(p)) return 'signup';
+  if (isPlansPath(p)) return 'planos';
   if (isCalculatorPath(p)) return 'calculator';
   if (p === WELCOME_PATH) return 'welcome';
   if (isLoginRelatedPath(p)) {
@@ -1567,6 +1574,7 @@ export default function App() {
         setLegalDoc(matchLegalPath(p)!);
         setCurrentRoute('legal');
       } else if (isSignupPath(p)) setCurrentRoute('signup');
+      else if (isPlansPath(p)) setCurrentRoute('planos');
       else if (p === WELCOME_PATH) setCurrentRoute('welcome');
       else if (p === '/registro' || p === '/register') setCurrentRoute('signup');
       else if (p === '/login') setCurrentRoute('login');
@@ -1588,7 +1596,9 @@ export default function App() {
         const cached = JSON.parse(raw) as User;
         if (!cached?.id) return false;
         setCurrentUser(cached);
-        setCurrentRoute(p === WELCOME_PATH && cached.role !== 'Atleta' ? 'welcome' : 'app');
+        setCurrentRoute(
+          isPlansPath(p) ? 'planos' : p === WELCOME_PATH && cached.role !== 'Atleta' ? 'welcome' : 'app'
+        );
         setIsInitializing(false);
         restored = true;
         return true;
@@ -1801,6 +1811,14 @@ export default function App() {
       trackPageView('/calculadoras/jackson-pollock-7-dobras');
       return;
     }
+    if (currentRoute === 'planos') {
+      const path = normalizePathname();
+      if (!isPlansPath(path)) {
+        window.history.pushState({}, '', '/planos');
+      }
+      trackPageView(isPlansPath(path) ? path : '/planos');
+      return;
+    }
     if (currentRoute === 'login') {
       window.history.pushState({}, '', '/login');
       trackPageView('/login');
@@ -1848,6 +1866,11 @@ export default function App() {
       if (legal) {
         setLegalDoc(legal);
         setCurrentRoute('legal');
+        setBlogSlug(null);
+        return;
+      }
+      if (isPlansPath(path)) {
+        setCurrentRoute('planos');
         setBlogSlug(null);
         return;
       }
@@ -2038,6 +2061,19 @@ export default function App() {
           setActiveTab(destination === 'dashboard' ? 'dashboard' : 'table');
           setCurrentRoute('app');
         }}
+      />
+    );
+  }
+
+  if (currentRoute === 'planos') {
+    return (
+      <PlansPage
+        onHome={() => {
+          setCurrentRoute('landing');
+          window.history.pushState({}, '', '/');
+        }}
+        onLogin={() => setCurrentRoute('login')}
+        onOpenApp={() => setCurrentRoute('app')}
       />
     );
   }

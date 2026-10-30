@@ -14,7 +14,9 @@ import { isQaTestEmail } from './qaEmail';
 
 export { isQaTestEmail } from './qaEmail';
 
-export type PlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'ADMINISTRADOR';
+export type PlanName = 'ESSENCIAL' | 'COMPETICAO' | 'PERFORMANCE' | 'PRO' | 'ADMINISTRADOR';
+
+export type BillingProvider = 'stripe' | 'lifetime' | null;
 
 export interface EffectiveAccess {
   /** Plano que vale para liberar features agora. */
@@ -24,8 +26,14 @@ export interface EffectiveAccess {
   /** Dias inteiros restantes do teste; null fora de trial. */
   trialDaysRemaining: number | null;
   trialEndsAt: Date | null;
+  currentPeriodEnd: Date | null;
   /** true → escrita bloqueada; leitura e exportação continuam livres. */
   isExpired: boolean;
+  /** Plano pago PRO (Stripe) ou PRO permanente. */
+  isPro: boolean;
+  /** Admin, lista LIFETIME_PRO_EMAILS ou provider `lifetime`. O webhook não altera estas contas. */
+  isLifetimePro: boolean;
+  billingProvider: BillingProvider;
 }
 
 export interface AccessUserInput {
@@ -40,10 +48,56 @@ const DAY_MS = 86_400_000;
 const PLAN_FALLBACK: PlanName = 'ESSENCIAL';
 
 function asPlan(value: string | null | undefined): PlanName {
-  if (value === 'ESSENCIAL' || value === 'COMPETICAO' || value === 'PERFORMANCE' || value === 'ADMINISTRADOR') {
+  if (
+    value === 'ESSENCIAL' ||
+    value === 'COMPETICAO' ||
+    value === 'PERFORMANCE' ||
+    value === 'PRO' ||
+    value === 'ADMINISTRADOR'
+  ) {
     return value;
   }
   return PLAN_FALLBACK;
+}
+
+/** E-mails com PRO permanente, separados por vírgula. Não é lista de cobrança. */
+export function lifetimeProEmails(): Set<string> {
+  return new Set(
+    (process.env.LIFETIME_PRO_EMAILS || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+/**
+ * PRO que não depende do Stripe e que o webhook não pode tirar.
+ * Role ADMINISTRADOR, e-mail em LIFETIME_PRO_EMAILS, ou provider `lifetime`.
+ */
+export function isLifetimeProAccount(
+  user: AccessUserInput,
+  subscription: Subscription | null | undefined
+): boolean {
+  if (user.roleName === 'ADMINISTRADOR') return true;
+  const email = user.email?.trim().toLowerCase();
+  if (email && lifetimeProEmails().has(email)) return true;
+  if (subscription?.provider === 'lifetime') return true;
+  return false;
+}
+
+function decorate(
+  base: Omit<EffectiveAccess, 'isPro' | 'isLifetimePro' | 'billingProvider' | 'currentPeriodEnd'>,
+  subscription: Subscription | null | undefined,
+  lifetime: boolean
+): EffectiveAccess {
+  const currentPeriodEnd = lifetime ? null : subscription?.currentPeriodEnd ?? null;
+  return {
+    ...base,
+    currentPeriodEnd,
+    isLifetimePro: lifetime,
+    billingProvider: lifetime ? 'lifetime' : subscription?.provider === 'stripe' ? 'stripe' : null,
+    isPro: lifetime || (base.plan === 'PRO' && !base.isExpired),
+  };
 }
 
 /** Dias inteiros que faltam até `end`, nunca negativo. */
@@ -56,29 +110,40 @@ export function resolveEffectiveAccess(
   subscription: Subscription | null | undefined,
   now: Date = new Date()
 ): EffectiveAccess {
-  // Admin da plataforma nunca é limitado por assinatura.
-  if (user.roleName === 'ADMINISTRADOR') {
-    return {
-      plan: 'ADMINISTRADOR',
-      status: 'active',
-      isTrialing: false,
-      trialDaysRemaining: null,
-      trialEndsAt: null,
-      isExpired: false,
-    };
+  const lifetime = isLifetimeProAccount(user, subscription);
+
+  // Admin, lista configurável e provider lifetime: o Stripe não manda nesta conta.
+  if (lifetime) {
+    const plan: PlanName = user.roleName === 'ADMINISTRADOR' ? 'ADMINISTRADOR' : 'PRO';
+    return decorate(
+      {
+        plan,
+        status: 'active',
+        isTrialing: false,
+        trialDaysRemaining: null,
+        trialEndsAt: null,
+        isExpired: false,
+      },
+      subscription,
+      true
+    );
   }
 
   // Contas anteriores ao teste gratuito (e atletas, que herdam acesso do técnico)
   // não têm assinatura. Mantêm o acesso que sempre tiveram.
   if (!subscription) {
-    return {
-      plan: asPlan(user.roleName),
-      status: 'active',
-      isTrialing: false,
-      trialDaysRemaining: null,
-      trialEndsAt: null,
-      isExpired: false,
-    };
+    return decorate(
+      {
+        plan: asPlan(user.roleName),
+        status: 'active',
+        isTrialing: false,
+        trialDaysRemaining: null,
+        trialEndsAt: null,
+        isExpired: false,
+      },
+      subscription,
+      false
+    );
   }
 
   if (subscription.status === 'trialing') {
@@ -86,47 +151,62 @@ export function resolveEffectiveAccess(
     const expired = !endsAt || endsAt.getTime() <= now.getTime();
 
     if (expired) {
-      return {
-        plan: 'ESSENCIAL',
-        status: 'expired',
-        isTrialing: false,
-        trialDaysRemaining: 0,
-        trialEndsAt: endsAt ?? null,
-        isExpired: true,
-      };
+      return decorate(
+        {
+          plan: 'ESSENCIAL',
+          status: 'expired',
+          isTrialing: false,
+          trialDaysRemaining: 0,
+          trialEndsAt: endsAt ?? null,
+          isExpired: true,
+        },
+        subscription,
+        false
+      );
     }
 
-    return {
-      plan: asPlan(subscription.plan),
-      status: 'trialing',
-      isTrialing: true,
-      trialDaysRemaining: daysUntil(endsAt, now),
-      trialEndsAt: endsAt,
-      isExpired: false,
-    };
+    return decorate(
+      {
+        plan: asPlan(subscription.plan),
+        status: 'trialing',
+        isTrialing: true,
+        trialDaysRemaining: daysUntil(endsAt, now),
+        trialEndsAt: endsAt,
+        isExpired: false,
+      },
+      subscription,
+      false
+    );
   }
 
   if (subscription.status === 'expired' || subscription.status === 'canceled') {
-    return {
-      plan: 'ESSENCIAL',
-      status: subscription.status,
-      isTrialing: false,
-      trialDaysRemaining: 0,
-      trialEndsAt: subscription.trialEndsAt ?? null,
-      isExpired: true,
-    };
+    return decorate(
+      {
+        plan: 'ESSENCIAL',
+        status: subscription.status,
+        isTrialing: false,
+        trialDaysRemaining: 0,
+        trialEndsAt: subscription.trialEndsAt ?? null,
+        isExpired: true,
+      },
+      subscription,
+      false
+    );
   }
 
   // `past_due`: pagamento falhou mas ainda não cortámos o acesso — período de cortesia.
-  // Quando o billing entrar, é aqui que a política de dunning decide.
-  return {
-    plan: asPlan(subscription.plan),
-    status: subscription.status,
-    isTrialing: false,
-    trialDaysRemaining: null,
-    trialEndsAt: subscription.trialEndsAt ?? null,
-    isExpired: false,
-  };
+  return decorate(
+    {
+      plan: asPlan(subscription.plan),
+      status: subscription.status,
+      isTrialing: false,
+      trialDaysRemaining: null,
+      trialEndsAt: subscription.trialEndsAt ?? null,
+      isExpired: false,
+    },
+    subscription,
+    false
+  );
 }
 
 /**
@@ -138,6 +218,7 @@ export const PLAN_QUOTAS: Record<PlanName, { maxMatches: number; maxChampionship
   ESSENCIAL: { maxMatches: 10, maxChampionships: 1, maxPlayers: 30 },
   COMPETICAO: { maxMatches: Infinity, maxChampionships: Infinity, maxPlayers: 60 },
   PERFORMANCE: { maxMatches: Infinity, maxChampionships: Infinity, maxPlayers: Infinity },
+  PRO: { maxMatches: Infinity, maxChampionships: Infinity, maxPlayers: Infinity },
   ADMINISTRADOR: { maxMatches: Infinity, maxChampionships: Infinity, maxPlayers: Infinity },
 };
 
