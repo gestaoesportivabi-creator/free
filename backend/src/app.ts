@@ -35,6 +35,7 @@ import meRoutes from './routes/me.routes';
 import telegramRoutes from './routes/telegram.routes';
 import assistantRoutes from './routes/assistant.routes';
 import webAssistantRoutes from './routes/webAssistant.routes';
+import { billingRouter, stripeWebhookRouter } from './routes/stripe.routes';
 import { startTelegramPolling } from './services/telegram/telegramPolling';
 
 const app: Express = express();
@@ -68,6 +69,9 @@ app.use(cors({
   credentials: true,
 }));
 
+// Webhook do Stripe: corpo CRU (assinatura), por isso ANTES do express.json().
+app.use('/api/stripe', stripeWebhookRouter);
+
 // Parser de JSON (aumentado para suportar foto base64 no cadastro/edição de atleta)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -84,6 +88,10 @@ app.use('/api/leads', leadsRoutes);
 app.use('/api/cron', trialRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/assistant', assistantRoutes);
+
+// Pagamento (Stripe): só staff autenticado e SEM requireActiveSubscription —
+// quem está com o teste expirado precisa conseguir assinar.
+app.use('/api/billing', authMiddleware, requireStaff, billingRouter);
 
 // Assistente web (dashboard) — JWT + tenant; todos os usuarios logados
 app.use('/api/web-assistant', authMiddleware, tenantMiddleware(), webAssistantRoutes);
