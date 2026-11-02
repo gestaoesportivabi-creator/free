@@ -8,6 +8,7 @@
 import { getApiUrl, API_RESOURCES } from '../config';
 import { Player, MatchRecord, PhysicalAssessment, WeeklySchedule, StatTargets, Team, SubscriptionPlanName } from '../types';
 import { ApiRequestError, TRIAL_EXPIRED_CODE, TRIAL_EXPIRED_STATUS } from '../utils/trialExpiredSave';
+import { apiErrorMessage } from '../utils/apiErrorMessage';
 import { classifyGetOneHttp, GetOneFailure, type GetOneBody } from '../utils/getOneOutcome';
 
 /** Abaixo do maxDuration de 60s da Vercel, para o cliente desistir antes do corte. */
@@ -38,7 +39,7 @@ function throwApiResponse(
   if (response.status === 409 && codeField) {
     throw new ApiRequestError(response.status, codeField, parsed?.message || errorField || codeField);
   }
-  throw new Error(errorField || responseText || `Erro ${response.status}`);
+  throw new Error(apiErrorMessage(parsed, responseText, response.status));
 }
 
 /**
