@@ -781,7 +781,31 @@ export interface SubscriptionSnapshot {
   trialEndsAt: string | null;
   isExpired: boolean;
   emailVerificationOverdue: boolean;
+  /** Ausente em backends antigos; sem chaves do Stripe vem tudo `false`. */
+  billing?: {
+    checkoutEnabled: boolean;
+    portalEnabled: boolean;
+    isAdminPro: boolean;
+  };
 }
+
+async function billingRedirect(action: 'checkout' | 'portal'): Promise<string> {
+  const token = localStorage.getItem('token') || '';
+  const response = await fetch(`${getApiUrl()}/billing/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  const parsed = await response.json().catch(() => null);
+  if (!response.ok || !parsed?.success || !parsed?.data?.url) {
+    throw new Error(parsed?.message || 'Não foi possível abrir o pagamento agora. Tente novamente em instantes.');
+  }
+  return parsed.data.url as string;
+}
+
+export const billingApi = {
+  startCheckout: () => billingRedirect('checkout'),
+  openPortal: () => billingRedirect('portal'),
+};
 
 export interface OnboardingStep {
   id: string;

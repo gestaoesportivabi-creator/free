@@ -16,6 +16,7 @@ import prisma from '../config/database';
 import { sendTrialLifecycleEmail } from './email/email.service';
 import type { TrialEmailKey } from './email/templates/trial-lifecycle';
 import { getTrialDurationDays } from '../utils/subscription.helper';
+import { isAdminProEmail } from '../utils/adminPro';
 
 const DAY_MS = 86_400_000;
 
@@ -93,7 +94,8 @@ export async function runTrialLifecycle(now: Date = new Date()): Promise<Lifecyc
   for (const sub of trialing) {
     result.processed += 1;
 
-    if (!sub.user?.isActive || !sub.trialStartedAt || !sub.trialEndsAt) {
+    // Admin PRO nunca recebe e-mails de fim de teste.
+    if (!sub.user?.isActive || !sub.trialStartedAt || !sub.trialEndsAt || isAdminProEmail(sub.user.email)) {
       result.skipped += 1;
       continue;
     }
@@ -163,7 +165,7 @@ export async function runTrialLifecycle(now: Date = new Date()): Promise<Lifecyc
       });
       result.expiredMarked += 1;
 
-      if (!sub.user?.isActive || !sub.user.emailVerifiedAt) continue;
+      if (!sub.user?.isActive || !sub.user.emailVerifiedAt || isAdminProEmail(sub.user.email)) continue;
       if (!(await claimEmailSlot(sub.userId, 'trial_expired'))) continue;
 
       const stats = await accountStats(sub.userId);
@@ -193,7 +195,7 @@ export async function runTrialLifecycle(now: Date = new Date()): Promise<Lifecyc
 
   for (const sub of winback) {
     try {
-      if (!sub.user?.isActive || !sub.user.emailVerifiedAt) continue;
+      if (!sub.user?.isActive || !sub.user.emailVerifiedAt || isAdminProEmail(sub.user.email)) continue;
       if (!(await claimEmailSlot(sub.userId, 'trial_winback'))) continue;
 
       const stats = await accountStats(sub.userId);
