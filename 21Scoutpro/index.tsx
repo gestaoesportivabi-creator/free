@@ -4,6 +4,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConsentBanner } from './components/ConsentBanner';
 import { NewsletterPopup } from './components/NewsletterPopup';
 import { shouldBootPublicApp } from './publicBoot';
+import { fixDirtyUrl } from './cleanPath';
+
+// Link com ponto/vírgula grudado no fim (comum no WhatsApp) não pode cair no 404.
+fixDirtyUrl();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
