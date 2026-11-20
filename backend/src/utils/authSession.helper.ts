@@ -66,7 +66,7 @@ export async function buildAuthSessionForUser(userId: string): Promise<{
       email: user.email,
       name: user.name,
       role: mapRoleForFrontend(roleName),
-      planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
+      planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete, user.email),
       isPlatformAdmin: roleName === 'ADMINISTRADOR',
       ...(isAthlete && user.jogadorId
         ? {
