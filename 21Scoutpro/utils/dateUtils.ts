@@ -97,3 +97,23 @@ export function toLocalYmd(value: Date | string | undefined | null): string {
 export function getTodayLocalYmd(): string {
   return toLocalYmd(new Date());
 }
+
+const WEEKDAY_SHORT_PT = ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.'] as const;
+const MONTH_SHORT_PT = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'] as const;
+
+/**
+ * Rótulo de dia de jogo: "qua., 21 de out.".
+ * Usa o calendário gravado (YYYY-MM-DD), inclusive quando a string vem como
+ * ISO meia-noite UTC (`2026-10-21T00:00:00.000Z`). Não passa por
+ * `new Date("YYYY-MM-DD")`, que em America/Sao_Paulo vira o dia anterior.
+ * Horário colado na string (`T00:05` ou `T23:59`) não muda o dia: o dia é o
+ * prefixo de calendário, o mesmo da tabela de campeonato.
+ */
+export function formatMatchDayLabel(dateStr: string | undefined | null): string {
+  const date = parseLocalDateOnly(dateStr || undefined);
+  if (Number.isNaN(date.getTime())) return '—';
+  const weekday = WEEKDAY_SHORT_PT[date.getDay()];
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = MONTH_SHORT_PT[date.getMonth()];
+  return `${weekday}, ${day} de ${month}`;
+}

@@ -22,6 +22,7 @@ import { matchNeedsEventLogFetch, omitUnhydratedEventLog } from '../utils/matchL
 import { preservePossessionSeconds, readPossessionSeconds } from '../utils/possessionStats';
 import { readKickoffTime } from '../utils/reopenRealtimeCollection';
 import { saveLaterUi, statusForScoutSave } from '../utils/matchStatus';
+import { isWoodworkShot, shotResultToAction } from '../utils/shotsOnTarget';
 import { buildStartingLineupSave, LineupDraftRecord, shouldPersistStartingLineup } from '../utils/startingLineupDraft';
 import { liveCalendarExitPlan } from '../utils/openGameList';
 import { benchForLineupModal, pickDefaultLineup, splitCourtAndBench } from '../utils/prepReopen';
@@ -306,6 +307,10 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
         type = 'shot';
         result = 'blocked';
         break;
+      case 'shotPost':
+        type = 'shot';
+        result = 'post';
+        break;
       case 'falta':
         type = 'foul';
         break;
@@ -393,6 +398,9 @@ function postMatchEventLogToMatchEvents(log: PostMatchEvent[], players: Player[]
     }
     if (pe.zone && zoneToResult[pe.zone]) event.result = zoneToResult[pe.zone];
     else if (pe.result) event.result = pe.result as MatchEvent['result'];
+    if (type === 'shot' && isWoodworkShot({ action: pe.action, subtipo: pe.subtipo, result: pe.result })) {
+      event.result = 'post';
+    }
     if (pe.goalMethod) event.goalMethod = pe.goalMethod;
     if (pe.isOpponentGoal === true || (pe.action === 'goal' && pe.subtipo === 'Contra')) {
       event.isOpponentGoal = true;
@@ -1890,10 +1898,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       case 'goal': return 'goal';
       case 'pass': return e.result === 'correct' ? 'passCorrect' : 'passWrong';
       case 'shot':
-        if (e.result === 'inside') return 'shotOn';
-        if (e.result === 'outside') return 'shotOff';
-        if (e.result === 'blocked') return 'shotZonaChute';
-        return 'shotOn';
+        return shotResultToAction(e.result);
       case 'foul': return 'falta';
       case 'tackle':
         if (e.result === 'withBall') return 'tackleWithBall';
@@ -2026,7 +2031,7 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
           // Também registrar no jogador para permitir Top 10 por atleta no Scout Coletivo
           (ps as any).transitionErrors = ((ps as any).transitionErrors ?? 0) + 1;
         }
-      } else if (action === 'shotOn') {
+      } else if (action === 'shotOn' && !isWoodworkShot(e)) {
         ps.shotsOnTarget += 1;
         teamStats.shotsOnTarget += 1;
       } else if (action === 'shotOff') {
