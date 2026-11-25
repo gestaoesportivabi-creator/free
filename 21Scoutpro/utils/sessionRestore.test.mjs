@@ -76,3 +76,21 @@ test('Finalizar navega sem reload e continua logado', () => {
     TOKEN
   );
 });
+
+test('sem router da App não usa só pushState', () => {
+  let pushed = null;
+  let assigned = null;
+  const kind = performFinalizeNavigation({
+    hasLiveOpener: false,
+    pushState: (url) => {
+      pushed = url;
+    },
+    assign: (url) => {
+      assigned = url;
+    },
+    close: () => {},
+  });
+  assert.equal(kind, 'missing-router');
+  assert.equal(pushed, null);
+  assert.equal(assigned, null);
+});

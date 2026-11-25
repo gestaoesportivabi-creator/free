@@ -50,15 +50,16 @@ export interface FinalizeNavigationDeps {
  */
 export function performFinalizeNavigation(
   deps: FinalizeNavigationDeps
-): 'soft' | 'close-opener' {
+): 'soft' | 'close-opener' | 'missing-router' {
   if (deps.hasLiveOpener) {
     deps.close();
     return 'close-opener';
   }
-  if (deps.softRoute) {
+  if (typeof deps.softRoute === 'function') {
     deps.softRoute();
     return 'soft';
   }
-  deps.pushState('/dashboard');
-  return 'soft';
+  // Sem o router da App, pushState sozinho deixa RealtimeScoutPage montada
+  // (pathname muda, o React continua em /scout-realtime).
+  return 'missing-router';
 }
