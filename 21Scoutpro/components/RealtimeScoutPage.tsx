@@ -16,6 +16,7 @@ import {
   markKeepSessionAfterFinalize,
 } from '../utils/openMatchAnalysis';
 import { performFinalizeNavigation } from '../utils/sessionRestore';
+import { exitLiveScoutToDashboard, shouldClearExplicitStartOnLeave } from '../utils/liveScoutExit';
 import { isTrialExpiredSaveError } from '../utils/trialExpiredSave';
 import { stashFinalizedMatch } from '../utils/finalizedMatchHandoff';
 import { readKickoffTime, resolveRealtimeOpenTarget } from '../utils/reopenRealtimeCollection';
@@ -206,7 +207,13 @@ export const RealtimeScoutPage: React.FC<{
           });
           stashOpenGameList();
           localStorage.removeItem('realtimeScoutData');
-          window.location.assign('/dashboard');
+          exitLiveScoutToDashboard({
+            hasLiveOpener: false,
+            pushState: (url) => window.history.pushState({}, '', url),
+            assign: (url) => window.location.assign(url),
+            close: () => window.close(),
+            onSoftNavigateDashboard,
+          });
           return;
         }
 
@@ -242,13 +249,21 @@ export const RealtimeScoutPage: React.FC<{
   }, []);
 
   const exitRealtimeScout = () => {
-    clearExplicitScoutStart();
+    if (shouldClearExplicitStartOnLeave()) {
+      clearExplicitScoutStart();
+    }
     localStorage.removeItem('realtimeScoutData');
     if (window.opener && !window.opener.closed) {
       window.close();
       return;
     }
-    window.location.assign('/dashboard');
+    exitLiveScoutToDashboard({
+      hasLiveOpener: false,
+      pushState: (url) => window.history.pushState({}, '', url),
+      assign: (url) => window.location.assign(url),
+      close: () => window.close(),
+      onSoftNavigateDashboard,
+    });
   };
 
   const leaveToGameList = () => {
