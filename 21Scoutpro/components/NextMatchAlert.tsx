@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Trophy } from 'lucide-react';
 import { ChampionshipMatch } from '../types';
+import { parseLocalDateOnly } from '../utils/dateUtils';
 
 interface NextMatchAlertProps {
   matches: ChampionshipMatch[];
@@ -69,8 +70,8 @@ export const NextMatchAlert: React.FC<NextMatchAlertProps> = ({ matches }) => {
       // Ordenar por data e hora (mais próxima primeiro)
       futureMatches.sort((a, b) => {
         try {
-          const dateA = new Date(a.date);
-          const dateB = new Date(b.date);
+          const dateA = parseLocalDateOnly(a.date);
+          const dateB = parseLocalDateOnly(b.date);
           
           if (dateA.getTime() !== dateB.getTime()) {
             return dateA.getTime() - dateB.getTime();

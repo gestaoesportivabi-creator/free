@@ -46,6 +46,7 @@ import { SPORT_CONFIGS } from './constants';
 import { BarChart3, Clock, Trophy, Ambulance, UserX, UserCheck, Menu, AlertTriangle, MessageCircle } from 'lucide-react';
 import { User, MatchRecord, Player, PhysicalAssessment, WeeklySchedule, StatTargets, PlayerTimeControl, Team, Championship, SubscriptionPlanName } from './types';
 import { playersApi, matchesApi, assessmentsApi, schedulesApi, competitionsApi, statTargetsApi, timeControlsApi, championshipMatchesApi, teamsApi, championshipsApi, meApi } from './services/api';
+import { toLocalYmd } from './utils/dateUtils';
 import { AthleteHome, type AthleteTodayData } from './components/athlete/AthleteHome';
 import { AthletePseForm } from './components/athlete/AthletePseForm';
 import { AthletePsrForm } from './components/athlete/AthletePsrForm';
@@ -551,7 +552,7 @@ export default function App() {
   // Próximo compromisso: o mais próximo entre próximo jogo e próximo treino (hoje/futuro)
   const nextCommitment = useMemo(() => {
     const now = liveNow;
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = toLocalYmd(now);
 
     const candidates: { dateTime: Date; type: 'jogo' | 'treino'; label: string; competition?: string }[] = [];
 
@@ -580,9 +581,12 @@ export default function App() {
           const date = (day as { date?: string }).date || '';
           const time = (day as { time?: string }).time || '00:00';
           const activity = (day as { activity?: string }).activity || '';
-          if (!date || date < todayStr) return;
+          const dayKey = date.slice(0, 10);
+          if (!dayKey || dayKey < todayStr) return;
+          const [y, mo, d] = dayKey.split('-').map(Number);
           const [h = 0, m = 0] = time.split(':').map(Number);
-          const dt = new Date(date + 'T' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':00');
+          if (!y || !mo || !d) return;
+          const dt = new Date(y, mo - 1, d, h || 0, m || 0);
           if (Number.isNaN(dt.getTime()) || dt < now) return;
           candidates.push({
             dateTime: dt,
@@ -640,7 +644,7 @@ export default function App() {
 
   // Foco do dia: observações da programação (aba Programação) para o dia de hoje
   const focusOfDay = useMemo(() => {
-    const todayStr = liveNow.toISOString().split('T')[0];
+    const todayStr = toLocalYmd(liveNow);
     const activeSchedules = (schedules || []).filter(
       s => s && (s.isActive === true || s.isActive === 'TRUE' || s.isActive === 'true') && s.days && Array.isArray(s.days)
     );
