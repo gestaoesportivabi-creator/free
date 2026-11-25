@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag, Lock } from 'lucide-react';
+import { Calendar, Clock, Users, Trophy, Plus, Save, Trash2, Edit2, RefreshCw, X, Upload, BarChart3, Award, Flag, Lock, Play } from 'lucide-react';
 import { Championship } from '../types';
 import { setChampionshipCards } from '../utils/championshipCards';
 import { parseLocalDateOnly, isDateInPast, formatDateSafe, getTodayLocalYmd } from '../utils/dateUtils';
@@ -420,7 +420,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                             <Trophy className="text-[#10b981] shrink-0" /> Tabela de Campeonato
                         </h2>
                         <p className="text-zinc-500 text-xs font-bold mt-1 hidden sm:block">
-                            Gerencie os jogos da temporada e use para preencher automaticamente o Input de Dados
+                            Gerencie os jogos da temporada e abra a Preparação (Dados do Jogo) a partir de cada partida
                         </p>
                     </div>
                     {!isCreating && (
@@ -816,15 +816,19 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                             </td>
                                             <td className="p-1.5 md:p-2 whitespace-nowrap">
                                                 <div className="flex items-center justify-center gap-0.5 md:gap-1">
+                                                    {onUseForInput && (<button type="button" onClick={() => handleUseForInput(match)} className="p-1 md:p-1.5 text-emerald-400 hover:bg-zinc-900 rounded-lg transition-colors" title="Abrir Preparação" aria-label={`Abrir Preparação contra ${match.opponent || 'adversário'}`}><Play size={14} aria-hidden /></button>)}
                                                     <button
+                                                        type="button"
                                                         onClick={() => handleEdit(match)}
                                                         className="p-1 md:p-1.5 text-blue-400 hover:bg-zinc-900 rounded-lg transition-colors"
                                                         title="Editar"
+                                                        aria-label="Editar partida"
                                                     >
                                                         <Edit2 size={14} />
                                                     </button>
                                                     {onDelete && (
                                                         <button
+                                                            type="button"
                                                             onClick={() => {
                                                                 if (window.confirm('Tem certeza que deseja excluir esta partida?')) {
                                                                     onDelete(match.id);
@@ -832,6 +836,7 @@ export const ChampionshipTable: React.FC<ChampionshipTableProps> = ({
                                                             }}
                                                             className="p-1 md:p-1.5 text-red-400 hover:bg-zinc-900 rounded-lg transition-colors"
                                                             title="Excluir"
+                                                            aria-label="Excluir partida"
                                                         >
                                                             <Trash2 size={14} />
                                                         </button>
