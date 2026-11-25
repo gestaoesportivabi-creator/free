@@ -4,6 +4,7 @@
  */
 
 import { MatchRecord, MatchStats } from '../types/frontend';
+import { derivedShotsOnTarget } from '../services/shotsOnTarget';
 
 // Tipos do banco de dados (Prisma retorna camelCase)
 interface JogoDB {
@@ -221,6 +222,14 @@ export function transformMatchToFrontend(
     }
     if (goalTimes.length > 0) result.teamStats.goalTimes = goalTimes;
     if (goalsConcededTimes.length > 0) result.teamStats.goalsConcededTimes = goalsConcededTimes;
+  }
+
+  const derivedShots = derivedShotsOnTarget(result.postMatchEventLog);
+  if (derivedShots) {
+    result.teamStats.shotsOnTarget = derivedShots.team;
+    for (const [playerId, stats] of Object.entries(result.playerStats)) {
+      stats.shotsOnTarget = derivedShots.byPlayer[playerId] ?? 0;
+    }
   }
 
   return result;

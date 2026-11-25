@@ -3319,7 +3319,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                                         (e) =>
                                           e.action === 'shotOn' ||
                                           e.action === 'shotOff' ||
-                                          e.action === 'shotZonaChute'
+                                          e.action === 'shotZonaChute' ||
+                                          e.action === 'shotPost'
                                       ),
                                     },
                                   ];

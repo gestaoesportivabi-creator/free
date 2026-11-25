@@ -174,6 +174,7 @@ export type PostMatchAction =
   | 'shotOn'
   | 'shotOff'
   | 'shotZonaChute'
+  | 'shotPost'
   | 'falta'
   | 'tackleWithBall'
   | 'tackleWithoutBall'

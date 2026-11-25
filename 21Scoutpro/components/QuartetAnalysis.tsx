@@ -3,6 +3,7 @@ import { Trophy, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { MatchRecord, Player } from '../types';
 import { postMatchEventClockToAbsoluteSeconds, storedToAbsoluteSeconds } from '../utils/matchPeriod';
 import { useMatchesWithEventLogs } from '../utils/matchEventLog';
+import { isShotOnTargetEvent } from '../utils/shotsOnTarget';
 import { ExpandableCard } from './ExpandableCard';
 import { LockedFeatureBlock } from './EmBreve';
 interface QuartetAnalysisProps {
@@ -251,7 +252,7 @@ export const QuartetAnalysis: React.FC<QuartetAnalysisProps> = ({ matches: match
           }
         } else if (ev.action === 'passCorrect' && inQuartet) rec.passes_certos += 1;
         else if (ev.action === 'passWrong' && inQuartet) rec.passes_errados += 1;
-        else if (ev.action === 'shotOn' && inQuartet) rec.chutes_dentro += 1;
+        else if (isShotOnTargetEvent(ev) && inQuartet) rec.chutes_dentro += 1;
         else if (ev.action === 'shotOff' && inQuartet) rec.chutes_fora += 1;
         else if (ev.action === 'tackleWithBall' && inQuartet) rec.desarmes_com_posse += 1;
         else if ((ev.action === 'tackleWithoutBall' || ev.action === 'tackleCounter') && inQuartet) rec.desarmes_sem_posse += 1;
