@@ -7,6 +7,9 @@
 export const TRIAL_EXPIRED_STATUS = 402;
 export const TRIAL_EXPIRED_CODE = 'trial_expired';
 
+export const EMAIL_NOT_VERIFIED_STATUS = 403;
+export const EMAIL_NOT_VERIFIED_CODE = 'email_not_verified';
+
 /** Mesmo canal de planos já usado no app (não há página interna de preços). */
 export const PLANS_CTA_HREF =
   'https://wa.me/5548991486176?text=' +
@@ -31,6 +34,19 @@ export function isTrialExpiredSaveError(error: unknown): boolean {
   const status = (error as { status?: unknown }).status;
   const code = (error as { code?: unknown }).code;
   return status === TRIAL_EXPIRED_STATUS && code === TRIAL_EXPIRED_CODE;
+}
+
+export function isEmailNotVerifiedSaveError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const status = (error as { status?: unknown }).status;
+  const code = (error as { code?: unknown }).code;
+  return status === EMAIL_NOT_VERIFIED_STATUS && code === EMAIL_NOT_VERIFIED_CODE;
+}
+
+export function notifyEmailNotVerifiedMatchSave(): void {
+  alert(
+    'Confirme seu e-mail para gravar partidas. Reenvie o link a partir do seu perfil; a partida não foi apagada desta tela.'
+  );
 }
 
 /**

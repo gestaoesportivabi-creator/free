@@ -175,8 +175,12 @@ export function isEmailVerificationOverdue(
   if (user.roleName === 'ADMINISTRADOR') return false;
   if (isQaTestEmail(user.email)) return false;
 
-  // Só se aplica a contas de auto-cadastro; contas legadas não têm assinatura.
-  const startedAt = subscription?.trialStartedAt ?? subscription?.createdAt;
+  // Só o teste gratuito: assinatura `active` (paga/legacy) não pode perder escrita
+  // porque o backfill de scout_subscriptions usou createdAt antigo e emailVerifiedAt null.
+  // Contas legadas sem linha de assinatura também passam (startedAt ausente).
+  if (!subscription || subscription.status !== 'trialing') return false;
+
+  const startedAt = subscription.trialStartedAt ?? subscription.createdAt;
   if (!startedAt) return false;
 
   const deadline = startedAt.getTime() + getEmailVerificationGraceDays() * DAY_MS;

@@ -20,7 +20,12 @@ import { consumeOpenPrep, markExplicitScoutStart, peekOpenPrep, prepReopenTarget
 import { isMatchFinalizedForScout } from '../utils/matchStatus';
 import { calendarBadgeForSavedMatch, calendarBadgeForScheduled, dropUncollectedFixtureShells, findSavedMatchForAgenda } from '../utils/calendarListStatus';
 import { peekOpenMatchAnalysisId, consumeOpenMatchAnalysisId } from '../utils/openMatchAnalysis';
-import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from '../utils/trialExpiredSave';
+import {
+  isEmailNotVerifiedSaveError,
+  isTrialExpiredSaveError,
+  notifyEmailNotVerifiedMatchSave,
+  notifyTrialExpiredMatchSave,
+} from '../utils/trialExpiredSave';
 import { EMPTY_UNION_EVENT_LOG_MESSAGE, isEmptyUnionEventLogError } from '../utils/eventLogConflict';
 
 const OPPONENT_TEAM_ID = 'OPPONENT_TEAM';
@@ -1702,6 +1707,10 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
                 notifyTrialExpiredMatchSave(true);
                 return;
             }
+            if (isEmailNotVerifiedSaveError(error)) {
+                notifyEmailNotVerifiedMatchSave();
+                return;
+            }
             if (isEmptyUnionEventLogError(error)) {
                 alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
                 return;
@@ -2166,6 +2175,8 @@ export const ScoutTable: React.FC<ScoutTableProps> = ({
             console.error('Erro ao salvar análise técnica:', error);
             if (isTrialExpiredSaveError(error)) {
                 notifyTrialExpiredMatchSave(true);
+            } else if (isEmailNotVerifiedSaveError(error)) {
+                notifyEmailNotVerifiedMatchSave();
             } else if (isEmptyUnionEventLogError(error)) {
                 alert(EMPTY_UNION_EVENT_LOG_MESSAGE);
             } else {
