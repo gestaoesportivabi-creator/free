@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Clock, Mail, X } from 'lucide-react';
-import { SubscriptionSnapshot, authApi } from '../services/api';
+import { SubscriptionSnapshot, authApi, billingApi } from '../services/api';
 
 /**
  * Barra de estado do teste gratuito.
@@ -23,6 +23,35 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
   const [dismissed, setDismissed] = useState(false);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+
+  const billing = subscription.billing;
+
+  const goToBilling = async (action: 'startCheckout' | 'openPortal') => {
+    setBillingBusy(true);
+    setBillingError(null);
+    try {
+      window.location.assign(await billingApi[action]());
+    } catch (e) {
+      setBillingError(e instanceof Error ? e.message : 'Não foi possível abrir o pagamento agora.');
+      setBillingBusy(false);
+    }
+  };
+
+  const billingButton = (action: 'startCheckout' | 'openPortal', label: string) => (
+    <button
+      type="button"
+      onClick={() => goToBilling(action)}
+      disabled={billingBusy}
+      className="text-xs font-semibold text-[#00f0ff] hover:text-white underline disabled:opacity-60 disabled:no-underline"
+    >
+      {billingBusy ? 'Abrindo...' : label}
+    </button>
+  );
+
+  const billingErrorText = billingError && <span className="text-xs text-red-300">{billingError}</span>;
 
   const handleResend = async () => {
     setResending(true);
@@ -67,12 +96,49 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
           <p className="text-xs text-red-100">
             Seu teste terminou. Você continua a poder <strong>consultar e exportar</strong> tudo o que registou.
           </p>
+          {billing?.checkoutEnabled && billingButton('startCheckout', 'Assinar o plano PRO')}
+          {billingErrorText}
           <a
             href="mailto:contato@scout21.com.br?subject=Continuar%20com%20o%20SCOUT21"
             className="text-xs font-semibold text-red-200 hover:text-red-100 underline"
           >
             Falar sobre continuar
           </a>
+        </div>
+      </div>
+    );
+  }
+
+  // Pagamento pendente: leva direto ao portal para atualizar o cartão.
+  if (subscription.status === 'past_due' && billing?.portalEnabled) {
+    return (
+      <div className="w-full bg-amber-500/10 border-b border-amber-500/30 px-4 py-2.5">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
+          <AlertTriangle size={15} className="text-amber-400 shrink-0" />
+          <p className="text-xs text-amber-100">Não conseguimos cobrar sua assinatura. Atualize a forma de pagamento.</p>
+          {billingButton('openPortal', 'Gerenciar assinatura')}
+          {billingErrorText}
+        </div>
+      </div>
+    );
+  }
+
+  // Assinante ativo: atalho discreto para cancelar/gerenciar no portal do Stripe.
+  if (subscription.status === 'active' && billing?.portalEnabled && !dismissed) {
+    return (
+      <div className="w-full bg-zinc-900/60 border-b border-zinc-800 px-4 py-1.5">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+          <p className="text-xs text-zinc-400">Plano PRO ativo.</p>
+          {billingButton('openPortal', 'Gerenciar assinatura')}
+          {billingErrorText}
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            className="text-zinc-600 hover:text-zinc-400 transition-colors"
+            aria-label="Ocultar aviso"
+          >
+            <X size={14} />
+          </button>
         </div>
       </div>
     );
@@ -98,6 +164,8 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
             : `Faltam ${days} dia${days === 1 ? '' : 's'} do seu teste gratuito.`}
           <span className="text-zinc-500 ml-1.5 hidden sm:inline">Nada será cobrado.</span>
         </p>
+        {billing?.checkoutEnabled && billingButton('startCheckout', 'Assinar o plano PRO')}
+        {billingErrorText}
 
         {!isUrgent && (
           <button

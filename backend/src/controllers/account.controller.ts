@@ -7,6 +7,8 @@
 
 import { Request, Response } from 'express';
 import prisma from '../config/database';
+import { getStripeConfig, isCheckoutEnabled, isPortalEnabled } from '../config/stripe';
+import { isAdminProEmail } from '../utils/adminPro';
 
 export const accountController = {
   /**
@@ -21,9 +23,26 @@ export const accountController = {
       return res.status(500).json({ success: false, error: 'Contexto de assinatura indisponível' });
     }
 
+    // Só diz ao frontend o que ele pode mostrar: sem chaves do Stripe, os botões somem.
+    const config = getStripeConfig();
+    const isAdminPro = isAdminProEmail(req.user?.email);
+    let hasCustomer = false;
+    if (req.user?.id && isPortalEnabled(config)) {
+      const record = await prisma.subscription.findUnique({
+        where: { userId: req.user.id },
+        select: { provider: true, providerCustomerId: true },
+      });
+      hasCustomer = record?.provider === 'stripe' && Boolean(record.providerCustomerId);
+    }
+
     return res.json({
       success: true,
       data: {
+        billing: {
+          checkoutEnabled: isCheckoutEnabled(config) && !isAdminPro && !(hasCustomer && ['active', 'past_due'].includes(access.status)),
+          portalEnabled: hasCustomer,
+          isAdminPro,
+        },
         plan: access.plan,
         status: access.status,
         isTrialing: access.isTrialing,

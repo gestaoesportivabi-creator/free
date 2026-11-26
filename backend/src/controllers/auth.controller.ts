@@ -149,7 +149,7 @@ export const authController = {
             email: user.email,
             name: user.name,
             role: mapRoleForFrontend(roleName),
-            planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
+            planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete, user.email),
             isPlatformAdmin: roleName === 'ADMINISTRADOR',
             ...(isAthlete && user.jogadorId
               ? {
@@ -575,7 +575,7 @@ export const authController = {
         name: user.name,
         email: user.email,
         role: mapRoleForFrontend(roleName),
-        planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete),
+        planName: await resolveSessionPlanName(prisma, user.id, roleName, isAthlete, user.email),
         isPlatformAdmin: roleName === 'ADMINISTRADOR',
         photoUrl: user.photoUrl ?? undefined,
         ...(isAthlete && user.jogadorId

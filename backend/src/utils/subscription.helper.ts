@@ -11,6 +11,7 @@
 
 import type { Subscription, SubscriptionStatus } from '@prisma/client';
 import { isQaTestEmail } from './qaEmail';
+import { isAdminProEmail } from './adminPro';
 
 export { isQaTestEmail } from './qaEmail';
 
@@ -60,6 +61,18 @@ export function resolveEffectiveAccess(
   if (user.roleName === 'ADMINISTRADOR') {
     return {
       plan: 'ADMINISTRADOR',
+      status: 'active',
+      isTrialing: false,
+      trialDaysRemaining: null,
+      trialEndsAt: null,
+      isExpired: false,
+    };
+  }
+
+  // Admin PRO (env ADMIN_PRO_EMAILS): vale antes de trial, Stripe ou qualquer status.
+  if (isAdminProEmail(user.email)) {
+    return {
+      plan: 'PERFORMANCE',
       status: 'active',
       isTrialing: false,
       trialDaysRemaining: null,
@@ -173,6 +186,7 @@ export function isEmailVerificationOverdue(
 ): boolean {
   if (user.emailVerifiedAt) return false;
   if (user.roleName === 'ADMINISTRADOR') return false;
+  if (isAdminProEmail(user.email)) return false;
   if (isQaTestEmail(user.email)) return false;
 
   // Só se aplica a contas de auto-cadastro; contas legadas não têm assinatura.
@@ -197,14 +211,15 @@ export async function resolveSessionPlanName(
   prismaClient: { subscription: { findUnique: (args: { where: { userId: string } }) => Promise<Subscription | null> } },
   userId: string,
   roleName: string,
-  isAthlete: boolean
+  isAthlete: boolean,
+  email?: string | null
 ): Promise<string | undefined> {
   if (isAthlete) return undefined;
   if (roleName === 'ADMINISTRADOR') return roleName;
 
   try {
     const subscription = await prismaClient.subscription.findUnique({ where: { userId } });
-    return resolveEffectiveAccess({ roleName }, subscription).plan;
+    return resolveEffectiveAccess({ roleName, email }, subscription).plan;
   } catch {
     // Falha a consultar a assinatura não pode impedir o login.
     return roleName;
