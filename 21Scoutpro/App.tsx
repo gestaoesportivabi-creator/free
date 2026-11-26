@@ -57,7 +57,12 @@ import { peekOpenMatchAnalysisId, OPEN_MATCH_ANALYSIS_KEY, shouldKeepSessionAfte
 import { consumeOpenGameList, OPEN_GAME_LIST_KEY } from './utils/openGameList';
 import { consumeFinalizedMatch, MATCHES_DIRTY_KEY } from './utils/finalizedMatchHandoff';
 import { isAbortError, shouldClearSessionToken } from './utils/sessionRestore';
-import { isTrialExpiredSaveError, notifyTrialExpiredMatchSave } from './utils/trialExpiredSave';
+import {
+  isEmailNotVerifiedSaveError,
+  isTrialExpiredSaveError,
+  notifyEmailNotVerifiedMatchSave,
+  notifyTrialExpiredMatchSave,
+} from './utils/trialExpiredSave';
 import { normalizeScheduleDays } from './utils/scheduleUtils';
 import { getChampionshipCards, getPlayerStatus } from './utils/championshipCards';
 import { upsertMatchRecord } from './utils/matchUpsert';
@@ -1301,6 +1306,10 @@ export default function App() {
           if (!isAutosave) throw error;
           return undefined;
         }
+        if (isEmailNotVerifiedSaveError(error)) {
+          if (!isAutosave) notifyEmailNotVerifiedMatchSave();
+          return undefined;
+        }
         if (isEmptyUnionEventLogError(error)) {
           // Não troca a lista nem a coleta local por uma fita vazia.
           throw error;
@@ -2318,6 +2327,8 @@ export default function App() {
                 if (isTrialExpiredSaveError(error)) {
                   // O formulário só é limpo depois de `true`; o 402 não apaga partidas já salvas.
                   notifyTrialExpiredMatchSave(true);
+                } else if (isEmailNotVerifiedSaveError(error)) {
+                  notifyEmailNotVerifiedMatchSave();
                 } else {
                   alert('Erro ao salvar partida. Verifique o console.');
                 }

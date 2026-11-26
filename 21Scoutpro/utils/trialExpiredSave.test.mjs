@@ -4,6 +4,7 @@ import {
   ApiRequestError,
   PLANS_CTA_HREF,
   PLANS_CTA_LABEL,
+  isEmailNotVerifiedSaveError,
   isTrialExpiredSaveError,
   notifyTrialExpiredMatchSave,
   trialExpiredMatchSaveMessage,
@@ -15,6 +16,13 @@ test('402 + trial_expired identifica teste ou assinatura expirada', () => {
   assert.equal(isTrialExpiredSaveError(new ApiRequestError(500, 'trial_expired')), false);
   assert.equal(isTrialExpiredSaveError(new ApiRequestError(402, 'email_not_verified')), false);
   assert.equal(isTrialExpiredSaveError(new Error('trial_expired')), false);
+});
+
+test('403 + email_not_verified identifica e-mail não confirmado', () => {
+  const err = new ApiRequestError(403, 'email_not_verified', 'Confirme seu e-mail');
+  assert.equal(isEmailNotVerifiedSaveError(err), true);
+  assert.equal(isEmailNotVerifiedSaveError(new ApiRequestError(402, 'trial_expired')), false);
+  assert.equal(isEmailNotVerifiedSaveError(new Error('email_not_verified')), false);
 });
 
 test('mensagem diz que o teste terminou e que os dados continuam na tela', () => {

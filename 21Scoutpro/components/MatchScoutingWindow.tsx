@@ -33,7 +33,9 @@ import {
   readLineupDeletedEventIds,
 } from '../utils/eventLogConflict';
 import {
+  isEmailNotVerifiedSaveError,
   isTrialExpiredSaveError,
+  notifyEmailNotVerifiedMatchSave,
   notifyTrialExpiredMatchSave,
   PLANS_CTA_HREF,
   PLANS_CTA_LABEL,
@@ -2582,6 +2584,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } else if (isTrialExpiredSaveError(err)) {
         setFinalizeTrialExpired(true);
         setFinalizeError(trialExpiredMatchSaveMessage(true));
+      } else if (isEmailNotVerifiedSaveError(err)) {
+        setFinalizeTrialExpired(false);
+        setFinalizeError(
+          'Confirme seu e-mail para gravar partidas. Reenvie o link a partir do seu perfil.'
+        );
       } else {
         setFinalizeTrialExpired(false);
         setFinalizeError('Erro ao finalizar. Tente novamente.');
@@ -2628,6 +2635,11 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
       } catch (err) {
         if (isTrialExpiredSaveError(err)) {
           notifyTrialExpiredMatchSave(true);
+          autosaveSkipRef.current = false;
+          return;
+        }
+        if (isEmailNotVerifiedSaveError(err)) {
+          notifyEmailNotVerifiedMatchSave();
           autosaveSkipRef.current = false;
           return;
         }
@@ -2779,6 +2791,10 @@ export const MatchScoutingWindow: React.FC<MatchScoutingWindowProps> = ({
         autosaveSkipRef.current = false;
         if (isTrialExpiredSaveError(err)) {
           notifyTrialExpiredMatchSave(true);
+          return;
+        }
+        if (isEmailNotVerifiedSaveError(err)) {
+          notifyEmailNotVerifiedMatchSave();
           return;
         }
         if (isEmptyUnionEventLogError(err)) {

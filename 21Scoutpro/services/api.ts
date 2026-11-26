@@ -35,6 +35,16 @@ function throwApiResponse(
   ) {
     throw new ApiRequestError(response.status, TRIAL_EXPIRED_CODE, parsed?.message || errorField || TRIAL_EXPIRED_CODE);
   }
+  if (
+    response.status === 403 &&
+    (errorField === 'email_not_verified' || codeField === 'email_not_verified')
+  ) {
+    throw new ApiRequestError(
+      response.status,
+      'email_not_verified',
+      parsed?.message || errorField || 'email_not_verified'
+    );
+  }
   if (response.status === 409 && codeField) {
     throw new ApiRequestError(response.status, codeField, parsed?.message || errorField || codeField);
   }

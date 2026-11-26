@@ -1,13 +1,15 @@
 # Bypass e-mail verificado — contas QA
 
 ## Problema
-`POST /api/championship-matches` (e qualquer escrita) retorna `403 email_not_verified` quando o trial passou da graça (`EMAIL_VERIFICATION_GRACE_DAYS`, default 7) e `email_verified_at` é null.
+`POST /api/championship-matches` (e qualquer escrita) retorna `403 email_not_verified` quando o **teste (`trialing`)** passou da graça (`EMAIL_VERIFICATION_GRACE_DAYS`, default 7) e `email_verified_at` é null.
 
 Conta afetada no ciclo José: `qa.scout21+jose@gmail.com`.
 
+Assinatura `active` (paga/legacy) **não** entra nessa trava — o backfill de `scout_subscriptions` deixou `created_at` antigo com `email_verified_at` null e bloqueava escrita de contas como `menegattb@gmail.com` com o alerta genérico “Erro ao salvar partida”.
+
 ## Solução (código)
 - `backend/src/utils/qaEmail.ts` → `isQaTestEmail()`
-- `isEmailVerificationOverdue()` ignora:
+- `isEmailVerificationOverdue()` só aplica a `status === 'trialing'` e ignora:
   - `qa.scout21+*`
   - `qa.scout21@*`
   - `*@qa.scout21.local`
