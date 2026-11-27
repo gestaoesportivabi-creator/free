@@ -6,7 +6,7 @@ import { SubscriptionSnapshot, authApi } from '../services/api';
  * Barra de estado do teste gratuito.
  *
  * Dois avisos distintos, por ordem de urgência:
- *  1. e-mail não confirmado (bloqueia escrita ao fim do prazo de tolerância);
+ *  1. e-mail não confirmado (banner; a API já não corta a escrita por isto);
  *  2. dias restantes do teste.
  *
  * O tom é informativo, nunca alarmista — e sempre repete que não haverá cobrança,
@@ -32,7 +32,7 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
     if (ok) onRefresh?.();
   };
 
-  // Aviso de e-mail tem prioridade: é o que bloqueia a conta primeiro.
+  // Aviso de e-mail tem prioridade visual; a escrita já não depende disto.
   if (!emailVerified) {
     return (
       <div className="w-full bg-amber-500/10 border-b border-amber-500/30 px-4 py-2.5">
@@ -41,7 +41,7 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ subscription, emailVer
           <p className="text-xs text-amber-100">
             {resent
               ? 'Link reenviado. Confira sua caixa de entrada e o spam.'
-              : 'Confirme seu e-mail para manter o registo de dados liberado.'}
+              : 'Confirme seu e-mail quando puder — assim protegemos a sua conta.'}
           </p>
           {!resent && (
             <button

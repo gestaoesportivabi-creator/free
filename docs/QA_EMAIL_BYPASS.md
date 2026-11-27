@@ -1,18 +1,17 @@
 # Bypass e-mail verificado — contas QA
 
-## Problema
-`POST /api/championship-matches` (e qualquer escrita) retorna `403 email_not_verified` quando o **teste (`trialing`)** passou da graça (`EMAIL_VERIFICATION_GRACE_DAYS`, default 7) e `email_verified_at` é null.
+## Problema (histórico)
+`POST /api/championship-matches` (e qualquer escrita) devolvia `403 email_not_verified` quando o **teste (`trialing`)** passava da graça (`EMAIL_VERIFICATION_GRACE_DAYS`, default 7) e `email_verified_at` era null — ex.: `joao.nardimiranda@gmail.com` no dia 7 do trial.
 
-Conta afetada no ciclo José: `qa.scout21+jose@gmail.com`.
-
-Assinatura `active` (paga/legacy) **não** entra nessa trava — o backfill de `scout_subscriptions` deixou `created_at` antigo com `email_verified_at` null e bloqueava escrita de contas como `menegattb@gmail.com` com o alerta genérico “Erro ao salvar partida”.
+Assinatura `active` legada também já foi atingida quando a graça usava `subscription.created_at` do backfill (`menegattb@gmail.com`).
 
 ## Solução (código)
-- `backend/src/utils/qaEmail.ts` → `isQaTestEmail()`
-- `isEmailVerificationOverdue()` só aplica a `status === 'trialing'` e ignora:
+- `requireActiveSubscription()` **já não** devolve 403 por e-mail; o banner no React continua a pedir confirmação.
+- `isEmailVerificationOverdue()` só marca bandeira para UI em `trialing` e ignora QA:
   - `qa.scout21+*`
   - `qa.scout21@*`
   - `*@qa.scout21.local`
+- `backend/src/utils/qaEmail.ts` → `isQaTestEmail()`
 
 ## Desbloqueio imediato (produção)
 Também marcar `email_verified_at = now()` nas contas QA existentes (feito via SQL no incidente 22/09/2026).
