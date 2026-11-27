@@ -81,8 +81,9 @@ export function subscriptionContext() {
 }
 
 /**
- * Bloqueia escrita quando o teste expirou ou quando o e-mail não foi verificado
- * dentro do prazo. Leitura passa sempre.
+ * Bloqueia escrita quando o teste expirou. Leitura passa sempre.
+ * E-mail não verificado: só bandeira em `req.access` (banner no React) —
+ * não devolve 403, para não interromper coleta no meio do teste.
  */
 export function requireActiveSubscription() {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -105,15 +106,6 @@ export function requireActiveSubscription() {
         message:
           'Seu teste de 30 dias terminou. Seus dados continuam salvos e podem ser consultados e exportados.',
         trialEndedAt: access.trialEndsAt,
-      });
-    }
-
-    if (access.emailVerificationOverdue) {
-      return res.status(403).json({
-        success: false,
-        error: 'email_not_verified',
-        message:
-          'Confirme seu e-mail para continuar registando dados. Reenvie o link a partir do seu perfil.',
       });
     }
 
